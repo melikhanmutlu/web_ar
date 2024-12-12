@@ -17,12 +17,18 @@ FBX2GLTF_PATH = os.path.join(TOOLS_DIR, 'FBX2glTF.exe')
 SECRET_KEY = os.getenv('WEB_AR_SECRET_KEY', 'your-secret-key-here')
 
 # Dosya limitleri ve izinler
+<<<<<<< HEAD
 MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 100 * 1024 * 1024))  # 100MB default
 ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx'}
 
 # Maximum model size in meters (50 cm = 0.5 meters)
 MAX_MODEL_SIZE = 0.5
 
+=======
+MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 50 * 1024 * 1024))  # 50MB default
+ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx'}
+
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 # Klasörleri oluştur
 def create_directories():
     """Create necessary directories if they don't exist."""

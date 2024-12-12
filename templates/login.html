@@ -12,6 +12,10 @@
             </div>
             
             <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-6">
+<<<<<<< HEAD
+=======
+                {{ form.hidden_tag() }}
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
                 <div>
                     <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Username or Email</label>
                     {{ form.username(class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:text-white") }}
@@ -33,6 +37,7 @@
                 </div>
 
                 <div class="flex items-center">
+<<<<<<< HEAD
                     {{ form.remember(class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded") }}
                     <label for="remember" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">Remember me</label>
                 </div>
@@ -57,6 +62,26 @@
                         Create Account
                     </a>
                 </div>
+=======
+                    {{ form.remember(class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded dark:border-gray-600 dark:bg-gray-700") }}
+                    <label for="remember" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                        Remember me
+                    </label>
+                </div>
+
+                <div>
+                    {{ form.submit(class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150 ease-in-out") }}
+                </div>
+            </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    Don't have an account? 
+                    <a href="{{ url_for('auth.register') }}" class="font-medium text-primary hover:text-primary-dark transition-colors">
+                        Register here
+                    </a>
+                </p>
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
             </div>
         </div>
     </div>

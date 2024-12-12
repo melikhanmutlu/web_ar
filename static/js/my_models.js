@@ -75,7 +75,11 @@ async function deleteSelectedModels() {
 }
 
 function viewModel(modelId) {
+<<<<<<< HEAD
     window.location.href = `/view/${modelId}`;
+=======
+    window.location.href = `/view_model/${modelId}`;
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 }
 
 // Folder Management Functions
@@ -204,8 +208,13 @@ function showMoveToFolderModal(modelId) {
 
 function moveModelToFolder(modelIdOrFolderId, folderId = null) {
     // If only one parameter is provided, it's the folder ID (modal case)
+<<<<<<< HEAD
     const targetFolderId = folderId !== null ? folderId : (modelIdOrFolderId === 'null' ? null : parseInt(modelIdOrFolderId));
     const targetModelId = folderId !== null ? parseInt(modelIdOrFolderId) : selectedModelId;
+=======
+    const targetFolderId = folderId !== null ? folderId : modelIdOrFolderId;
+    const targetModelId = folderId !== null ? modelIdOrFolderId : selectedModelId;
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
     if (!targetModelId) {
         displayToast('No model selected', 'error');
@@ -239,7 +248,10 @@ function moveModelToFolder(modelIdOrFolderId, folderId = null) {
             }
             displayToast('Model moved successfully', 'success');
             hideMoveToFolderModal();
+<<<<<<< HEAD
             location.reload();
+=======
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         } else {
             throw new Error(data.error || 'Failed to move model');
         }

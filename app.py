@@ -1,7 +1,11 @@
 from datetime import datetime
 import os
 import json
+<<<<<<< HEAD
 from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for, flash, session
+=======
+from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for, flash
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.utils import secure_filename
 import logging
@@ -18,12 +22,18 @@ from sqlalchemy.orm import Session
 import qrcode
 from slugify import slugify
 import trimesh
+<<<<<<< HEAD
 from converters import OBJConverter, FBXConverter, STLConverter
 import numpy as np
 
 app = Flask(__name__)
 app.config.from_object('config')
 app.secret_key = 'super secret key'
+=======
+
+app = Flask(__name__)
+app.config.from_object('config')
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
 # Add headers to allow all origins
 @app.after_request
@@ -41,6 +51,7 @@ create_directories()
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+<<<<<<< HEAD
 # SQLite thread-safe configuration
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'connect_args': {
@@ -53,6 +64,13 @@ app.config['CONVERTED_FOLDER'] = CONVERTED_FOLDER
 app.config['TEMP_FOLDER'] = TEMP_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit
 app.config['ALLOWED_EXTENSIONS'] = {'obj', 'stl', 'fbx'}
+=======
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['CONVERTED_FOLDER'] = CONVERTED_FOLDER
+app.config['TEMP_FOLDER'] = TEMP_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
+app.config['ALLOWED_EXTENSIONS'] = ALLOWED_EXTENSIONS
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
 # Constants
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -60,7 +78,11 @@ CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'con
 TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
 QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr_codes')
 ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx'}
+<<<<<<< HEAD
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit
+=======
+MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB limit
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
 # Initialize extensions
 db.init_app(app)
@@ -329,6 +351,7 @@ def convert_obj_to_glb(obj_path, output_path):
     try:
         logger.info("Starting OBJ to GLB conversion")
         
+<<<<<<< HEAD
         # Create OBJ converter
         converter = OBJConverter()
         
@@ -347,10 +370,27 @@ def convert_obj_to_glb(obj_path, output_path):
                 logger.info(f"MTL file saved: {mtl_path}")
         
         # Process texture files
+=======
+        # Get the directory containing the OBJ file
+        obj_dir = os.path.dirname(obj_path)
+        obj_filename = os.path.basename(obj_path)
+        
+        # Save MTL file if provided
+        if 'mtl' in request.files:
+            mtl_file = request.files['mtl']
+            if mtl_file.filename:
+                mtl_path = os.path.join(obj_dir, secure_filename(mtl_file.filename))
+                mtl_file.save(mtl_path)
+                logger.info(f"Saved MTL file: {mtl_path}")
+        
+        # Process textures if they exist
+        texture_files = []
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         if 'textures' in request.files:
             textures = request.files.getlist('textures')
             for texture in textures:
                 if texture.filename:
+<<<<<<< HEAD
                     texture_path = os.path.join(os.path.dirname(obj_path), secure_filename(texture.filename))
                     texture.save(texture_path)
                     converter.add_texture_file(texture_path)
@@ -366,10 +406,41 @@ def convert_obj_to_glb(obj_path, output_path):
             
     except Exception as e:
         logger.error(f"Error during OBJ conversion: {str(e)}")
+=======
+                    texture_path = os.path.join(obj_dir, secure_filename(texture.filename))
+                    texture.save(texture_path)
+                    texture_files.append(texture_path)
+                    logger.info(f"Saved texture file: {texture_path}")
+        
+        # Use obj2gltf with full path to npx
+        npx_path = r"C:\Program Files\nodejs\npx.cmd"
+        cmd = [
+            npx_path,
+            'obj2gltf',
+            '-i', obj_path,
+            '-o', output_path,
+            '--checkTransparency',  # Handle transparent textures
+            '--binary'  # Embed textures in GLB
+        ]
+        
+        logger.info(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"Conversion failed: {result.stderr}")
+            return None
+            
+        logger.info("OBJ converted successfully")
+        return output_path
+        
+    except Exception as e:
+        logger.error(f"Error converting OBJ to GLB: {str(e)}")
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def convert_to_glb(file_path):
+<<<<<<< HEAD
     """Convert uploaded 3D model to GLB format using appropriate converter."""
     try:
         file_ext = os.path.splitext(file_path)[1].lower()[1:]  # Get extension without dot
@@ -405,6 +476,28 @@ def convert_to_glb(file_path):
     except Exception as e:
         logger.error(f"Error in convert_to_glb: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+=======
+    """Convert uploaded 3D model to GLB format."""
+    try:
+        file_ext = os.path.splitext(file_path)[1].lower()[1:]  # Get extension without dot
+        
+        if file_ext not in ALLOWED_EXTENSIONS:
+            print(f"Unsupported file format: {file_ext}")
+            return None
+            
+        if file_ext == 'obj':
+            return convert_obj_to_glb(file_path, os.path.join(app.config['CONVERTED_FOLDER'], os.path.basename(file_path)))
+        elif file_ext == 'stl':
+            return convert_stl_to_glb(file_path, os.path.join(app.config['CONVERTED_FOLDER'], os.path.basename(file_path)))
+        elif file_ext == 'fbx':
+            return convert_fbx_to_glb(file_path, os.path.join(app.config['CONVERTED_FOLDER'], os.path.basename(file_path)))
+        else:
+            print(f"No conversion method available for {file_ext}")
+            return None
+            
+    except Exception as e:
+        print(f"Error in convert_to_glb: {str(e)}")
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         return None
 
 def normalize_texture_name(filename):
@@ -704,6 +797,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+<<<<<<< HEAD
     try:
         logger.info("Starting upload process")
         
@@ -722,10 +816,43 @@ def upload_file():
         # Generate unique ID
         unique_id = str(uuid.uuid4())
         logger.info(f"Generated unique ID: {unique_id}")
+=======
+    app.logger.info('Starting upload process')
+    
+    try:
+        # Log request information
+        app.logger.info(f"Request files: {list(request.files.keys())}")
+        app.logger.info(f"Request form: {list(request.form.keys())}")
+        
+        # Generate a unique ID for this upload
+        unique_id = str(uuid.uuid4())
+        app.logger.info(f"Generated unique ID: {unique_id}")
+        
+        # Get the uploaded file
+        file = request.files.get('file')
+        app.logger.info(f"File object: {file}")
+        
+        if not file:
+            app.logger.error("No selected file")
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Get the filename and check if it's allowed
+        filename = file.filename
+        app.logger.info(f"File name: {filename}")
+        
+        if filename == '':
+            app.logger.error("No selected file")
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not allowed_file(filename):
+            app.logger.error(f"File type not allowed: {filename}")
+            return jsonify({'success': False, 'error': 'File type not allowed'}), 400
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         
         # Create upload subdirectory
         upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], unique_id)
         os.makedirs(upload_subdir, exist_ok=True)
+<<<<<<< HEAD
         logger.info(f"Created upload subdirectory: {upload_subdir}")
         
         # Save uploaded file
@@ -770,6 +897,66 @@ def upload_file():
         if not success:
             return jsonify({'error': 'Conversion failed'}), 500
 
+=======
+        app.logger.info(f"Created upload subdirectory: {upload_subdir}")
+        
+        # Save the uploaded file
+        filename = secure_filename(filename)
+        filename = filename.replace(' ', '_')  # Replace spaces with underscores
+        filepath = os.path.join(upload_subdir, filename)
+        file.save(filepath)
+        app.logger.info(f"File saved successfully: {filepath}")
+        
+        # Get file extension
+        file_extension = os.path.splitext(filename)[1].lower()
+        app.logger.info(f"File extension: {file_extension}")
+        
+        # Get file info
+        file_info = get_file_info(filepath)
+        app.logger.info(f"File info: {file_info}")
+        
+        # Get color settings
+        use_color = request.form.get('useColor') == 'true'
+        color = request.form.get('color', '#FFFFFF')
+        app.logger.info(f"Color settings - useColor: {use_color}, color: {color}")
+        
+        # Convert file if needed
+        output_dir = os.path.join(app.config['CONVERTED_FOLDER'], unique_id)
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, 'model.glb')
+
+        if file_extension == '.fbx':
+            app.logger.info("Starting FBX to GLB conversion")
+            convert_fbx_to_glb(filepath, output_path)
+            app.logger.info("FBX converted successfully")
+            
+            if use_color:
+                app.logger.info(f"Applying color {color} to model")
+                convert_model_new(output_path, output_path, color)
+                app.logger.info("Color applied successfully")
+                
+        elif file_extension in ['.obj', '.stl']:
+            app.logger.info(f"Starting {file_extension} to GLB conversion")
+            if file_extension == '.obj':
+                convert_obj_to_glb(filepath, output_path)
+            else:
+                convert_stl_to_glb(filepath, output_path)
+            app.logger.info("Model converted successfully")
+            
+            if use_color:
+                app.logger.info(f"Applying color {color} to model")
+                convert_model_new(output_path, output_path, color)
+                app.logger.info("Color applied and model saved successfully")
+        else:
+            # For GLB/GLTF files, just copy to output directory
+            shutil.copy2(filepath, output_path)
+            
+            if use_color:
+                app.logger.info(f"Applying color {color} to model")
+                convert_model_new(output_path, output_path, color)
+                app.logger.info("Color applied and model saved successfully")
+        
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         # Save model info to database
         model = UserModel(
             id=unique_id,
@@ -785,6 +972,7 @@ def upload_file():
         )
         db.session.add(model)
         db.session.commit()
+<<<<<<< HEAD
         logger.info(f"Model info saved to database with ID: {unique_id}")
             
         # Generate QR code
@@ -856,6 +1044,24 @@ def upload_model():
         logger.error(f"Error in upload_model: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+=======
+        app.logger.info("Model info saved to database")
+        
+        # Generate QR code
+        qr_code_filename = generate_qr_code(unique_id)
+        app.logger.info(f"QR code generated: {qr_code_filename}")
+        
+        return jsonify({
+            'success': True,
+            'redirect_url': url_for('view_model', model_id=unique_id),
+            'model_id': unique_id,
+            'progress': 100
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error during upload: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
 @app.route('/convert', methods=['POST'])
 def convert():
@@ -1399,7 +1605,11 @@ def move_selected_models():
 
 @app.errorhandler(413)
 def too_large(e):
+<<<<<<< HEAD
     return jsonify({'error': 'Dosya boyutu çok büyük. Maksimum dosya boyutu 100MB.'}), 413
+=======
+    return jsonify({'error': 'Dosya boyutu çok büyük. Maksimum dosya boyutu 10MB.'}), 413
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
 
 @app.errorhandler(500)
 def server_error(e):

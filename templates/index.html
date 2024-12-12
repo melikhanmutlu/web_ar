@@ -49,7 +49,11 @@
                                 <span class="ml-1">or drag and drop</span>
                             </div>
                             <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+<<<<<<< HEAD
                                 Supported formats: OBJ, GLB, GLTF, FBX, STL (max. 100MB)
+=======
+                                Supported formats: OBJ, GLB, GLTF, FBX, STL (max. 10MB)
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
                             </p>
                             <div id="selectedFileName" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
                         </div>
@@ -109,6 +113,7 @@
 
                 <!-- Upload Status -->
                 <div id="uploadStatus" class="hidden">
+<<<<<<< HEAD
                     <style>
                         .progress-wrapper {
                             margin: 1.5rem 0;
@@ -261,6 +266,67 @@
                     <div id="uploadResult" class="upload-result" style="display: none;"></div>
                 </div>
 
+=======
+                    <div class="mb-2">
+                        <span class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            Uploading...
+                        </span>
+                    </div>
+                    <style>
+                        /* Progress bar styles */
+                        .upload-progress-container {
+                            width: 100%;
+                            background-color: #f3f4f6;
+                            border-radius: 0.5rem;
+                            margin: 1rem 0;
+                            position: relative;
+                            height: 1.5rem;
+                            overflow: hidden;
+                        }
+
+                        .dark .upload-progress-container {
+                            background-color: #374151;
+                        }
+
+                        .upload-progress-bar {
+                            width: 0%;
+                            height: 100%;
+                            background-color: #111827;
+                            border-radius: 0.5rem;
+                            transition: width 0.3s ease;
+                        }
+
+                        .dark .upload-progress-bar {
+                            background-color: #3b82f6;
+                        }
+
+                        .upload-progress-text {
+                            position: absolute;
+                            width: 100%;
+                            text-align: center;
+                            color: #111827;
+                            font-size: 0.875rem;
+                            line-height: 1.5rem;
+                            font-weight: 500;
+                            z-index: 1;
+                            text-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+                        }
+
+                        .dark .upload-progress-text {
+                            color: #ffffff;
+                            text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+                        }
+                    </style>
+                    <div class="upload-progress-container">
+                        <div class="upload-progress-text" id="progressText">0%</div>
+                        <div class="upload-progress-bar" id="progressBar"></div>
+                    </div>
+                </div>
+
+                <!-- Upload Result -->
+                <div id="uploadResult" class="hidden rounded-lg p-4"></div>
+
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
                 <!-- Submit Button -->
                 <button type="submit" class="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg py-3 px-4 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 dark:focus:ring-white dark:focus:ring-offset-gray-900">
                     Upload and View
@@ -404,9 +470,15 @@
                 }
 
                 // Check file size (10MB limit)
+<<<<<<< HEAD
                 const maxSize = 100 * 1024 * 1024; // 100MB in bytes
                 if (file.size > maxSize) {
                     displayError('File size exceeds 100MB limit. Please choose a smaller file.');
+=======
+                const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+                if (file.size > maxSize) {
+                    displayError('File size exceeds 10MB limit. Please choose a smaller file.');
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
                     return;
                 }
 
@@ -468,6 +540,7 @@
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
+<<<<<<< HEAD
             const fileInput = document.getElementById('file-upload');
             const file = fileInput.files[0];
             
@@ -557,6 +630,53 @@
                     </div>
                 `;
             });
+=======
+            // Check if a file is selected
+            if (!fileInput.files || fileInput.files.length === 0) {
+                displayError('Please select a file to upload');
+                return;
+            }
+
+            const formData = new FormData(uploadForm);
+            const xhr = new XMLHttpRequest();
+
+            xhr.open('POST', uploadForm.action, true);
+
+            xhr.upload.onprogress = function(e) {
+                if (e.lengthComputable) {
+                    const percentComplete = (e.loaded / e.total) * 100;
+                    // Update progress bar if you have one
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.success) {
+                            window.location.href = response.redirect_url;
+                        } else {
+                            displayError(response.error || 'Upload failed');
+                        }
+                    } catch (error) {
+                        console.error('Error parsing response:', error);
+                        displayError('Error processing server response');
+                    }
+                } else {
+                    displayError('Upload failed. Please try again.');
+                }
+            };
+
+            xhr.onerror = function() {
+                displayError('Network error occurred. Please try again.');
+            };
+
+            try {
+                xhr.send(formData);
+            } catch (error) {
+                displayError('Error sending file. Please try again.');
+            }
+>>>>>>> 4093290bd781a426eb457d791906d2fd7644ee15
         });
     });
 </script>

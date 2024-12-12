@@ -1,0 +1,599 @@
+2024-12-01 05:26:16,628 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:26:16,629 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:26:16,629 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:26:16,630 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:16,630 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:16,630 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:26:16,631 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:26:16,631 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:16,635 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:16,635 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:16,635 - root - INFO - Static URL path: /static
+2024-12-01 05:26:20,545 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:26:20,545 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:26:20,546 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:26:20,547 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:20,547 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:20,547 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:26:20,548 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:26:20,548 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:20,548 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:20,548 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:20,548 - root - INFO - Static URL path: /static
+2024-12-01 05:26:57,942 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:26:57,942 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:26:57,942 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:26:57,944 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:57,944 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:57,944 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:26:57,944 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:26:57,944 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:57,944 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:57,944 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:57,944 - root - INFO - Static URL path: /static
+2024-12-01 05:26:57,971 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-12-01 05:26:57,971 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2024-12-01 05:26:57,973 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:26:59,100 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:26:59,100 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:26:59,100 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:26:59,101 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:59,101 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:59,101 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:26:59,102 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:26:59,102 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:26:59,102 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:59,102 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:26:59,103 - root - INFO - Static URL path: /static
+2024-12-01 05:26:59,117 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:26:59,119 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:27:01,884 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:27:01,885 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:27:01,885 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:27:01,886 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:27:01,890 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:01,891 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:27:01,892 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:27:01,892 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:27:01,892 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:01,892 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:01,892 - root - INFO - Static URL path: /static
+2024-12-01 05:27:01,919 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-12-01 05:27:01,920 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2024-12-01 05:27:01,921 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:27:02,986 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:27:02,987 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:27:02,987 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:27:02,988 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:27:02,988 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:02,989 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:27:02,989 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:27:02,989 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:27:02,989 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:02,989 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:27:02,990 - root - INFO - Static URL path: /static
+2024-12-01 05:27:03,008 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:27:03,011 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:27:14,340 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:27:14] "GET / HTTP/1.1" 200 -
+2024-12-01 05:27:22,334 - root - INFO - Test file saved to: c:\Users\syste\CascadeProjects\web_ar\temp\test_convert\AirFunnel_XL.stl
+2024-12-01 05:27:22,335 - root - ERROR - Error getting file info: name 'filetype' is not defined
+2024-12-01 05:27:22,335 - root - INFO - File info: None
+2024-12-01 05:27:22,339 - root - INFO - Attempting to load mesh...
+2024-12-01 05:27:22,347 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0071s
+2024-12-01 05:27:22,347 - root - INFO - Mesh loaded successfully: {'vertices': 2514, 'faces': 5076, 'type': 'Trimesh'}
+2024-12-01 05:27:22,347 - root - INFO - Attempting GLB export...
+2024-12-01 05:27:22,352 - root - INFO - GLB export successful. File size: 92000 bytes
+2024-12-01 05:27:22,354 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:27:22] "POST /debug/convert_test HTTP/1.1" 200 -
+2024-12-01 05:27:22,449 - root - INFO - Starting file conversion process...
+2024-12-01 05:27:22,974 - root - INFO - Created temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052722_5d067961
+2024-12-01 05:27:22,977 - root - INFO - Saved model file to: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052722_5d067961\AirFunnel_XL.stl
+2024-12-01 05:27:22,978 - root - INFO - Output path: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052722_5d067961.glb
+2024-12-01 05:27:22,978 - root - INFO - Converting stl model to GLB
+2024-12-01 05:27:22,978 - root - INFO - Input: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052722_5d067961\AirFunnel_XL.stl
+2024-12-01 05:27:22,978 - root - INFO - Output: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052722_5d067961.glb
+2024-12-01 05:27:22,978 - root - INFO - Starting STL conversion...
+2024-12-01 05:27:22,978 - root - INFO - Loading STL file...
+2024-12-01 05:27:22,989 - trimesh - DEBUG - No adjacent faces detected! Did you merge vertices?
+2024-12-01 05:27:22,990 - trimesh - DEBUG - fix_normals executed in 0.0050 seconds.
+2024-12-01 05:27:22,996 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0169s
+2024-12-01 05:27:22,996 - root - INFO - STL loaded successfully. Vertices: 2514, Faces: 5076
+2024-12-01 05:27:22,997 - root - INFO - Fixing mesh issues...
+2024-12-01 05:27:23,006 - trimesh - DEBUG - fix_normals executed in 0.0064 seconds.
+2024-12-01 05:27:23,015 - trimesh - DEBUG - fix_normals executed in 0.0073 seconds.
+2024-12-01 05:27:23,021 - root - INFO - Creating scene...
+2024-12-01 05:27:23,021 - root - INFO - Creating PBR material...
+2024-12-01 05:27:23,022 - root - INFO - PBR material created successfully
+2024-12-01 05:27:23,022 - root - INFO - Applying material to mesh...
+2024-12-01 05:27:23,022 - root - INFO - Material applied successfully
+2024-12-01 05:27:23,022 - root - INFO - Adding mesh to scene...
+2024-12-01 05:27:23,023 - root - INFO - Mesh added to scene successfully
+2024-12-01 05:27:23,023 - root - INFO - Export options: {'include_normals': True, 'include_metadata': True, 'merge_primitives': False, 'smooth': True, 'write_texture': True}
+2024-12-01 05:27:23,023 - root - INFO - Exporting to GLB: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052722_5d067961.glb
+2024-12-01 05:27:23,023 - root - ERROR - Error converting STL: export_glb() got an unexpected keyword argument 'include_metadata'
+2024-12-01 05:27:23,024 - root - ERROR - Full traceback:
+Traceback (most recent call last):
+  File "c:\Users\syste\CascadeProjects\web_ar\app.py", line 343, in convert_model
+    success = scene.export(
+              ^^^^^^^^^^^^^
+  File "C:\Users\syste\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\trimesh\scene\scene.py", line 941, in export
+    return export.export_scene(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\syste\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\trimesh\exchange\export.py", line 262, in export_scene
+    data = export_glb(scene, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: export_glb() got an unexpected keyword argument 'include_metadata'
+2024-12-01 05:27:23,027 - root - ERROR - Conversion failed
+2024-12-01 05:27:23,029 - root - INFO - Cleaned up temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052722_5d067961
+2024-12-01 05:27:23,030 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:27:23] "[31m[1mPOST /convert HTTP/1.1[0m" 400 -
+2024-12-01 05:28:26,956 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:28:27,024 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:28:27,082 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:28:27,177 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:28:28,235 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:28:28,235 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:28:28,236 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:28:28,237 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:28,237 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,237 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:28:28,237 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:28:28,238 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:28,238 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,238 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,238 - root - INFO - Static URL path: /static
+2024-12-01 05:28:28,255 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:28:28,258 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:28:28,398 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:28:28,398 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:28:28,399 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:28:28,400 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:28,400 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,400 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:28:28,401 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:28:28,401 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:28,401 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,401 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:28,401 - root - INFO - Static URL path: /static
+2024-12-01 05:28:28,416 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:28:28,419 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:28:34,457 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:28:34,457 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:28:34,458 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:28:34,459 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:34,459 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:34,459 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:28:34,459 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:28:34,459 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:34,460 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:34,460 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:34,460 - root - INFO - Static URL path: /static
+2024-12-01 05:28:34,483 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-12-01 05:28:34,483 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2024-12-01 05:28:34,484 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:28:35,537 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:28:35,538 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:28:35,538 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:28:35,539 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:35,539 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:35,540 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:28:35,540 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:28:35,540 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:28:35,540 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:35,540 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:28:35,540 - root - INFO - Static URL path: /static
+2024-12-01 05:28:35,553 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:28:35,556 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:28:45,738 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:28:45] "GET / HTTP/1.1" 200 -
+2024-12-01 05:28:48,497 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:28:48] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2024-12-01 05:28:54,349 - root - INFO - Test file saved to: c:\Users\syste\CascadeProjects\web_ar\temp\test_convert\AirFunnel_XL.stl
+2024-12-01 05:28:54,351 - root - ERROR - Error getting file info: name 'filetype' is not defined
+2024-12-01 05:28:54,351 - root - INFO - File info: None
+2024-12-01 05:28:54,351 - root - INFO - Attempting to load mesh...
+2024-12-01 05:28:54,363 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0108s
+2024-12-01 05:28:54,363 - root - INFO - Mesh loaded successfully: {'vertices': 2514, 'faces': 5076, 'type': 'Trimesh'}
+2024-12-01 05:28:54,363 - root - INFO - Attempting GLB export...
+2024-12-01 05:28:54,367 - root - INFO - GLB export successful. File size: 92000 bytes
+2024-12-01 05:28:54,371 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:28:54] "POST /debug/convert_test HTTP/1.1" 200 -
+2024-12-01 05:28:54,469 - root - INFO - Starting file conversion process...
+2024-12-01 05:28:54,704 - root - INFO - Created temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052854_1d2bb76f
+2024-12-01 05:28:54,707 - root - INFO - Saved model file to: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052854_1d2bb76f\AirFunnel_XL.stl
+2024-12-01 05:28:54,707 - root - INFO - Output path: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052854_1d2bb76f.glb
+2024-12-01 05:28:54,708 - root - INFO - Starting conversion of c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052854_1d2bb76f\AirFunnel_XL.stl to c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052854_1d2bb76f.glb
+2024-12-01 05:28:54,708 - root - INFO - File format: stl
+2024-12-01 05:28:54,708 - root - INFO - MTL path: None
+2024-12-01 05:28:54,708 - root - INFO - Texture path: None
+2024-12-01 05:28:54,709 - root - INFO - Loading mesh from c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052854_1d2bb76f\AirFunnel_XL.stl
+2024-12-01 05:28:54,719 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0095s
+2024-12-01 05:28:54,719 - root - INFO - Mesh type: <class 'trimesh.base.Trimesh'>
+2024-12-01 05:28:54,719 - root - INFO - Vertices: 2514
+2024-12-01 05:28:54,720 - root - INFO - Faces: 5076
+2024-12-01 05:28:54,720 - root - INFO - Creating scene
+2024-12-01 05:28:54,720 - root - INFO - Created new scene from mesh
+2024-12-01 05:28:54,721 - root - INFO - Exporting to GLB: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_052854_1d2bb76f.glb
+2024-12-01 05:28:54,721 - root - ERROR - Error exporting to GLB: export_glb() got an unexpected keyword argument 'processed'
+2024-12-01 05:28:54,721 - root - ERROR - Conversion failed
+2024-12-01 05:28:54,724 - root - INFO - Cleaned up temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_052854_1d2bb76f
+2024-12-01 05:28:54,724 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:28:54] "[31m[1mPOST /convert HTTP/1.1[0m" 400 -
+2024-12-01 05:29:35,226 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:35,389 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:35,633 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:35,760 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:35,815 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:36,007 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:36,519 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:36,519 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:36,519 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:36,520 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:36,520 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,521 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:36,522 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:36,522 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:36,522 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,522 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,523 - root - INFO - Static URL path: /static
+2024-12-01 05:29:36,538 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:36,542 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:36,851 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:36,851 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:36,851 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:36,852 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:36,853 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,853 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:36,853 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:36,853 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:36,853 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,853 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:36,854 - root - INFO - Static URL path: /static
+2024-12-01 05:29:36,869 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:36,872 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:37,061 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:37,062 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:37,063 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:37,064 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:37,064 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:37,064 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:37,064 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:37,065 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:37,065 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:37,065 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:37,065 - root - INFO - Static URL path: /static
+2024-12-01 05:29:37,082 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:37,085 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:46,579 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:46,591 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:46,744 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:46,758 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:47,411 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:29:47,534 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:47,788 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:47,789 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:47,789 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:47,790 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:47,791 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,791 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:47,791 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:47,791 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:47,791 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,791 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,792 - root - INFO - Static URL path: /static
+2024-12-01 05:29:47,803 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:47,803 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:47,804 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:47,805 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:47,805 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:47,805 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,805 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:47,805 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:47,805 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:47,805 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,806 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:47,806 - root - INFO - Static URL path: /static
+2024-12-01 05:29:47,808 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:47,819 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:47,822 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:48,627 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:48,628 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:48,628 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:48,630 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:48,630 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:48,630 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:48,631 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:48,631 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:48,631 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:48,632 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:48,632 - root - INFO - Static URL path: /static
+2024-12-01 05:29:48,649 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:48,655 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:50,574 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:50,574 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:50,574 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:50,575 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:50,575 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:50,576 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:50,576 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:50,576 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:50,576 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:50,576 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:50,576 - root - INFO - Static URL path: /static
+2024-12-01 05:29:50,600 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2024-12-01 05:29:50,601 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2024-12-01 05:29:50,603 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:29:51,613 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:29:51,613 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:29:51,614 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:29:51,615 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:51,615 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:51,615 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:29:51,615 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:29:51,616 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:29:51,616 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:51,616 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:29:51,616 - root - INFO - Static URL path: /static
+2024-12-01 05:29:51,630 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:29:51,635 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:29:56,553 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:29:56] "GET / HTTP/1.1" 200 -
+2024-12-01 05:29:58,654 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:29:58] "GET / HTTP/1.1" 200 -
+2024-12-01 05:30:00,614 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:30:00] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2024-12-01 05:30:07,646 - root - INFO - Test file saved to: c:\Users\syste\CascadeProjects\web_ar\temp\test_convert\AirFunnel_XL.stl
+2024-12-01 05:30:07,647 - root - ERROR - Error getting file info: name 'filetype' is not defined
+2024-12-01 05:30:07,647 - root - INFO - File info: None
+2024-12-01 05:30:07,647 - root - INFO - Attempting to load mesh...
+2024-12-01 05:30:07,659 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0104s
+2024-12-01 05:30:07,659 - root - INFO - Mesh loaded successfully: {'vertices': 2514, 'faces': 5076, 'type': 'Trimesh'}
+2024-12-01 05:30:07,659 - root - INFO - Attempting GLB export...
+2024-12-01 05:30:07,662 - root - INFO - GLB export successful. File size: 92000 bytes
+2024-12-01 05:30:07,670 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:30:07] "POST /debug/convert_test HTTP/1.1" 200 -
+2024-12-01 05:30:07,777 - root - INFO - Starting file conversion process...
+2024-12-01 05:30:08,015 - root - INFO - Created temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053008_f0871801
+2024-12-01 05:30:08,018 - root - INFO - Saved model file to: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053008_f0871801\AirFunnel_XL.stl
+2024-12-01 05:30:08,018 - root - INFO - Output path: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053008_f0871801.glb
+2024-12-01 05:30:08,018 - root - INFO - Starting conversion of c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053008_f0871801\AirFunnel_XL.stl to c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053008_f0871801.glb
+2024-12-01 05:30:08,018 - root - INFO - File format: stl
+2024-12-01 05:30:08,018 - root - INFO - MTL path: None
+2024-12-01 05:30:08,019 - root - INFO - Texture path: None
+2024-12-01 05:30:08,019 - root - INFO - Loading mesh from c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053008_f0871801\AirFunnel_XL.stl
+2024-12-01 05:30:08,027 - trimesh - DEBUG - No adjacent faces detected! Did you merge vertices?
+2024-12-01 05:30:08,027 - trimesh - DEBUG - fix_normals executed in 0.0028 seconds.
+2024-12-01 05:30:08,032 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0134s
+2024-12-01 05:30:08,033 - root - INFO - Mesh type: <class 'trimesh.base.Trimesh'>
+2024-12-01 05:30:08,033 - root - INFO - Vertices: 2514
+2024-12-01 05:30:08,034 - root - INFO - Faces: 5076
+2024-12-01 05:30:08,034 - root - INFO - Creating scene
+2024-12-01 05:30:08,034 - root - INFO - Processing mesh...
+2024-12-01 05:30:08,039 - trimesh - DEBUG - fix_normals executed in 0.0043 seconds.
+2024-12-01 05:30:08,048 - trimesh - DEBUG - fix_normals executed in 0.0063 seconds.
+2024-12-01 05:30:08,051 - root - INFO - Created new scene from mesh
+2024-12-01 05:30:08,051 - root - INFO - Exporting to GLB: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053008_f0871801.glb
+2024-12-01 05:30:08,055 - root - INFO - Export successful. File size: 92208 bytes
+2024-12-01 05:30:08,055 - root - INFO - Conversion successful
+2024-12-01 05:30:08,055 - root - ERROR - Error during file processing: name 'url_for' is not defined
+2024-12-01 05:30:08,057 - root - INFO - Cleaned up temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053008_f0871801
+2024-12-01 05:30:08,057 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:30:08] "[35m[1mPOST /convert HTTP/1.1[0m" 500 -
+2024-12-01 05:30:31,304 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:31,412 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:31,419 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:31,529 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:32,227 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:32,279 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:32,405 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:32,417 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:32,525 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:32,526 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:32,526 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:32,527 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:32,529 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,529 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:32,529 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:32,529 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:32,530 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,530 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,530 - root - INFO - Static URL path: /static
+2024-12-01 05:30:32,549 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:32,554 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:32,646 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:32,646 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:32,647 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:32,648 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:32,648 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,648 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:32,649 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:32,649 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:32,649 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,649 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:32,649 - root - INFO - Static URL path: /static
+2024-12-01 05:30:32,664 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:32,670 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:33,544 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:33,546 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:33,546 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:33,547 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:33,547 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,547 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:33,547 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:33,547 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:33,548 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,548 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,548 - root - INFO - Static URL path: /static
+2024-12-01 05:30:33,562 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:33,566 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:33,567 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:33,567 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:33,568 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:33,569 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:33,569 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,570 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:33,570 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:33,570 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:33,570 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,570 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:33,571 - root - INFO - Static URL path: /static
+2024-12-01 05:30:33,585 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:33,588 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:57,923 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:58,054 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:58,064 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:58,210 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:58,558 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:58,581 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:30:58,723 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:58,734 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:30:59,223 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:59,223 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:59,223 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:59,224 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,225 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,225 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,225 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,225 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,225 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,225 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,226 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,231 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,231 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,232 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,232 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,232 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,232 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,233 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,233 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,243 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:59,246 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:59,394 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:59,395 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:59,395 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:59,396 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,397 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,397 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,397 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,397 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,397 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,398 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,398 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,402 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,403 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,403 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,404 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,404 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,404 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,404 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,405 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,421 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:59,425 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:59,854 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:59,855 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:59,855 - root - INFO - Working directory: C:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:59,857 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,857 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,857 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,858 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,858 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,858 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,858 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,858 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,863 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,864 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,864 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,864 - root - INFO - Created directory: C:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,865 - root - INFO - Upload folder: C:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,865 - root - INFO - Converted folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,865 - root - INFO - Static folder: C:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,865 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,878 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:59,881 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:30:59,881 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:30:59,881 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:30:59,882 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,883 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,883 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,883 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,883 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,883 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:30:59,884 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,884 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,884 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,888 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,888 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,888 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:30:59,888 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:30:59,888 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:30:59,889 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,889 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:30:59,889 - root - INFO - Static URL path: /static
+2024-12-01 05:30:59,902 - werkzeug - WARNING -  * Debugger is active!
+2024-12-01 05:30:59,907 - werkzeug - INFO -  * Debugger PIN: 110-136-671
+2024-12-01 05:31:06,201 - root - INFO - Starting Web AR Model Converter
+2024-12-01 05:31:06,201 - root - INFO - Python version: 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+2024-12-01 05:31:06,201 - root - INFO - Working directory: c:\Users\syste\CascadeProjects\web_ar
+2024-12-01 05:31:06,202 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:31:06,202 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,203 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:31:06,203 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:31:06,203 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:31:06,204 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,204 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,204 - root - INFO - Static URL path: /static
+2024-12-01 05:31:06,210 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:31:06,210 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,210 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\temp
+2024-12-01 05:31:06,210 - root - INFO - Created directory: c:\Users\syste\CascadeProjects\web_ar\models
+2024-12-01 05:31:06,211 - root - INFO - Upload folder: c:\Users\syste\CascadeProjects\web_ar\uploads
+2024-12-01 05:31:06,211 - root - INFO - Converted folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,211 - root - INFO - Static folder: c:\Users\syste\CascadeProjects\web_ar\converted
+2024-12-01 05:31:06,211 - root - INFO - Static URL path: /static
+2024-12-01 05:31:15,539 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:15] "GET / HTTP/1.1" 200 -
+2024-12-01 05:31:17,551 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:17] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2024-12-01 05:31:23,065 - root - INFO - Test file saved to: c:\Users\syste\CascadeProjects\web_ar\temp\test_convert\AirFunnel_XL.stl
+2024-12-01 05:31:23,066 - root - ERROR - Error getting file info: name 'filetype' is not defined
+2024-12-01 05:31:23,066 - root - INFO - File info: None
+2024-12-01 05:31:23,066 - root - INFO - Attempting to load mesh...
+2024-12-01 05:31:23,074 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0074s
+2024-12-01 05:31:23,075 - root - INFO - Mesh loaded successfully: {'vertices': 2514, 'faces': 5076, 'type': 'Trimesh'}
+2024-12-01 05:31:23,075 - root - INFO - Attempting GLB export...
+2024-12-01 05:31:23,078 - root - INFO - GLB export successful. File size: 92000 bytes
+2024-12-01 05:31:23,081 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:23] "POST /debug/convert_test HTTP/1.1" 200 -
+2024-12-01 05:31:23,184 - root - INFO - Starting file conversion process...
+2024-12-01 05:31:23,416 - root - INFO - Created temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053123_6f151883
+2024-12-01 05:31:23,419 - root - INFO - Saved model file to: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053123_6f151883\AirFunnel_XL.stl
+2024-12-01 05:31:23,419 - root - INFO - Output path: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053123_6f151883.glb
+2024-12-01 05:31:23,420 - root - INFO - Starting conversion of c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053123_6f151883\AirFunnel_XL.stl to c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053123_6f151883.glb
+2024-12-01 05:31:23,420 - root - INFO - File format: stl
+2024-12-01 05:31:23,420 - root - INFO - MTL path: None
+2024-12-01 05:31:23,420 - root - INFO - Texture path: None
+2024-12-01 05:31:23,420 - root - INFO - Loading mesh from c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053123_6f151883\AirFunnel_XL.stl
+2024-12-01 05:31:23,427 - trimesh - DEBUG - No adjacent faces detected! Did you merge vertices?
+2024-12-01 05:31:23,427 - trimesh - DEBUG - fix_normals executed in 0.0031 seconds.
+2024-12-01 05:31:23,433 - trimesh - DEBUG - loaded <trimesh.Trimesh(vertices.shape=(2514, 3), faces.shape=(5076, 3))> using `load_stl` in 0.0122s
+2024-12-01 05:31:23,434 - root - INFO - Mesh type: <class 'trimesh.base.Trimesh'>
+2024-12-01 05:31:23,434 - root - INFO - Vertices: 2514
+2024-12-01 05:31:23,434 - root - INFO - Faces: 5076
+2024-12-01 05:31:23,434 - root - INFO - Creating scene
+2024-12-01 05:31:23,434 - root - INFO - Processing mesh...
+2024-12-01 05:31:23,443 - trimesh - DEBUG - fix_normals executed in 0.0064 seconds.
+2024-12-01 05:31:23,451 - trimesh - DEBUG - fix_normals executed in 0.0054 seconds.
+2024-12-01 05:31:23,454 - root - INFO - Created new scene from mesh
+2024-12-01 05:31:23,454 - root - INFO - Exporting to GLB: c:\Users\syste\CascadeProjects\web_ar\converted\AirFunnel_XL_20241201_053123_6f151883.glb
+2024-12-01 05:31:23,457 - root - INFO - Export successful. File size: 92208 bytes
+2024-12-01 05:31:23,457 - root - INFO - Conversion successful
+2024-12-01 05:31:23,457 - root - INFO - Model URL: http://09a2-188-119-61-196.ngrok-free.app/view/AirFunnel_XL_20241201_053123_6f151883.glb
+2024-12-01 05:31:23,494 - root - INFO - Generated QR code: c:\Users\syste\CascadeProjects\web_ar\converted\qr_20241201_053123_6f151883.png
+2024-12-01 05:31:23,495 - root - INFO - QR URL: http://09a2-188-119-61-196.ngrok-free.app/static/qr_20241201_053123_6f151883.png
+2024-12-01 05:31:23,497 - root - INFO - Cleaned up temporary directory: c:\Users\syste\CascadeProjects\web_ar\temp\temp_20241201_053123_6f151883
+2024-12-01 05:31:23,497 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:23] "POST /convert HTTP/1.1" 200 -
+2024-12-01 05:31:23,602 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:23] "GET /view/AirFunnel_XL_20241201_053123_6f151883.glb HTTP/1.1" 200 -
+2024-12-01 05:31:47,869 - root - INFO - Test file saved to: c:\Users\syste\CascadeProjects\web_ar\temp\test_convert\Tree.fbx
+2024-12-01 05:31:47,870 - root - ERROR - Error getting file info: name 'filetype' is not defined
+2024-12-01 05:31:47,870 - root - INFO - File info: None
+2024-12-01 05:31:47,870 - root - INFO - Attempting to load mesh...
+2024-12-01 05:31:47,870 - root - ERROR - Error loading mesh: File type: fbx not supported
+2024-12-01 05:31:47,875 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:47] "[31m[1mPOST /debug/convert_test HTTP/1.1[0m" 400 -
+2024-12-01 05:31:47,970 - werkzeug - INFO - 127.0.0.1 - - [01/Dec/2024 05:31:47] "GET /debug/logs HTTP/1.1" 200 -
+2024-12-01 05:35:08,372 - werkzeug - INFO -  * Detected change in 'C:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:35:08,508 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:35:09,451 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:35:09,504 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading
+2024-12-01 05:35:09,576 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:35:09,640 - werkzeug - INFO -  * Restarting with stat
+2024-12-01 05:35:09,750 - werkzeug - INFO -  * Detected change in 'c:\\Users\\syste\\CascadeProjects\\web_ar\\app.py', reloading

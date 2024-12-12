@@ -1,0 +1,563 @@
+{% extends "base.html" %}
+
+{% block title %}Home - arvision{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-5rem)] pt-24 bg-gray-50 dark:bg-gray-900">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="max-w-xl mx-auto mb-6 px-4">
+                {% for category, message in messages %}
+                    <div class="rounded-lg p-4 mb-4 {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Hero Section -->
+    <div class="text-center max-w-3xl mx-auto mb-8 sm:mb-12 px-4">
+        <h1 class="text-3xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6">
+            Transform Your 3D Models
+        </h1>
+        <p class="text-base sm:text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+            Upload your 3D models and instantly view them in augmented reality. 
+            Share your creations with anyone using QR codes.
+        </p>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="max-w-xl mx-auto px-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-8 backdrop-blur-lg bg-opacity-80 dark:bg-opacity-80">
+            <h2 class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-6">Upload Your Model</h2>
+            
+            <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="space-y-4 sm:space-y-6">
+                <!-- File Upload -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Select 3D Model File
+                    </label>
+                    <div id="dropZone" class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 sm:p-8 transition-all duration-300 hover:border-gray-900 dark:hover:border-white hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer">
+                        <input id="file-upload" name="file" type="file" class="hidden" accept=".obj,.glb,.gltf,.fbx,.stl">
+                        <div class="text-center">
+                            <svg class="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500 mb-3 sm:mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                            </svg>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">
+                                <span class="text-gray-900 dark:text-white font-medium hover:text-gray-600 dark:hover:text-gray-300">Choose file</span>
+                                <span class="ml-1">or drag and drop</span>
+                            </div>
+                            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                Supported formats: OBJ, GLB, GLTF, FBX, STL (max. 100MB)
+                            </p>
+                            <div id="selectedFileName" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MTL File Upload (Optional) -->
+                <div id="mtlUpload" class="hidden">
+                    <div class="mt-2">
+                        <label for="mtl-upload" class="block cursor-pointer">
+                            <div class="flex items-center justify-center w-full px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-200">
+                                <div class="space-y-1 text-center">
+                                    <div id="mtlUploadText">
+                                        <span class="text-gray-900 dark:text-white font-medium hover:text-gray-600 dark:hover:text-gray-300">Upload MTL file</span>
+                                    </div>
+                                    <div id="selectedMtlFileName" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
+                                    <input id="mtl-upload" name="mtl" type="file" class="hidden" accept=".mtl">
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Texture Files Upload (Optional) -->
+                <div id="textureUpload" class="hidden">
+                    <div class="mt-2">
+                        <label for="texture-upload" class="block cursor-pointer">
+                            <div class="flex items-center justify-center w-full px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-200">
+                                <div class="space-y-1 text-center">
+                                    <div id="textureUploadText">
+                                        <span class="text-gray-900 dark:text-white font-medium hover:text-gray-600 dark:hover:text-gray-300">Upload texture files</span>
+                                    </div>
+                                    <div id="selectedTextureFileNames" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
+                                    <input id="texture-upload" name="textures" type="file" class="hidden" accept=".jpg,.jpeg,.png,.tga,.bmp" multiple>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Color Input -->
+                <div>
+                    <label class="flex items-center space-x-2 mb-2">
+                        <input type="checkbox" id="useColor" name="useColor" value="true" class="rounded border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-gray-900 dark:focus:ring-white">
+                        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Apply color to model</span>
+                    </label>
+                    <div id="colorPickerContainer" class="hidden mt-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Select Color
+                        </label>
+                        <div class="flex space-x-2">
+                            <input type="color" id="colorPicker" name="color" value="#ffffff" class="h-10 w-20 p-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 cursor-pointer">
+                            <input type="text" id="colorInput" class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value="#FFFFFF" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#FFFFFF">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Status -->
+                <div id="uploadStatus" class="hidden">
+                    <style>
+                        .progress-wrapper {
+                            margin: 1.5rem 0;
+                            background: var(--bg-secondary, #f3f4f6);
+                            border-radius: 0.5rem;
+                            padding: 1.5rem;
+                            border: 1px solid var(--border-color, #e5e7eb);
+                        }
+
+                        .dark .progress-wrapper {
+                            background: var(--bg-secondary-dark, #1f2937);
+                            border-color: var(--border-color-dark, #374151);
+                        }
+
+                        .progress-status {
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 0.75rem;
+                        }
+
+                        .progress-label {
+                            font-size: 0.875rem;
+                            font-weight: 500;
+                            color: var(--text-primary, #111827);
+                        }
+
+                        .dark .progress-label {
+                            color: var(--text-primary-dark, #f3f4f6);
+                        }
+
+                        .progress-percentage {
+                            font-size: 0.875rem;
+                            font-weight: 600;
+                            color: var(--text-primary, #111827);
+                        }
+
+                        .dark .progress-percentage {
+                            color: var(--text-primary-dark, #f3f4f6);
+                        }
+
+                        .progress-bar-container {
+                            width: 100%;
+                            height: 0.5rem;
+                            background: var(--bg-primary, #ffffff);
+                            border-radius: 0.25rem;
+                            overflow: hidden;
+                        }
+
+                        .dark .progress-bar-container {
+                            background: var(--bg-primary-dark, #111827);
+                        }
+
+                        .progress-bar {
+                            height: 100%;
+                            width: 0%;
+                            background: var(--progress-color, #111827);
+                            border-radius: 0.25rem;
+                            transition: width 0.3s ease, background-color 0.3s ease;
+                        }
+
+                        .dark .progress-bar {
+                            background: var(--progress-color-dark, #f3f4f6);
+                        }
+
+                        .progress-bar.success {
+                            background: var(--success-color, #111827);
+                        }
+
+                        .dark .progress-bar.success {
+                            background: var(--success-color-dark, #f3f4f6);
+                        }
+
+                        .progress-bar.error {
+                            background: var(--error-color, #dc2626);
+                        }
+
+                        .dark .progress-bar.error {
+                            background: var(--error-color-dark, #ef4444);
+                        }
+
+                        .upload-result {
+                            margin-top: 1rem;
+                            padding: 1rem;
+                            border-radius: 0.5rem;
+                            background: var(--bg-primary, #ffffff);
+                            border: 1px solid var(--border-color, #e5e7eb);
+                            text-align: center;
+                        }
+
+                        .dark .upload-result {
+                            background: var(--bg-primary-dark, #111827);
+                            border-color: var(--border-color-dark, #374151);
+                        }
+
+                        .upload-result.success {
+                            border-color: var(--success-color, #111827);
+                        }
+
+                        .dark .upload-result.success {
+                            border-color: var(--success-color-dark, #f3f4f6);
+                        }
+
+                        .upload-result.error {
+                            border-color: var(--error-color, #dc2626);
+                        }
+
+                        .dark .upload-result.error {
+                            border-color: var(--error-color-dark, #ef4444);
+                        }
+
+                        .view-model-button {
+                            display: inline-block;
+                            margin-top: 0.75rem;
+                            padding: 0.5rem 1rem;
+                            background: var(--bg-secondary, #f3f4f6);
+                            color: var(--text-primary, #111827);
+                            border: 1px solid var(--border-color, #e5e7eb);
+                            border-radius: 0.375rem;
+                            font-size: 0.875rem;
+                            font-weight: 500;
+                            text-decoration: none;
+                            transition: all 0.2s ease;
+                        }
+
+                        .dark .view-model-button {
+                            background: var(--bg-secondary-dark, #1f2937);
+                            color: var(--text-primary-dark, #f3f4f6);
+                            border-color: var(--border-color-dark, #374151);
+                        }
+
+                        .view-model-button:hover {
+                            background: var(--bg-hover, #e5e7eb);
+                        }
+
+                        .dark .view-model-button:hover {
+                            background: var(--bg-hover-dark, #374151);
+                        }
+                    </style>
+
+                    <div class="progress-wrapper">
+                        <div class="progress-status">
+                            <span class="progress-label" id="uploadStatusText">Uploading...</span>
+                            <span class="progress-percentage" id="progressText">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progressBar"></div>
+                        </div>
+                    </div>
+                    <div id="uploadResult" class="upload-result" style="display: none;"></div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg py-3 px-4 text-sm font-medium hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900 dark:focus:ring-white dark:focus:ring-offset-gray-900">
+                    Upload and View
+                </button>
+            </form>
+        </div>
+
+        <!-- Features Section -->
+        <div class="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-6 mb-12">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 backdrop-blur-lg bg-opacity-80 dark:bg-opacity-80">
+                <div class="flex items-center mb-4">
+                    <svg class="w-8 h-8 text-gray-900 dark:text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Real-time Preview</h3>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400">View your 3D models instantly in your browser with our interactive viewer.</p>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 backdrop-blur-lg bg-opacity-80 dark:bg-opacity-80">
+                <div class="flex items-center mb-4">
+                    <svg class="w-8 h-8 text-gray-900 dark:text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                    </svg>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">QR Code Sharing</h3>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400">Share your models easily with QR codes for quick AR viewing on any device.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('file-upload');
+        const selectedFileName = document.getElementById('selectedFileName');
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadResult = document.getElementById('uploadResult');
+
+        // Initialize color picker functionality
+        const colorPickerCheckbox = document.getElementById('useColor');
+        const colorPickerContainer = document.getElementById('colorPickerContainer');
+        if (colorPickerCheckbox && colorPickerContainer) {
+            colorPickerCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    colorPickerContainer.classList.remove('hidden');
+                } else {
+                    colorPickerContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                handleFiles(files);
+                fileInput.files = files; // Set the files to the input element
+            }
+        });
+
+        // Handle clicked files
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Handle selected files
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFiles(e.target.files);
+            }
+        });
+
+        // Handle MTL file selection
+        const mtlInput = document.getElementById('mtl-upload');
+        const selectedMtlFileName = document.getElementById('selectedMtlFileName');
+        const mtlUploadText = document.getElementById('mtlUploadText');
+        
+        mtlInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                selectedMtlFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
+                selectedMtlFileName.classList.remove('hidden');
+                mtlUploadText.classList.add('hidden');
+            } else {
+                selectedMtlFileName.classList.add('hidden');
+                mtlUploadText.classList.remove('hidden');
+            }
+        });
+
+        // Handle texture files selection
+        const textureInput = document.getElementById('texture-upload');
+        const selectedTextureFileNames = document.getElementById('selectedTextureFileNames');
+        const textureUploadText = document.getElementById('textureUploadText');
+        
+        textureInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const files = Array.from(e.target.files);
+                const totalSizeMB = (files.reduce((total, file) => total + file.size, 0) / (1024 * 1024)).toFixed(2);
+                const fileList = files.map(file => file.name).join('<br>');
+                selectedTextureFileNames.innerHTML = `Selected ${files.length} file(s):<br>${fileList}<br>Total: ${totalSizeMB} MB`;
+                selectedTextureFileNames.classList.remove('hidden');
+                textureUploadText.classList.add('hidden');
+            } else {
+                selectedTextureFileNames.classList.add('hidden');
+                textureUploadText.classList.remove('hidden');
+            }
+        });
+
+        function handleFiles(files) {
+            const file = files[0];
+            if (file) {
+                // Check file type
+                const validExtensions = ['.obj', '.glb', '.gltf', '.fbx', '.stl'];
+                const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+                
+                if (!validExtensions.includes(fileExtension)) {
+                    displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, or STL).');
+                    return;
+                }
+
+                // Check file size (10MB limit)
+                const maxSize = 100 * 1024 * 1024; // 100MB in bytes
+                if (file.size > maxSize) {
+                    displayError('File size exceeds 100MB limit. Please choose a smaller file.');
+                    return;
+                }
+
+                // Update the filename display
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                selectedFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
+                selectedFileName.classList.remove('hidden');
+
+                // Show/hide MTL and texture upload based on file type
+                const mtlUpload = document.getElementById('mtlUpload');
+                const textureUpload = document.getElementById('textureUpload');
+                
+                if (fileExtension === '.obj') {
+                    mtlUpload?.classList.remove('hidden');
+                    textureUpload?.classList.remove('hidden');
+                } else {
+                    mtlUpload?.classList.add('hidden');
+                    textureUpload?.classList.add('hidden');
+                }
+            }
+        }
+
+        function displayError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-red-100 text-red-700 p-4 rounded-lg mb-4';
+            errorDiv.innerHTML = `
+                <div class="font-medium">Upload Failed</div>
+                <div class="mt-1 text-sm">${message}</div>
+            `;
+            
+            // Remove any existing error messages
+            const existingError = uploadForm.querySelector('.bg-red-100');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Insert error message at the top of the form
+            uploadForm.insertBefore(errorDiv, uploadForm.firstChild);
+            
+            // Clear the file input
+            fileInput.value = '';
+            selectedFileName.classList.add('hidden');
+        }
+
+        function highlight(e) {
+            dropZone.classList.add('border-gray-900', 'dark:border-white', 'bg-gray-50', 'dark:bg-gray-700/50');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('border-gray-900', 'dark:border-white', 'bg-gray-50', 'dark:bg-gray-700/50');
+        }
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Handle form submission
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('file-upload');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                displayError('Please select a file to upload.');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('useColor', document.getElementById('colorPickerContainer').style.display !== 'none');
+            formData.append('color', document.getElementById('colorPicker').value);
+            
+            // Reset progress bar and show upload status
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const statusText = document.getElementById('uploadStatusText');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const uploadResult = document.getElementById('uploadResult');
+
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            uploadStatus.style.display = 'block';
+            uploadResult.style.display = 'none';
+            
+            let isUploading = true;
+            let progress = 0;
+
+            // Simulated progress
+            const progressInterval = setInterval(() => {
+                if (!isUploading) {
+                    clearInterval(progressInterval);
+                    return;
+                }
+
+                if (progress < 90) {
+                    progress += Math.random() * 10;
+                    progress = Math.min(progress, 90);
+                    progressBar.style.width = progress + '%';
+                    progressText.textContent = Math.round(progress) + '%';
+                    statusText.textContent = 'Uploading and converting...';
+                }
+            }, 200);
+
+            // Upload file
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(response => {
+                isUploading = false;
+                if (response.success) {
+                    uploadResult.className = 'upload-result success';
+                    uploadResult.style.display = 'block';
+                    
+                    // Önce progress bar'ı 100% yapalım
+                    progressBar.style.width = '100%';
+                    progressText.textContent = '100%';
+                    statusText.textContent = 'Upload completed';
+                    
+                    // Kısa bir gecikme sonra başarı mesajını gösterelim
+                    setTimeout(() => {
+                        uploadResult.innerHTML = `
+                            <div style="color: var(--text-primary, #111827);" class="dark:text-gray-100">
+                                ${response.message}
+                            </div>
+                        `;
+                        
+                        // 1 saniye sonra yönlendirelim
+                        setTimeout(() => {
+                            window.location.href = response.viewer_url;
+                        }, 1000);
+                    }, 500);
+                } else {
+                    throw new Error(response.error || 'Upload failed');
+                }
+            })
+            .catch(error => {
+                isUploading = false;
+                progressBar.classList.add('error');
+                uploadResult.className = 'upload-result error';
+                uploadResult.style.display = 'block';
+                uploadResult.innerHTML = `
+                    <div class="text-red-600">
+                        ${error.message}
+                    </div>
+                `;
+            });
+        });
+    });
+</script>
+{% endblock %}

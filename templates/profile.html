@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - ARVision{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Profile Header -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex items-center space-x-4">
+                <div class="flex-1">
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.name }}</h2>
+                    <p class="text-gray-600 dark:text-gray-400">{{ current_user.email }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Models -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">My Models</h3>
+            
+            {% if user.models %}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for model in user.models %}
+                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                            <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ model.original_filename }}</h4>
+                            <div class="flex space-x-2">
+                                <a href="{{ url_for('view_model', model_id=model.id) }}" 
+                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                                    View
+                                </a>
+                                <a href="{{ url_for('download_model', filename=model.original_filename) }}" 
+                                   class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                                    Download
+                                </a>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-gray-600 dark:text-gray-400">No models uploaded yet.</p>
+            {% endif %}
+
+            <!-- Upload New Model -->
+            <div class="mt-6">
+                <a href="{{ url_for('index') }}" 
+                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+                    Upload New Model
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

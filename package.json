@@ -1,0 +1,41 @@
+{
+  "name": "web-ar-converter",
+  "version": "4.0.0",
+  "description": "Web-based 3D model converter and AR viewer",
+  "main": "index.js",
+  "scripts": {
+    "start": "python app.py",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@google/model-viewer": "^3.5.0",
+    "fbx2gltf": "^0.9.7-p1",
+    "obj2gltf": "^3.1.6",
+    "three": "^0.163.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/web-ar-converter.git"
+  },
+  "keywords": [
+    "ar",
+    "3d",
+    "model",
+    "converter",
+    "webxr",
+    "gltf",
+    "glb"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/web-ar-converter/issues"
+  },
+  "homepage": "https://github.com/yourusername/web-ar-converter#readme"
+}

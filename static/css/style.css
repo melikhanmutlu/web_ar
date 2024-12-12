@@ -1,0 +1,82 @@
+/* Drag and Drop Styles */
+.model-card {
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+
+.model-card.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+}
+
+.folder-drop-target {
+    transition: all 0.2s ease;
+}
+
+.folder-drop-target.drag-over {
+    transform: scale(1.02);
+    border-color: #4F46E5;
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
+
+/* Selection Styles */
+.model-card.selected {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.model-card.selected::before {
+    content: '';
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    background-color: #4F46E5;
+    border-radius: 50%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='white'%3E%3Cpath fill-rule='evenodd' d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    z-index: 10;
+}
+
+.selected-overlay {
+    transition: opacity 0.2s ease-in-out;
+}
+
+.model-checkbox {
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* Folder Styles */
+.folder-icon {
+    transition: all 0.2s ease;
+}
+
+.folder-drop-target:hover .folder-icon {
+    transform: scale(1.1);
+}
+
+/* Delete Button */
+#deleteSelectedBtn {
+    transition: opacity 0.2s ease;
+}
+
+#deleteSelectedBtn.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Selection Instructions */
+.selection-instructions {
+    font-size: 0.875rem;
+    color: #6B7280;
+    margin-bottom: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    .selection-instructions {
+        color: #9CA3AF;
+    }
+}

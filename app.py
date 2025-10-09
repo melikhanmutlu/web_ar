@@ -808,9 +808,23 @@ def upload_file():
         color = request.form.get('color', '#4CAF50')
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
         
-        # Get maximum dimension setting (in centimeters, convert to meters)
-        max_dimension = float(request.form.get('maxDimension', '50')) / 100.0
-        logger.info(f"Maximum dimension setting: {max_dimension} meters")
+        # Get texture removal setting (for FBX)
+        remove_textures_raw = request.form.get('removeTextures')
+        remove_textures = remove_textures_raw == 'true' if remove_textures_raw else False
+        logger.info(f"Remove textures setting: {remove_textures}")
+        
+        # Get maximum dimension setting (only if checkbox is checked)
+        use_max_dimension_raw = request.form.get('useMaxDimension')
+        logger.info(f"DEBUG: useMaxDimension raw value: {use_max_dimension_raw}, type: {type(use_max_dimension_raw)}")
+        use_max_dimension = use_max_dimension_raw == 'true' if use_max_dimension_raw else False
+        logger.info(f"DEBUG: useMaxDimension parsed: {use_max_dimension}")
+        
+        if use_max_dimension:
+            max_dimension = float(request.form.get('maxDimension', '50')) / 100.0
+            logger.info(f"Maximum dimension limit enabled: {max_dimension * 100} cm ({max_dimension} m)")
+        else:
+            max_dimension = 0  # No scaling
+            logger.info(f"Maximum dimension limit disabled - model will keep original size")
         
         # Create converted directory
         converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], unique_id)
@@ -849,6 +863,10 @@ def upload_file():
             converter = STLConverter()
         elif file_extension == '.fbx':
             converter = FBXConverter()
+            # Set texture removal for FBX if requested
+            if remove_textures:
+                converter.remove_textures = True
+                logger.info("FBX texture removal enabled")
         else:
             return jsonify({'error': 'Unsupported file format'}), 400
             

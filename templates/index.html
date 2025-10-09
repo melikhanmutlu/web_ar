@@ -534,14 +534,24 @@
             // Check if color should be applied
             const useColorCheckbox = document.getElementById('useColor');
             const shouldApplyColor = useColorCheckbox && useColorCheckbox.checked;
-            formData.append('useColor', shouldApplyColor);
+            formData.append('useColor', shouldApplyColor ? 'true' : 'false');
             formData.append('color', document.getElementById('colorPicker').value);
+            
+            const useMaxDimensionCheckbox = document.getElementById('useMaxDimension');
+            const shouldLimitDimension = useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked;
+            formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
             formData.append('maxDimension', document.getElementById('max-dimension').value);
+            
+            const removeTexturesCheckbox = document.getElementById('removeTextures');
+            const shouldRemoveTextures = removeTexturesCheckbox && removeTexturesCheckbox.checked;
+            formData.append('removeTextures', shouldRemoveTextures ? 'true' : 'false');
             
             console.log('Upload settings:', {
                 useColor: shouldApplyColor,
                 color: document.getElementById('colorPicker').value,
-                maxDimension: document.getElementById('max-dimension').value
+                useMaxDimension: shouldLimitDimension,
+                maxDimension: document.getElementById('max-dimension').value,
+                removeTextures: shouldRemoveTextures
             });
             
             // Add MTL file if present (for OBJ files)

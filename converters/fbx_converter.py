@@ -440,8 +440,8 @@ class FBXConverter(BaseConverter):
                                                 extents = geom.bounds[1] - geom.bounds[0]
                                                 self.log_operation(f"  Extents after scaling: {extents}")
                                 
-                                # Apply color if requested (and remove_textures is True)
-                                if color and self.remove_textures:
+                                # Apply color if requested
+                                if color:
                                     self.log_operation("Removing textures and applying solid color to all geometries")
                                     # Convert hex to RGB
                                     hex_color = color.lstrip('#')

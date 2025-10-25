@@ -155,14 +155,12 @@
             background: rgba(31, 41, 55, 0.9);
         }
 
-        /* Don't hide model-viewer's native AR button - it works better on mobile! */
+        /* Hide model-viewer's AR button - use custom one */
+        model-viewer::part(ar-button) {
+            display: none;
+        }
         
         @media (max-width: 640px) {
-            /* Hide custom AR button on mobile, use native model-viewer AR button */
-            #arButton {
-                display: none !important;
-            }
-            
             .color-picker-container {
                 display: none !important;
             }
@@ -407,13 +405,6 @@
         
         .dark .ar-modal-footer {
             color: #ccc;
-        }
-
-        /* Desktop: Hide native AR button, use custom one */
-        @media (min-width: 641px) {
-            model-viewer::part(ar-button) {
-                display: none;
-            }
         }
 
         @media (max-width: 640px) {

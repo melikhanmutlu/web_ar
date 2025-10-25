@@ -1,0 +1,17 @@
+Add ar-modes to enable native AR button visibility
+
+Problem:
+- Native AR button not showing on mobile
+- ar-modes attribute required for button to appear
+- Without it, model-viewer doesn't show AR button
+
+Solution:
+- Add ar-modes="scene-viewer webxr quick-look"
+- Enables all AR platforms
+- Native button will now appear on mobile
+
+Result:
+- Android: scene-viewer mode
+- iOS: quick-look mode
+- WebXR: for supported browsers
+- Native AR button visible on mobile

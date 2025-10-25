@@ -1,0 +1,16 @@
+Fix AR button visibility on mobile by adding z-index
+
+Problem:
+- AR button not visible on mobile devices
+- Model-viewer was covering the buttons
+- Missing z-index on bottom-right-controls
+
+Solution:
+- Add z-index: 2000 to bottom-right-controls
+- Ensure buttons stay above model-viewer
+- Apply to both desktop and mobile
+
+Result:
+- AR button now visible on mobile
+- All control buttons properly layered
+- No more hidden buttons

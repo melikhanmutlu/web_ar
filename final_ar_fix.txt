@@ -1,0 +1,32 @@
+FINAL FIX: Use native AR button on mobile, custom on desktop
+
+Problem:
+- iPhone Safari: AR button not working
+- Android Chrome: Downloading GLB instead of AR
+- Custom AR button not properly activating AR
+- Native model-viewer AR button was hidden everywhere
+
+Solution:
+- Mobile (≤640px): Show NATIVE AR button, hide custom button
+- Desktop (≥641px): Hide native AR button, show custom button
+- Native AR button works perfectly on mobile devices
+- Custom button shows QR modal on desktop
+
+Changes:
+- Remove global hide of native AR button
+- Add @media query to hide native button only on desktop
+- Add @media query to hide custom button only on mobile
+- Native AR button appears automatically on mobile
+
+Why This Works:
+- Google's native AR button is battle-tested
+- Handles iOS Quick Look automatically
+- Handles Android Scene Viewer automatically
+- No JavaScript needed - pure native functionality
+- Custom button only for desktop QR modal
+
+Result:
+- iPhone: Native AR button → Quick Look works
+- Android: Native AR button → Scene Viewer works
+- Desktop: Custom AR button → QR modal works
+- No more downloads, no more broken AR

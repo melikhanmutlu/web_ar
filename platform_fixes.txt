@@ -1,0 +1,9 @@
+Make all converters and tools platform-aware for Railway deployment
+
+- Fix obj2gltf npx path in app.py (Windows vs Linux)
+- Fix FBX2glTF path in fbx_converter.py (Windows .exe vs Linux binary)
+- Fix FBX2glTF path in app.py convert_fbx_to_glb function
+- All paths now detect platform and use appropriate binary
+- Windows: Uses .exe and full paths
+- Linux/Railway: Uses binaries without extension from PATH
+- This ensures compatibility across development and production environments

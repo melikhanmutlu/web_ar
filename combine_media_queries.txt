@@ -1,0 +1,17 @@
+Combine duplicate media queries for mobile CSS
+
+Problem:
+- Two separate @media (max-width: 640px) blocks
+- Confusing and potentially conflicting styles
+- Native AR button still not showing on mobile
+
+Solution:
+- Combine the two media queries into one
+- Ensure native AR button is not hidden on mobile
+- Keep custom AR button hidden on mobile
+- Keep color picker hidden on mobile
+
+Result:
+- Cleaner, more maintainable CSS
+- Less chance of conflicting styles
+- Native AR button should now appear on mobile

@@ -1,0 +1,30 @@
+Add extensive debugging and force AR activation on mobile
+
+Problem:
+- AR button still downloading GLB instead of launching AR
+- canActivateAR might be returning false
+- Need to debug and force activation
+
+Solution:
+- Add console.log for all AR-related checks
+- Detect mobile devices explicitly
+- Force AR activation even if canActivateAR is false
+- Add preventDefault and stopPropagation
+- Try activateAR() regardless of canActivateAR on mobile
+
+Changes:
+- Mobile device detection with user agent
+- Extensive console logging for debugging
+- Force AR activation on mobile devices
+- Graceful fallback to QR modal on error
+- Desktop shows QR modal as before
+
+Debug Info:
+- Logs: AR button click, model viewer state, canActivateAR value
+- Helps identify why AR isn't launching
+- Forces AR attempt on mobile even if checks fail
+
+Result:
+- Better debugging information in console
+- Forced AR activation on mobile
+- Should bypass any false negative checks

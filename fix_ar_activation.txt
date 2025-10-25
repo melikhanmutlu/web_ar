@@ -1,0 +1,26 @@
+Fix AR button to properly activate AR on mobile devices
+
+Problem:
+- AR button was downloading model instead of activating AR
+- canActivateAR check was not working properly
+- No error handling for AR activation
+
+Solution:
+- Improve AR detection logic
+- Try to activate AR directly with async/await
+- Add try-catch error handling
+- Fall back to QR modal if AR activation fails
+- Better mobile device detection
+
+Changes:
+- Enhanced isARSupported() function
+- Made AR button click handler async
+- Direct activateAR() call on mobile
+- Graceful fallback to QR modal
+- Console logging for debugging
+
+Result:
+- Mobile devices with AR support will launch AR directly
+- Desktop/unsupported devices show QR modal
+- No more unwanted downloads
+- Better user experience

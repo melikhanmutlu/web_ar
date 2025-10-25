@@ -1,0 +1,29 @@
+Revert model-viewer to v2 configuration that was working
+
+Problem:
+- AR still downloading GLB instead of launching
+- Added ar-modes, ar-scale, ios-src but broke functionality
+- v2 was working with simpler configuration
+
+Solution:
+- Remove ar-modes="webxr scene-viewer quick-look"
+- Remove ar-scale="fixed"
+- Remove ios-src attribute
+- Keep only: ar, ar-placement="floor"
+- Match v2's working configuration exactly
+
+v2 Configuration (Working):
+- ar (enables AR)
+- ar-placement="floor"
+- shadow-intensity="1"
+- camera-controls
+- auto-rotate
+
+Current Configuration (Broken):
+- Had extra attributes that broke AR
+
+Result:
+- Back to v2's proven working configuration
+- Native AR button on mobile
+- Custom AR button on desktop
+- Should work like v2 did

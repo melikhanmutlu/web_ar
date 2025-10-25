@@ -1,0 +1,15 @@
+Improve AR modal spacing and enlarge QR code
+
+Changes:
+- Reduce top spacing (mb-4 to mb-3)
+- Reduce description spacing (mb-4 to mb-3)
+- Increase QR container margin (1rem to 1.5rem)
+- Increase QR container padding (1rem to 1.25rem)
+- Remove footer top margin (margin-top: 0.5rem to 0)
+- Enlarge QR code from 256x256 to 300x300 pixels
+
+Result:
+- More balanced spacing throughout modal
+- Larger, easier to scan QR code
+- Cleaner, more compact appearance
+- Better visual hierarchy

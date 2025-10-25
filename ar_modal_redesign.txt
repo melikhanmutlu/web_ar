@@ -1,0 +1,18 @@
+Redesign AR modal to match QR modal styling
+
+Changes:
+- Remove dark overlay background (no more nested modals)
+- Match QR modal's clean white box design
+- Center modal with same positioning as QR modal
+- Add close button (X) in header like QR modal
+- Enlarge QR code from 128x128 to 256x256 pixels
+- Use same shadow and border-radius as QR modal
+- Consistent padding and spacing
+- Remove phone icon, keep it minimal and clean
+- Better dark mode support
+
+Result:
+- AR modal now looks identical to QR modal
+- No more overlapping/nested modal issue
+- Larger, easier to scan QR code
+- Cleaner, more professional appearance

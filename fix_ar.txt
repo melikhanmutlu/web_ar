@@ -1,0 +1,19 @@
+Fix AR modal styling and model-viewer AR configuration
+
+Modal Fixes:
+- Add proper dark overlay background (rgba(0,0,0,0.75))
+- Add backdrop-filter blur for better visual separation
+- Fix modal content background (white box)
+- Improve QR code container styling
+- Better button styling
+
+Model-Viewer AR Fixes:
+- Change ar-scale from "auto" to "fixed" for consistent sizing
+- Add ar-modes="webxr scene-viewer quick-look" for better compatibility
+- Add ios-src for iOS Quick Look support
+- Keep ar-placement="floor" for proper placement
+
+These changes ensure:
+1. Modal no longer shows model behind it
+2. AR viewing works better on mobile devices
+3. Model appears at correct scale in AR

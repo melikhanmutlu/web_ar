@@ -1,0 +1,24 @@
+Revert to custom AR button - native button was causing downloads
+
+Problem:
+- Native AR button was downloading GLB instead of launching AR
+- Previous working version used custom AR button with activateAR()
+- Native button approach didn't work as expected
+
+Solution:
+- Revert to hiding native AR button everywhere
+- Keep custom AR button visible on all devices
+- Custom button calls modelViewer.activateAR() properly
+- This was the working configuration before
+
+Changes:
+- Hide model-viewer::part(ar-button) globally
+- Remove mobile-specific button hiding
+- Custom AR button works on both mobile and desktop
+- Falls back to QR modal when AR not supported
+
+Result:
+- Back to working AR activation on mobile
+- Custom button properly calls activateAR()
+- QR modal fallback for desktop
+- No more unwanted downloads

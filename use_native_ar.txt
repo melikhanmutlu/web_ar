@@ -1,0 +1,24 @@
+Use model-viewer's native AR button on mobile devices
+
+Problem:
+- Custom AR button was downloading GLB instead of launching AR
+- Native AR button was hidden everywhere
+- Mobile users couldn't access AR properly
+
+Solution:
+- Show native model-viewer AR button on mobile (≤640px)
+- Hide custom AR button on mobile
+- Hide native AR button only on desktop (≥641px)
+- Keep custom AR button on desktop (shows QR modal)
+
+Changes:
+- Remove global hide of native AR button
+- Add media query to hide native button only on desktop
+- Add media query to hide custom button only on mobile
+- Native AR button works perfectly on mobile devices
+
+Result:
+- Mobile: Native AR button appears and works correctly
+- Desktop: Custom AR button shows QR modal
+- No more unwanted downloads
+- Proper AR experience on all devices

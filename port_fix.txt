@@ -1,0 +1,6 @@
+Fix Railway PORT environment variable issue
+
+- Add start.sh script for proper PORT variable expansion
+- Update Dockerfile to use start.sh
+- Set default PORT to 8080 if not provided
+- Use exec in start.sh for proper signal handling

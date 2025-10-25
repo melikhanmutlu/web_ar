@@ -1,0 +1,5 @@
+Add Linux FBX2glTF binary for Railway deployment
+
+- FBX2glTF v0.13.1 Linux x64 binary
+- Required for FBX to GLB conversion on Railway
+- File size: ~6MB

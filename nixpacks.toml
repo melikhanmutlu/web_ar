@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "nodejs-18_x", "gcc", "g++"]
+nixPkgs = ["python311", "nodejs-18_x"]
 
 [phases.install]
 cmds = [
@@ -9,7 +9,7 @@ cmds = [
 ]
 
 [phases.build]
-cmds = ["python migrate_db.py || echo 'Migration skipped'"]
+cmds = ["python migrate_db.py || true"]
 
 [start]
-cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300 --log-level info"
+cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"

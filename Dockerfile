@@ -27,6 +27,9 @@ RUN npm install
 # Copy application code
 COPY . .
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Create necessary directories
 RUN mkdir -p uploads converted temp qr_codes tools instance
 
@@ -40,12 +43,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8080/ || exit 1
 
-# Start application with gunicorn
-CMD gunicorn app:app \
-    --bind 0.0.0.0:$PORT \
-    --workers 2 \
-    --threads 4 \
-    --timeout 300 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info
+# Start application using startup script
+CMD ["./start.sh"]

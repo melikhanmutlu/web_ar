@@ -1,0 +1,22 @@
+Strengthen native AR button hiding for Safari compatibility
+
+Problem:
+- Native AR button visible in Safari alongside custom button
+- ::part(ar-button) selector may not work in all browsers
+- Need stronger CSS to ensure native button stays hidden
+
+Solution:
+- Add !important to ::part(ar-button) selector
+- Add additional selector for Safari compatibility
+- Target button[slot="ar-button"] as fallback
+- Ensures native button hidden in all browsers
+
+Changes:
+- model-viewer::part(ar-button) { display: none !important; }
+- model-viewer > button[slot="ar-button"] { display: none !important; }
+
+Result:
+- Native AR button hidden in all browsers
+- Only custom AR button visible
+- Works in Safari, Chrome, and all other browsers
+- Clean, consistent UI

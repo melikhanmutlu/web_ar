@@ -157,7 +157,12 @@
 
         /* Hide native AR button everywhere - use custom one */
         model-viewer::part(ar-button) {
-            display: none;
+            display: none !important;
+        }
+        
+        /* Additional selector for Safari compatibility */
+        model-viewer > button[slot="ar-button"] {
+            display: none !important;
         }
 
         @media (max-width: 640px) {

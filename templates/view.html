@@ -155,20 +155,11 @@
             background: rgba(31, 41, 55, 0.9);
         }
 
-        /* Desktop: Hide native AR button */
-        @media (min-width: 641px) {
-            model-viewer::part(ar-button) {
-                display: none;
-            }
+        /* Hide native AR button everywhere - use custom one */
+        model-viewer::part(ar-button) {
+            display: none;
         }
-        
-        /* Mobile: Show native AR button, hide custom one */
-        @media (max-width: 640px) {
-            #arButton {
-                display: none !important;
-            }
-        }
-        
+
         @media (max-width: 640px) {
             .color-picker-container {
                 display: none !important;

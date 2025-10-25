@@ -1,0 +1,20 @@
+Show custom AR button everywhere - native doesn't work in desktop simulation
+
+Problem:
+- Custom AR button hidden on mobile
+- Native AR button only works on real mobile devices
+- Desktop mobile simulation doesn't show native AR button
+- Users can't test AR in browser mobile view
+
+Solution:
+- Show custom AR button on all devices
+- Hide native AR button everywhere
+- Custom button calls activateAR() which works on real mobile
+- Works in desktop, mobile view, and real mobile devices
+
+Result:
+- AR button visible everywhere
+- Desktop: Shows QR modal
+- Mobile simulation: Shows QR modal or tries AR
+- Real mobile: Activates AR successfully
+- Consistent user experience

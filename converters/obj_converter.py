@@ -6,6 +6,8 @@ import subprocess
 import logging
 import trimesh
 import numpy as np
+import platform
+import shutil
 from typing import Optional, List
 from .base_converter import BaseConverter
 from .utils.file_utils import ensure_directory, safe_delete_file
@@ -16,7 +18,15 @@ class OBJConverter(BaseConverter):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.supported_extensions = {'.obj'}
-        self.npx_path = r"C:\Program Files\nodejs\npx.cmd"
+        
+        # Platform-aware npx path
+        if platform.system() == 'Windows':
+            self.npx_path = r"C:\Program Files\nodejs\npx.cmd"
+        else:
+            # Linux/Mac - use npx from PATH
+            npx_location = shutil.which('npx')
+            self.npx_path = npx_location if npx_location else 'npx'
+        
         self.texture_files: List[str] = []
         self.mtl_file: Optional[str] = None
 

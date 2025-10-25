@@ -389,9 +389,9 @@
         
         .ar-qr-container {
             background: white;
-            padding: 1rem;
+            padding: 1.25rem;
             border-radius: 0.5rem;
-            margin: 1rem 0;
+            margin: 1.5rem 0;
             display: flex;
             justify-content: center;
         }
@@ -400,7 +400,7 @@
             text-align: center;
             font-size: 0.875rem;
             color: #666;
-            margin-top: 0.5rem;
+            margin-top: 0;
         }
         
         .dark .ar-modal-footer {
@@ -798,14 +798,14 @@
                     // Show modal
                     arModal.classList.add('show');
                     
-                    // Generate QR code (larger size)
+                    // Generate QR code (extra large size)
                     const qrContainer = document.getElementById('arModalQrCode');
                     if (qrContainer) {
                         qrContainer.innerHTML = ''; // Clear previous QR code
                         new QRCode(qrContainer, {
                             text: window.location.href,
-                            width: 256,
-                            height: 256,
+                            width: 300,
+                            height: 300,
                             colorDark: '#000000',
                             colorLight: '#ffffff',
                             correctLevel: QRCode.CorrectLevel.H
@@ -1205,7 +1205,7 @@
 
     <!-- AR Modal -->
     <div id="arModal" class="bg-white dark:bg-gray-800">
-        <div class="flex justify-between items-center mb-4">
+        <div class="flex justify-between items-center mb-3">
             <h3 class="text-xl font-semibold text-gray-900 dark:text-white">AR Not Supported</h3>
             <button id="closeArModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1214,7 +1214,7 @@
             </button>
         </div>
         
-        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
             Your device doesn't support AR viewing. Please use a mobile device with AR capabilities.
         </p>
         

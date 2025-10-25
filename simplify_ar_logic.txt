@@ -1,0 +1,25 @@
+Simplify AR activation logic and add ar-status event listener
+
+Problem:
+- canActivateAR returning false even on mobile
+- Complex mobile detection logic not working
+- Too many console logs cluttering output
+
+Solution:
+- Remove canActivateAR checks - just try activateAR()
+- Add ar-status event listener for better error handling
+- Simplify AR button click handler
+- Let model-viewer handle AR capability detection
+- Show QR modal on any error
+
+Changes:
+- Listen to ar-status event for failures
+- Direct activateAR() call without pre-checks
+- Catch errors and show QR modal as fallback
+- Cleaner, simpler code
+
+Result:
+- Model-viewer handles AR detection internally
+- Better error handling with ar-status event
+- Simpler, more reliable code
+- QR modal fallback for unsupported devices

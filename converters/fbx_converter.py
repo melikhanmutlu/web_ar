@@ -7,6 +7,7 @@ import logging
 import trimesh
 import tempfile
 import numpy as np
+import platform
 from pathlib import Path
 from .base_converter import BaseConverter
 from .utils.file_utils import ensure_directory
@@ -19,7 +20,14 @@ class FBXConverter(BaseConverter):
     def __init__(self):
         super().__init__()
         self.supported_extensions = {'.fbx'}
-        self.fbx2gltf_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools', 'FBX2glTF.exe')
+        
+        # Platform-aware FBX2glTF path
+        tools_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools')
+        if platform.system() == 'Windows':
+            self.fbx2gltf_path = os.path.join(tools_dir, 'FBX2glTF.exe')
+        else:
+            self.fbx2gltf_path = os.path.join(tools_dir, 'FBX2glTF')
+        
         self.remove_textures = False  # Option to remove existing textures
         
     def validate(self, file_path: str) -> bool:

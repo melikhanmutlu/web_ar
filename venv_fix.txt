@@ -1,0 +1,7 @@
+Use Python virtual environment to fix externally-managed-environment error
+
+- Add virtualenv to nixPkgs
+- Create venv in /opt/venv during install
+- Install all packages in venv
+- Use venv gunicorn in start command
+- This avoids Nix immutable filesystem restrictions

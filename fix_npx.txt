@@ -1,0 +1,6 @@
+Fix OBJ converter npx path for Linux/Railway deployment
+
+- Add platform detection (Windows vs Linux)
+- Use shutil.which() to find npx on Linux
+- Keep Windows path for local development
+- This fixes the FileNotFoundError on Railway

@@ -1,0 +1,6 @@
+Add explicit pip install to nixpacks install phase
+
+- Python packages were not being installed
+- Add install phase with pip install -r requirements.txt
+- Keep npm ci for Node.js dependencies
+- Now both Python and Node.js packages will install

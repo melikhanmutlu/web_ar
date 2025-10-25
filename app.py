@@ -354,7 +354,12 @@ def convert_fbx_to_glb(fbx_path, output_path):
     """Convert FBX file to GLB format using FBX2glTF."""
     try:
         logger.info("Starting FBX to GLB conversion")
-        fbx2gltf_path = os.path.join(TOOLS_DIR, 'FBX2glTF.exe')
+        # Platform-aware FBX2glTF path
+        import platform
+        if platform.system() == 'Windows':
+            fbx2gltf_path = os.path.join(TOOLS_DIR, 'FBX2glTF.exe')
+        else:
+            fbx2gltf_path = os.path.join(TOOLS_DIR, 'FBX2glTF')
         
         # Ensure output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -708,8 +713,14 @@ def check_node_installed():
 def ensure_obj2gltf_installed():
     """Ensure obj2gltf is installed globally."""
     try:
-        # Check if obj2gltf is installed using full path to npx
-        npx_path = r"C:\Program Files\nodejs\npx.cmd"
+        # Platform-aware npx path
+        import platform
+        if platform.system() == 'Windows':
+            npx_path = r"C:\Program Files\nodejs\npx.cmd"
+        else:
+            npx_path = shutil.which('npx') or 'npx'
+        
+        # Check if obj2gltf is installed
         result = subprocess.run([npx_path, 'obj2gltf', '--version'],
                               capture_output=True,
                               text=True)

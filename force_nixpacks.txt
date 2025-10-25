@@ -1,0 +1,6 @@
+Force Railway to use nixpacks instead of Dockerfile
+
+- Remove Dockerfile.backup completely
+- Remove .dockerignore
+- Add .nixpacksignore to prevent Dockerfile detection
+- Railway should now use nixpacks.toml and railway.json

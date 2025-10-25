@@ -1,0 +1,3 @@
+Update Procfile to use venv gunicorn path
+
+Railway uses Procfile for start command, not nixpacks.toml

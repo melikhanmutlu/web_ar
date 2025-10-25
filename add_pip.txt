@@ -1,0 +1,5 @@
+Add pip to nixPkgs to fix Python package installation
+
+- Add python311Packages.pip to nixPkgs
+- Remove redundant pip upgrade command
+- Now pip will be available during install phase

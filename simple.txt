@@ -1,0 +1,6 @@
+Simplify nixpacks and railway.json - let auto-detection work
+
+- Remove custom install/build phases from nixpacks.toml
+- Remove buildCommand from railway.json
+- Let Railway auto-detect Python and Node.js from files
+- Nixpacks will automatically run pip install and npm install

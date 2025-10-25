@@ -1,0 +1,54 @@
+v3: Production-ready deployment with Railway support, UI improvements, and comprehensive documentation
+
+🚀 Major Features:
+- Railway.app deployment support with PostgreSQL
+- Production WSGI server (Waitress for Windows, Gunicorn for Linux)
+- Platform-agnostic FBX2glTF path handling
+- Comprehensive deployment documentation
+
+🎨 UI/UX Improvements:
+- Abstract animated background with radial gradients
+- Minimal card design (transparent backgrounds, subtle borders)
+- Navbar container alignment (max-w-7xl)
+- Light mode optimizations
+- Feature cards styling improvements
+
+🔧 Bug Fixes:
+- FBX2glTF hang issue fixed (stdin=DEVNULL)
+- Connection timeout resolved (300s with Waitress)
+- Port binding for production (0.0.0.0)
+- Database connection pooling
+
+📦 Deployment Files:
+- railway.json - Railway configuration
+- Procfile - Heroku/Railway start command
+- runtime.txt - Python 3.11.0
+- .env.example - Environment variables template
+
+📚 Documentation:
+- DEPLOYMENT.md - General deployment guide
+- RAILWAY_DEPLOYMENT.md - Railway-specific guide (detailed)
+- PROJECT_PROMPT.md - Full-stack project specification (6000+ words)
+
+🛠️ Developer Tools:
+- create_package.py - Automated ZIP packaging
+- start.bat - Quick Windows startup
+- start_production.py - Production server with Waitress
+- build_exe.py - PyInstaller build script
+
+🔄 Technical Changes:
+- PostgreSQL support with automatic DATABASE_URL parsing
+- SQLAlchemy connection pooling
+- Platform detection (Windows/Linux/Mac)
+- Environment variable configuration
+- Production-ready Flask configuration
+
+📊 Dependencies:
+- Added: gunicorn==21.2.0
+- Added: waitress==3.0.2
+
+✅ Testing:
+- FBX conversion with color: Working
+- Large file uploads: Fixed (timeout resolved)
+- Multi-threaded requests: Supported
+- Cross-platform compatibility: Verified

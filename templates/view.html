@@ -788,7 +788,15 @@
             // Function to check if AR is supported
             function isARSupported() {
                 const modelViewer = document.querySelector('model-viewer');
-                return modelViewer && modelViewer.canActivateAR;
+                // Check if model-viewer exists and has AR capability
+                if (!modelViewer) return false;
+                
+                // Check for AR support in different ways
+                const hasARMode = modelViewer.hasAttribute('ar');
+                const canActivate = modelViewer.canActivateAR;
+                
+                // On mobile devices with AR support, canActivateAR should be true
+                return hasARMode && canActivate;
             }
 
             // Function to show AR modal with QR code
@@ -848,11 +856,20 @@
             }
 
             // Event Listeners
-            arButton?.addEventListener('click', () => {
-                if (!isARSupported()) {
-                    showArModal();
+            arButton?.addEventListener('click', async () => {
+                const modelViewer = document.querySelector('model-viewer');
+                
+                // Try to activate AR directly on mobile
+                if (modelViewer && modelViewer.canActivateAR) {
+                    try {
+                        await modelViewer.activateAR();
+                    } catch (error) {
+                        console.log('AR activation failed, showing QR modal:', error);
+                        showArModal();
+                    }
                 } else {
-                    modelViewer.activateAR();
+                    // Desktop or AR not supported - show QR modal
+                    showArModal();
                 }
             });
 

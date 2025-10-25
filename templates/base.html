@@ -6,6 +6,9 @@
     <title>{% block title %}ARVision{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -15,7 +18,20 @@
                         primary: '#1F2937',
                         'primary-dark': '#111827',
                         secondary: '#4B5563',
-                        'secondary-dark': '#374151'
+                        'secondary-dark': '#374151',
+                        cyan: {
+                            400: '#00E5FF',
+                            500: '#00B2CC',
+                            600: '#008FA3'
+                        },
+                        orange: {
+                            500: '#FF3D00',
+                            600: '#C30000'
+                        }
+                    },
+                    fontFamily: {
+                        'poppins': ['Poppins', 'sans-serif'],
+                        'inter': ['Inter', 'sans-serif']
                     }
                 }
             }
@@ -42,7 +58,7 @@
                 @apply text-white bg-gray-700 hover:bg-gray-600 focus:ring-gray-700;
             }
             .nav-link {
-                @apply text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200;
+                @apply text-gray-700 dark:text-white font-medium hover:text-gray-900 dark:hover:text-cyan-400 transition-colors duration-200;
             }
         }
         /* Custom Styles */
@@ -72,7 +88,7 @@
 <body class="h-full bg-gray-50 dark:bg-gray-900">
     {% block header %}
     <header class="fixed top-0 left-0 right-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
-        <div class="container mx-auto px-4">
+        <div class="max-w-7xl mx-auto px-4">
             <div class="flex justify-between items-center h-16">
                 <!-- Logo - Left Side -->
                 <div class="flex-shrink-0">

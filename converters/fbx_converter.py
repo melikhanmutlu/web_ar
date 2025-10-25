@@ -293,6 +293,7 @@ class FBXConverter(BaseConverter):
                                          capture_output=True, 
                                          text=True, 
                                          check=False,
+                                         stdin=subprocess.DEVNULL,  # Don't wait for input
                                          timeout=300)  # 5 minute timeout
                     
                     # Check conversion result

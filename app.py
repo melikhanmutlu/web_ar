@@ -1392,6 +1392,7 @@ def serve_converted_file(unique_id, filename):
 
 @app.route('/my_models')
 @app.route('/my_models/<folder_id>')
+@login_required
 def my_models(folder_id=None):
     try:
         if folder_id:
@@ -1887,6 +1888,8 @@ def before_request():
 if __name__ == '__main__':
     if init_app_dependencies():
         app.logger.info("Dependencies initialized successfully")
-        app.run(debug=True)
+        # Railway/Heroku için PORT environment variable
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port, debug=app.config.get('DEBUG', True))
     else:
         app.logger.error("Failed to initialize dependencies")

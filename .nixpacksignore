@@ -1,0 +1,4 @@
+# Ignore these files during nixpacks build
+Dockerfile*
+*.dockerfile
+.dockerignore

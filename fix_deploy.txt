@@ -1,0 +1,7 @@
+Fix Railway deployment: Use nixpacks instead of Dockerfile
+
+- Rename Dockerfile to Dockerfile.backup
+- Update railway.json to include npm install
+- Update nixpacks.toml with proper configuration
+- Add threads to gunicorn for better performance
+- Ensure migration doesn't fail build (|| true)

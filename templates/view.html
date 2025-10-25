@@ -856,19 +856,48 @@
             }
 
             // Event Listeners
-            arButton?.addEventListener('click', async () => {
+            arButton?.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
                 const modelViewer = document.querySelector('model-viewer');
                 
-                // Try to activate AR directly on mobile
-                if (modelViewer && modelViewer.canActivateAR) {
-                    try {
-                        await modelViewer.activateAR();
-                    } catch (error) {
-                        console.log('AR activation failed, showing QR modal:', error);
+                console.log('AR Button clicked');
+                console.log('Model Viewer:', modelViewer);
+                console.log('Can Activate AR:', modelViewer?.canActivateAR);
+                console.log('Has AR attribute:', modelViewer?.hasAttribute('ar'));
+                
+                // Force AR activation on mobile
+                if (modelViewer) {
+                    // Check if we're on mobile
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    
+                    if (isMobile && modelViewer.canActivateAR) {
+                        console.log('Attempting to activate AR...');
+                        try {
+                            await modelViewer.activateAR();
+                            console.log('AR activated successfully');
+                        } catch (error) {
+                            console.error('AR activation failed:', error);
+                            showArModal();
+                        }
+                    } else if (isMobile) {
+                        // Mobile but canActivateAR is false - try anyway
+                        console.log('Mobile detected, forcing AR activation...');
+                        try {
+                            await modelViewer.activateAR();
+                            console.log('AR activated successfully (forced)');
+                        } catch (error) {
+                            console.error('Forced AR activation failed:', error);
+                            showArModal();
+                        }
+                    } else {
+                        // Desktop - show QR modal
+                        console.log('Desktop detected, showing QR modal');
                         showArModal();
                     }
                 } else {
-                    // Desktop or AR not supported - show QR modal
+                    console.error('Model viewer not found');
                     showArModal();
                 }
             });

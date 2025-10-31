@@ -1,0 +1,24 @@
+Fix FBX2glTF permission error - add execute permission during build
+
+Problem:
+- FBX file upload fails with 500 error
+- Error: PermissionError: [Errno 13] Permission denied: '/app/tools/FBX2glTF'
+- FBX2glTF binary doesn't have execute permission after deployment
+
+Root Cause:
+- tools/FBX2glTF is a binary file
+- Git doesn't preserve execute permissions on Railway
+- Nixpacks build doesn't automatically set execute permissions
+
+Solution:
+- Add chmod +x command to nixpacks.toml install phase
+- Sets execute permission on FBX2glTF during build
+- Runs before application starts
+
+Changes:
+- nixpacks.toml: Added "chmod +x tools/FBX2glTF" to install cmds
+
+Result:
+- FBX conversion will work after redeploy
+- Permission error fixed
+- All file formats (STL, OBJ, FBX) working

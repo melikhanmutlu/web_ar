@@ -1,0 +1,27 @@
+Fix FBX2glTF permission - add chmod to start command
+
+Problem:
+- Previous fix didn't work (chmod in install phase)
+- FBX2glTF still has permission error
+- File might not exist during install phase
+
+Solution:
+- Move chmod to start command
+- Run chmod right before gunicorn starts
+- Use full path: /app/tools/FBX2glTF
+- Add error suppression: 2>/dev/null || true
+
+Changes:
+- nixpacks.toml start cmd:
+  chmod +x /app/tools/FBX2glTF 2>/dev/null || true && gunicorn...
+
+Why This Works:
+- Runs at container start time (file definitely exists)
+- Suppresses errors if already executable
+- Continues even if chmod fails (|| true)
+- Runs before every container start
+
+Result:
+- FBX2glTF will have execute permission
+- FBX conversion will work
+- No more PermissionError

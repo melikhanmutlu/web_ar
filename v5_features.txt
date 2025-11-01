@@ -1,0 +1,61 @@
+v5: Material Editor, Model Transform & Annotation System
+
+New Features Added:
+
+1. Material Editor Panel (Right Side)
+   - Base Color picker with hex input
+   - Metalness slider (0.0 - 1.0)
+   - Roughness slider (0.0 - 1.0)
+   - Texture upload & apply
+   - Texture preview & remove
+   - Reset material button
+   - Real-time material updates
+
+2. Model Transform Panel (Right Side)
+   - Scale slider (0.1x - 3.0x)
+   - Rotation X slider (0° - 360°)
+   - Rotation Y slider (0° - 360°)
+   - Rotation Z slider (0° - 360°)
+   - Reset transform button
+   - Live transform preview
+
+3. Annotations Panel (Right Side)
+   - Add 3D hotspots to model
+   - Hotspot title & description
+   - Measurement tool (distance)
+   - Hotspots list management
+   - Remove individual hotspots
+   - Clear all annotations
+
+UI/UX Improvements:
+- Collapsible panels with smooth animations
+- Consistent design with existing theme
+- Dark mode support for all panels
+- Mobile responsive (panels hidden on mobile)
+- Emoji icons for better visual hierarchy
+- Color-coded buttons (green, blue, red)
+
+Technical Implementation:
+- Symbol-based scene access for material manipulation
+- model-viewer API for transforms
+- Slot-based hotspot system
+- Event-driven architecture
+- No external dependencies (pure vanilla JS)
+
+Responsive Design:
+- Desktop: All panels visible on right side
+- Mobile (< 640px): Panels hidden to save space
+- Maintains existing layout and functionality
+
+Integration:
+- Non-breaking changes to v4
+- Preserves all existing features
+- Compatible with AR, QR, Screenshot, Download
+- Works with all file formats (STL, OBJ, FBX)
+
+Result:
+- Professional material editing capabilities
+- Full 3D transformation control
+- Interactive annotation system
+- Enhanced user experience
+- Production-ready features

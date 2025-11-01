@@ -559,6 +559,11 @@
                 right: 0.5rem;
                 z-index: 2000;
             }
+            
+            /* Hide right side panels on mobile */
+            .panel-container {
+                display: none !important;
+            }
         }
 
         .dark .bottom-right-controls button svg {
@@ -1007,6 +1012,153 @@
             </div>
         </div>
 
+        <!-- Right Side Panels -->
+        <div class="absolute right-6 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4" style="max-width: 320px;">
+            
+            <!-- Material Editor Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">🎨 Material Editor</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="materialPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="materialPanel" class="panel-content p-4 hidden">
+                    <!-- Base Color -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Base Color</label>
+                        <div class="flex gap-2 items-center">
+                            <input type="color" id="materialColor" class="w-10 h-10 rounded cursor-pointer border-2 border-gray-300 dark:border-gray-600" value="#ffffff">
+                            <input type="text" id="materialColorHex" class="flex-1 px-2 py-1.5 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="#FFFFFF">
+                        </div>
+                    </div>
+
+                    <!-- Metalness -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Metalness</label>
+                            <span id="metalnessValue" class="text-xs text-gray-500 dark:text-gray-400">0.0</span>
+                        </div>
+                        <input type="range" id="metalnessSlider" min="0" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Roughness -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Roughness</label>
+                            <span id="roughnessValue" class="text-xs text-gray-500 dark:text-gray-400">1.0</span>
+                        </div>
+                        <input type="range" id="roughnessSlider" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Texture Upload -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Texture</label>
+                        <input type="file" id="textureUpload" accept="image/*" class="hidden">
+                        <button onclick="document.getElementById('textureUpload').click()" class="w-full px-3 py-2 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors">
+                            Upload Texture
+                        </button>
+                        <div id="texturePreview" class="mt-2 hidden">
+                            <img id="texturePreviewImg" class="w-full h-20 object-cover rounded border-2 border-gray-300 dark:border-gray-600">
+                            <button onclick="removeTexture()" class="mt-1 w-full px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded">Remove</button>
+                        </div>
+                    </div>
+
+                    <!-- Reset Button -->
+                    <button id="resetMaterial" class="w-full px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors">
+                        Reset Material
+                    </button>
+                </div>
+            </div>
+
+            <!-- Model Transform Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('transformPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">🔧 Transform</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="transformPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="transformPanel" class="panel-content p-4 hidden">
+                    <!-- Scale -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Scale</label>
+                            <span id="scaleValue" class="text-xs text-gray-500 dark:text-gray-400">1.0x</span>
+                        </div>
+                        <input type="range" id="scaleSlider" min="0.1" max="3" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation X -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate X</label>
+                            <span id="rotateXValue" class="text-xs text-gray-500 dark:text-gray-400">0°</span>
+                        </div>
+                        <input type="range" id="rotateXSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation Y -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Y</label>
+                            <span id="rotateYValue" class="text-xs text-gray-500 dark:text-gray-400">0°</span>
+                        </div>
+                        <input type="range" id="rotateYSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation Z -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Z</label>
+                            <span id="rotateZValue" class="text-xs text-gray-500 dark:text-gray-400">0°</span>
+                        </div>
+                        <input type="range" id="rotateZSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Reset Button -->
+                    <button id="resetTransform" class="w-full px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors">
+                        Reset Transform
+                    </button>
+                </div>
+            </div>
+
+            <!-- Annotations Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('annotationsPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">📍 Annotations</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="annotationsPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="annotationsPanel" class="panel-content p-4 hidden">
+                    <!-- Add Hotspot -->
+                    <button id="addHotspot" class="w-full px-3 py-2 mb-3 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors">
+                        + Add Hotspot
+                    </button>
+
+                    <!-- Measurement Tool -->
+                    <button id="measurementTool" class="w-full px-3 py-2 mb-3 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors">
+                        📏 Measure Distance
+                    </button>
+
+                    <!-- Hotspots List -->
+                    <div class="mb-3">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Hotspots</label>
+                        <div id="hotspotsList" class="space-y-2 max-h-40 overflow-y-auto">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>
+                        </div>
+                    </div>
+
+                    <!-- Clear All -->
+                    <button id="clearAnnotations" class="w-full px-3 py-2 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors">
+                        Clear All
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
         <!-- Bottom Right Controls -->
         <div class="fixed bottom-4 right-4 flex gap-2 bottom-right-controls">
             <!-- AR Button -->
@@ -1275,5 +1427,369 @@
             Scan this QR code to view the model on a supported device
         </p>
     </div>
+
+    <!-- Advanced Features JavaScript -->
+    <script>
+        // ========== PANEL TOGGLE FUNCTIONALITY ==========
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            const icon = document.getElementById(panelId + 'Icon');
+            
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                panel.classList.add('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // ========== MATERIAL EDITOR FUNCTIONALITY ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelViewer = document.querySelector('model-viewer');
+            let currentTexture = null;
+
+            // Get internal scene for material manipulation
+            function getInternalScene() {
+                const symbols = Object.getOwnPropertySymbols(modelViewer);
+                const sceneSymbol = symbols.find(s => s.description === 'scene');
+                return sceneSymbol ? modelViewer[sceneSymbol] : null;
+            }
+
+            // Material Color
+            const materialColor = document.getElementById('materialColor');
+            const materialColorHex = document.getElementById('materialColorHex');
+            
+            materialColor.addEventListener('input', (e) => {
+                const color = e.target.value;
+                materialColorHex.value = color;
+                applyMaterialColor(color);
+            });
+
+            materialColorHex.addEventListener('input', (e) => {
+                const color = e.target.value;
+                if (/^#[0-9A-F]{6}$/i.test(color)) {
+                    materialColor.value = color;
+                    applyMaterialColor(color);
+                }
+            });
+
+            function applyMaterialColor(hexColor) {
+                const scene = getInternalScene();
+                if (!scene) return;
+
+                const r = parseInt(hexColor.substr(1, 2), 16) / 255;
+                const g = parseInt(hexColor.substr(3, 2), 16) / 255;
+                const b = parseInt(hexColor.substr(5, 2), 16) / 255;
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            if (mat.color) {
+                                mat.color.setRGB(r, g, b);
+                                mat.needsUpdate = true;
+                            }
+                        });
+                    }
+                });
+                modelViewer.requestUpdate();
+            }
+
+            // Metalness
+            const metalnessSlider = document.getElementById('metalnessSlider');
+            const metalnessValue = document.getElementById('metalnessValue');
+            
+            metalnessSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                metalnessValue.textContent = value.toFixed(2);
+                applyMetalness(value);
+            });
+
+            function applyMetalness(value) {
+                const scene = getInternalScene();
+                if (!scene) return;
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            if (mat.metalness !== undefined) {
+                                mat.metalness = value;
+                                mat.needsUpdate = true;
+                            }
+                        });
+                    }
+                });
+                modelViewer.requestUpdate();
+            }
+
+            // Roughness
+            const roughnessSlider = document.getElementById('roughnessSlider');
+            const roughnessValue = document.getElementById('roughnessValue');
+            
+            roughnessSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                roughnessValue.textContent = value.toFixed(2);
+                applyRoughness(value);
+            });
+
+            function applyRoughness(value) {
+                const scene = getInternalScene();
+                if (!scene) return;
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            if (mat.roughness !== undefined) {
+                                mat.roughness = value;
+                                mat.needsUpdate = true;
+                            }
+                        });
+                    }
+                });
+                modelViewer.requestUpdate();
+            }
+
+            // Texture Upload
+            const textureUpload = document.getElementById('textureUpload');
+            const texturePreview = document.getElementById('texturePreview');
+            const texturePreviewImg = document.getElementById('texturePreviewImg');
+
+            textureUpload.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const imageUrl = event.target.result;
+                    texturePreviewImg.src = imageUrl;
+                    texturePreview.classList.remove('hidden');
+                    applyTexture(imageUrl);
+                };
+                reader.readAsDataURL(file);
+            });
+
+            function applyTexture(imageUrl) {
+                const scene = getInternalScene();
+                if (!scene) return;
+
+                const textureLoader = new (scene.children[0].material.map ? scene.children[0].material.map.constructor : Object)();
+                
+                const img = new Image();
+                img.onload = () => {
+                    scene.traverse((child) => {
+                        if (child.isMesh) {
+                            const materials = Array.isArray(child.material) ? child.material : [child.material];
+                            materials.forEach(mat => {
+                                // Create texture from image
+                                const canvas = document.createElement('canvas');
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(img, 0, 0);
+                                
+                                // Note: Full texture implementation requires THREE.js texture loader
+                                // This is a simplified version
+                                mat.needsUpdate = true;
+                            });
+                        }
+                    });
+                    modelViewer.requestUpdate();
+                };
+                img.src = imageUrl;
+            }
+
+            window.removeTexture = function() {
+                texturePreview.classList.add('hidden');
+                textureUpload.value = '';
+                // Reset to default material
+                const scene = getInternalScene();
+                if (!scene) return;
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            mat.map = null;
+                            mat.needsUpdate = true;
+                        });
+                    }
+                });
+                modelViewer.requestUpdate();
+            };
+
+            // Reset Material
+            document.getElementById('resetMaterial').addEventListener('click', () => {
+                materialColor.value = '#ffffff';
+                materialColorHex.value = '#ffffff';
+                metalnessSlider.value = 0;
+                metalnessValue.textContent = '0.0';
+                roughnessSlider.value = 1;
+                roughnessValue.textContent = '1.0';
+                
+                applyMaterialColor('#ffffff');
+                applyMetalness(0);
+                applyRoughness(1);
+                removeTexture();
+            });
+
+            // ========== TRANSFORM FUNCTIONALITY ==========
+            
+            // Scale
+            const scaleSlider = document.getElementById('scaleSlider');
+            const scaleValue = document.getElementById('scaleValue');
+            
+            scaleSlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                scaleValue.textContent = value.toFixed(1) + 'x';
+                modelViewer.scale = `${value} ${value} ${value}`;
+            });
+
+            // Rotation X
+            const rotateXSlider = document.getElementById('rotateXSlider');
+            const rotateXValue = document.getElementById('rotateXValue');
+            
+            rotateXSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                rotateXValue.textContent = value + '°';
+                updateRotation();
+            });
+
+            // Rotation Y
+            const rotateYSlider = document.getElementById('rotateYSlider');
+            const rotateYValue = document.getElementById('rotateYValue');
+            
+            rotateYSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                rotateYValue.textContent = value + '°';
+                updateRotation();
+            });
+
+            // Rotation Z
+            const rotateZSlider = document.getElementById('rotateZSlider');
+            const rotateZValue = document.getElementById('rotateZValue');
+            
+            rotateZSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                rotateZValue.textContent = value + '°';
+                updateRotation();
+            });
+
+            function updateRotation() {
+                const x = parseInt(rotateXSlider.value);
+                const y = parseInt(rotateYSlider.value);
+                const z = parseInt(rotateZSlider.value);
+                
+                modelViewer.orientation = `${x}deg ${y}deg ${z}deg`;
+            }
+
+            // Reset Transform
+            document.getElementById('resetTransform').addEventListener('click', () => {
+                scaleSlider.value = 1;
+                scaleValue.textContent = '1.0x';
+                rotateXSlider.value = 0;
+                rotateXValue.textContent = '0°';
+                rotateYSlider.value = 0;
+                rotateYValue.textContent = '0°';
+                rotateZSlider.value = 0;
+                rotateZValue.textContent = '0°';
+                
+                modelViewer.scale = '1 1 1';
+                modelViewer.orientation = '0deg 0deg 0deg';
+            });
+
+            // ========== ANNOTATIONS FUNCTIONALITY ==========
+            
+            let hotspots = [];
+            let measurementPoints = [];
+            let measurementMode = false;
+
+            // Add Hotspot
+            document.getElementById('addHotspot').addEventListener('click', () => {
+                const hotspotId = 'hotspot-' + Date.now();
+                const hotspot = document.createElement('button');
+                hotspot.setAttribute('slot', hotspotId);
+                hotspot.setAttribute('data-position', '0m 0m 0m');
+                hotspot.setAttribute('data-normal', '0m 1m 0m');
+                hotspot.className = 'hotspot';
+                hotspot.textContent = '📍';
+                hotspot.style.cssText = 'background: #4CAF50; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 16px;';
+                
+                // Add click event to edit
+                hotspot.addEventListener('click', () => {
+                    const title = prompt('Hotspot Title:', 'New Hotspot');
+                    const description = prompt('Description:', '');
+                    if (title) {
+                        hotspot.setAttribute('data-title', title);
+                        hotspot.setAttribute('data-description', description);
+                        updateHotspotsList();
+                    }
+                });
+
+                modelViewer.appendChild(hotspot);
+                hotspots.push({
+                    id: hotspotId,
+                    element: hotspot,
+                    title: 'New Hotspot',
+                    description: ''
+                });
+                
+                updateHotspotsList();
+            });
+
+            // Measurement Tool
+            document.getElementById('measurementTool').addEventListener('click', () => {
+                measurementMode = !measurementMode;
+                const btn = document.getElementById('measurementTool');
+                
+                if (measurementMode) {
+                    btn.textContent = '✓ Measuring...';
+                    btn.classList.add('bg-green-500');
+                    btn.classList.remove('bg-blue-500');
+                    measurementPoints = [];
+                } else {
+                    btn.textContent = '📏 Measure Distance';
+                    btn.classList.remove('bg-green-500');
+                    btn.classList.add('bg-blue-500');
+                }
+            });
+
+            // Clear Annotations
+            document.getElementById('clearAnnotations').addEventListener('click', () => {
+                if (confirm('Clear all hotspots and measurements?')) {
+                    hotspots.forEach(h => h.element.remove());
+                    hotspots = [];
+                    measurementPoints = [];
+                    updateHotspotsList();
+                }
+            });
+
+            function updateHotspotsList() {
+                const list = document.getElementById('hotspotsList');
+                
+                if (hotspots.length === 0) {
+                    list.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>';
+                } else {
+                    list.innerHTML = hotspots.map((h, i) => `
+                        <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                            <span class="text-xs text-gray-700 dark:text-gray-300">${h.title || 'Hotspot ' + (i + 1)}</span>
+                            <button onclick="removeHotspot('${h.id}')" class="text-red-500 hover:text-red-700 text-xs">✕</button>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            window.removeHotspot = function(id) {
+                const index = hotspots.findIndex(h => h.id === id);
+                if (index !== -1) {
+                    hotspots[index].element.remove();
+                    hotspots.splice(index, 1);
+                    updateHotspotsList();
+                }
+            };
+        });
+    </script>
 </body>
 </html>

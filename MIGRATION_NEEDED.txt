@@ -1,0 +1,30 @@
+DATABASE MIGRATION REQUIRED
+
+New columns added to UserModel:
+1. original_dimensions (JSON) - Stores original dimensions at upload
+2. cumulative_scale (Float, default=1.0) - Tracks total scale factor applied
+
+Migration SQL (SQLite):
+```sql
+ALTER TABLE user_model ADD COLUMN original_dimensions TEXT;
+ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0;
+```
+
+Migration SQL (PostgreSQL):
+```sql
+ALTER TABLE user_model ADD COLUMN original_dimensions JSONB;
+ALTER TABLE user_model ADD COLUMN cumulative_scale FLOAT DEFAULT 1.0;
+```
+
+For existing models, run:
+```sql
+UPDATE user_model SET cumulative_scale = 1.0 WHERE cumulative_scale IS NULL;
+```
+
+Or drop and recreate database (development only):
+```python
+from app import app, db
+with app.app_context():
+    db.drop_all()
+    db.create_all()
+```

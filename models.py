@@ -78,6 +78,10 @@ class UserModel(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     folder_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=True)
     
+    # Scale tracking
+    original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload
+    cumulative_scale = db.Column(db.Float, default=1.0)  # Total scale factor applied
+    
     def __repr__(self):
         return f'<UserModel {self.filename}>'
 

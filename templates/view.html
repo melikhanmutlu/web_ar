@@ -1186,6 +1186,10 @@
                                 <span>Depth:</span>
                                 <span id="dimDepth">-- cm</span>
                             </div>
+                            <div class="flex justify-between pt-2 mt-2 border-t border-gray-200 dark:border-gray-600 font-medium text-cyan-600 dark:text-cyan-400">
+                                <span>Total Scale:</span>
+                                <span id="cumulativeScale">1.0x</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1608,6 +1612,13 @@
             const modelViewer = document.querySelector('model-viewer');
             let currentTexture = null;
             let currentTextureData = null;  // Store base64 texture data
+
+            // Display cumulative scale from backend
+            const cumulativeScaleElement = document.getElementById('cumulativeScale');
+            const cumulativeScale = {{ cumulative_scale }};
+            if (cumulativeScaleElement) {
+                cumulativeScaleElement.textContent = cumulativeScale.toFixed(2) + 'x';
+            }
 
             // Get internal scene for material manipulation
             function getInternalScene() {
@@ -2299,9 +2310,9 @@
                             Saved! Reloading...
                         `;
                         
-                        // Reload page to show updated model
+                        // Reload page with cache bust to show updated model
                         setTimeout(() => {
-                            window.location.reload();
+                            window.location.href = window.location.pathname + '?t=' + Date.now();
                         }, 1500);
                     } else {
                         throw new Error(result.error || 'Save failed');

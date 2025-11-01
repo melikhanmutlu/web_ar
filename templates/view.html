@@ -1621,7 +1621,7 @@
             const materialColor = document.getElementById('materialColor');
             const materialColorHex = document.getElementById('materialColorHex');
             
-            // Load current material color from model
+            // Load current material properties from model
             modelViewer.addEventListener('load', () => {
                 setTimeout(() => {
                     const scene = getInternalScene();
@@ -1629,13 +1629,30 @@
                         scene.traverse((child) => {
                             if (child.isMesh && child.material) {
                                 const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+                                
+                                // Load color
                                 if (mat.color) {
                                     const hex = '#' + mat.color.getHexString();
                                     materialColor.value = hex;
                                     materialColorHex.value = hex;
                                     console.log('Loaded material color:', hex);
-                                    return; // Stop after first material
                                 }
+                                
+                                // Load metalness
+                                if (mat.metalness !== undefined) {
+                                    metalnessSlider.value = mat.metalness;
+                                    metalnessValue.textContent = mat.metalness.toFixed(2);
+                                    console.log('Loaded metalness:', mat.metalness);
+                                }
+                                
+                                // Load roughness
+                                if (mat.roughness !== undefined) {
+                                    roughnessSlider.value = mat.roughness;
+                                    roughnessValue.textContent = mat.roughness.toFixed(2);
+                                    console.log('Loaded roughness:', mat.roughness);
+                                }
+                                
+                                return; // Stop after first material
                             }
                         });
                     }
@@ -1859,6 +1876,22 @@
             // Scale
             const scaleSlider = document.getElementById('scaleSlider');
             const scaleValue = document.getElementById('scaleValue');
+            
+            // Load current scale from model
+            modelViewer.addEventListener('load', () => {
+                setTimeout(() => {
+                    // Get current scale from model-viewer
+                    const currentScale = modelViewer.scale;
+                    if (currentScale) {
+                        const scaleArray = currentScale.split(' ').map(parseFloat);
+                        const scaleVal = scaleArray[0] || 1.0;
+                        scaleSlider.value = scaleVal;
+                        scaleValue.textContent = scaleVal.toFixed(1) + 'x';
+                        updateDimensionDisplay(scaleVal);
+                        console.log('Loaded scale:', scaleVal);
+                    }
+                }, 600);
+            });
             
             scaleSlider.addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);

@@ -625,10 +625,11 @@ class FBXConverter(BaseConverter):
                 self.log_operation("Re-exporting GLB to normalize buffer-embedded textures")
                 try:
                     # Create a temporary path for re-export
+                    # IMPORTANT: Must end with .glb for pygltflib to save as binary GLB!
                     import tempfile
-                    temp_path = glb_path + '.temp'
+                    temp_path = glb_path.replace('.glb', '_temp.glb')
                     
-                    # Save to temp path first
+                    # Save to temp path first (will save as binary GLB due to .glb extension)
                     gltf.save(temp_path)
                     
                     # Verify temp file was created

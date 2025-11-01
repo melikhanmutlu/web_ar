@@ -599,6 +599,31 @@ class FBXConverter(BaseConverter):
             from pygltflib import GLTF2
             import base64
             
+            # LOG: FBX directory contents (textures that came with FBX)
+            fbx_dir = os.path.dirname(fbx_path)
+            self.log_operation(f"📁 FBX Directory: {fbx_dir}")
+            self.log_operation(f"📁 Scanning for texture files in FBX directory...")
+            
+            texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.tif', '.tiff', '.webp'}
+            found_textures = []
+            
+            try:
+                for file in os.listdir(fbx_dir):
+                    file_path = os.path.join(fbx_dir, file)
+                    if os.path.isfile(file_path):
+                        ext = os.path.splitext(file)[1].lower()
+                        if ext in texture_extensions:
+                            size = os.path.getsize(file_path)
+                            found_textures.append((file, size, ext))
+                            self.log_operation(f"  🖼️  Found: {file} ({size} bytes, {ext})")
+                
+                if not found_textures:
+                    self.log_operation(f"  ⚠️  No texture files found in FBX directory")
+                else:
+                    self.log_operation(f"  ✅ Total textures found: {len(found_textures)}")
+            except Exception as e:
+                self.log_operation(f"  ⚠️  Error scanning FBX directory: {e}")
+            
             self.log_operation(f"Loading GLB to embed textures: {glb_path}")
             gltf = GLTF2().load(glb_path)
             
@@ -606,31 +631,48 @@ class FBXConverter(BaseConverter):
                 self.log_operation("No images found in GLB - FBX2glTF may have discarded textures")
                 return
             
-            self.log_operation(f"Found {len(gltf.images)} images in GLB")
+            self.log_operation(f"📦 GLB Analysis: Found {len(gltf.images)} images in GLB")
+            self.log_operation(f"📦 Image Details:")
+            
             has_buffer_images = False
             for i, img in enumerate(gltf.images):
                 if img.uri:
                     if img.uri.startswith('data:'):
-                        self.log_operation(f"  Image {i}: Already embedded (data URI)")
+                        uri_preview = img.uri[:50] + "..." if len(img.uri) > 50 else img.uri
+                        self.log_operation(f"  🖼️  Image {i}: Data URI (embedded, {len(img.uri)} chars)")
+                        self.log_operation(f"       Preview: {uri_preview}")
                     else:
-                        self.log_operation(f"  Image {i}: External - {img.uri}")
+                        self.log_operation(f"  🖼️  Image {i}: External file - {img.uri}")
+                        # Check if external file exists
+                        external_path = os.path.join(fbx_dir, img.uri)
+                        if os.path.exists(external_path):
+                            size = os.path.getsize(external_path)
+                            self.log_operation(f"       ✅ File exists: {size} bytes")
+                        else:
+                            self.log_operation(f"       ❌ File NOT found at: {external_path}")
                 elif img.bufferView is not None:
-                    self.log_operation(f"  Image {i}: Embedded in buffer (bufferView: {img.bufferView})")
+                    # Get buffer size
+                    buffer_view = gltf.bufferViews[img.bufferView]
+                    buffer_size = buffer_view.byteLength
+                    self.log_operation(f"  🖼️  Image {i}: Buffer-embedded (bufferView: {img.bufferView}, {buffer_size} bytes)")
                     has_buffer_images = True
                 else:
-                    self.log_operation(f"  Image {i}: Unknown format")
+                    self.log_operation(f"  ⚠️  Image {i}: Unknown format (no URI, no bufferView)")
             
             # If images are embedded in buffer, convert to data URIs for model-viewer compatibility
             if has_buffer_images:
-                self.log_operation("Converting buffer-embedded textures to data URIs for model-viewer")
+                self.log_operation("🔄 Converting buffer-embedded textures to data URIs for model-viewer")
                 try:
                     # Get binary blob
                     binary_blob = gltf.binary_blob()
                     if not binary_blob:
-                        self.log_operation("Warning: No binary blob found", "WARNING")
+                        self.log_operation("⚠️  Warning: No binary blob found", "WARNING")
                         return
                     
+                    self.log_operation(f"📦 Binary blob size: {len(binary_blob)} bytes")
+                    
                     # Convert each buffer-embedded image to data URI
+                    conversion_summary = []
                     for i, img in enumerate(gltf.images):
                         if img.bufferView is not None:
                             try:
@@ -638,6 +680,9 @@ class FBXConverter(BaseConverter):
                                 buffer_view = gltf.bufferViews[img.bufferView]
                                 offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
                                 length = buffer_view.byteLength
+                                
+                                self.log_operation(f"  🔄 Converting Image {i}:")
+                                self.log_operation(f"     Buffer offset: {offset}, length: {length}")
                                 
                                 # Extract image data from binary blob
                                 image_data = binary_blob[offset:offset + length]
@@ -651,6 +696,8 @@ class FBXConverter(BaseConverter):
                                 elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
                                     mime_type = 'image/webp'
                                 
+                                self.log_operation(f"     Detected format: {mime_type}")
+                                
                                 # Convert to data URI
                                 data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
                                 
@@ -658,9 +705,25 @@ class FBXConverter(BaseConverter):
                                 img.uri = data_uri
                                 img.bufferView = None
                                 
-                                self.log_operation(f"Converted image {i} to data URI ({len(image_data)} bytes, {mime_type})")
+                                conversion_summary.append({
+                                    'index': i,
+                                    'size': len(image_data),
+                                    'mime': mime_type,
+                                    'data_uri_size': len(data_uri)
+                                })
+                                
+                                self.log_operation(f"     ✅ Converted to data URI: {len(image_data)} bytes → {len(data_uri)} chars")
                             except Exception as img_error:
-                                self.log_operation(f"Warning: Could not convert image {i}: {img_error}", "WARNING")
+                                self.log_operation(f"     ❌ Failed to convert image {i}: {img_error}", "WARNING")
+                                conversion_summary.append({
+                                    'index': i,
+                                    'error': str(img_error)
+                                })
+                    
+                    # Summary
+                    successful = len([c for c in conversion_summary if 'error' not in c])
+                    failed = len([c for c in conversion_summary if 'error' in c])
+                    self.log_operation(f"🔄 Conversion Summary: {successful} successful, {failed} failed")
                     
                     # Ensure all images have corresponding textures
                     from pygltflib import Texture, Sampler
@@ -725,10 +788,11 @@ class FBXConverter(BaseConverter):
                                     self.log_operation(f"  Fixed Texture Assignment: Material {leaf_material_idx} now uses Texture {correct_leaf_texture_idx} (Image 1)")
 
                                 # FIX ALPHA/TRANSPARENCY
-                                if leaf_material.alphaMode != "BLEND":
+                                if leaf_material.alphaMode != "MASK":
                                     self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
-                                    leaf_material.alphaMode = "BLEND"
-                                    self.log_operation(f"  Fixed Transparency: Set alphaMode=BLEND")
+                                    leaf_material.alphaMode = "MASK"
+                                    leaf_material.alphaCutoff = 0.5
+                                    self.log_operation(f"  Fixed Transparency: Set alphaMode=MASK, alphaCutoff=0.5")
                     
                     # Log mesh-material assignments
                     if gltf.meshes:
@@ -759,6 +823,28 @@ class FBXConverter(BaseConverter):
                             img_idx = tex.source if tex.source is not None else "None"
                             self.log_operation(f"  Texture {tex_idx} → Image {img_idx}")
                     
+                    # FINAL SUMMARY
+                    self.log_operation("=" * 60)
+                    self.log_operation("📊 TEXTURE EMBEDDING SUMMARY")
+                    self.log_operation("=" * 60)
+                    self.log_operation(f"📁 Textures in FBX directory: {len(found_textures)}")
+                    self.log_operation(f"📦 Images in GLB (from FBX2glTF): {len(gltf.images)}")
+                    self.log_operation(f"🔄 Images converted to Data URI: {successful}")
+                    self.log_operation(f"🎨 Textures in GLB: {len(gltf.textures) if gltf.textures else 0}")
+                    self.log_operation(f"🎭 Materials in GLB: {len(gltf.materials) if gltf.materials else 0}")
+                    
+                    # Check which textures are actually used
+                    used_textures = set()
+                    if gltf.materials:
+                        for mat in gltf.materials:
+                            if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
+                                used_textures.add(mat.pbrMetallicRoughness.baseColorTexture.index)
+                    
+                    unused_count = len(gltf.textures) - len(used_textures) if gltf.textures else 0
+                    self.log_operation(f"✅ Textures assigned to materials: {len(used_textures)}")
+                    self.log_operation(f"⚠️  Unused textures: {unused_count}")
+                    self.log_operation("=" * 60)
+                    
                     # Save with data URIs
                     temp_path = glb_path.replace('.glb', '_temp.glb')
                     gltf.save(temp_path)
@@ -772,32 +858,6 @@ class FBXConverter(BaseConverter):
                         
                         final_size = os.path.getsize(glb_path)
                         self.log_operation(f"✅ GLB re-exported with data URI textures: {final_size} bytes")
-                        
-                        # FINAL STEP: Re-export using glb_modifier to ensure consistency
-                        # This mimics what happens when user clicks "Save" button
-                        self.log_operation("Performing final re-export using glb_modifier for consistency...")
-                        try:
-                            from glb_modifier import modify_glb
-                            
-                            # Create a temporary output path
-                            final_temp_path = glb_path.replace('.glb', '_final.glb')
-                            
-                            # Call modify_glb with no modifications (empty dict)
-                            # This will just load and save, normalizing the GLB
-                            success = modify_glb(glb_path, final_temp_path, {})
-                            
-                            if success and os.path.exists(final_temp_path):
-                                # Replace original with final version
-                                shutil.move(final_temp_path, glb_path)
-                                final_final_size = os.path.getsize(glb_path)
-                                self.log_operation(f"✅ Final re-export completed: {final_final_size} bytes")
-                            else:
-                                self.log_operation("Warning: Final re-export failed, using previous version", "WARNING")
-                        except Exception as e:
-                            self.log_operation(f"Warning: Could not perform final re-export: {e}", "WARNING")
-                            import traceback
-                            self.log_operation(f"Traceback: {traceback.format_exc()}", "WARNING")
-                        
                         return
                     else:
                         self.log_operation("Warning: Temp file was not created", "WARNING")

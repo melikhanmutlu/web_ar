@@ -1,0 +1,13 @@
+v6 Release - Complete Feature Set
+
+Major Features:
+1. Material Editor with texture embedding
+2. Model Transform controls
+3. Annotation System with hotspots
+4. GLB Export with modifications
+5. Save to AR functionality
+6. Animation preservation
+7. Auto-rotate toggle
+8. Accordion panel layout
+
+All features tested and production-ready.

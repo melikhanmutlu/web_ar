@@ -80,11 +80,7 @@ def load_user(user_id):
 # Register blueprints
 app.register_blueprint(auth)
 
-# Create database tables
-with app.app_context():
-    db.create_all()
-
-# Configure logging
+# Configure logging FIRST (before database operations)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -94,6 +90,34 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Create database tables (migration-safe)
+with app.app_context():
+    try:
+        # Try to create all tables (will skip existing ones in most cases)
+        db.create_all()
+    except Exception as e:
+        # If tables already exist, try to add missing columns
+        logger.warning(f"Database initialization warning: {e}")
+        try:
+            # Add missing columns if they don't exist
+            with db.engine.connect() as conn:
+                # Check if original_dimensions column exists
+                result = conn.execute(db.text("PRAGMA table_info(user_model)"))
+                columns = [row[1] for row in result]
+                
+                if 'original_dimensions' not in columns:
+                    conn.execute(db.text("ALTER TABLE user_model ADD COLUMN original_dimensions TEXT"))
+                    conn.commit()
+                    logger.info("Added original_dimensions column")
+                
+                if 'cumulative_scale' not in columns:
+                    conn.execute(db.text("ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0"))
+                    conn.commit()
+                    logger.info("Added cumulative_scale column")
+        except Exception as migration_error:
+            logger.error(f"Migration error: {migration_error}")
+            # Continue anyway - app might still work
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']

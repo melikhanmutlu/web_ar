@@ -620,34 +620,66 @@ class FBXConverter(BaseConverter):
                 else:
                     self.log_operation(f"  Image {i}: Unknown format")
             
-            # If images are embedded in buffer, re-export GLB to normalize
+            # If images are embedded in buffer, convert to data URIs for model-viewer compatibility
             if has_buffer_images:
-                self.log_operation("Re-exporting GLB to normalize buffer-embedded textures")
+                self.log_operation("Converting buffer-embedded textures to data URIs for model-viewer")
                 try:
-                    # Create a temporary path for re-export
-                    # IMPORTANT: Must end with .glb for pygltflib to save as binary GLB!
-                    import tempfile
-                    temp_path = glb_path.replace('.glb', '_temp.glb')
+                    # Get binary blob
+                    binary_blob = gltf.binary_blob()
+                    if not binary_blob:
+                        self.log_operation("Warning: No binary blob found", "WARNING")
+                        return
                     
-                    # Save to temp path first (will save as binary GLB due to .glb extension)
+                    # Convert each buffer-embedded image to data URI
+                    for i, img in enumerate(gltf.images):
+                        if img.bufferView is not None:
+                            try:
+                                # Get buffer view
+                                buffer_view = gltf.bufferViews[img.bufferView]
+                                offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                                length = buffer_view.byteLength
+                                
+                                # Extract image data from binary blob
+                                image_data = binary_blob[offset:offset + length]
+                                
+                                # Determine MIME type from image data
+                                mime_type = 'image/png'  # Default
+                                if image_data[:4] == b'\x89PNG':
+                                    mime_type = 'image/png'
+                                elif image_data[:2] == b'\xff\xd8':
+                                    mime_type = 'image/jpeg'
+                                elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
+                                    mime_type = 'image/webp'
+                                
+                                # Convert to data URI
+                                data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
+                                
+                                # Replace bufferView with data URI
+                                img.uri = data_uri
+                                img.bufferView = None
+                                
+                                self.log_operation(f"Converted image {i} to data URI ({len(image_data)} bytes, {mime_type})")
+                            except Exception as img_error:
+                                self.log_operation(f"Warning: Could not convert image {i}: {img_error}", "WARNING")
+                    
+                    # Save with data URIs
+                    temp_path = glb_path.replace('.glb', '_temp.glb')
                     gltf.save(temp_path)
                     
-                    # Verify temp file was created
                     if os.path.exists(temp_path):
                         temp_size = os.path.getsize(temp_path)
                         self.log_operation(f"Temp GLB created: {temp_size} bytes")
                         
-                        # Replace original with normalized version
                         import shutil
                         shutil.move(temp_path, glb_path)
                         
                         final_size = os.path.getsize(glb_path)
-                        self.log_operation(f"✅ GLB re-exported successfully: {final_size} bytes")
+                        self.log_operation(f"✅ GLB re-exported with data URI textures: {final_size} bytes")
                         return
                     else:
                         self.log_operation("Warning: Temp file was not created", "WARNING")
                 except Exception as e:
-                    self.log_operation(f"Warning: Could not re-export GLB: {e}", "WARNING")
+                    self.log_operation(f"Warning: Could not convert textures: {e}", "WARNING")
                     import traceback
                     self.log_operation(f"Traceback: {traceback.format_exc()}", "WARNING")
             

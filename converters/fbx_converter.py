@@ -697,17 +697,34 @@ class FBXConverter(BaseConverter):
                             image_to_texture[img_idx] = tex_idx
                             self.log_operation(f"  Created Texture {tex_idx} → Image {img_idx}")
                     
+                    # Log mesh-material assignments
+                    if gltf.meshes:
+                        self.log_operation(f"Mesh-Material assignments ({len(gltf.meshes)} meshes):")
+                        for mesh_idx, mesh in enumerate(gltf.meshes):
+                            mesh_name = mesh.name if mesh.name else f"Mesh_{mesh_idx}"
+                            for prim_idx, prim in enumerate(mesh.primitives):
+                                mat_idx = prim.material if prim.material is not None else "None"
+                                mat_name = gltf.materials[prim.material].name if prim.material is not None and prim.material < len(gltf.materials) else "Unknown"
+                                self.log_operation(f"  {mesh_name}[{prim_idx}] → Material {mat_idx} ({mat_name})")
+                    
                     # Log material-texture assignments for debugging
                     if gltf.materials:
-                        self.log_operation(f"Checking {len(gltf.materials)} materials for texture assignments:")
+                        self.log_operation(f"Material-Texture assignments ({len(gltf.materials)} materials):")
                         for i, mat in enumerate(gltf.materials):
                             mat_name = mat.name if mat.name else f"Material_{i}"
                             if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
                                 tex_idx = mat.pbrMetallicRoughness.baseColorTexture.index
                                 img_idx = gltf.textures[tex_idx].source if tex_idx < len(gltf.textures) else "?"
-                                self.log_operation(f"  {mat_name}: Texture {tex_idx} → Image {img_idx}")
+                                self.log_operation(f"  Material {i} ({mat_name}): Texture {tex_idx} → Image {img_idx}")
                             else:
-                                self.log_operation(f"  {mat_name}: No baseColorTexture ❌")
+                                self.log_operation(f"  Material {i} ({mat_name}): No baseColorTexture ❌")
+                    
+                    # Log all textures
+                    if gltf.textures:
+                        self.log_operation(f"All Textures ({len(gltf.textures)} total):")
+                        for tex_idx, tex in enumerate(gltf.textures):
+                            img_idx = tex.source if tex.source is not None else "None"
+                            self.log_operation(f"  Texture {tex_idx} → Image {img_idx}")
                     
                     # Save with data URIs
                     temp_path = glb_path.replace('.glb', '_temp.glb')

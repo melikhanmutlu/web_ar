@@ -772,37 +772,29 @@ class FBXConverter(BaseConverter):
                                 break
                         
                         if leaf_material:
-                            # Find the texture that points to Image 1 (the correct leaf texture)
-                            correct_leaf_texture_idx = -1
-                            for i, tex in enumerate(gltf.textures):
-                                if tex.source == 1: # Image 1 is the leaf texture
-                                    correct_leaf_texture_idx = i
-                                    break
-                            
-                            if correct_leaf_texture_idx != -1:
-                                self.log_operation(f"Fixing leaf material '{leaf_material.name}' assignment.")
-                                pbr = leaf_material.pbrMetallicRoughness
-                                if pbr.baseColorTexture.index != correct_leaf_texture_idx:
-                                    self.log_operation(f"  Current Texture: {pbr.baseColorTexture.index}. Correct: {correct_leaf_texture_idx}.")
-                                    pbr.baseColorTexture.index = correct_leaf_texture_idx
-                                    self.log_operation(f"  Fixed Texture Assignment: Material {leaf_material_idx} now uses Texture {correct_leaf_texture_idx} (Image 1)")
+                            # Preserve existing baseColorTexture assignment (FBX2glTF's choice)
+                            pbr = leaf_material.pbrMetallicRoughness
+                            existing_tex_idx = None
+                            if pbr and pbr.baseColorTexture:
+                                existing_tex_idx = pbr.baseColorTexture.index
+                            self.log_operation(f"Preserving leaf material texture assignment: {existing_tex_idx}")
 
-                                # FIX ALPHA/TRANSPARENCY
-                                self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
-                                leaf_material.alphaMode = "BLEND"
-                                leaf_material.doubleSided = True
-                                self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
+                            # FIX ALPHA/TRANSPARENCY
+                            self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
+                            leaf_material.alphaMode = "BLEND"
+                            leaf_material.doubleSided = True
+                            self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
 
-                                # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
-                                try:
-                                    if pbr is not None:
-                                        if pbr.baseColorFactor is None:
-                                            pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
-                                        pbr.metallicFactor = 0.0
-                                        pbr.roughnessFactor = 1.0
-                                        self.log_operation("  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor=[1,1,1,1]")
-                                except Exception as _e:
-                                    self.log_operation(f"  ⚠️ Could not enforce foliage PBR defaults: {_e}", "WARNING")
+                            # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
+                            try:
+                                if pbr is not None:
+                                    if not pbr.baseColorFactor or len(pbr.baseColorFactor) < 4 or pbr.baseColorFactor[3] < 0.9:
+                                        pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                                    pbr.metallicFactor = 0.0
+                                    pbr.roughnessFactor = 1.0
+                                    self.log_operation("  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor alpha reset to 1")
+                            except Exception as _e:
+                                self.log_operation(f"  ⚠️ Could not enforce foliage PBR defaults: {_e}", "WARNING")
                     
                     # Log mesh-material assignments
                     if gltf.meshes:

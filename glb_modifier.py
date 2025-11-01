@@ -46,8 +46,8 @@ def apply_material_modifications(gltf, material_mods):
         name = material.name or f"Material_{i}"
         name_l = name.lower()
         alpha_mode = (material.alphaMode or "OPAQUE")
-        has_texture = bool(pbr.baseColorTexture)
-        is_transparent_like = alpha_mode in ("BLEND", "MASK") or any(k in name_l for k in ["leaf", "leaves", "foliage", "db2x2"]) or has_texture
+        # Detect foliage strictly by name or pre-set alpha modes
+        is_transparent_like = alpha_mode in ("BLEND", "MASK") or any(k in name_l for k in ["leaf", "leaves", "foliage", "db2x2"]) 
         
         # Foliage-safe defaults (do BEFORE applying user knobs)
         if is_transparent_like:
@@ -65,7 +65,7 @@ def apply_material_modifications(gltf, material_mods):
                 logger.warning(f"Failed to apply foliage defaults on {name}: {e}")
         
         # Apply base color (only if not default white)
-        if 'color' in material_mods and material_mods['color']:
+        if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
                 color_hex = material_mods['color']
                 # Skip if color is default white (#ffffff) - preserve original

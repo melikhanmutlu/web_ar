@@ -624,11 +624,31 @@ class FBXConverter(BaseConverter):
             if has_buffer_images:
                 self.log_operation("Re-exporting GLB to normalize buffer-embedded textures")
                 try:
-                    gltf.save(glb_path)
-                    self.log_operation("✅ GLB re-exported successfully")
-                    return
+                    # Create a temporary path for re-export
+                    import tempfile
+                    temp_path = glb_path + '.temp'
+                    
+                    # Save to temp path first
+                    gltf.save(temp_path)
+                    
+                    # Verify temp file was created
+                    if os.path.exists(temp_path):
+                        temp_size = os.path.getsize(temp_path)
+                        self.log_operation(f"Temp GLB created: {temp_size} bytes")
+                        
+                        # Replace original with normalized version
+                        import shutil
+                        shutil.move(temp_path, glb_path)
+                        
+                        final_size = os.path.getsize(glb_path)
+                        self.log_operation(f"✅ GLB re-exported successfully: {final_size} bytes")
+                        return
+                    else:
+                        self.log_operation("Warning: Temp file was not created", "WARNING")
                 except Exception as e:
                     self.log_operation(f"Warning: Could not re-export GLB: {e}", "WARNING")
+                    import traceback
+                    self.log_operation(f"Traceback: {traceback.format_exc()}", "WARNING")
             
             fbx_dir = os.path.dirname(fbx_path)
             glb_dir = os.path.dirname(glb_path)

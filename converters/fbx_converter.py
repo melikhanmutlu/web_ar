@@ -773,6 +773,32 @@ class FBXConverter(BaseConverter):
                         
                         final_size = os.path.getsize(glb_path)
                         self.log_operation(f"✅ GLB re-exported with data URI textures: {final_size} bytes")
+                        
+                        # FINAL STEP: Re-export using glb_modifier to ensure consistency
+                        # This mimics what happens when user clicks "Save" button
+                        self.log_operation("Performing final re-export using glb_modifier for consistency...")
+                        try:
+                            from glb_modifier import modify_glb
+                            
+                            # Create a temporary output path
+                            final_temp_path = glb_path.replace('.glb', '_final.glb')
+                            
+                            # Call modify_glb with no modifications (empty dict)
+                            # This will just load and save, normalizing the GLB
+                            success = modify_glb(glb_path, final_temp_path, {})
+                            
+                            if success and os.path.exists(final_temp_path):
+                                # Replace original with final version
+                                shutil.move(final_temp_path, glb_path)
+                                final_final_size = os.path.getsize(glb_path)
+                                self.log_operation(f"✅ Final re-export completed: {final_final_size} bytes")
+                            else:
+                                self.log_operation("Warning: Final re-export failed, using previous version", "WARNING")
+                        except Exception as e:
+                            self.log_operation(f"Warning: Could not perform final re-export: {e}", "WARNING")
+                            import traceback
+                            self.log_operation(f"Traceback: {traceback.format_exc()}", "WARNING")
+                        
                         return
                     else:
                         self.log_operation("Warning: Temp file was not created", "WARNING")

@@ -1,0 +1,142 @@
+Fix: Info Modal Dimensions from GLB (Single Source of Truth)
+
+Problem:
+Info Modal and Transform Panel showed different dimensions:
+- Info Modal: 56.22 x 79.52 x 51.26 cm (from database - WRONG)
+- Transform Panel: 7.1 x 6.5 x 10.1 cm (from GLB - CORRECT)
+
+User confirmed Transform Panel is correct by downloading and checking in other tools.
+
+Root Cause:
+Info Modal used database dimensions (saved at upload), but GLB was scaled after upload (size limit applied). Database was never updated, causing mismatch.
+
+Solution:
+Changed Info Modal to read from GLB API instead of database. Now both panels use same source.
+
+Implementation:
+
+Before (Jinja2 template - database):
+```html
+<span>{{ model_dimensions.x }} cm</span>
+<span>{{ model_dimensions.y }} cm</span>
+<span>{{ model_dimensions.z }} cm</span>
+<span>{{ model_dimensions.max }} cm</span>
+```
+
+After (JavaScript - GLB API):
+```html
+<span id="infoModalWidth">-- cm</span>
+<span id="infoModalHeight">-- cm</span>
+<span id="infoModalDepth">-- cm</span>
+<span id="infoModalMax">-- cm</span>
+```
+
+JavaScript Update:
+```javascript
+async function loadModelDimensions() {
+    const response = await fetch(`/get_model_dimensions/${modelId}`);
+    const result = await response.json();
+    
+    if (result.success) {
+        originalDimensions = result.dimensions;
+        
+        // Update Transform Panel
+        updateDimensionDisplay(1.0);
+        
+        // Update Info Modal (NEW!)
+        document.getElementById('infoModalWidth').textContent = 
+            `${originalDimensions.width.toFixed(2)} cm`;
+        document.getElementById('infoModalHeight').textContent = 
+            `${originalDimensions.height.toFixed(2)} cm`;
+        document.getElementById('infoModalDepth').textContent = 
+            `${originalDimensions.depth.toFixed(2)} cm`;
+        
+        const maxDim = Math.max(
+            originalDimensions.width, 
+            originalDimensions.height, 
+            originalDimensions.depth
+        );
+        document.getElementById('infoModalMax').textContent = 
+            `${maxDim.toFixed(2)} cm`;
+    }
+}
+```
+
+How It Works:
+
+1. Page Load:
+```
+1. loadModelDimensions() called
+2. Fetch /get_model_dimensions API
+3. API reads GLB with trimesh
+4. Returns actual dimensions
+5. Update both Transform Panel AND Info Modal
+6. ✅ Both show same values
+```
+
+2. After Scale & Save:
+```
+1. User scales model 2x
+2. Save & Apply to AR
+3. GLB vertices scaled
+4. Page reload
+5. loadModelDimensions() called
+6. API reads scaled GLB
+7. Both panels show scaled dimensions
+8. ✅ Always in sync
+```
+
+Benefits:
+
+Single Source of Truth:
+✅ Both panels read from GLB file
+✅ No database sync issues
+✅ Always accurate
+✅ Real-time updates
+
+Consistency:
+✅ Info Modal matches Transform Panel
+✅ Matches downloaded GLB
+✅ Matches AR view
+✅ No confusion
+
+Reliability:
+✅ Database can be outdated - doesn't matter
+✅ GLB is always current
+✅ User can verify by downloading
+✅ What you see is what you get
+
+Technical Notes:
+
+API Endpoint:
+```python
+@app.route('/get_model_dimensions/<model_id>')
+def get_model_dimensions(model_id):
+    glb_path = os.path.join(CONVERTED_FOLDER, model_id, 'model.glb')
+    mesh = trimesh.load(glb_path, force='scene')
+    bounds = mesh.bounds
+    dimensions = bounds[1] - bounds[0]
+    
+    return jsonify({
+        'success': True,
+        'dimensions': {
+            'width': float(dimensions[0] * 100),   # X
+            'height': float(dimensions[1] * 100),  # Y
+            'depth': float(dimensions[2] * 100),   # Z
+            'unit': 'cm'
+        }
+    })
+```
+
+This endpoint reads GLB directly, ensuring accuracy.
+
+Database Role:
+Database still stores dimensions for:
+- Search/filtering (approximate)
+- Sorting by size
+- Historical reference
+
+But display always uses GLB as source of truth.
+
+Result:
+Info Modal now shows correct dimensions matching Transform Panel and actual GLB file. Both panels synchronized via single API endpoint.

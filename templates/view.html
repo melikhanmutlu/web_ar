@@ -1478,7 +1478,6 @@
                     {% endif %}
 
                     <!-- Model Dimensions -->
-                    {% if model_dimensions %}
                     <div class="flex items-start">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
@@ -1490,24 +1489,23 @@
                             <div class="space-y-1">
                                 <div class="flex items-center justify-between text-sm">
                                     <span class="text-gray-600 dark:text-gray-400">Width (X):</span>
-                                    <span class="text-gray-900 dark:text-white font-medium">{{ model_dimensions.x }} cm</span>
+                                    <span id="infoModalWidth" class="text-gray-900 dark:text-white font-medium">-- cm</span>
                                 </div>
                                 <div class="flex items-center justify-between text-sm">
                                     <span class="text-gray-600 dark:text-gray-400">Height (Y):</span>
-                                    <span class="text-gray-900 dark:text-white font-medium">{{ model_dimensions.y }} cm</span>
+                                    <span id="infoModalHeight" class="text-gray-900 dark:text-white font-medium">-- cm</span>
                                 </div>
                                 <div class="flex items-center justify-between text-sm">
                                     <span class="text-gray-600 dark:text-gray-400">Depth (Z):</span>
-                                    <span class="text-gray-900 dark:text-white font-medium">{{ model_dimensions.z }} cm</span>
+                                    <span id="infoModalDepth" class="text-gray-900 dark:text-white font-medium">-- cm</span>
                                 </div>
                                 <div class="flex items-center justify-between text-sm pt-1 border-t border-gray-200 dark:border-gray-700">
                                     <span class="text-gray-600 dark:text-gray-400 font-medium">Max Dimension:</span>
-                                    <span class="text-gray-900 dark:text-white font-semibold">{{ model_dimensions.max }} cm</span>
+                                    <span id="infoModalMax" class="text-gray-900 dark:text-white font-semibold">-- cm</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    {% endif %}
 
                     <!-- Upload Date -->
                     <div class="flex items-start">
@@ -1857,6 +1855,15 @@
                     if (result.success) {
                         originalDimensions = result.dimensions;
                         updateDimensionDisplay(1.0); // Initial display
+                        
+                        // Update Info Modal dimensions as well
+                        document.getElementById('infoModalWidth').textContent = `${originalDimensions.width.toFixed(2)} cm`;
+                        document.getElementById('infoModalHeight').textContent = `${originalDimensions.height.toFixed(2)} cm`;
+                        document.getElementById('infoModalDepth').textContent = `${originalDimensions.depth.toFixed(2)} cm`;
+                        
+                        // Calculate max dimension
+                        const maxDim = Math.max(originalDimensions.width, originalDimensions.height, originalDimensions.depth);
+                        document.getElementById('infoModalMax').textContent = `${maxDim.toFixed(2)} cm`;
                     }
                 } catch (error) {
                     console.error('Failed to load dimensions:', error);

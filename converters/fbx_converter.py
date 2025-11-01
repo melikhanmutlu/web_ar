@@ -335,9 +335,13 @@ class FBXConverter(BaseConverter):
                             self.log_operation(f"Post-processing needed: scaling from original FBX dims (factor: {scale_factor:.4f})")
                             self.log_operation(f"Original max: {max_dim_m:.4f}m, Target: {max_allowed_m:.4f}m")
                     
-                    # If no post-processing needed, use FBX2glTF output directly (preserves textures)
+                    # If no post-processing needed, embed external textures into GLB
                     if not needs_processing:
-                        self.log_operation("No post-processing needed - using FBX2glTF output directly (textures preserved)")
+                        self.log_operation("No post-processing needed - embedding external textures into GLB")
+                        try:
+                            self._embed_external_textures(output_path, input_path)
+                        except Exception as tex_error:
+                            self.log_operation(f"Warning: Could not embed textures: {tex_error}", "WARNING")
                         self.update_status("COMPLETED")
                         return True
                     
@@ -588,6 +592,70 @@ class FBXConverter(BaseConverter):
             import traceback
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
+
+    def _embed_external_textures(self, glb_path: str, fbx_path: str) -> None:
+        """Embed external texture files into GLB."""
+        try:
+            from pygltflib import GLTF2
+            import base64
+            
+            self.log_operation(f"Loading GLB to embed textures: {glb_path}")
+            gltf = GLTF2().load(glb_path)
+            
+            if not gltf.images:
+                self.log_operation("No images found in GLB")
+                return
+            
+            fbx_dir = os.path.dirname(fbx_path)
+            modified = False
+            
+            for i, image in enumerate(gltf.images):
+                # Check if image has external URI (not embedded)
+                if image.uri and not image.uri.startswith('data:'):
+                    self.log_operation(f"Found external texture: {image.uri}")
+                    
+                    # Try to find texture file
+                    texture_path = os.path.join(fbx_dir, image.uri)
+                    if not os.path.exists(texture_path):
+                        # Try without path (just filename)
+                        texture_path = os.path.join(fbx_dir, os.path.basename(image.uri))
+                    
+                    if os.path.exists(texture_path):
+                        self.log_operation(f"Embedding texture: {texture_path}")
+                        
+                        # Read texture file
+                        with open(texture_path, 'rb') as f:
+                            texture_data = f.read()
+                        
+                        # Determine MIME type
+                        ext = os.path.splitext(texture_path)[1].lower()
+                        mime_type = {
+                            '.png': 'image/png',
+                            '.jpg': 'image/jpeg',
+                            '.jpeg': 'image/jpeg',
+                            '.webp': 'image/webp'
+                        }.get(ext, 'image/png')
+                        
+                        # Convert to data URI
+                        data_uri = f"data:{mime_type};base64,{base64.b64encode(texture_data).decode('utf-8')}"
+                        image.uri = data_uri
+                        modified = True
+                        self.log_operation(f"Embedded texture {i}: {len(texture_data)} bytes")
+                    else:
+                        self.log_operation(f"Warning: Texture file not found: {texture_path}", "WARNING")
+            
+            if modified:
+                self.log_operation("Saving GLB with embedded textures")
+                gltf.save(glb_path)
+                self.log_operation("✅ Textures embedded successfully")
+            else:
+                self.log_operation("No external textures to embed")
+                
+        except Exception as e:
+            self.log_operation(f"Error embedding textures: {e}", "ERROR")
+            import traceback
+            self.log_operation(f"Traceback: {traceback.format_exc()}")
+            raise
 
     def handle_error(self, error_message: str) -> None:
         """Handle and log error messages."""

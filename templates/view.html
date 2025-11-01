@@ -568,6 +568,70 @@
             transition: transform 0.3s ease-in-out;
         }
 
+        /* Elegant button styles */
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-secondary {
+            background: white;
+            border: 1.5px solid #e5e7eb;
+            color: #374151;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            border-color: #9ca3af;
+            background: #f9fafb;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .dark .btn-secondary {
+            background: #374151;
+            border-color: #4b5563;
+            color: #e5e7eb;
+        }
+        
+        .dark .btn-secondary:hover {
+            background: #4b5563;
+            border-color: #6b7280;
+        }
+        
+        .btn-danger {
+            background: white;
+            border: 1.5px solid #fecaca;
+            color: #dc2626;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-danger:hover {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.1);
+        }
+        
+        .dark .btn-danger {
+            background: #7f1d1d;
+            border-color: #991b1b;
+            color: #fca5a5;
+        }
+        
+        .dark .btn-danger:hover {
+            background: #991b1b;
+            border-color: #b91c1c;
+        }
+
         @media (max-width: 640px) {
             .bottom-right-controls {
                 bottom: 0.5rem;
@@ -1033,7 +1097,7 @@
             <!-- Material Editor Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">🎨 Material Editor</span>
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Material Editor</span>
                     <svg class="w-4 h-4 transform transition-transform" id="materialPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
@@ -1070,22 +1134,22 @@
                     <div class="mb-4">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Texture</label>
                         <input type="file" id="textureUpload" accept="image/*" class="hidden">
-                        <button onclick="document.getElementById('textureUpload').click()" class="w-full px-3 py-2 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors">
+                        <button onclick="document.getElementById('textureUpload').click()" class="btn-secondary w-full px-3 py-2 text-xs rounded">
                             Upload Texture
                         </button>
                         <div id="texturePreview" class="mt-2 hidden">
                             <img id="texturePreviewImg" class="w-full h-20 object-cover rounded border-2 border-gray-300 dark:border-gray-600">
-                            <button onclick="removeTexture()" class="mt-1 w-full px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded">Remove</button>
+                            <button onclick="removeTexture()" class="btn-danger mt-1 w-full px-2 py-1 text-xs rounded">Remove</button>
                         </div>
                     </div>
 
                     <!-- Reset Button -->
-                    <button id="resetMaterial" class="w-full px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors">
+                    <button id="resetMaterial" class="btn-secondary w-full px-3 py-2 text-xs rounded">
                         Reset Material
                     </button>
                     
                     <!-- Export Modified Model Button -->
-                    <button id="exportModified" class="w-full px-3 py-2 mt-3 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors font-semibold flex items-center justify-center gap-2">
+                    <button id="exportModified" class="btn-primary w-full px-3 py-2 mt-3 text-xs rounded font-semibold flex items-center justify-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                         </svg>
@@ -1100,7 +1164,7 @@
             <!-- Model Transform Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('transformPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">🔧 Transform</span>
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Transform</span>
                     <svg class="w-4 h-4 transform transition-transform" id="transformPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
@@ -1143,7 +1207,7 @@
                     </div>
 
                     <!-- Reset Button -->
-                    <button id="resetTransform" class="w-full px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors">
+                    <button id="resetTransform" class="btn-secondary w-full px-3 py-2 text-xs rounded">
                         Reset Transform
                     </button>
                 </div>
@@ -1152,20 +1216,20 @@
             <!-- Annotations Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('annotationsPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">📍 Annotations</span>
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Annotations</span>
                     <svg class="w-4 h-4 transform transition-transform" id="annotationsPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
                 <div id="annotationsPanel" class="panel-content p-4 hidden">
                     <!-- Add Hotspot -->
-                    <button id="addHotspot" class="w-full px-3 py-2 mb-3 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors">
+                    <button id="addHotspot" class="btn-primary w-full px-3 py-2 mb-3 text-xs rounded">
                         + Add Hotspot
                     </button>
 
                     <!-- Measurement Tool -->
-                    <button id="measurementTool" class="w-full px-3 py-2 mb-3 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors">
-                        📏 Measure Distance
+                    <button id="measurementTool" class="btn-secondary w-full px-3 py-2 mb-3 text-xs rounded">
+                        Measure Distance
                     </button>
 
                     <!-- Hotspots List -->
@@ -1177,7 +1241,7 @@
                     </div>
 
                     <!-- Clear All -->
-                    <button id="clearAnnotations" class="w-full px-3 py-2 text-xs bg-red-500 hover:bg-red-600 text-white rounded transition-colors">
+                    <button id="clearAnnotations" class="btn-danger w-full px-3 py-2 text-xs rounded">
                         Clear All
                     </button>
                 </div>
@@ -1197,7 +1261,7 @@
                         Save all material & transform changes to the model. Changes will be visible in AR mode.
                     </p>
                     
-                    <button id="saveChanges" class="w-full px-4 py-3 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-semibold flex items-center justify-center gap-2 shadow-md hover:shadow-lg">
+                    <button id="saveChanges" class="btn-primary w-full px-4 py-3 text-sm rounded-lg font-semibold flex items-center justify-center gap-2">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
                         </svg>

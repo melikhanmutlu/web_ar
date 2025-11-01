@@ -1241,25 +1241,29 @@
                     </svg>
                 </button>
                 <div id="annotationsPanel" class="panel-content p-4 hidden">
-                    <!-- Add Hotspot -->
-                    <button id="addHotspot" class="btn-primary w-full px-3 py-2 mb-3 text-xs rounded">
-                        + Add Hotspot
-                    </button>
+                    <!-- Camera Views Section -->
+                    <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Camera Views</label>
+                        <button id="saveCameraView" class="btn-primary w-full px-3 py-2 mb-2 text-xs rounded">
+                            Save Current View
+                        </button>
+                        <div id="cameraViewsList" class="space-y-1 max-h-32 overflow-y-auto">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>
+                        </div>
+                    </div>
 
-                    <!-- Measurement Tool -->
-                    <button id="measurementTool" class="btn-secondary w-full px-3 py-2 mb-3 text-xs rounded">
-                        Measure Distance
-                    </button>
-
-                    <!-- Hotspots List -->
-                    <div class="mb-3">
+                    <!-- Hotspots Section -->
+                    <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Hotspots</label>
-                        <div id="hotspotsList" class="space-y-2 max-h-40 overflow-y-auto">
+                        <button id="addHotspot" class="btn-primary w-full px-3 py-2 mb-2 text-xs rounded">
+                            + Add Pin
+                        </button>
+                        <div id="hotspotsList" class="space-y-1 max-h-32 overflow-y-auto">
                             <p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>
                         </div>
                     </div>
 
-                    <!-- Clear All -->
+                    <!-- Actions -->
                     <button id="clearAnnotations" class="btn-danger w-full px-3 py-2 text-xs rounded">
                         Clear All
                     </button>
@@ -1898,9 +1902,72 @@
             // ========== ANNOTATIONS FUNCTIONALITY ==========
             
             let hotspots = [];
-            let measurementPoints = [];
-            let measurementMode = false;
+            let cameraViews = [];
 
+            // ========== CAMERA VIEWS ==========
+            
+            // Save Current Camera View
+            document.getElementById('saveCameraView').addEventListener('click', () => {
+                const viewName = prompt('Enter view name:', `View ${cameraViews.length + 1}`);
+                if (!viewName) return;
+                
+                // Get current camera state
+                const cameraOrbit = modelViewer.getCameraOrbit();
+                const fieldOfView = modelViewer.getFieldOfView();
+                
+                const view = {
+                    id: 'view-' + Date.now(),
+                    name: viewName,
+                    orbit: {
+                        theta: cameraOrbit.theta,
+                        phi: cameraOrbit.phi,
+                        radius: cameraOrbit.radius
+                    },
+                    fov: fieldOfView
+                };
+                
+                cameraViews.push(view);
+                updateCameraViewsList();
+            });
+            
+            // Update Camera Views List
+            function updateCameraViewsList() {
+                const list = document.getElementById('cameraViewsList');
+                
+                if (cameraViews.length === 0) {
+                    list.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>';
+                } else {
+                    list.innerHTML = cameraViews.map((view, i) => `
+                        <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs">
+                            <button onclick="applyCameraView('${view.id}')" class="flex-1 text-left text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                                ${view.name}
+                            </button>
+                            <button onclick="removeCameraView('${view.id}')" class="text-red-500 hover:text-red-700 ml-2">✕</button>
+                        </div>
+                    `).join('');
+                }
+            }
+            
+            // Apply Camera View
+            window.applyCameraView = function(viewId) {
+                const view = cameraViews.find(v => v.id === viewId);
+                if (!view) return;
+                
+                modelViewer.cameraOrbit = `${view.orbit.theta}rad ${view.orbit.phi}rad ${view.orbit.radius}m`;
+                modelViewer.fieldOfView = `${view.fov}deg`;
+            };
+            
+            // Remove Camera View
+            window.removeCameraView = function(viewId) {
+                const index = cameraViews.findIndex(v => v.id === viewId);
+                if (index !== -1) {
+                    cameraViews.splice(index, 1);
+                    updateCameraViewsList();
+                }
+            };
+
+            // ========== HOTSPOTS ==========
+            
             // Add Hotspot
             document.getElementById('addHotspot').addEventListener('click', () => {
                 const hotspotId = 'hotspot-' + Date.now();
@@ -1912,13 +1979,44 @@
                 hotspot.textContent = '📍';
                 hotspot.style.cssText = 'background: #4CAF50; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 16px;';
                 
+                // Add tooltip div
+                const tooltip = document.createElement('div');
+                tooltip.className = 'hotspot-tooltip';
+                tooltip.style.cssText = 'display: none; position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; max-width: 200px; z-index: 1000; pointer-events: none;';
+                document.body.appendChild(tooltip);
+                
+                // Add hover events
+                hotspot.addEventListener('mouseenter', (e) => {
+                    const title = hotspot.getAttribute('data-title') || 'New Hotspot';
+                    const description = hotspot.getAttribute('data-description') || '';
+                    tooltip.innerHTML = `<strong>${title}</strong>${description ? '<br>' + description : ''}`;
+                    tooltip.style.display = 'block';
+                });
+                
+                hotspot.addEventListener('mousemove', (e) => {
+                    tooltip.style.left = (e.clientX + 10) + 'px';
+                    tooltip.style.top = (e.clientY + 10) + 'px';
+                });
+                
+                hotspot.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                });
+                
                 // Add click event to edit
                 hotspot.addEventListener('click', () => {
-                    const title = prompt('Hotspot Title:', 'New Hotspot');
-                    const description = prompt('Description:', '');
+                    const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'New Hotspot');
+                    const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
                     if (title) {
                         hotspot.setAttribute('data-title', title);
                         hotspot.setAttribute('data-description', description);
+                        
+                        // Update hotspots array
+                        const hotspotData = hotspots.find(h => h.id === hotspotId);
+                        if (hotspotData) {
+                            hotspotData.title = title;
+                            hotspotData.description = description;
+                        }
+                        
                         updateHotspotsList();
                     }
                 });
@@ -1927,6 +2025,7 @@
                 hotspots.push({
                     id: hotspotId,
                     element: hotspot,
+                    tooltip: tooltip,
                     title: 'New Hotspot',
                     description: ''
                 });
@@ -1934,30 +2033,21 @@
                 updateHotspotsList();
             });
 
-            // Measurement Tool
-            document.getElementById('measurementTool').addEventListener('click', () => {
-                measurementMode = !measurementMode;
-                const btn = document.getElementById('measurementTool');
-                
-                if (measurementMode) {
-                    btn.textContent = '✓ Measuring...';
-                    btn.classList.add('bg-green-500');
-                    btn.classList.remove('bg-blue-500');
-                    measurementPoints = [];
-                } else {
-                    btn.textContent = '📏 Measure Distance';
-                    btn.classList.remove('bg-green-500');
-                    btn.classList.add('bg-blue-500');
-                }
-            });
-
             // Clear Annotations
             document.getElementById('clearAnnotations').addEventListener('click', () => {
-                if (confirm('Clear all hotspots and measurements?')) {
-                    hotspots.forEach(h => h.element.remove());
+                if (confirm('Clear all hotspots and camera views?')) {
+                    // Clear hotspots
+                    hotspots.forEach(h => {
+                        h.element.remove();
+                        if (h.tooltip) h.tooltip.remove();
+                    });
                     hotspots = [];
-                    measurementPoints = [];
+                    
+                    // Clear camera views
+                    cameraViews = [];
+                    
                     updateHotspotsList();
+                    updateCameraViewsList();
                 }
             });
 

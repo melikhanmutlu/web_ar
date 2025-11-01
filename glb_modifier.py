@@ -193,14 +193,76 @@ def apply_texture_modifications(gltf, texture_data_base64):
 
 def apply_transform_modifications(gltf, transform_mods):
     """
-    Apply transform modifications to all root nodes in the GLTF
-    IMPORTANT: This modifies node transforms, preserving animations
+    Apply transform modifications to GLTF
+    - Scale: Applied to mesh vertices (permanent geometry change)
+    - Rotation: Applied to node transforms (preserves animations)
     
     Args:
         gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
+    
+    # Apply scale to mesh vertices (permanent geometry change)
+    if 'scale' in transform_mods:
+        scale_factor = float(transform_mods['scale'])
+        if scale_factor != 1.0 and gltf.meshes:
+            logger.info(f"Applying scale {scale_factor} to mesh vertices")
+            try:
+                for mesh_idx, mesh in enumerate(gltf.meshes):
+                    if not mesh.primitives:
+                        continue
+                    
+                    for prim_idx, primitive in enumerate(mesh.primitives):
+                        if primitive.attributes is None:
+                            continue
+                        
+                        # Get POSITION accessor
+                        if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
+                            pos_accessor_idx = primitive.attributes.POSITION
+                            accessor = gltf.accessors[pos_accessor_idx]
+                            buffer_view = gltf.bufferViews[accessor.bufferView]
+                            buffer = gltf.buffers[buffer_view.buffer]
+                            
+                            # Get binary data
+                            if buffer.uri and buffer.uri.startswith('data:'):
+                                # Data URI
+                                import base64
+                                data_start = buffer.uri.find(',') + 1
+                                binary_data = base64.b64decode(buffer.uri[data_start:])
+                            else:
+                                logger.warning(f"Cannot scale: buffer {buffer_view.buffer} is not embedded")
+                                continue
+                            
+                            # Parse vertex positions
+                            import struct
+                            offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                            offset += accessor.byteOffset if accessor.byteOffset else 0
+                            
+                            # Read and scale vertices
+                            vertex_count = accessor.count
+                            stride = buffer_view.byteStride if buffer_view.byteStride else 12  # 3 floats
+                            
+                            new_data = bytearray(binary_data)
+                            for i in range(vertex_count):
+                                pos = offset + i * stride
+                                # Read XYZ
+                                x, y, z = struct.unpack_from('fff', binary_data, pos)
+                                # Scale
+                                x *= scale_factor
+                                y *= scale_factor
+                                z *= scale_factor
+                                # Write back
+                                struct.pack_into('fff', new_data, pos, x, y, z)
+                            
+                            # Update buffer
+                            buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
+                            
+                            logger.info(f"Scaled {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
+                
+                logger.info(f"✅ Geometry scaled by {scale_factor}")
+            except Exception as e:
+                logger.error(f"Failed to scale geometry: {e}", exc_info=True)
     
     if not gltf.nodes:
         logger.warning("No nodes found in GLB")
@@ -225,21 +287,12 @@ def apply_transform_modifications(gltf, transform_mods):
         node = gltf.nodes[node_idx]
         
         # Initialize transform components if not present
-        if node.scale is None:
-            node.scale = [1.0, 1.0, 1.0]
         if node.rotation is None:
             node.rotation = [0.0, 0.0, 0.0, 1.0]  # Quaternion (x, y, z, w)
         if node.translation is None:
             node.translation = [0.0, 0.0, 0.0]
         
-        # Apply scale (always apply, even if 1.0)
-        if 'scale' in transform_mods:
-            try:
-                scale_factor = float(transform_mods['scale'])
-                node.scale = [scale_factor, scale_factor, scale_factor]
-                logger.info(f"Applied scale {scale_factor} to node {node_idx}")
-            except Exception as e:
-                logger.error(f"Failed to apply scale to node {node_idx}: {e}")
+        # Note: Scale is now applied to geometry vertices, not node transform
         
         # Apply rotation (convert Euler angles to quaternion)
         if 'rotation' in transform_mods:

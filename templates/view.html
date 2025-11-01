@@ -1622,12 +1622,16 @@
             const materialColorHex = document.getElementById('materialColorHex');
             
             // Load current material properties from model
+            let materialPropertiesLoaded = false;
             modelViewer.addEventListener('load', () => {
+                if (materialPropertiesLoaded) return; // Prevent multiple loads
+                
                 setTimeout(() => {
                     const scene = getInternalScene();
                     if (scene) {
+                        let foundMaterial = false;
                         scene.traverse((child) => {
-                            if (child.isMesh && child.material) {
+                            if (!foundMaterial && child.isMesh && child.material) {
                                 const mat = Array.isArray(child.material) ? child.material[0] : child.material;
                                 
                                 // Load color
@@ -1652,7 +1656,8 @@
                                     console.log('Loaded roughness:', mat.roughness);
                                 }
                                 
-                                return; // Stop after first material
+                                foundMaterial = true;
+                                materialPropertiesLoaded = true;
                             }
                         });
                     }
@@ -1877,21 +1882,8 @@
             const scaleSlider = document.getElementById('scaleSlider');
             const scaleValue = document.getElementById('scaleValue');
             
-            // Load current scale from model
-            modelViewer.addEventListener('load', () => {
-                setTimeout(() => {
-                    // Get current scale from model-viewer
-                    const currentScale = modelViewer.scale;
-                    if (currentScale) {
-                        const scaleArray = currentScale.split(' ').map(parseFloat);
-                        const scaleVal = scaleArray[0] || 1.0;
-                        scaleSlider.value = scaleVal;
-                        scaleValue.textContent = scaleVal.toFixed(1) + 'x';
-                        updateDimensionDisplay(scaleVal);
-                        console.log('Loaded scale:', scaleVal);
-                    }
-                }, 600);
-            });
+            // Note: Scale is now applied to geometry, so slider always starts at 1.0
+            // The actual model size is reflected in dimensions display
             
             scaleSlider.addEventListener('input', (e) => {
                 const value = parseFloat(e.target.value);

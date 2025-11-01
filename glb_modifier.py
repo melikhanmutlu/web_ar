@@ -44,13 +44,18 @@ def apply_material_modifications(gltf, material_mods):
         
         pbr = material.pbrMetallicRoughness
         
-        # Apply base color
+        # Apply base color (only if not default white)
         if 'color' in material_mods and material_mods['color']:
             try:
-                color_rgb = hex_to_rgb(material_mods['color'])
-                # Set baseColorFactor (RGBA)
-                pbr.baseColorFactor = list(color_rgb) + [1.0]
-                logger.info(f"Applied color {material_mods['color']} to material {i}")
+                color_hex = material_mods['color']
+                # Skip if color is default white (#ffffff) - preserve original
+                if color_hex.lower() != '#ffffff':
+                    color_rgb = hex_to_rgb(color_hex)
+                    # Set baseColorFactor (RGBA)
+                    pbr.baseColorFactor = list(color_rgb) + [1.0]
+                    logger.info(f"Applied color {color_hex} to material {i}")
+                else:
+                    logger.info(f"Skipping default white color for material {i} - preserving original")
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
         
@@ -166,6 +171,12 @@ def apply_texture_modifications(gltf, texture_data_base64):
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
+                    # Preserve existing baseColorFactor if it exists
+                    existing_color = material.pbrMetallicRoughness.baseColorFactor
+                    if existing_color:
+                        logger.info(f"Preserving existing baseColorFactor for material {i}: {existing_color}")
+                    
+                    # Apply texture
                     material.pbrMetallicRoughness.baseColorTexture = type('obj', (object,), {
                         'index': texture_index,
                         'texCoord': 0

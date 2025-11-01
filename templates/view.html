@@ -1621,6 +1621,27 @@
             const materialColor = document.getElementById('materialColor');
             const materialColorHex = document.getElementById('materialColorHex');
             
+            // Load current material color from model
+            modelViewer.addEventListener('load', () => {
+                setTimeout(() => {
+                    const scene = getInternalScene();
+                    if (scene) {
+                        scene.traverse((child) => {
+                            if (child.isMesh && child.material) {
+                                const mat = Array.isArray(child.material) ? child.material[0] : child.material;
+                                if (mat.color) {
+                                    const hex = '#' + mat.color.getHexString();
+                                    materialColor.value = hex;
+                                    materialColorHex.value = hex;
+                                    console.log('Loaded material color:', hex);
+                                    return; // Stop after first material
+                                }
+                            }
+                        });
+                    }
+                }, 500);
+            });
+            
             materialColor.addEventListener('input', (e) => {
                 const color = e.target.value;
                 materialColorHex.value = color;
@@ -2085,7 +2106,7 @@
 
             // Collect all modifications
             function collectModifications() {
-                return {
+                const mods = {
                     material: {
                         color: materialColor.value,
                         metalness: parseFloat(metalnessSlider.value),
@@ -2101,6 +2122,11 @@
                         }
                     }
                 };
+                
+                // Debug log
+                console.log('Collected modifications:', JSON.stringify(mods, null, 2));
+                
+                return mods;
             }
 
             // Export modified model

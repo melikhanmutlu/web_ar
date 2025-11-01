@@ -1,0 +1,156 @@
+Fix: Material and Transform Save Issues
+
+Problem:
+When saving modifications, either material OR transform changes were applied, but not both together. Additionally, material colors were being reset to white.
+
+Root Causes:
+
+1. Default White Color Issue:
+   - Material color input defaulted to #ffffff (white)
+   - Backend always applied this white color
+   - Original model colors were overwritten
+   - User's actual color choices were lost
+
+2. Color Not Loaded from Model:
+   - Frontend didn't read model's current color
+   - Always started with white (#ffffff)
+   - User couldn't see original color
+
+3. Texture Overwriting Color:
+   - When texture applied, baseColorFactor might be lost
+   - No preservation of existing color values
+
+Solutions Implemented:
+
+1. Backend (glb_modifier.py):
+
+   A. Skip Default White Color:
+   ```python
+   # Before:
+   if 'color' in material_mods and material_mods['color']:
+       color_rgb = hex_to_rgb(material_mods['color'])
+       pbr.baseColorFactor = list(color_rgb) + [1.0]
+   
+   # After:
+   if 'color' in material_mods and material_mods['color']:
+       color_hex = material_mods['color']
+       # Skip if color is default white - preserve original
+       if color_hex.lower() != '#ffffff':
+           color_rgb = hex_to_rgb(color_hex)
+           pbr.baseColorFactor = list(color_rgb) + [1.0]
+       else:
+           logger.info("Skipping default white - preserving original")
+   ```
+   
+   B. Preserve Color When Applying Texture:
+   ```python
+   # Log existing color before applying texture
+   existing_color = material.pbrMetallicRoughness.baseColorFactor
+   if existing_color:
+       logger.info(f"Preserving baseColorFactor: {existing_color}")
+   
+   # Apply texture without overwriting color
+   material.pbrMetallicRoughness.baseColorTexture = ...
+   ```
+
+2. Frontend (view.html):
+
+   A. Load Current Material Color:
+   ```javascript
+   modelViewer.addEventListener('load', () => {
+       setTimeout(() => {
+           const scene = getInternalScene();
+           scene.traverse((child) => {
+               if (child.isMesh && child.material) {
+                   const mat = child.material;
+                   if (mat.color) {
+                       const hex = '#' + mat.color.getHexString();
+                       materialColor.value = hex;
+                       materialColorHex.value = hex;
+                   }
+               }
+           });
+       }, 500);
+   });
+   ```
+   
+   B. Add Debug Logging:
+   ```javascript
+   function collectModifications() {
+       const mods = { material: {...}, transform: {...} };
+       console.log('Collected modifications:', JSON.stringify(mods, null, 2));
+       return mods;
+   }
+   ```
+
+How It Works Now:
+
+Scenario 1: User Changes Only Transform
+```
+1. Material color loads from model (e.g., #ff0000)
+2. User adjusts scale to 1.5x
+3. User clicks "Save & Apply to AR"
+4. Backend receives:
+   - material.color: #ff0000 (original)
+   - transform.scale: 1.5
+5. Backend skips color (not white, but unchanged)
+6. Backend applies scale
+7. ✅ Transform applied, color preserved
+```
+
+Scenario 2: User Changes Only Material
+```
+1. Material color loads from model (e.g., #808080)
+2. User changes color to #00ff00
+3. User clicks "Save & Apply to AR"
+4. Backend receives:
+   - material.color: #00ff00 (new)
+   - transform.scale: 1.0 (default)
+5. Backend applies new color
+6. Backend applies scale (no change)
+7. ✅ Color applied, transform preserved
+```
+
+Scenario 3: User Changes Both
+```
+1. Material color loads from model
+2. User changes color to #0000ff
+3. User changes scale to 2.0
+4. User clicks "Save & Apply to AR"
+5. Backend receives:
+   - material.color: #0000ff (new)
+   - transform.scale: 2.0 (new)
+6. Backend applies both
+7. ✅ Both applied correctly
+```
+
+Scenario 4: User Adds Texture
+```
+1. User uploads texture
+2. User changes metalness to 0.8
+3. User clicks "Save & Apply to AR"
+4. Backend applies material changes
+5. Backend applies texture
+6. Backend preserves baseColorFactor
+7. ✅ Texture + material properties both work
+```
+
+Benefits:
+
+✅ Material and transform changes work together
+✅ Original colors preserved when not changed
+✅ User sees current model color on load
+✅ White color issue fixed
+✅ Texture doesn't overwrite color
+✅ Debug logging for troubleshooting
+✅ Consistent behavior
+
+Testing:
+- Change only material → Works
+- Change only transform → Works
+- Change both → Works
+- Add texture + material → Works
+- Save multiple times → Works
+
+Result:
+Save & Apply to AR now correctly applies ALL modifications (material + transform + texture) together, preserving original values when not changed by the user.

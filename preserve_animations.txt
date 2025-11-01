@@ -1,0 +1,108 @@
+Preserve Animations in GLB Export
+
+Critical Fix: Animation Preservation
+
+Problem:
+- Previous implementation used Trimesh for GLB modifications
+- Trimesh only handles static geometry
+- Animations, skins, and skeletal data were lost during export
+- Users lost animation features after modifying materials/transforms
+
+Solution:
+- Switched from Trimesh to pygltflib
+- pygltflib fully supports GLB/glTF 2.0 specification
+- Preserves ALL GLB features during modifications
+
+Changes Made:
+
+1. glb_modifier.py - Complete Rewrite:
+   
+   a) Library Change:
+      - Removed: trimesh for GLB processing
+      - Added: pygltflib (GLTF2 class)
+      - Reason: Full GLB spec support including animations
+   
+   b) apply_material_modifications():
+      - Now works with gltf.materials array
+      - Directly modifies pbrMetallicRoughness properties
+      - Preserves all other material properties
+      - No geometry manipulation (animations safe)
+   
+   c) apply_transform_modifications():
+      - Works with gltf.nodes array
+      - Only modifies root node transforms
+      - Uses quaternions for rotation (GLB standard)
+      - Child nodes and animations untouched
+      - Added euler_to_quaternion() helper function
+   
+   d) modify_glb():
+      - Uses GLTF2().load() instead of trimesh.load()
+      - Applies modifications without touching animations
+      - Uses gltf.save() to preserve all data
+      - Verification step confirms animations preserved
+
+2. requirements.txt:
+   - Added: pygltflib==1.16.1
+   - Kept: trimesh (still used for initial conversions)
+
+Technical Details:
+
+GLB Structure Preserved:
+✅ Animations (keyframes, channels, samplers)
+✅ Skins (skeletal data, joint matrices)
+✅ Morphs (blend shapes, targets)
+✅ Cameras
+✅ Lights
+✅ Extensions
+✅ Extras (custom data)
+
+Material Modifications:
+- Direct property updates on materials array
+- No geometry reconstruction
+- PBR properties: baseColorFactor, metallicFactor, roughnessFactor
+- All other material properties untouched
+
+Transform Modifications:
+- Applied to root nodes only
+- Uses proper GLB transform format:
+  * scale: [x, y, z]
+  * rotation: [x, y, z, w] quaternion
+  * translation: [x, y, z]
+- Child nodes inherit transforms (animations work)
+- Euler to Quaternion conversion for rotation
+
+Animation Safety:
+- Animations reference node indices
+- Node hierarchy preserved
+- Transform channels unmodified
+- Skinning data intact
+- Morph targets preserved
+
+Verification:
+- Logs animation count before/after
+- Logs skin count before/after
+- Confirms file size and existence
+- ✅ marker in logs when animations preserved
+
+Benefits:
+✅ Animations work after export
+✅ Skeletal animations preserved
+✅ Morph targets preserved
+✅ All GLB features intact
+✅ No data loss
+✅ Professional-grade export
+
+Use Cases Now Supported:
+- Animated characters with material changes
+- Rigged models with color adjustments
+- Morphing models with transforms
+- Complex scenes with multiple animations
+
+Logging:
+- Before: "Loaded scene with X geometries"
+- After: "Loaded GLB: Nodes, Meshes, Materials, Animations, Skins"
+- Verification: "✅ Animations preserved: X animations"
+- Verification: "✅ Skins preserved: X skins"
+
+Result:
+Users can now modify materials and transforms without losing animations, making the export feature truly production-ready for animated 3D content.

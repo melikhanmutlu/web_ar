@@ -9,6 +9,7 @@ qrcode==7.4.2
 pillow==10.0.0
 numpy==1.24.3
 trimesh==3.23.5
+pygltflib==1.16.1
 filetype==1.2.0
 uuid==1.30
 scipy==1.11.2

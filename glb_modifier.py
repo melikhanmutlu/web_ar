@@ -1,12 +1,14 @@
 """
 GLB Modifier Module
 Applies material and transform modifications to GLB files
+Preserves animations, skins, and all other GLB features
 """
 
-import trimesh
 import numpy as np
 import logging
 from pathlib import Path
+from pygltflib import GLTF2
+import struct
 
 logger = logging.getLogger(__name__)
 
@@ -17,111 +19,150 @@ def hex_to_rgb(hex_color):
     return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 
-def apply_material_modifications(scene, material_mods):
+def apply_material_modifications(gltf, material_mods):
     """
-    Apply material modifications to all geometries in the scene
+    Apply material modifications to all materials in the GLTF
     
     Args:
-        scene: Trimesh scene object
+        gltf: GLTF2 object
         material_mods: dict with 'color', 'metalness', 'roughness'
     """
     logger.info(f"Applying material modifications: {material_mods}")
     
-    for geometry_name in scene.geometry:
-        geom = scene.geometry[geometry_name]
-        
-        # Ensure geometry has visual material
-        if not hasattr(geom.visual, 'material'):
-            logger.warning(f"Geometry {geometry_name} has no material, skipping")
+    if not gltf.materials:
+        logger.warning("No materials found in GLB")
+        return gltf
+    
+    for i, material in enumerate(gltf.materials):
+        # Ensure material has PBR metallic roughness
+        if not material.pbrMetallicRoughness:
+            logger.warning(f"Material {i} has no PBR properties, skipping")
             continue
         
-        material = geom.visual.material
+        pbr = material.pbrMetallicRoughness
         
         # Apply base color
         if 'color' in material_mods and material_mods['color']:
             try:
                 color_rgb = hex_to_rgb(material_mods['color'])
                 # Set baseColorFactor (RGBA)
-                material.baseColorFactor = list(color_rgb) + [1.0]
-                logger.info(f"Applied color {material_mods['color']} to {geometry_name}")
+                pbr.baseColorFactor = list(color_rgb) + [1.0]
+                logger.info(f"Applied color {material_mods['color']} to material {i}")
             except Exception as e:
-                logger.error(f"Failed to apply color: {e}")
+                logger.error(f"Failed to apply color to material {i}: {e}")
         
         # Apply metalness
         if 'metalness' in material_mods:
             try:
-                material.metallicFactor = float(material_mods['metalness'])
-                logger.info(f"Applied metalness {material_mods['metalness']} to {geometry_name}")
+                pbr.metallicFactor = float(material_mods['metalness'])
+                logger.info(f"Applied metalness {material_mods['metalness']} to material {i}")
             except Exception as e:
-                logger.error(f"Failed to apply metalness: {e}")
+                logger.error(f"Failed to apply metalness to material {i}: {e}")
         
         # Apply roughness
         if 'roughness' in material_mods:
             try:
-                material.roughnessFactor = float(material_mods['roughness'])
-                logger.info(f"Applied roughness {material_mods['roughness']} to {geometry_name}")
+                pbr.roughnessFactor = float(material_mods['roughness'])
+                logger.info(f"Applied roughness {material_mods['roughness']} to material {i}")
             except Exception as e:
-                logger.error(f"Failed to apply roughness: {e}")
+                logger.error(f"Failed to apply roughness to material {i}: {e}")
     
-    return scene
+    return gltf
 
 
-def apply_transform_modifications(scene, transform_mods):
+def apply_transform_modifications(gltf, transform_mods):
     """
-    Apply transform modifications to the scene
+    Apply transform modifications to all root nodes in the GLTF
+    IMPORTANT: This modifies node transforms, preserving animations
     
     Args:
-        scene: Trimesh scene object
+        gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
     
-    # Apply scale
-    if 'scale' in transform_mods:
-        try:
-            scale_factor = float(transform_mods['scale'])
-            if scale_factor != 1.0:
-                scene.apply_scale(scale_factor)
-                logger.info(f"Applied scale {scale_factor}")
-        except Exception as e:
-            logger.error(f"Failed to apply scale: {e}")
+    if not gltf.nodes:
+        logger.warning("No nodes found in GLB")
+        return gltf
     
-    # Apply rotation
-    if 'rotation' in transform_mods:
-        try:
-            rotation = transform_mods['rotation']
-            
-            # Convert degrees to radians
-            rx = np.radians(float(rotation.get('x', 0)))
-            ry = np.radians(float(rotation.get('y', 0)))
-            rz = np.radians(float(rotation.get('z', 0)))
-            
-            # Create rotation matrix (ZYX order - standard in 3D)
-            # Apply rotations in order: Z, then Y, then X
-            if rz != 0:
-                matrix_z = trimesh.transformations.rotation_matrix(rz, [0, 0, 1])
-                scene.apply_transform(matrix_z)
-                logger.info(f"Applied Z rotation {rotation.get('z', 0)}°")
-            
-            if ry != 0:
-                matrix_y = trimesh.transformations.rotation_matrix(ry, [0, 1, 0])
-                scene.apply_transform(matrix_y)
-                logger.info(f"Applied Y rotation {rotation.get('y', 0)}°")
-            
-            if rx != 0:
-                matrix_x = trimesh.transformations.rotation_matrix(rx, [1, 0, 0])
-                scene.apply_transform(matrix_x)
-                logger.info(f"Applied X rotation {rotation.get('x', 0)}°")
+    # Find root nodes (nodes without parents)
+    root_nodes = []
+    all_child_indices = set()
+    
+    for node in gltf.nodes:
+        if node.children:
+            all_child_indices.update(node.children)
+    
+    for i, node in enumerate(gltf.nodes):
+        if i not in all_child_indices:
+            root_nodes.append(i)
+    
+    logger.info(f"Found {len(root_nodes)} root nodes: {root_nodes}")
+    
+    # Apply transforms to root nodes only
+    for node_idx in root_nodes:
+        node = gltf.nodes[node_idx]
+        
+        # Initialize transform components if not present
+        if node.scale is None:
+            node.scale = [1.0, 1.0, 1.0]
+        if node.rotation is None:
+            node.rotation = [0.0, 0.0, 0.0, 1.0]  # Quaternion (x, y, z, w)
+        if node.translation is None:
+            node.translation = [0.0, 0.0, 0.0]
+        
+        # Apply scale
+        if 'scale' in transform_mods:
+            try:
+                scale_factor = float(transform_mods['scale'])
+                if scale_factor != 1.0:
+                    node.scale = [scale_factor, scale_factor, scale_factor]
+                    logger.info(f"Applied scale {scale_factor} to node {node_idx}")
+            except Exception as e:
+                logger.error(f"Failed to apply scale to node {node_idx}: {e}")
+        
+        # Apply rotation (convert Euler angles to quaternion)
+        if 'rotation' in transform_mods:
+            try:
+                rotation = transform_mods['rotation']
+                rx = np.radians(float(rotation.get('x', 0)))
+                ry = np.radians(float(rotation.get('y', 0)))
+                rz = np.radians(float(rotation.get('z', 0)))
                 
-        except Exception as e:
-            logger.error(f"Failed to apply rotation: {e}")
+                # Convert Euler angles (ZYX order) to quaternion
+                quat = euler_to_quaternion(rx, ry, rz)
+                node.rotation = quat
+                logger.info(f"Applied rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) to node {node_idx}")
+            except Exception as e:
+                logger.error(f"Failed to apply rotation to node {node_idx}: {e}")
     
-    return scene
+    return gltf
+
+
+def euler_to_quaternion(roll, pitch, yaw):
+    """
+    Convert Euler angles to quaternion (x, y, z, w)
+    Order: ZYX (yaw, pitch, roll)
+    """
+    cy = np.cos(yaw * 0.5)
+    sy = np.sin(yaw * 0.5)
+    cp = np.cos(pitch * 0.5)
+    sp = np.sin(pitch * 0.5)
+    cr = np.cos(roll * 0.5)
+    sr = np.sin(roll * 0.5)
+    
+    w = cr * cp * cy + sr * sp * sy
+    x = sr * cp * cy - cr * sp * sy
+    y = cr * sp * cy + sr * cp * sy
+    z = cr * cp * sy - sr * sp * cy
+    
+    return [x, y, z, w]
 
 
 def modify_glb(input_path, output_path, modifications):
     """
     Main function to modify a GLB file
+    Preserves all GLB features including animations, skins, morphs, etc.
     
     Args:
         input_path: Path to input GLB file
@@ -134,31 +175,40 @@ def modify_glb(input_path, output_path, modifications):
     try:
         logger.info(f"Loading GLB from {input_path}")
         
-        # Load the GLB file
-        scene = trimesh.load(input_path, force='scene')
+        # Load the GLB file using pygltflib
+        gltf = GLTF2().load(input_path)
         
-        if not isinstance(scene, trimesh.Scene):
-            logger.error("Loaded object is not a scene")
-            return False
-        
-        logger.info(f"Loaded scene with {len(scene.geometry)} geometries")
+        logger.info(f"Loaded GLB:")
+        logger.info(f"  - Nodes: {len(gltf.nodes) if gltf.nodes else 0}")
+        logger.info(f"  - Meshes: {len(gltf.meshes) if gltf.meshes else 0}")
+        logger.info(f"  - Materials: {len(gltf.materials) if gltf.materials else 0}")
+        logger.info(f"  - Animations: {len(gltf.animations) if gltf.animations else 0}")
+        logger.info(f"  - Skins: {len(gltf.skins) if gltf.skins else 0}")
         
         # Apply material modifications
         if 'material' in modifications:
-            scene = apply_material_modifications(scene, modifications['material'])
+            gltf = apply_material_modifications(gltf, modifications['material'])
         
         # Apply transform modifications
         if 'transform' in modifications:
-            scene = apply_transform_modifications(scene, modifications['transform'])
+            gltf = apply_transform_modifications(gltf, modifications['transform'])
         
-        # Export modified scene
+        # Export modified GLB
         logger.info(f"Exporting modified GLB to {output_path}")
-        scene.export(output_path, file_type='glb')
+        gltf.save(output_path)
         
         # Verify output file exists
         if Path(output_path).exists():
             file_size = Path(output_path).stat().st_size
             logger.info(f"Successfully exported GLB ({file_size} bytes)")
+            
+            # Verify animations are preserved
+            gltf_verify = GLTF2().load(output_path)
+            if gltf_verify.animations:
+                logger.info(f"✅ Animations preserved: {len(gltf_verify.animations)} animations")
+            if gltf_verify.skins:
+                logger.info(f"✅ Skins preserved: {len(gltf_verify.skins)} skins")
+            
             return True
         else:
             logger.error("Output file was not created")

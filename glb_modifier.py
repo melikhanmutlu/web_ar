@@ -225,13 +225,16 @@ def apply_transform_modifications(gltf, transform_mods):
                             buffer = gltf.buffers[buffer_view.buffer]
                             
                             # Get binary data
+                            import base64
                             if buffer.uri and buffer.uri.startswith('data:'):
-                                # Data URI
-                                import base64
+                                # Data URI (embedded as base64)
                                 data_start = buffer.uri.find(',') + 1
                                 binary_data = base64.b64decode(buffer.uri[data_start:])
+                            elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                                # GLB binary chunk
+                                binary_data = gltf.binary_blob()
                             else:
-                                logger.warning(f"Cannot scale: buffer {buffer_view.buffer} is not embedded")
+                                logger.warning(f"Cannot scale: buffer {buffer_view.buffer} has no accessible data")
                                 continue
                             
                             # Parse vertex positions
@@ -255,8 +258,13 @@ def apply_transform_modifications(gltf, transform_mods):
                                 # Write back
                                 struct.pack_into('fff', new_data, pos, x, y, z)
                             
-                            # Update buffer
-                            buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
+                            # Update buffer based on type
+                            if buffer.uri and buffer.uri.startswith('data:'):
+                                # Update data URI
+                                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
+                            else:
+                                # Update GLB binary chunk
+                                gltf.set_binary_blob(bytes(new_data))
                             
                             logger.info(f"Scaled {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
                 

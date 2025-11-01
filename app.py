@@ -1024,9 +1024,9 @@ def upload_model():
             if temp_dir: shutil.rmtree(temp_dir)
             return jsonify({'error': 'Unsupported file format'}), 400
 
-        # Set max dimension if specified
-        if max_dimension:
-            converter.set_max_dimension(max_dimension * 100)  # Convert back to cm
+        # Set max dimension if specified (max_dimension is already in cm)
+        if max_dimension is not None:
+            converter.set_max_dimension(max_dimension)
 
         # Perform conversion
         logger.info(f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}")

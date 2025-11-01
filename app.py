@@ -833,10 +833,10 @@ def upload_file():
         logger.info(f"DEBUG: useMaxDimension parsed: {use_max_dimension}")
         
         if use_max_dimension:
-            max_dimension = float(request.form.get('maxDimension', '50')) / 100.0
-            logger.info(f"Maximum dimension limit enabled: {max_dimension * 100} cm ({max_dimension} m)")
+            max_dimension = float(request.form.get('maxDimension', '50'))  # Keep in cm
+            logger.info(f"Maximum dimension limit enabled: {max_dimension} cm")
         else:
-            max_dimension = 0  # No scaling
+            max_dimension = None  # No scaling
             logger.info(f"Maximum dimension limit disabled - model will keep original size")
         
         # Create converted directory
@@ -1040,23 +1040,24 @@ def upload_model():
         else:
             logger.info(f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}")
 
-        # --- Temporarily Disable Scaling --- 
-        logger.info(f"[upload_model - {unique_id}] Skipping scaling step for debugging.")
-        # if max_dimension is not None and os.path.exists(output_path):
-        #     logger.info(f"[upload_model - {unique_id}] Applying size limit: {max_dimension}m to {output_path}")
-        #     try:
-        #         # Load the mesh AFTER successful conversion
-        #         mesh = trimesh.load(output_path) 
-        #         apply_size_limit(mesh, max_dimension) # apply_size_limit modifies the mesh in-place
-        #         logger.info(f"[upload_model - {unique_id}] Scaling applied conceptually, attempting export...")
-        #         mesh.export(output_path) # Overwrite the file with the scaled version
-        #         logger.info(f"[upload_model - {unique_id}] Export after scaling successful.")
-        #     except Exception as e:
-        #         logger.error(f"[upload_model - {unique_id}] Error scaling or exporting model {output_path}: {str(e)}")
-        #         # Decide if scaling failure should stop the process
-        #         # For now, log error and continue with unscaled model
-        # else:
-        #      logger.info(f"[upload_model - {unique_id}] No max dimension specified or output file missing before scaling.")
+        # Apply size limit if specified
+        if max_dimension is not None and os.path.exists(output_path):
+            logger.info(f"[upload_model - {unique_id}] Applying size limit: {max_dimension}cm to {output_path}")
+            try:
+                # Convert cm to meters for apply_size_limit function
+                max_dimension_meters = max_dimension / 100.0
+                
+                # Load the mesh AFTER successful conversion
+                mesh = trimesh.load(output_path) 
+                apply_size_limit(mesh, max_dimension_meters) # apply_size_limit modifies the mesh in-place
+                logger.info(f"[upload_model - {unique_id}] Scaling applied, attempting export...")
+                mesh.export(output_path) # Overwrite the file with the scaled version
+                logger.info(f"[upload_model - {unique_id}] Export after scaling successful.")
+            except Exception as e:
+                logger.error(f"[upload_model - {unique_id}] Error scaling or exporting model {output_path}: {str(e)}")
+                # Log error but continue with unscaled model
+        else:
+             logger.info(f"[upload_model - {unique_id}] No max dimension specified or output file missing before scaling.")
 
         # Check file size before saving to DB
         final_file_size = 0

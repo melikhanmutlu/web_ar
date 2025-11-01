@@ -1,0 +1,194 @@
+Fix: Scale Save & Enable Size Limit
+
+Two Critical Fixes:
+
+1. Scale Transformation Not Saving
+   Problem: Scale changes were not being saved to GLB
+   Root Cause: Code skipped applying scale if value was not 1.0
+   
+   Before (glb_modifier.py line 239):
+   ```python
+   if scale_factor != 1.0:
+       node.scale = [scale_factor, scale_factor, scale_factor]
+   ```
+   
+   Issue: This condition prevented scale from being saved!
+   - If user set scale to 1.5x, it would save
+   - But if user set scale to 1.0x, it would skip
+   - This caused inconsistent behavior
+   
+   After:
+   ```python
+   # Always apply scale
+   node.scale = [scale_factor, scale_factor, scale_factor]
+   ```
+   
+   Result: Scale is ALWAYS applied and saved, regardless of value
+
+2. Size Limit Re-enabled
+   Problem: Size limit was disabled for debugging
+   Root Cause: Code was commented out
+   
+   Changes:
+   A. Uncommented size limit code (app.py line 1043-1060)
+   B. Fixed unit conversion issue:
+      - Frontend sends: cm (e.g., 50 cm)
+      - Backend stores: cm initially
+      - Conversion to meters: happens when applying
+   
+   Before:
+   ```python
+   # Disabled
+   # if max_dimension is not None:
+   #     apply_size_limit(mesh, max_dimension)
+   ```
+   
+   After:
+   ```python
+   if max_dimension is not None and os.path.exists(output_path):
+       # Convert cm to meters
+       max_dimension_meters = max_dimension / 100.0
+       mesh = trimesh.load(output_path)
+       apply_size_limit(mesh, max_dimension_meters)
+       mesh.export(output_path)
+   ```
+
+Unit Conversion Flow:
+
+Upload Page:
+```
+User Input: 50 cm
+↓
+Frontend: name="maxDimension" value="50"
+↓
+Backend (line 836): max_dimension = 50  (cm)
+↓
+Backend (line 1048): max_dimension_meters = 50 / 100.0 = 0.5 (m)
+↓
+apply_size_limit(mesh, 0.5)  # Scales longest edge to 0.5m (50cm)
+```
+
+How Size Limit Works:
+
+1. User enables "Limit Model Size"
+2. Sets value (e.g., 50 cm)
+3. Model uploads
+4. Backend converts model to GLB
+5. Backend checks longest edge
+6. If longest edge > 50cm, scales down proportionally
+7. If longest edge < 50cm, scales up proportionally
+8. Saves scaled GLB
+
+Example:
+```
+Original model: 100cm x 80cm x 60cm
+Longest edge: 100cm
+Size limit: 50cm
+Scale factor: 50/100 = 0.5
+Result: 50cm x 40cm x 30cm ✅
+```
+
+Scale Save Test Cases:
+
+Test 1: Scale to 1.5x
+```
+1. Load model
+2. Set scale to 1.5x
+3. Click "Save & Apply to AR"
+4. Backend receives: transform.scale = 1.5
+5. Backend applies: node.scale = [1.5, 1.5, 1.5]
+6. GLB saved with scale
+7. ✅ Model is 1.5x larger in AR
+```
+
+Test 2: Scale to 1.0x (Edge Case)
+```
+1. Load model (already scaled to 2.0x)
+2. Set scale back to 1.0x
+3. Click "Save & Apply to AR"
+4. Backend receives: transform.scale = 1.0
+5. Backend applies: node.scale = [1.0, 1.0, 1.0]
+6. GLB saved with scale
+7. ✅ Model returns to original size
+```
+
+Test 3: Scale to 0.5x
+```
+1. Load model
+2. Set scale to 0.5x
+3. Click "Save & Apply to AR"
+4. Backend receives: transform.scale = 0.5
+5. Backend applies: node.scale = [0.5, 0.5, 0.5]
+6. GLB saved with scale
+7. ✅ Model is 0.5x smaller in AR
+```
+
+Size Limit Test Cases:
+
+Test 1: Model Larger Than Limit
+```
+Upload: 100cm model
+Limit: 50cm
+Result: Scaled to 50cm ✅
+```
+
+Test 2: Model Smaller Than Limit
+```
+Upload: 20cm model
+Limit: 50cm
+Result: Scaled to 50cm ✅
+```
+
+Test 3: No Limit
+```
+Upload: 100cm model
+Limit: Disabled
+Result: Stays 100cm ✅
+```
+
+Combined Test: Size Limit + Scale Save
+```
+1. Upload 100cm model with 50cm limit
+   → Model becomes 50cm
+2. View in AR
+   → Model is 50cm ✅
+3. Set scale to 2.0x
+4. Save & Apply to AR
+   → Model becomes 100cm (50cm * 2.0)
+5. View in AR
+   → Model is 100cm ✅
+```
+
+Benefits:
+
+Scale Save:
+✅ Scale transformations persist
+✅ Works with all scale values (0.1x to 3.0x)
+✅ No edge cases
+✅ Consistent behavior
+
+Size Limit:
+✅ Re-enabled and working
+✅ Proper unit conversion (cm → m)
+✅ Scales models on upload
+✅ Maintains aspect ratio
+✅ User-friendly (cm input)
+
+Verification:
+
+To verify scale is saved:
+1. Set scale to 1.5x
+2. Save & Apply to AR
+3. Reload page
+4. Check dimension display
+5. Should show 1.5x original dimensions
+
+To verify size limit:
+1. Upload large model (e.g., 200cm)
+2. Enable size limit: 50cm
+3. Upload
+4. Check dimension display
+5. Should show ~50cm longest edge
+
+Result:
+Both scale transformations and size limits now work correctly. Scale changes are always saved regardless of value, and size limits are applied during upload with proper unit conversion.

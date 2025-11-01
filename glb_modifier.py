@@ -232,13 +232,12 @@ def apply_transform_modifications(gltf, transform_mods):
         if node.translation is None:
             node.translation = [0.0, 0.0, 0.0]
         
-        # Apply scale
+        # Apply scale (always apply, even if 1.0)
         if 'scale' in transform_mods:
             try:
                 scale_factor = float(transform_mods['scale'])
-                if scale_factor != 1.0:
-                    node.scale = [scale_factor, scale_factor, scale_factor]
-                    logger.info(f"Applied scale {scale_factor} to node {node_idx}")
+                node.scale = [scale_factor, scale_factor, scale_factor]
+                logger.info(f"Applied scale {scale_factor} to node {node_idx}")
             except Exception as e:
                 logger.error(f"Failed to apply scale to node {node_idx}: {e}")
         

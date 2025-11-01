@@ -1,0 +1,167 @@
+Add Texture Embedding & Save to AR Feature
+
+Major New Features:
+
+1. Texture Embedding
+   - Upload textures and embed them into GLB files
+   - Base64 data URI embedding (no external files)
+   - Automatic image optimization (max 2048x2048)
+   - RGB conversion for compatibility
+   - Proper GLB texture structure (images, textures, samplers)
+
+2. Save & Apply to AR
+   - Save all modifications to original model.glb
+   - Changes visible immediately in AR mode
+   - Automatic backup creation before save
+   - Page reload to show updated model
+   - Confirmation dialog for safety
+
+Frontend Changes (view.html):
+
+1. Texture Data Storage:
+   - Added currentTextureData variable
+   - Stores base64 texture on upload
+   - Clears on texture removal
+   - Included in collectModifications()
+
+2. Save Changes Panel:
+   - New panel below Annotations
+   - Green border for visibility
+   - "Save & Apply to AR" button
+   - Clear messaging about AR preview
+   - Warning about original model update
+
+3. Save Functionality:
+   - Confirmation dialog before save
+   - Loading states (Saving... → Saved!)
+   - Error handling with user feedback
+   - Automatic page reload after save
+   - Calls /save_modifications endpoint
+
+Backend Changes:
+
+1. glb_modifier.py - Texture Embedding:
+   
+   a) New Imports:
+      - PIL.Image for image processing
+      - base64 for encoding/decoding
+      - io for buffer operations
+      - pygltflib Image, Texture, Sampler classes
+   
+   b) apply_texture_modifications():
+      - Decodes base64 image data
+      - Opens with PIL for format detection
+      - Converts to RGB (removes alpha)
+      - Optimizes size (max 2048x2048)
+      - Creates data URI for embedding
+      - Adds sampler with proper filtering
+      - Adds image to gltf.images array
+      - Adds texture to gltf.textures array
+      - Applies to all materials
+      - Comprehensive logging
+   
+   c) modify_glb() Updated:
+      - Checks for texture in material modifications
+      - Calls apply_texture_modifications if present
+      - Texture applied after color/metalness/roughness
+
+2. app.py - Save Endpoint:
+   
+   a) /save_modifications (POST):
+      - Receives model_id and modifications
+      - Validates inputs
+      - Creates backup (model_backup_<timestamp>.glb)
+      - Creates temp output file
+      - Applies all modifications (material, texture, transform)
+      - Replaces original model.glb with modified version
+      - Returns success with backup filename
+      - Comprehensive error handling
+
+Technical Details:
+
+Texture Embedding Process:
+1. User uploads image → base64 data URI
+2. Frontend stores in currentTextureData
+3. Included in modifications JSON
+4. Backend decodes base64
+5. PIL opens and processes image
+6. Converts to RGB (white background for alpha)
+7. Resizes if > 2048x2048 (LANCZOS)
+8. Re-encodes as PNG (optimized)
+9. Creates new base64 data URI
+10. Adds to GLB structure:
+    - Sampler (LINEAR, REPEAT)
+    - Image (data URI)
+    - Texture (references image + sampler)
+11. Applies to all materials
+12. Saves GLB with embedded texture
+
+Save Process:
+1. User clicks "Save & Apply to AR"
+2. Confirmation dialog
+3. Frontend collects all modifications
+4. POST to /save_modifications
+5. Backend creates backup
+6. Backend applies modifications
+7. Backend replaces model.glb
+8. Frontend reloads page
+9. Updated model loads in viewer
+10. AR button shows modified model
+
+Texture Features:
+✅ Base64 embedding (no external files)
+✅ Format conversion (PNG, JPG, etc.)
+✅ Alpha channel handling (white background)
+✅ Size optimization (max 2048x2048)
+✅ Proper GLB structure
+✅ Applied to all materials
+✅ Preserved in export
+
+Save Features:
+✅ Replaces original model.glb
+✅ Creates timestamped backup
+✅ Preserves animations
+✅ Preserves skins
+✅ Immediate AR preview
+✅ Confirmation dialog
+✅ Error handling
+
+User Workflow:
+
+1. Upload Model → View in viewer
+2. Adjust Material:
+   - Change color
+   - Adjust metalness/roughness
+   - Upload texture
+3. Adjust Transform:
+   - Scale model
+   - Rotate X/Y/Z
+4. Click "Export Modified Model" → Download GLB
+   OR
+5. Click "Save & Apply to AR" → Update original
+6. Confirm save
+7. Page reloads with updated model
+8. Click AR button → See changes in AR!
+
+Benefits:
+✅ Texture support in export
+✅ AR preview with modifications
+✅ Non-destructive (backup created)
+✅ Immediate feedback
+✅ Professional workflow
+✅ Production-ready
+
+File Structure:
+/converted/<model_id>/
+├── model.glb                    ← Updated with modifications
+├── model_backup_1730481234.glb  ← Automatic backup
+├── modified_1730481567.glb      ← Export downloads
+└── temp_1730481890.glb          ← Temporary (deleted after save)
+
+Limitations:
+- Texture size limited to 2048x2048 (performance)
+- Alpha channels converted to RGB (compatibility)
+- One texture per model (applied to all materials)
+
+Result:
+Users can now upload textures, see them embedded in GLB exports, and save all modifications to the original model for immediate AR preview. The workflow is professional, safe (with backups), and production-ready.

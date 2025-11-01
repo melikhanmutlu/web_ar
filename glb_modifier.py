@@ -7,8 +7,11 @@ Preserves animations, skins, and all other GLB features
 import numpy as np
 import logging
 from pathlib import Path
-from pygltflib import GLTF2
+from pygltflib import GLTF2, Image as GLTFImage, Texture, Sampler
 import struct
+import base64
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,113 @@ def apply_material_modifications(gltf, material_mods):
                 logger.error(f"Failed to apply roughness to material {i}: {e}")
     
     return gltf
+
+
+def apply_texture_modifications(gltf, texture_data_base64):
+    """
+    Apply texture to all materials in the GLTF
+    Embeds texture as base64 data URI in GLB
+    
+    Args:
+        gltf: GLTF2 object
+        texture_data_base64: Base64 encoded image data (data:image/png;base64,...)
+    
+    Returns:
+        gltf: Modified GLTF2 object
+    """
+    if not texture_data_base64:
+        logger.info("No texture data provided, skipping texture modification")
+        return gltf
+    
+    try:
+        logger.info("Applying texture modifications")
+        
+        # Decode base64 image
+        if ',' in texture_data_base64:
+            # Remove data URI prefix (data:image/png;base64,)
+            texture_data_base64 = texture_data_base64.split(',')[1]
+        
+        image_bytes = base64.b64decode(texture_data_base64)
+        logger.info(f"Decoded texture image: {len(image_bytes)} bytes")
+        
+        # Open image with PIL to get format and optimize
+        img = Image.open(io.BytesIO(image_bytes))
+        logger.info(f"Image format: {img.format}, size: {img.size}, mode: {img.mode}")
+        
+        # Convert to RGB if needed (remove alpha for JPG compatibility)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # Create white background
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+            img = background
+        elif img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Optimize image size (max 2048x2048 for performance)
+        max_size = 2048
+        if img.width > max_size or img.height > max_size:
+            img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            logger.info(f"Resized image to: {img.size}")
+        
+        # Save as PNG to buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG', optimize=True)
+        image_bytes = buffer.getvalue()
+        logger.info(f"Optimized texture: {len(image_bytes)} bytes")
+        
+        # Create data URI for embedding
+        image_data_uri = f"data:image/png;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+        
+        # Initialize arrays if not present
+        if gltf.images is None:
+            gltf.images = []
+        if gltf.textures is None:
+            gltf.textures = []
+        if gltf.samplers is None:
+            gltf.samplers = []
+        
+        # Add sampler (texture filtering settings)
+        sampler = Sampler()
+        sampler.magFilter = 9729  # LINEAR
+        sampler.minFilter = 9987  # LINEAR_MIPMAP_LINEAR
+        sampler.wrapS = 10497     # REPEAT
+        sampler.wrapT = 10497     # REPEAT
+        sampler_index = len(gltf.samplers)
+        gltf.samplers.append(sampler)
+        
+        # Add image with data URI
+        gltf_image = GLTFImage()
+        gltf_image.uri = image_data_uri
+        image_index = len(gltf.images)
+        gltf.images.append(gltf_image)
+        logger.info(f"Added image at index {image_index}")
+        
+        # Add texture referencing the image
+        texture = Texture()
+        texture.source = image_index
+        texture.sampler = sampler_index
+        texture_index = len(gltf.textures)
+        gltf.textures.append(texture)
+        logger.info(f"Added texture at index {texture_index}")
+        
+        # Apply texture to all materials
+        if gltf.materials:
+            for i, material in enumerate(gltf.materials):
+                if material.pbrMetallicRoughness:
+                    material.pbrMetallicRoughness.baseColorTexture = type('obj', (object,), {
+                        'index': texture_index,
+                        'texCoord': 0
+                    })()
+                    logger.info(f"Applied texture to material {i}")
+        
+        logger.info("✅ Texture embedding completed successfully")
+        return gltf
+        
+    except Exception as e:
+        logger.error(f"Failed to apply texture: {e}", exc_info=True)
+        return gltf
 
 
 def apply_transform_modifications(gltf, transform_mods):
@@ -188,6 +298,10 @@ def modify_glb(input_path, output_path, modifications):
         # Apply material modifications
         if 'material' in modifications:
             gltf = apply_material_modifications(gltf, modifications['material'])
+            
+            # Apply texture if provided
+            if 'texture' in modifications['material'] and modifications['material']['texture']:
+                gltf = apply_texture_modifications(gltf, modifications['material']['texture'])
         
         # Apply transform modifications
         if 'transform' in modifications:

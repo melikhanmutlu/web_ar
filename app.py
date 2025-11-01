@@ -1969,6 +1969,60 @@ def download_modified(model_id, filename):
         return str(e), 500
 
 
+@app.route('/save_modifications', methods=['POST'])
+def save_modifications():
+    """Save modifications to original GLB model (replaces model.glb)"""
+    try:
+        data = request.json
+        model_id = data.get('model_id')
+        modifications = data.get('modifications')
+        
+        if not model_id or not modifications:
+            return jsonify({'success': False, 'error': 'Missing model_id or modifications'}), 400
+        
+        logger.info(f"[save_modifications] Model ID: {model_id}")
+        logger.info(f"[save_modifications] Modifications: {modifications}")
+        
+        # Get original GLB path
+        original_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        
+        if not os.path.exists(original_path):
+            logger.error(f"Original GLB not found: {original_path}")
+            return jsonify({'success': False, 'error': 'Original model not found'}), 404
+        
+        # Create backup of original
+        backup_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'model_backup_{int(time.time())}.glb')
+        shutil.copy2(original_path, backup_path)
+        logger.info(f"[save_modifications] Created backup: {backup_path}")
+        
+        # Create temporary output path
+        temp_output = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'temp_{int(time.time())}.glb')
+        
+        logger.info(f"[save_modifications] Input: {original_path}")
+        logger.info(f"[save_modifications] Temp output: {temp_output}")
+        
+        # Apply modifications
+        success = modify_glb(original_path, temp_output, modifications)
+        
+        if success and os.path.exists(temp_output):
+            # Replace original with modified version
+            shutil.move(temp_output, original_path)
+            logger.info(f"[save_modifications] Successfully replaced original GLB")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Model updated successfully',
+                'backup': os.path.basename(backup_path)
+            })
+        else:
+            logger.error("[save_modifications] Modification failed")
+            return jsonify({'success': False, 'error': 'Failed to modify GLB'}), 500
+            
+    except Exception as e:
+        logger.error(f"[save_modifications] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     if init_app_dependencies():
         app.logger.info("Dependencies initialized successfully")

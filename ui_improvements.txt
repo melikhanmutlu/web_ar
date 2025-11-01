@@ -1,0 +1,224 @@
+Add Auto-Rotate Toggle & Accordion Panel Layout
+
+UI/UX Improvements:
+
+1. Auto-Rotate Toggle
+   - New button in bottom-right controls
+   - Toggle auto-rotation on/off
+   - Visual feedback (red when OFF, white when ON)
+   - Dynamic tooltip showing current state
+   - Smooth rotation control
+
+2. Accordion Panel Layout
+   - Only one panel open at a time
+   - Prevents vertical overflow
+   - Better space management
+   - Smooth transitions
+   - Improved user experience
+
+Frontend Changes (view.html):
+
+1. Auto-Rotate Toggle Button:
+   
+   Location: Bottom-right controls (next to screenshot)
+   
+   HTML:
+   ```html
+   <button id="autoRotateToggle" class="rounded-full...">
+       <svg id="autoRotateIcon">
+           <!-- Refresh/rotate icon -->
+       </svg>
+   </button>
+   ```
+   
+   States:
+   - ON (default): White background, normal icon
+   - OFF: Red background (bg-red-500), same icon
+   
+   Functionality:
+   - Click to toggle auto-rotate attribute
+   - modelViewer.setAttribute('auto-rotate', '') → ON
+   - modelViewer.removeAttribute('auto-rotate') → OFF
+   - Visual feedback with color change
+   - Tooltip updates dynamically
+
+2. Accordion Panel System:
+   
+   Before (Problem):
+   - All 3 panels could be open simultaneously
+   - Vertical overflow on smaller screens
+   - Panels extended beyond viewport
+   - Poor UX when all open
+   
+   After (Solution):
+   - Only 1 panel open at a time
+   - Click panel → Opens and closes others
+   - Click same panel → Closes it (toggle)
+   - No overflow issues
+   - Clean, organized interface
+   
+   Implementation:
+   ```javascript
+   const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel'];
+   
+   function togglePanel(panelId) {
+       const isCurrentlyOpen = !panel.classList.contains('hidden');
+       
+       // Close all panels first
+       allPanelIds.forEach(id => {
+           closePanel(id);
+       });
+       
+       // Open clicked panel if it was closed
+       if (!isCurrentlyOpen) {
+           openPanel(panelId);
+       }
+   }
+   ```
+
+3. Smooth Transitions:
+   
+   CSS Added:
+   ```css
+   .panel-content {
+       transition: max-height 0.3s ease-in-out, 
+                   opacity 0.3s ease-in-out;
+       overflow: hidden;
+   }
+   
+   .panel-content.hidden {
+       max-height: 0 !important;
+       opacity: 0;
+   }
+   
+   .panel-header svg {
+       transition: transform 0.3s ease-in-out;
+   }
+   ```
+   
+   Effects:
+   - Smooth panel open/close
+   - Icon rotation animation
+   - Opacity fade in/out
+   - Professional feel
+
+User Experience:
+
+Auto-Rotate Toggle:
+```
+Initial State:
+- Model auto-rotates
+- Button: White background
+- Tooltip: "Toggle Auto-Rotate"
+
+User clicks button:
+- Auto-rotate stops
+- Button: Red background
+- Tooltip: "Auto-Rotate: OFF (Click to turn ON)"
+
+User clicks again:
+- Auto-rotate resumes
+- Button: White background
+- Tooltip: "Auto-Rotate: ON (Click to turn OFF)"
+```
+
+Accordion Panels:
+```
+Scenario 1: Open Material Panel
+- Click "Material Editor"
+- Material panel opens smoothly
+- Transform & Annotations remain closed
+
+Scenario 2: Switch to Transform
+- Click "Transform"
+- Material panel closes smoothly
+- Transform panel opens smoothly
+- Annotations remains closed
+
+Scenario 3: Close Current Panel
+- Click "Transform" again
+- Transform panel closes
+- All panels now closed
+- Clean interface
+
+Scenario 4: Quick Switching
+- Click Material → Opens
+- Click Transform → Material closes, Transform opens
+- Click Annotations → Transform closes, Annotations opens
+- Smooth, no jarring movements
+```
+
+Benefits:
+
+Auto-Rotate Toggle:
+✅ User control over rotation
+✅ Better for detailed inspection
+✅ Reduces motion sickness
+✅ Professional feature
+✅ Clear visual feedback
+
+Accordion Layout:
+✅ No vertical overflow
+✅ Better space management
+✅ Cleaner interface
+✅ One focus at a time
+✅ Smooth animations
+✅ Professional UX
+✅ Mobile-friendly
+
+Technical Details:
+
+Auto-Rotate:
+- Uses model-viewer's native auto-rotate attribute
+- Default: ON (auto-rotate attribute present)
+- Toggle removes/adds attribute
+- No performance impact
+- Instant response
+
+Accordion:
+- JavaScript-based panel management
+- Array of panel IDs for easy maintenance
+- Close all → Open one pattern
+- Prevents multiple panels open
+- CSS transitions for smoothness
+
+Button Layout:
+```
+Bottom-Right Controls (left to right):
+1. AR Button
+2. QR Button
+3. Screenshot Button
+4. Auto-Rotate Toggle ← NEW!
+5. Download Button
+6. Fullscreen Button
+7. Theme Toggle
+```
+
+Visual Feedback:
+
+Auto-Rotate States:
+```
+ON:  ⟳ (white background)
+OFF: ⟳ (red background)
+```
+
+Panel Icons:
+```
+Closed: ▼ (arrow down)
+Open:   ▲ (arrow up, rotated 180°)
+```
+
+Responsive Design:
+- Auto-rotate button: Same size as other controls
+- Panels: Hidden on mobile (< 640px)
+- Accordion: Works on all screen sizes
+- Transitions: Smooth on all devices
+
+Accessibility:
+- Clear tooltips for auto-rotate
+- Visual state indicators
+- Smooth, predictable animations
+- Keyboard accessible (native button)
+
+Result:
+Users now have full control over model rotation and a clean, organized panel interface that prevents overflow and provides a professional, smooth user experience. The accordion layout ensures only one panel is open at a time, making the interface cleaner and more focused.

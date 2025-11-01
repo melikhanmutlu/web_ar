@@ -607,6 +607,7 @@ class FBXConverter(BaseConverter):
                 return
             
             fbx_dir = os.path.dirname(fbx_path)
+            glb_dir = os.path.dirname(glb_path)
             modified = False
             
             for i, image in enumerate(gltf.images):
@@ -614,35 +615,45 @@ class FBXConverter(BaseConverter):
                 if image.uri and not image.uri.startswith('data:'):
                     self.log_operation(f"Found external texture: {image.uri}")
                     
-                    # Try to find texture file
-                    texture_path = os.path.join(fbx_dir, image.uri)
-                    if not os.path.exists(texture_path):
-                        # Try without path (just filename)
-                        texture_path = os.path.join(fbx_dir, os.path.basename(image.uri))
+                    # Try multiple locations for texture file
+                    texture_path = None
+                    search_paths = [
+                        os.path.join(glb_dir, image.uri),  # Same dir as GLB
+                        os.path.join(fbx_dir, image.uri),  # Same dir as FBX
+                        os.path.join(glb_dir, os.path.basename(image.uri)),  # GLB dir, filename only
+                        os.path.join(fbx_dir, os.path.basename(image.uri)),  # FBX dir, filename only
+                    ]
                     
-                    if os.path.exists(texture_path):
-                        self.log_operation(f"Embedding texture: {texture_path}")
-                        
-                        # Read texture file
-                        with open(texture_path, 'rb') as f:
-                            texture_data = f.read()
-                        
-                        # Determine MIME type
-                        ext = os.path.splitext(texture_path)[1].lower()
-                        mime_type = {
-                            '.png': 'image/png',
-                            '.jpg': 'image/jpeg',
-                            '.jpeg': 'image/jpeg',
-                            '.webp': 'image/webp'
-                        }.get(ext, 'image/png')
-                        
-                        # Convert to data URI
-                        data_uri = f"data:{mime_type};base64,{base64.b64encode(texture_data).decode('utf-8')}"
-                        image.uri = data_uri
-                        modified = True
-                        self.log_operation(f"Embedded texture {i}: {len(texture_data)} bytes")
-                    else:
-                        self.log_operation(f"Warning: Texture file not found: {texture_path}", "WARNING")
+                    for path in search_paths:
+                        if os.path.exists(path):
+                            texture_path = path
+                            break
+                    
+                    if not texture_path:
+                        self.log_operation(f"Warning: Texture file not found in any location: {image.uri}", "WARNING")
+                        self.log_operation(f"Searched: {search_paths}", "WARNING")
+                        continue
+                    
+                    self.log_operation(f"Embedding texture: {texture_path}")
+                    
+                    # Read texture file
+                    with open(texture_path, 'rb') as f:
+                        texture_data = f.read()
+                    
+                    # Determine MIME type
+                    ext = os.path.splitext(texture_path)[1].lower()
+                    mime_type = {
+                        '.png': 'image/png',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.webp': 'image/webp'
+                    }.get(ext, 'image/png')
+                    
+                    # Convert to data URI
+                    data_uri = f"data:{mime_type};base64,{base64.b64encode(texture_data).decode('utf-8')}"
+                    image.uri = data_uri
+                    modified = True
+                    self.log_operation(f"Embedded texture {i}: {len(texture_data)} bytes")
             
             if modified:
                 self.log_operation("Saving GLB with embedded textures")

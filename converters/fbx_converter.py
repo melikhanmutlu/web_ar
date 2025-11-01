@@ -607,6 +607,7 @@ class FBXConverter(BaseConverter):
                 return
             
             self.log_operation(f"Found {len(gltf.images)} images in GLB")
+            has_buffer_images = False
             for i, img in enumerate(gltf.images):
                 if img.uri:
                     if img.uri.startswith('data:'):
@@ -615,8 +616,19 @@ class FBXConverter(BaseConverter):
                         self.log_operation(f"  Image {i}: External - {img.uri}")
                 elif img.bufferView is not None:
                     self.log_operation(f"  Image {i}: Embedded in buffer (bufferView: {img.bufferView})")
+                    has_buffer_images = True
                 else:
                     self.log_operation(f"  Image {i}: Unknown format")
+            
+            # If images are embedded in buffer, re-export GLB to normalize
+            if has_buffer_images:
+                self.log_operation("Re-exporting GLB to normalize buffer-embedded textures")
+                try:
+                    gltf.save(glb_path)
+                    self.log_operation("✅ GLB re-exported successfully")
+                    return
+                except Exception as e:
+                    self.log_operation(f"Warning: Could not re-export GLB: {e}", "WARNING")
             
             fbx_dir = os.path.dirname(fbx_path)
             glb_dir = os.path.dirname(glb_path)

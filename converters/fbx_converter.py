@@ -720,9 +720,16 @@ class FBXConverter(BaseConverter):
                                 self.log_operation(f"Fixing leaf material '{leaf_material.name}' assignment.")
                                 pbr = leaf_material.pbrMetallicRoughness
                                 if pbr.baseColorTexture.index != correct_leaf_texture_idx:
-                                    self.log_operation(f"  Current: Texture {pbr.baseColorTexture.index}. Correct: Texture {correct_leaf_texture_idx}.")
+                                    self.log_operation(f"  Current Texture: {pbr.baseColorTexture.index}. Correct: {correct_leaf_texture_idx}.")
                                     pbr.baseColorTexture.index = correct_leaf_texture_idx
-                                    self.log_operation(f"  ✅ Fixed: Material {leaf_material_idx} now uses Texture {correct_leaf_texture_idx} (Image 1)")
+                                    self.log_operation(f"  Fixed Texture Assignment: Material {leaf_material_idx} now uses Texture {correct_leaf_texture_idx} (Image 1)")
+
+                                # FIX ALPHA/TRANSPARENCY
+                                if leaf_material.alphaMode != "MASK":
+                                    self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
+                                    leaf_material.alphaMode = "MASK"
+                                    leaf_material.alphaCutoff = 0.5
+                                    self.log_operation(f"  Fixed Transparency: Set alphaMode=MASK, alphaCutoff=0.5")
                     
                     # Log mesh-material assignments
                     if gltf.meshes:

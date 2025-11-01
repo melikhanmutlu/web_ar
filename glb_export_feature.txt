@@ -1,0 +1,89 @@
+Add GLB Export with Material & Transform Modifications
+
+New Feature: Export Modified Model
+
+Users can now export their modified 3D models as GLB files with all material and transform changes applied.
+
+Frontend Changes (view.html):
+1. Added "Export Modified Model" button to Material Editor panel
+   - Green button with download icon
+   - Shows loading state during processing
+   - Success/error feedback with visual indicators
+   
+2. JavaScript functionality:
+   - collectModifications(): Gathers all current material & transform settings
+   - getCurrentModelId(): Extracts model ID from URL
+   - Export button handler with async/await
+   - Loading states: Processing → Success/Failed
+   - Automatic download trigger on success
+
+Backend Changes:
+
+1. New Module: glb_modifier.py
+   - hex_to_rgb(): Convert hex colors to RGB tuples
+   - apply_material_modifications(): Apply color, metalness, roughness
+   - apply_transform_modifications(): Apply scale and rotation
+   - modify_glb(): Main function to load, modify, and export GLB
+
+2. New Endpoints (app.py):
+   - POST /apply_modifications
+     * Receives model_id and modifications JSON
+     * Loads original GLB file
+     * Applies material changes (color, metalness, roughness)
+     * Applies transform changes (scale, rotation X/Y/Z)
+     * Exports modified GLB with timestamp
+     * Returns download URL
+   
+   - GET /download_modified/<model_id>/<filename>
+     * Serves the modified GLB file
+     * Sets proper download headers
+     * Timestamped filename
+
+Features Supported:
+
+Material Modifications:
+✅ Base Color (hex to RGB conversion)
+✅ Metalness (0.0 - 1.0)
+✅ Roughness (0.0 - 1.0)
+✅ Applied to all geometries in scene
+
+Transform Modifications:
+✅ Scale (uniform scaling)
+✅ Rotation X (degrees to radians)
+✅ Rotation Y (degrees to radians)
+✅ Rotation Z (degrees to radians)
+✅ Proper rotation order (Z → Y → X)
+
+Technical Details:
+- Uses Trimesh library for GLB processing
+- Preserves original model (creates new file)
+- Timestamped output files (modified_<timestamp>.glb)
+- Comprehensive error handling and logging
+- Validates file existence before processing
+- Proper RGBA color format (baseColorFactor)
+- PBR material properties (metallicFactor, roughnessFactor)
+
+User Experience:
+- One-click export from viewer
+- Visual feedback during processing
+- Automatic download on success
+- Clear error messages on failure
+- Non-destructive (original preserved)
+
+Limitations (Intentional):
+❌ Texture embedding (not implemented yet)
+❌ Annotations export (not implemented yet)
+✅ Material & Transform only (as requested)
+
+File Structure:
+- Original: /converted/<model_id>/model.glb
+- Modified: /converted/<model_id>/modified_<timestamp>.glb
+- Download name: modified_model_<timestamp>.glb
+
+Dependencies:
+- trimesh (already in requirements.txt)
+- numpy (already in requirements.txt)
+- No new dependencies required
+
+Result:
+Users can now make material and transform adjustments in the viewer and export the modified model as a new GLB file, ready for use in other applications or AR experiences.

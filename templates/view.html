@@ -1068,6 +1068,17 @@
                     <button id="resetMaterial" class="w-full px-3 py-2 text-xs bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors">
                         Reset Material
                     </button>
+                    
+                    <!-- Export Modified Model Button -->
+                    <button id="exportModified" class="w-full px-3 py-2 mt-3 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors font-semibold flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Export Modified Model
+                    </button>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                        Saves material & transform changes to GLB
+                    </p>
                 </div>
             </div>
 
@@ -1789,6 +1800,104 @@
                     updateHotspotsList();
                 }
             };
+
+            // ========== EXPORT MODIFIED MODEL FUNCTIONALITY ==========
+            
+            // Get current model ID from URL
+            function getCurrentModelId() {
+                const pathParts = window.location.pathname.split('/');
+                return pathParts[pathParts.length - 1];
+            }
+
+            // Collect all modifications
+            function collectModifications() {
+                return {
+                    material: {
+                        color: materialColor.value,
+                        metalness: parseFloat(metalnessSlider.value),
+                        roughness: parseFloat(roughnessSlider.value)
+                    },
+                    transform: {
+                        scale: parseFloat(scaleSlider.value),
+                        rotation: {
+                            x: parseInt(rotateXSlider.value),
+                            y: parseInt(rotateYSlider.value),
+                            z: parseInt(rotateZSlider.value)
+                        }
+                    }
+                };
+            }
+
+            // Export modified model
+            document.getElementById('exportModified').addEventListener('click', async () => {
+                const btn = document.getElementById('exportModified');
+                const originalText = btn.innerHTML;
+                
+                try {
+                    // Show loading state
+                    btn.disabled = true;
+                    btn.innerHTML = `
+                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Processing...
+                    `;
+
+                    const modelId = getCurrentModelId();
+                    const modifications = collectModifications();
+
+                    // Send to backend
+                    const response = await fetch('/apply_modifications', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            model_id: modelId,
+                            modifications: modifications
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Show success message
+                        btn.innerHTML = `
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Success! Downloading...
+                        `;
+                        
+                        // Trigger download
+                        window.location.href = result.download_url;
+                        
+                        // Reset button after 2 seconds
+                        setTimeout(() => {
+                            btn.innerHTML = originalText;
+                            btn.disabled = false;
+                        }, 2000);
+                    } else {
+                        throw new Error(result.error || 'Export failed');
+                    }
+                } catch (error) {
+                    console.error('Export error:', error);
+                    btn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Export Failed
+                    `;
+                    alert('Failed to export model: ' + error.message);
+                    
+                    // Reset button after 2 seconds
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            });
         });
     </script>
 </body>

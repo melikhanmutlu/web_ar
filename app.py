@@ -20,6 +20,8 @@ from slugify import slugify
 import trimesh
 from converters import OBJConverter, FBXConverter, STLConverter
 import numpy as np
+from glb_modifier import modify_glb
+import time
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -1895,6 +1897,77 @@ def before_request():
     """Run before each request to ensure database is in sync with files."""
     if request.endpoint == 'my_models':
         check_model_files()
+
+@app.route('/apply_modifications', methods=['POST'])
+def apply_modifications():
+    """Apply material and transform modifications to GLB model"""
+    try:
+        data = request.json
+        model_id = data.get('model_id')
+        modifications = data.get('modifications')
+        
+        if not model_id or not modifications:
+            return jsonify({'success': False, 'error': 'Missing model_id or modifications'}), 400
+        
+        logger.info(f"[apply_modifications] Model ID: {model_id}")
+        logger.info(f"[apply_modifications] Modifications: {modifications}")
+        
+        # Get original GLB path
+        original_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        
+        if not os.path.exists(original_path):
+            logger.error(f"Original GLB not found: {original_path}")
+            return jsonify({'success': False, 'error': 'Original model not found'}), 404
+        
+        # Create output filename with timestamp
+        timestamp = int(time.time())
+        output_filename = f'modified_{timestamp}.glb'
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, output_filename)
+        
+        logger.info(f"[apply_modifications] Input: {original_path}")
+        logger.info(f"[apply_modifications] Output: {output_path}")
+        
+        # Apply modifications
+        success = modify_glb(original_path, output_path, modifications)
+        
+        if success:
+            download_url = f'/download_modified/{model_id}/{output_filename}'
+            logger.info(f"[apply_modifications] Success! Download URL: {download_url}")
+            return jsonify({
+                'success': True,
+                'download_url': download_url,
+                'filename': output_filename
+            })
+        else:
+            logger.error("[apply_modifications] Modification failed")
+            return jsonify({'success': False, 'error': 'Failed to modify GLB'}), 500
+            
+    except Exception as e:
+        logger.error(f"[apply_modifications] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/download_modified/<model_id>/<filename>')
+def download_modified(model_id, filename):
+    """Download modified GLB file"""
+    try:
+        directory = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
+        logger.info(f"[download_modified] Serving {filename} from {directory}")
+        
+        if not os.path.exists(os.path.join(directory, filename)):
+            logger.error(f"File not found: {os.path.join(directory, filename)}")
+            return "File not found", 404
+        
+        return send_from_directory(
+            directory,
+            filename,
+            as_attachment=True,
+            download_name=f'modified_model_{int(time.time())}.glb'
+        )
+    except Exception as e:
+        logger.error(f"[download_modified] Error: {e}", exc_info=True)
+        return str(e), 500
+
 
 if __name__ == '__main__':
     if init_app_dependencies():

@@ -788,11 +788,10 @@ class FBXConverter(BaseConverter):
                                     self.log_operation(f"  Fixed Texture Assignment: Material {leaf_material_idx} now uses Texture {correct_leaf_texture_idx} (Image 1)")
 
                                 # FIX ALPHA/TRANSPARENCY
-                                if leaf_material.alphaMode != "MASK":
-                                    self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
-                                    leaf_material.alphaMode = "MASK"
-                                    leaf_material.alphaCutoff = 0.5
-                                    self.log_operation(f"  Fixed Transparency: Set alphaMode=MASK, alphaCutoff=0.5")
+                                self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
+                                leaf_material.alphaMode = "BLEND"
+                                leaf_material.doubleSided = True
+                                self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
                     
                     # Log mesh-material assignments
                     if gltf.meshes:

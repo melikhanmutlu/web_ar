@@ -792,6 +792,17 @@ class FBXConverter(BaseConverter):
                                 leaf_material.alphaMode = "BLEND"
                                 leaf_material.doubleSided = True
                                 self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
+
+                                # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
+                                try:
+                                    if pbr is not None:
+                                        if pbr.baseColorFactor is None:
+                                            pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                                        pbr.metallicFactor = 0.0
+                                        pbr.roughnessFactor = 1.0
+                                        self.log_operation("  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor=[1,1,1,1]")
+                                except Exception as _e:
+                                    self.log_operation(f"  ⚠️ Could not enforce foliage PBR defaults: {_e}", "WARNING")
                     
                     # Log mesh-material assignments
                     if gltf.meshes:

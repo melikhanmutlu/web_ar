@@ -43,6 +43,26 @@ def apply_material_modifications(gltf, material_mods):
             continue
         
         pbr = material.pbrMetallicRoughness
+        name = material.name or f"Material_{i}"
+        name_l = name.lower()
+        alpha_mode = (material.alphaMode or "OPAQUE")
+        has_texture = bool(pbr.baseColorTexture)
+        is_transparent_like = alpha_mode in ("BLEND", "MASK") or any(k in name_l for k in ["leaf", "leaves", "foliage", "db2x2"]) or has_texture
+        
+        # Foliage-safe defaults (do BEFORE applying user knobs)
+        if is_transparent_like:
+            try:
+                # Ensure visibility-friendly defaults
+                if pbr.baseColorFactor is None:
+                    pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                pbr.metallicFactor = 0.0
+                pbr.roughnessFactor = 1.0
+                # Transparency and double sided to ensure leaves render both sides
+                material.alphaMode = "BLEND"
+                material.doubleSided = True
+                logger.info(f"Foliage-safe defaults applied to {name}: alphaMode=BLEND, doubleSided=True, metallic=0, roughness=1")
+            except Exception as e:
+                logger.warning(f"Failed to apply foliage defaults on {name}: {e}")
         
         # Apply base color (only if not default white)
         if 'color' in material_mods and material_mods['color']:
@@ -59,21 +79,32 @@ def apply_material_modifications(gltf, material_mods):
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
         
-        # Apply metalness
-        if 'metalness' in material_mods:
+        # Apply metalness (skip for foliage-like/transparent materials)
+        if 'metalness' in material_mods and not is_transparent_like:
             try:
                 pbr.metallicFactor = float(material_mods['metalness'])
                 logger.info(f"Applied metalness {material_mods['metalness']} to material {i}")
             except Exception as e:
                 logger.error(f"Failed to apply metalness to material {i}: {e}")
+        elif 'metalness' in material_mods and is_transparent_like:
+            logger.info(f"Skipped metalness for foliage/transparent material {i} ({name})")
         
-        # Apply roughness
-        if 'roughness' in material_mods:
+        # Apply roughness (skip for foliage-like/transparent materials)
+        if 'roughness' in material_mods and not is_transparent_like:
             try:
                 pbr.roughnessFactor = float(material_mods['roughness'])
                 logger.info(f"Applied roughness {material_mods['roughness']} to material {i}")
             except Exception as e:
                 logger.error(f"Failed to apply roughness to material {i}: {e}")
+        elif 'roughness' in material_mods and is_transparent_like:
+            logger.info(f"Skipped roughness for foliage/transparent material {i} ({name})")
+
+        # Material summary
+        try:
+            tex_idx = pbr.baseColorTexture.index if pbr.baseColorTexture else None
+            logger.info(f"Material summary [{i}] {name}: alphaMode={material.alphaMode}, doubleSided={getattr(material, 'doubleSided', False)}, tex={tex_idx}, metallic={getattr(pbr,'metallicFactor',None)}, roughness={getattr(pbr,'roughnessFactor',None)}")
+        except Exception:
+            pass
     
     return gltf
 

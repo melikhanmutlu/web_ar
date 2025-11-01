@@ -2051,9 +2051,35 @@ def save_modifications():
             shutil.move(temp_output, original_path)
             logger.info(f"[save_modifications] Successfully replaced original GLB")
             
+            # Update database dimensions after scale
+            try:
+                mesh = trimesh.load(original_path, force='scene')
+                if isinstance(mesh, trimesh.Scene):
+                    bounds = mesh.bounds
+                else:
+                    bounds = mesh.bounds
+                
+                dimensions = bounds[1] - bounds[0]
+                new_dims = {
+                    'x': round(float(dimensions[0] * 100), 2),
+                    'y': round(float(dimensions[1] * 100), 2),
+                    'z': round(float(dimensions[2] * 100), 2),
+                    'max': round(float(max(dimensions) * 100), 2)
+                }
+                
+                # Update database
+                model = UserModel.query.filter_by(filename=f'converted/{model_id}/model.glb').first()
+                if model:
+                    model.dimensions = new_dims
+                    db.session.commit()
+                    logger.info(f"[save_modifications] Updated database dimensions: {new_dims}")
+                
+            except Exception as dim_error:
+                logger.error(f"[save_modifications] Failed to update dimensions: {dim_error}")
+            
             return jsonify({
                 'success': True,
-                'message': 'Model updated successfully',
+                'message': 'Model saved successfully',
                 'backup': os.path.basename(backup_path)
             })
         else:

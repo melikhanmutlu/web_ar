@@ -1193,7 +1193,8 @@
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-2">
                             <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Scale</label>
-                            <span id="scaleValue" class="text-xs text-gray-500 dark:text-gray-400">1.0x</span>
+                            <input type="number" id="scaleInput" min="0.1" max="10" step="0.1" value="1.0" 
+                                   class="w-16 px-2 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300">
                         </div>
                         <input type="range" id="scaleSlider" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                     </div>
@@ -1880,16 +1881,33 @@
             
             // Scale
             const scaleSlider = document.getElementById('scaleSlider');
-            const scaleValue = document.getElementById('scaleValue');
+            const scaleInput = document.getElementById('scaleInput');
             
             // Note: Scale is now applied to geometry, so slider always starts at 1.0
             // The actual model size is reflected in dimensions display
             
-            scaleSlider.addEventListener('input', (e) => {
-                const value = parseFloat(e.target.value);
-                scaleValue.textContent = value.toFixed(1) + 'x';
+            function updateScale(value) {
+                value = Math.max(0.1, Math.min(10, parseFloat(value)));
+                scaleSlider.value = value;
+                scaleInput.value = value.toFixed(1);
                 modelViewer.scale = `${value} ${value} ${value}`;
-                updateDimensionDisplay(value); // Update dimensions
+                updateDimensionDisplay(value);
+            }
+            
+            scaleSlider.addEventListener('input', (e) => {
+                updateScale(e.target.value);
+            });
+            
+            scaleInput.addEventListener('input', (e) => {
+                updateScale(e.target.value);
+            });
+            
+            scaleInput.addEventListener('blur', (e) => {
+                // Ensure value is within range on blur
+                let value = parseFloat(e.target.value);
+                if (isNaN(value) || value < 0.1) value = 0.1;
+                if (value > 10) value = 10;
+                updateScale(value);
             });
 
             // Rotation X

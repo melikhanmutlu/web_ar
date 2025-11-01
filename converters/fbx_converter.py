@@ -662,6 +662,17 @@ class FBXConverter(BaseConverter):
                             except Exception as img_error:
                                 self.log_operation(f"Warning: Could not convert image {i}: {img_error}", "WARNING")
                     
+                    # Log material-texture assignments for debugging
+                    if gltf.materials:
+                        self.log_operation(f"Checking {len(gltf.materials)} materials for texture assignments:")
+                        for i, mat in enumerate(gltf.materials):
+                            mat_name = mat.name if mat.name else f"Material_{i}"
+                            if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
+                                tex_idx = mat.pbrMetallicRoughness.baseColorTexture.index
+                                self.log_operation(f"  {mat_name}: baseColorTexture → Texture {tex_idx}")
+                            else:
+                                self.log_operation(f"  {mat_name}: No baseColorTexture ❌")
+                    
                     # Save with data URIs
                     temp_path = glb_path.replace('.glb', '_temp.glb')
                     gltf.save(temp_path)

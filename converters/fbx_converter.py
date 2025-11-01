@@ -662,6 +662,41 @@ class FBXConverter(BaseConverter):
                             except Exception as img_error:
                                 self.log_operation(f"Warning: Could not convert image {i}: {img_error}", "WARNING")
                     
+                    # Ensure all images have corresponding textures
+                    from pygltflib import Texture, Sampler
+                    
+                    if not gltf.textures:
+                        gltf.textures = []
+                    if not gltf.samplers:
+                        gltf.samplers = []
+                    
+                    # Create a default sampler if none exists
+                    if len(gltf.samplers) == 0:
+                        sampler = Sampler()
+                        sampler.magFilter = 9729  # LINEAR
+                        sampler.minFilter = 9987  # LINEAR_MIPMAP_LINEAR
+                        sampler.wrapS = 10497     # REPEAT
+                        sampler.wrapT = 10497     # REPEAT
+                        gltf.samplers.append(sampler)
+                    
+                    # Map images to textures
+                    image_to_texture = {}
+                    for tex_idx, tex in enumerate(gltf.textures):
+                        if tex.source is not None:
+                            image_to_texture[tex.source] = tex_idx
+                    
+                    # Create missing textures for images without them
+                    for img_idx in range(len(gltf.images)):
+                        if img_idx not in image_to_texture:
+                            self.log_operation(f"Creating missing texture for image {img_idx}")
+                            texture = Texture()
+                            texture.source = img_idx
+                            texture.sampler = 0  # Use first sampler
+                            tex_idx = len(gltf.textures)
+                            gltf.textures.append(texture)
+                            image_to_texture[img_idx] = tex_idx
+                            self.log_operation(f"  Created Texture {tex_idx} → Image {img_idx}")
+                    
                     # Log material-texture assignments for debugging
                     if gltf.materials:
                         self.log_operation(f"Checking {len(gltf.materials)} materials for texture assignments:")
@@ -669,7 +704,8 @@ class FBXConverter(BaseConverter):
                             mat_name = mat.name if mat.name else f"Material_{i}"
                             if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
                                 tex_idx = mat.pbrMetallicRoughness.baseColorTexture.index
-                                self.log_operation(f"  {mat_name}: baseColorTexture → Texture {tex_idx}")
+                                img_idx = gltf.textures[tex_idx].source if tex_idx < len(gltf.textures) else "?"
+                                self.log_operation(f"  {mat_name}: Texture {tex_idx} → Image {img_idx}")
                             else:
                                 self.log_operation(f"  {mat_name}: No baseColorTexture ❌")
                     

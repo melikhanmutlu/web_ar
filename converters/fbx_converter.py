@@ -697,6 +697,37 @@ class FBXConverter(BaseConverter):
                             image_to_texture[img_idx] = tex_idx
                             self.log_operation(f"  Created Texture {tex_idx} → Image {img_idx}")
                     
+                    # Fix materials without textures
+                    if gltf.materials:
+                        for mat_idx, mat in enumerate(gltf.materials):
+                            mat_name = mat.name if mat.name else f"Material_{mat_idx}"
+                            
+                            # Ensure PBR exists
+                            if not mat.pbrMetallicRoughness:
+                                continue
+                            
+                            pbr = mat.pbrMetallicRoughness
+                            
+                            # If material has no texture, assign one
+                            if not pbr.baseColorTexture:
+                                # Try to find an unused texture
+                                used_textures = set()
+                                for m in gltf.materials:
+                                    if m.pbrMetallicRoughness and m.pbrMetallicRoughness.baseColorTexture:
+                                        used_textures.add(m.pbrMetallicRoughness.baseColorTexture.index)
+                                
+                                # Find first unused texture
+                                for tex_idx in range(len(gltf.textures)):
+                                    if tex_idx not in used_textures:
+                                        # Assign this texture to the material
+                                        pbr.baseColorTexture = type('obj', (object,), {
+                                            'index': tex_idx,
+                                            'texCoord': 0
+                                        })()
+                                        img_idx = gltf.textures[tex_idx].source
+                                        self.log_operation(f"✅ Assigned Texture {tex_idx} (Image {img_idx}) to material '{mat_name}'")
+                                        break
+                    
                     # Log mesh-material assignments
                     if gltf.meshes:
                         self.log_operation(f"Mesh-Material assignments ({len(gltf.meshes)} meshes):")

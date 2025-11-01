@@ -1162,6 +1162,44 @@ def upload_model():
                         'max': max_cm
                     })
                     logger.info(f"[upload_model - {unique_id}] Model dimensions: {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
+                else:
+                    logger.warning(f"[upload_model - {unique_id}] Extents too small or zero: {extents}")
+            except Exception as e:
+                logger.warning(f"[upload_model - {unique_id}] Could not calculate dimensions: {str(e)}")
+        
+        # Parse dimensions for original_dimensions field
+        original_dims = None
+        if model_bounds:
+            try:
+                import json
+                bounds_data = json.loads(model_bounds)
+                original_dims = {
+                    'x': bounds_data['extents'][0],
+                    'y': bounds_data['extents'][1],
+                    'z': bounds_data['extents'][2],
+                    'max': bounds_data['max']
+                }
+            except:
+                pass
+        
+        # Create model record in database using the unique_id
+        # user_id is optional - can be None if user is not logged in
+        model = UserModel(
+            id=unique_id, # Use the same ID as the directory
+            user_id=current_user.id if current_user.is_authenticated else None,
+            filename=output_path,  # Store the correct full absolute path
+            file_size=final_file_size, # Use the checked size
+            file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
+            upload_date=datetime.utcnow(),
+            color=color if use_color else None,
+            bounds=model_bounds,  # Store dimensions
+            original_dimensions=original_dims,  # Store original dimensions
+            cumulative_scale=1.0  # Initial scale is 1.0
+        )
+        db.session.add(model)
+        db.session.commit()
+        logger.info(f"[upload_model - {unique_id}] Model info saved to database. User: {'logged in' if current_user.is_authenticated else 'anonymous'}")
+        
         # Generate QR code (using the same unique_id)
         # qr_code_filename = generate_qr_code(unique_id)
         # logger.info(f"QR code generated: {qr_code_filename}")

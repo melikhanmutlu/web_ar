@@ -44,12 +44,15 @@ def apply_material_modifications(gltf, material_mods):
         
         pbr = material.pbrMetallicRoughness
         
-        # Apply base color (only if not default white)
+        # Apply base color (only if not default white AND no texture)
         if 'color' in material_mods and material_mods['color']:
             try:
                 color_hex = material_mods['color']
+                # Skip if material has a texture - don't override it with color
+                if pbr.baseColorTexture:
+                    logger.info(f"Skipping color for material {i} - has texture, preserving it")
                 # Skip if color is default white (#ffffff) - preserve original
-                if color_hex.lower() != '#ffffff':
+                elif color_hex.lower() != '#ffffff':
                     color_rgb = hex_to_rgb(color_hex)
                     # Set baseColorFactor (RGBA)
                     pbr.baseColorFactor = list(color_rgb) + [1.0]

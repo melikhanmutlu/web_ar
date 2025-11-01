@@ -1,0 +1,68 @@
+Add Scale Tracking with Live Dimension Display
+
+Feature: Real-time dimension tracking as scale changes
+
+Backend Changes (app.py):
+
+1. New Endpoint: /get_model_dimensions/<model_id>
+   - Loads GLB model with trimesh
+   - Calculates bounding box dimensions
+   - Converts from meters to centimeters
+   - Returns width, height, depth in cm
+   - Handles both Scene and Trimesh objects
+
+Frontend Changes (view.html):
+
+1. Dimension Display Section (Transform Panel):
+   - Added before Scale slider
+   - Shows Width, Height, Depth in cm
+   - Gray background box for visibility
+   - Theme-aware styling
+
+2. JavaScript Functionality:
+   - loadModelDimensions(): Fetches original dimensions on page load
+   - updateDimensionDisplay(scale): Updates display when scale changes
+   - Integrated with scale slider input event
+   - Real-time calculation: original_dimension * scale
+
+User Experience:
+
+Initial State:
+- Transform panel opens
+- Dimensions load automatically
+- Shows original model size
+
+User adjusts scale:
+- Slider moves (e.g., 1.0x → 1.5x)
+- Dimensions update instantly
+- Example: 20cm → 30cm
+
+Save & Export:
+- Modified GLB includes scale transform
+- Dimensions reflect in saved model
+- AR preview shows correct size
+
+Technical Details:
+
+Dimension Calculation:
+- GLB units assumed to be meters
+- Conversion: meters * 100 = centimeters
+- Bounding box: bounds[1] - bounds[0]
+- X axis = Width
+- Y axis = Height
+- Z axis = Depth
+
+Scale Application:
+- Uniform scaling (same factor for X, Y, Z)
+- Display updates: dimension * scale_factor
+- Precision: 1 decimal place (e.g., 25.4 cm)
+
+Benefits:
+✅ Users see exact model size
+✅ Real-time feedback during scaling
+✅ Helps with AR placement planning
+✅ Professional dimension tracking
+✅ No guesswork needed
+
+Result:
+Users can now see and track model dimensions as they adjust scale, making it easy to understand the final size of their model before exporting or viewing in AR.

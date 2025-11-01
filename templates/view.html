@@ -1170,6 +1170,25 @@
                     </svg>
                 </button>
                 <div id="transformPanel" class="panel-content p-4 hidden">
+                    <!-- Model Dimensions -->
+                    <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Model Dimensions</label>
+                        <div id="dimensionsDisplay" class="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                            <div class="flex justify-between">
+                                <span>Width:</span>
+                                <span id="dimWidth">-- cm</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Height:</span>
+                                <span id="dimHeight">-- cm</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Depth:</span>
+                                <span id="dimDepth">-- cm</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Scale -->
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-2">
@@ -1777,6 +1796,41 @@
 
             // ========== TRANSFORM FUNCTIONALITY ==========
             
+            // ========== DIMENSION TRACKING ==========
+            let originalDimensions = null;
+            
+            // Load model dimensions
+            async function loadModelDimensions() {
+                try {
+                    const modelId = getCurrentModelId();
+                    const response = await fetch(`/get_model_dimensions/${modelId}`);
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        originalDimensions = result.dimensions;
+                        updateDimensionDisplay(1.0); // Initial display
+                    }
+                } catch (error) {
+                    console.error('Failed to load dimensions:', error);
+                }
+            }
+            
+            // Update dimension display based on scale
+            function updateDimensionDisplay(scale) {
+                if (!originalDimensions) return;
+                
+                const width = (originalDimensions.width * scale).toFixed(1);
+                const height = (originalDimensions.height * scale).toFixed(1);
+                const depth = (originalDimensions.depth * scale).toFixed(1);
+                
+                document.getElementById('dimWidth').textContent = `${width} cm`;
+                document.getElementById('dimHeight').textContent = `${height} cm`;
+                document.getElementById('dimDepth').textContent = `${depth} cm`;
+            }
+            
+            // Load dimensions on page load
+            loadModelDimensions();
+            
             // Scale
             const scaleSlider = document.getElementById('scaleSlider');
             const scaleValue = document.getElementById('scaleValue');
@@ -1785,6 +1839,7 @@
                 const value = parseFloat(e.target.value);
                 scaleValue.textContent = value.toFixed(1) + 'x';
                 modelViewer.scale = `${value} ${value} ${value}`;
+                updateDimensionDisplay(value); // Update dimensions
             });
 
             // Rotation X

@@ -1969,6 +1969,47 @@ def download_modified(model_id, filename):
         return str(e), 500
 
 
+@app.route('/get_model_dimensions/<model_id>')
+def get_model_dimensions(model_id):
+    """Get model dimensions in meters"""
+    try:
+        glb_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        
+        if not os.path.exists(glb_path):
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        # Load model with trimesh
+        mesh = trimesh.load(glb_path, force='scene')
+        
+        # Get bounding box
+        if isinstance(mesh, trimesh.Scene):
+            bounds = mesh.bounds
+        else:
+            bounds = mesh.bounds
+        
+        # Calculate dimensions (in meters, assuming GLB units are meters)
+        dimensions = bounds[1] - bounds[0]
+        
+        # Convert to cm for display
+        dimensions_cm = {
+            'width': float(dimensions[0] * 100),   # X
+            'height': float(dimensions[1] * 100),  # Y
+            'depth': float(dimensions[2] * 100),   # Z
+            'unit': 'cm'
+        }
+        
+        logger.info(f"[get_model_dimensions] Model {model_id} dimensions: {dimensions_cm}")
+        
+        return jsonify({
+            'success': True,
+            'dimensions': dimensions_cm
+        })
+        
+    except Exception as e:
+        logger.error(f"[get_model_dimensions] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/save_modifications', methods=['POST'])
 def save_modifications():
     """Save modifications to original GLB model (replaces model.glb)"""

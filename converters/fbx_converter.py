@@ -603,8 +603,20 @@ class FBXConverter(BaseConverter):
             gltf = GLTF2().load(glb_path)
             
             if not gltf.images:
-                self.log_operation("No images found in GLB")
+                self.log_operation("No images found in GLB - FBX2glTF may have discarded textures")
                 return
+            
+            self.log_operation(f"Found {len(gltf.images)} images in GLB")
+            for i, img in enumerate(gltf.images):
+                if img.uri:
+                    if img.uri.startswith('data:'):
+                        self.log_operation(f"  Image {i}: Already embedded (data URI)")
+                    else:
+                        self.log_operation(f"  Image {i}: External - {img.uri}")
+                elif img.bufferView is not None:
+                    self.log_operation(f"  Image {i}: Embedded in buffer (bufferView: {img.bufferView})")
+                else:
+                    self.log_operation(f"  Image {i}: Unknown format")
             
             fbx_dir = os.path.dirname(fbx_path)
             glb_dir = os.path.dirname(glb_path)

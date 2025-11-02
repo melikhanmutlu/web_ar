@@ -2441,6 +2441,7 @@
             
             let slicerEnabled = false;
             let meshBounds = null;
+            let clippingPlanes = {}; // Store Three.js clipping planes
             
             // Multi-plane support
             let activePlanes = new Set(['x']); // Currently active planes
@@ -2613,11 +2614,111 @@
                 disableClipping();
             }
             
-            // Enable live clipping preview using CSS/visual approach
+            // Apply Three.js clipping to actually hide parts of the model
+            function applyThreeJSClipping() {
+                try {
+                    // Access Three.js scene from model-viewer
+                    const scene = modelViewer.model;
+                    if (!scene || !meshBounds) return;
+                    
+                    // Create clipping planes array
+                    const planes = [];
+                    
+                    activePlanes.forEach(plane => {
+                        const settings = planeSettings[plane];
+                        const percent = settings.position;
+                        const keepSide = settings.keepSide;
+                        
+                        const min = meshBounds.min;
+                        const max = meshBounds.max;
+                        const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
+                        const range = max[axisIndex] - min[axisIndex];
+                        const position = min[axisIndex] + (percent / 100) * range;
+                        
+                        // Create Three.js plane
+                        let normal, constant;
+                        
+                        if (plane === 'x') {
+                            // X axis clipping
+                            normal = new THREE.Vector3(keepSide === 'above' ? -1 : 1, 0, 0);
+                            constant = keepSide === 'above' ? position : -position;
+                        } else if (plane === 'y') {
+                            // Y axis clipping
+                            normal = new THREE.Vector3(0, keepSide === 'above' ? -1 : 1, 0);
+                            constant = keepSide === 'above' ? position : -position;
+                        } else {
+                            // Z axis clipping
+                            normal = new THREE.Vector3(0, 0, keepSide === 'above' ? -1 : 1);
+                            constant = keepSide === 'above' ? position : -position;
+                        }
+                        
+                        const clippingPlane = new THREE.Plane(normal, constant);
+                        planes.push(clippingPlane);
+                    });
+                    
+                    // Apply clipping to all meshes in the scene
+                    scene.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            // Enable clipping on material
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => {
+                                    mat.clippingPlanes = planes;
+                                    mat.clipShadows = true;
+                                    mat.needsUpdate = true;
+                                });
+                            } else {
+                                child.material.clippingPlanes = planes;
+                                child.material.clipShadows = true;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                    
+                    // Enable local clipping on renderer
+                    const renderer = modelViewer[Symbol.for('renderer')];
+                    if (renderer) {
+                        renderer.localClippingEnabled = true;
+                    }
+                    
+                } catch (error) {
+                    console.error('Error applying Three.js clipping:', error);
+                }
+            }
+            
+            // Remove Three.js clipping
+            function removeThreeJSClipping() {
+                try {
+                    const scene = modelViewer.model;
+                    if (!scene) return;
+                    
+                    // Remove clipping from all meshes
+                    scene.traverse((child) => {
+                        if (child.isMesh && child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => {
+                                    mat.clippingPlanes = [];
+                                    mat.needsUpdate = true;
+                                });
+                            } else {
+                                child.material.clippingPlanes = [];
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                    
+                } catch (error) {
+                    console.error('Error removing Three.js clipping:', error);
+                }
+            }
+            
+            // Enable live clipping preview using CSS overlays + Three.js clipping
             // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
                     if (!meshBounds || activePlanes.size === 0) return;
+                    
+                    // Apply Three.js clipping to hide model parts
+                    applyThreeJSClipping();
                     
                     // Remove all existing overlays first
                     document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
@@ -2752,6 +2853,9 @@
             // Disable clipping preview
             function disableClipping() {
                 try {
+                    // Remove Three.js clipping
+                    removeThreeJSClipping();
+                    
                     // Remove all visual overlays
                     document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     

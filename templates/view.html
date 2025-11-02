@@ -2214,8 +2214,9 @@
                 const viewName = prompt('Enter view name:', `View ${cameraViews.length + 1}`);
                 if (!viewName) return;
                 
-                // Get current camera state
+                // Get current camera state (orbit, target, and fov)
                 const cameraOrbit = modelViewer.getCameraOrbit();
+                const cameraTarget = modelViewer.getCameraTarget();
                 const fieldOfView = modelViewer.getFieldOfView();
                 
                 const view = {
@@ -2225,6 +2226,11 @@
                         theta: cameraOrbit.theta,
                         phi: cameraOrbit.phi,
                         radius: cameraOrbit.radius
+                    },
+                    target: {
+                        x: cameraTarget.x,
+                        y: cameraTarget.y,
+                        z: cameraTarget.z
                     },
                     fov: fieldOfView
                 };
@@ -2240,24 +2246,38 @@
             modelViewer.addEventListener('load', () => {
                 if (!initialCameraState) {
                     const orbit = modelViewer.getCameraOrbit();
+                    const target = modelViewer.getCameraTarget();
                     const fieldOfView = modelViewer.getFieldOfView();
                     initialCameraState = {
                         orbit: { theta: orbit.theta, phi: orbit.phi, radius: orbit.radius },
+                        target: { x: target.x, y: target.y, z: target.z },
                         fov: fieldOfView
                     };
+                    console.log('Initial camera state saved:', initialCameraState);
                 }
             });
             
             // Reset Camera to initial position
             document.getElementById('resetCamera').addEventListener('click', () => {
                 if (initialCameraState) {
+                    // Reset camera orbit (rotation and zoom)
                     modelViewer.cameraOrbit = `${initialCameraState.orbit.theta}rad ${initialCameraState.orbit.phi}rad ${initialCameraState.orbit.radius}m`;
+                    
+                    // Reset camera target (pan position - model center)
+                    modelViewer.cameraTarget = `${initialCameraState.target.x}m ${initialCameraState.target.y}m ${initialCameraState.target.z}m`;
+                    
+                    // Reset field of view
                     modelViewer.fieldOfView = `${initialCameraState.fov}deg`;
+                    
+                    console.log('Camera reset to initial state');
                 } else {
                     // Fallback: reset to default
                     modelViewer.resetTurntableRotation();
                     modelViewer.cameraOrbit = 'auto auto auto';
+                    modelViewer.cameraTarget = 'auto auto auto';
                     modelViewer.fieldOfView = 'auto';
+                    
+                    console.log('Camera reset to auto defaults');
                 }
             });
             
@@ -2286,7 +2306,15 @@
                 const view = cameraViews.find(v => v.id === viewId);
                 if (!view) return;
                 
+                // Apply camera orbit (rotation and zoom)
                 modelViewer.cameraOrbit = `${view.orbit.theta}rad ${view.orbit.phi}rad ${view.orbit.radius}m`;
+                
+                // Apply camera target (pan position) if available
+                if (view.target) {
+                    modelViewer.cameraTarget = `${view.target.x}m ${view.target.y}m ${view.target.z}m`;
+                }
+                
+                // Apply field of view
                 modelViewer.fieldOfView = `${view.fov}deg`;
             };
             
@@ -2417,6 +2445,7 @@
                                 // Save camera view if requested
                                 if (linkCamera) {
                                     const cameraOrbit = modelViewer.getCameraOrbit();
+                                    const cameraTarget = modelViewer.getCameraTarget();
                                     const fieldOfView = modelViewer.getFieldOfView();
                                     
                                     const cameraViewId = 'camera-' + Date.now();
@@ -2427,6 +2456,11 @@
                                             theta: cameraOrbit.theta,
                                             phi: cameraOrbit.phi,
                                             radius: cameraOrbit.radius
+                                        },
+                                        target: {
+                                            x: cameraTarget.x,
+                                            y: cameraTarget.y,
+                                            z: cameraTarget.z
                                         },
                                         fov: fieldOfView
                                     };

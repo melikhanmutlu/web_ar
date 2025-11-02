@@ -1072,13 +1072,14 @@ def upload_model():
                 max_dimension_meters = max_dimension / 100.0
                 
                 # Load the mesh AFTER successful conversion
-                mesh = trimesh.load(output_path) 
+                import trimesh as tm  # Import locally to avoid scope issues
+                mesh = tm.load(output_path) 
                 apply_size_limit(mesh, max_dimension_meters) # apply_size_limit modifies the mesh in-place
                 logger.info(f"[upload_model - {unique_id}] Scaling applied, attempting export...")
                 mesh.export(output_path) # Overwrite the file with the scaled version
                 logger.info(f"[upload_model - {unique_id}] Export after scaling successful.")
             except Exception as e:
-                logger.error(f"[upload_model - {unique_id}] Error scaling or exporting model {output_path}: {str(e)}")
+                logger.error(f"[upload_model - {unique_id}] Error scaling or exporting model {output_path}: {str(e)}", exc_info=True)
                 # Log error but continue with unscaled model
         else:
              logger.info(f"[upload_model - {unique_id}] No max dimension specified or output file missing before scaling.")
@@ -2177,13 +2178,31 @@ def slice_model():
         plane_normal = data.get('plane_normal')  # [x, y, z]
         keep_side = data.get('keep_side', 'positive')  # 'positive' or 'negative'
         
+        logger.info(f"[slice_model] Received request for model_id: {model_id}")
+        
         if not all([model_id, plane_origin, plane_normal]):
             return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
         
+        # Try to find the model file
+        # First check if model_id is a UUID (converted model)
         input_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
         
         if not os.path.exists(input_path):
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
+            # Maybe model_id is the full filename from database
+            model = UserModel.query.get(model_id)
+            if model and model.filename:
+                # Extract folder from filename (e.g., "converted/uuid/model.glb" -> "uuid")
+                parts = model.filename.split('/')
+                if len(parts) >= 2:
+                    folder_id = parts[1]
+                    input_path = os.path.join(app.config['CONVERTED_FOLDER'], folder_id, 'model.glb')
+                    logger.info(f"[slice_model] Trying alternate path: {input_path}")
+        
+        if not os.path.exists(input_path):
+            logger.error(f"[slice_model] Model not found at: {input_path}")
+            logger.error(f"[slice_model] CONVERTED_FOLDER: {app.config['CONVERTED_FOLDER']}")
+            logger.error(f"[slice_model] model_id: {model_id}")
+            return jsonify({'success': False, 'error': f'Model not found at {input_path}'}), 404
         
         # Create backup
         import time

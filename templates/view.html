@@ -1887,8 +1887,23 @@
             });
 
             function applyMetalness(value) {
+                // Try model-viewer's material API first
+                if (modelViewer.model) {
+                    const materials = modelViewer.model.materials;
+                    if (materials && materials.length > 0) {
+                        materials.forEach(material => {
+                            material.pbrMetallicRoughness.setMetallicFactor(value);
+                        });
+                        return;
+                    }
+                }
+                
+                // Fallback to internal scene
                 const scene = getInternalScene();
-                if (!scene) return;
+                if (!scene) {
+                    console.warn('Scene not ready yet');
+                    return;
+                }
 
                 scene.traverse((child) => {
                     if (child.isMesh) {
@@ -1902,12 +1917,8 @@
                     }
                 });
                 
-                // Force multiple render updates for immediate visual feedback
+                // Force render update
                 modelViewer.requestUpdate();
-                requestAnimationFrame(() => {
-                    modelViewer.requestUpdate();
-                    requestAnimationFrame(() => modelViewer.requestUpdate());
-                });
             }
 
             // Roughness
@@ -1921,8 +1932,23 @@
             });
 
             function applyRoughness(value) {
+                // Try model-viewer's material API first
+                if (modelViewer.model) {
+                    const materials = modelViewer.model.materials;
+                    if (materials && materials.length > 0) {
+                        materials.forEach(material => {
+                            material.pbrMetallicRoughness.setRoughnessFactor(value);
+                        });
+                        return;
+                    }
+                }
+                
+                // Fallback to internal scene
                 const scene = getInternalScene();
-                if (!scene) return;
+                if (!scene) {
+                    console.warn('Scene not ready yet');
+                    return;
+                }
 
                 scene.traverse((child) => {
                     if (child.isMesh) {
@@ -1936,12 +1962,8 @@
                     }
                 });
                 
-                // Force multiple render updates for immediate visual feedback
+                // Force render update
                 modelViewer.requestUpdate();
-                requestAnimationFrame(() => {
-                    modelViewer.requestUpdate();
-                    requestAnimationFrame(() => modelViewer.requestUpdate());
-                });
             }
 
             // Texture Upload

@@ -1762,6 +1762,14 @@
             // If it was already open, it stays closed (accordion behavior)
         }
 
+        // ========== GLOBAL UTILITY FUNCTIONS ==========
+        
+        // Get current model ID from URL (used by multiple features)
+        function getCurrentModelId() {
+            const pathParts = window.location.pathname.split('/');
+            return pathParts[pathParts.length - 1];
+        }
+
         // ========== MATERIAL EDITOR FUNCTIONALITY ==========
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');
@@ -2325,12 +2333,6 @@
             };
 
             // ========== EXPORT MODIFIED MODEL FUNCTIONALITY ==========
-            
-            // Get current model ID from URL
-            function getCurrentModelId() {
-                const pathParts = window.location.pathname.split('/');
-                return pathParts[pathParts.length - 1];
-            }
 
             // Collect all modifications
             function collectModifications() {

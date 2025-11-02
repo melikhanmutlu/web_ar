@@ -1296,17 +1296,6 @@
 
                     <!-- Slicer Controls (hidden by default) -->
                     <div id="slicerControls" class="hidden">
-                        <!-- Quick Presets -->
-                        <div class="mb-4">
-                            <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Quick Presets</label>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button class="preset-btn nav-button text-xs justify-center" data-preset="half">Half Cut</button>
-                                <button class="preset-btn nav-button text-xs justify-center" data-preset="top25">Top 25%</button>
-                                <button class="preset-btn nav-button text-xs justify-center" data-preset="bottom25">Bottom 25%</button>
-                                <button class="preset-btn nav-button text-xs justify-center" data-preset="middle">Middle</button>
-                            </div>
-                        </div>
-
                         <!-- Multi-Plane Selection -->
                         <div class="mb-4">
                             <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Planes</label>
@@ -2646,67 +2635,74 @@
                         modelViewer.appendChild(overlay);
                     }
                     
+                    // Reset all styles first
+                    overlay.style.left = '';
+                    overlay.style.right = '';
+                    overlay.style.top = '';
+                    overlay.style.bottom = '';
+                    overlay.style.width = '';
+                    overlay.style.height = '';
+                    overlay.style.border = '';
+                    
                     // Calculate overlay position based on axis and percentage
+                    const slicePosition = percent; // 0-100%
+                    
                     if (firstPlane === 'y') {
-                        // Vertical slice
-                        const slicePosition = percent; // 0-100%
-                        
+                        // Y axis - Vertical slice (top/bottom)
                         if (keepSide === 'above') {
                             // Keep top, hide bottom
                             overlay.style.left = '0';
                             overlay.style.bottom = '0';
                             overlay.style.width = '100%';
                             overlay.style.height = (100 - slicePosition) + '%';
-                            overlay.style.background = 'linear-gradient(to top, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderTop = '3px solid red';
+                            overlay.style.background = 'linear-gradient(to top, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderTop = '3px solid #ff0000';
                         } else {
                             // Keep bottom, hide top
                             overlay.style.left = '0';
                             overlay.style.top = '0';
                             overlay.style.width = '100%';
                             overlay.style.height = slicePosition + '%';
-                            overlay.style.background = 'linear-gradient(to bottom, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderBottom = '3px solid red';
+                            overlay.style.background = 'linear-gradient(to bottom, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderBottom = '3px solid #ff0000';
                         }
                     } else if (firstPlane === 'x') {
-                        // Horizontal slice (left-right)
-                        const slicePosition = percent;
-                        
+                        // X axis - Horizontal slice (left/right)
                         if (keepSide === 'above') {
                             // Keep right, hide left
                             overlay.style.left = '0';
                             overlay.style.top = '0';
                             overlay.style.width = slicePosition + '%';
                             overlay.style.height = '100%';
-                            overlay.style.background = 'linear-gradient(to right, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderRight = '3px solid red';
+                            overlay.style.background = 'linear-gradient(to right, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderRight = '3px solid #ff0000';
                         } else {
                             // Keep left, hide right
                             overlay.style.right = '0';
                             overlay.style.top = '0';
                             overlay.style.width = (100 - slicePosition) + '%';
                             overlay.style.height = '100%';
-                            overlay.style.background = 'linear-gradient(to left, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderLeft = '3px solid red';
+                            overlay.style.background = 'linear-gradient(to left, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderLeft = '3px solid #ff0000';
                         }
-                    } else {
-                        // Z axis - show as vertical for simplicity
-                        const slicePosition = percent;
-                        
+                    } else if (firstPlane === 'z') {
+                        // Z axis - Depth slice (show as diagonal or vertical)
                         if (keepSide === 'above') {
+                            // Keep front, hide back
                             overlay.style.left = '0';
                             overlay.style.bottom = '0';
                             overlay.style.width = '100%';
                             overlay.style.height = (100 - slicePosition) + '%';
-                            overlay.style.background = 'linear-gradient(to top, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderTop = '3px solid red';
+                            overlay.style.background = 'linear-gradient(135deg, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderTop = '3px solid #ff0000';
                         } else {
+                            // Keep back, hide front
                             overlay.style.left = '0';
                             overlay.style.top = '0';
                             overlay.style.width = '100%';
                             overlay.style.height = slicePosition + '%';
-                            overlay.style.background = 'linear-gradient(to bottom, rgba(255,0,0,0.3), rgba(255,0,0,0.1))';
-                            overlay.style.borderBottom = '3px solid red';
+                            overlay.style.background = 'linear-gradient(-135deg, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
+                            overlay.style.borderBottom = '3px solid #ff0000';
                         }
                     }
                     
@@ -2738,20 +2734,24 @@
             // Update slice statistics (estimated based on percentage)
             function updateSliceStats() {
                 try {
-                    if (!meshBounds) return;
+                    if (!meshBounds || activePlanes.size === 0) return;
                     
-                    const percent = parseInt(slicePositionSlider.value);
+                    // Get first active plane settings
+                    const firstPlane = Array.from(activePlanes)[0];
+                    const settings = planeSettings[firstPlane];
+                    const percent = settings.position;
+                    const keepSide = settings.keepSide;
                     
                     // Estimate based on slice percentage
                     let keptPercent;
-                    if (slicerKeepSide === 'positive') {
+                    if (keepSide === 'above') {
                         keptPercent = percent;
                     } else {
                         keptPercent = 100 - percent;
                     }
                     
                     // Rough estimates (will be accurate after actual slice)
-                    const totalVertices = 11465; // Approximate for Tree model
+                    const totalVertices = 11465; // Approximate
                     const totalFaces = 13724;
                     
                     const keptVertices = Math.round(totalVertices * keptPercent / 100);
@@ -2837,46 +2837,6 @@
                     }
                     
                     // Recreate plane controls
-                    createPlaneControls();
-                    
-                    // Update preview if slicer is enabled
-                    if (slicerEnabled) {
-                        enableClipping();
-                    }
-                });
-            });
-            
-            // Quick Presets - apply to first active plane
-            document.querySelectorAll('.preset-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const preset = btn.dataset.preset;
-                    const firstPlane = Array.from(activePlanes)[0];
-                    
-                    if (!firstPlane) return;
-                    
-                    switch(preset) {
-                        case 'half':
-                            planeSettings[firstPlane].position = 50;
-                            planeSettings[firstPlane].keepSide = 'above';
-                            break;
-                        case 'top25':
-                            planeSettings[firstPlane].position = 75;
-                            planeSettings[firstPlane].keepSide = 'below';
-                            break;
-                        case 'bottom25':
-                            planeSettings[firstPlane].position = 25;
-                            planeSettings[firstPlane].keepSide = 'above';
-                            break;
-                        case 'middle':
-                            // Double slice: keep middle 50%
-                            if (!confirm('This will perform two slices (remove top 25% and bottom 25%). Continue?')) {
-                                return;
-                            }
-                            applyMultiPlaneSlice();
-                            return;
-                    }
-                    
-                    // Recreate controls to reflect changes
                     createPlaneControls();
                     
                     // Update preview if slicer is enabled

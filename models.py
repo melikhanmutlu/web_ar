@@ -82,8 +82,14 @@ class UserModel(db.Model):
     original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload
     cumulative_scale = db.Column(db.Float, default=1.0)  # Total scale factor applied
     
+    # Hotspot visibility
+    hotspots_visible = db.Column(db.Boolean, default=True)  # Toggle for showing/hiding hotspots
+    
     # Version tracking
     versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
+    
+    # Hotspots
+    hotspots = db.relationship('ModelHotspot', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelHotspot.created_at')
     
     def __repr__(self):
         return f'<UserModel {self.filename}>'
@@ -109,6 +115,79 @@ class UserModel(db.Model):
         if not self.upload_date:
             return 'Unknown'
         return self.upload_date.strftime('%Y-%m-%d %H:%M')
+
+
+class ModelHotspot(db.Model):
+    """
+    Stores hotspots (annotations) for 3D models
+    Each hotspot has a position, title, description, and optional camera view
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    
+    # Hotspot data
+    hotspot_id = db.Column(db.String(50), nullable=False)  # Frontend ID (e.g., 'hotspot-1234567890')
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    
+    # Position on model (3D coordinates)
+    position_x = db.Column(db.Float, nullable=False)
+    position_y = db.Column(db.Float, nullable=False)
+    position_z = db.Column(db.Float, nullable=False)
+    
+    # Normal vector (surface normal at hotspot)
+    normal_x = db.Column(db.Float, nullable=True)
+    normal_y = db.Column(db.Float, nullable=True)
+    normal_z = db.Column(db.Float, nullable=True)
+    
+    # Camera view (optional)
+    camera_view_id = db.Column(db.String(50), nullable=True)
+    camera_orbit_theta = db.Column(db.Float, nullable=True)
+    camera_orbit_phi = db.Column(db.Float, nullable=True)
+    camera_orbit_radius = db.Column(db.Float, nullable=True)
+    camera_target_x = db.Column(db.Float, nullable=True)
+    camera_target_y = db.Column(db.Float, nullable=True)
+    camera_target_z = db.Column(db.Float, nullable=True)
+    camera_fov = db.Column(db.Float, nullable=True)
+    
+    # Metadata
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<ModelHotspot {self.title} on {self.model_id}>'
+    
+    def to_dict(self):
+        """Convert hotspot to dictionary for JSON serialization"""
+        return {
+            'id': self.hotspot_id,
+            'title': self.title,
+            'description': self.description,
+            'position': {
+                'x': self.position_x,
+                'y': self.position_y,
+                'z': self.position_z
+            },
+            'normal': {
+                'x': self.normal_x,
+                'y': self.normal_y,
+                'z': self.normal_z
+            } if self.normal_x is not None else None,
+            'cameraViewId': self.camera_view_id,
+            'cameraView': {
+                'orbit': {
+                    'theta': self.camera_orbit_theta,
+                    'phi': self.camera_orbit_phi,
+                    'radius': self.camera_orbit_radius
+                },
+                'target': {
+                    'x': self.camera_target_x,
+                    'y': self.camera_target_y,
+                    'z': self.camera_target_z
+                },
+                'fov': self.camera_fov
+            } if self.camera_view_id else None
+        }
 
 
 class ModelVersion(db.Model):

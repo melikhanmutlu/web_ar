@@ -64,14 +64,26 @@ def apply_material_modifications(gltf, material_mods):
             except Exception as e:
                 logger.warning(f"Failed to apply foliage defaults on {name}: {e}")
         
-        # Apply base color
+        # Always set doubleSided to True for all materials
+        material.doubleSided = True
+        
+        # Apply base color with opacity
         if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
                 color_hex = material_mods['color']
                 color_rgb = hex_to_rgb(color_hex)
+                # Get opacity value (default 1.0)
+                opacity = float(material_mods.get('opacity', 1.0))
                 # Set baseColorFactor (RGBA)
-                pbr.baseColorFactor = list(color_rgb) + [1.0]
-                logger.info(f"Applied color {color_hex} to material {i}")
+                pbr.baseColorFactor = list(color_rgb) + [opacity]
+                logger.info(f"Applied color {color_hex} with opacity {opacity} to material {i}")
+                
+                # Set alpha mode based on opacity
+                if opacity < 1.0:
+                    material.alphaMode = 'BLEND'
+                    logger.info(f"Set alphaMode to BLEND for material {i} (opacity < 1.0)")
+                else:
+                    material.alphaMode = 'OPAQUE'
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
         

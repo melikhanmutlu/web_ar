@@ -1310,6 +1310,15 @@
                         <input type="range" id="roughnessSlider" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                     </div>
 
+                    <!-- Opacity -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Opacity</label>
+                            <span id="opacityValue" class="text-xs text-gray-500 dark:text-gray-400">1.0</span>
+                        </div>
+                        <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
                     <!-- Texture Upload -->
                     <div class="mb-4">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Texture</label>
@@ -2120,6 +2129,64 @@
                 modelViewer.requestUpdate();
             }
 
+            // Opacity
+            const opacitySlider = document.getElementById('opacitySlider');
+            const opacityValue = document.getElementById('opacityValue');
+            
+            opacitySlider.addEventListener('input', (e) => {
+                const value = parseFloat(e.target.value);
+                opacityValue.textContent = value.toFixed(2);
+                applyOpacity(value);
+            });
+
+            function applyOpacity(value) {
+                // Try model-viewer's material API first
+                if (modelViewer.model) {
+                    const materials = modelViewer.model.materials;
+                    if (materials && materials.length > 0) {
+                        materials.forEach(material => {
+                            const baseColor = material.pbrMetallicRoughness.baseColorFactor;
+                            if (baseColor && baseColor.length >= 4) {
+                                // Set alpha channel
+                                material.pbrMetallicRoughness.setBaseColorFactor([
+                                    baseColor[0], baseColor[1], baseColor[2], value
+                                ]);
+                            }
+                            // Enable transparency
+                            if (value < 1.0) {
+                                material.setAlphaMode('BLEND');
+                                material.setDoubleSided(true);
+                            } else {
+                                material.setAlphaMode('OPAQUE');
+                            }
+                        });
+                        return;
+                    }
+                }
+                
+                // Fallback to internal scene
+                const scene = getInternalScene();
+                if (!scene) {
+                    console.warn('Scene not ready yet');
+                    return;
+                }
+
+                scene.traverse((child) => {
+                    if (child.isMesh) {
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            mat.opacity = value;
+                            mat.transparent = value < 1.0;
+                            mat.side = 2; // THREE.DoubleSide
+                            mat.needsUpdate = true;
+                        });
+                    }
+                });
+                
+                // Force render update
+                modelViewer.requestUpdate();
+            }
+
             // Texture Upload
             const textureUpload = document.getElementById('textureUpload');
             const texturePreview = document.getElementById('texturePreview');
@@ -2198,10 +2265,13 @@
                 metalnessValue.textContent = '0.0';
                 roughnessSlider.value = 1;
                 roughnessValue.textContent = '1.0';
+                opacitySlider.value = 1;
+                opacityValue.textContent = '1.0';
                 
                 applyMaterialColor('#ffffff');
                 applyMetalness(0);
                 applyRoughness(1);
+                applyOpacity(1);
                 removeTexture();
             });
 
@@ -2788,6 +2858,7 @@
                         color: actualColor,
                         metalness: parseFloat(metalnessSlider.value),
                         roughness: parseFloat(roughnessSlider.value),
+                        opacity: parseFloat(opacitySlider.value),
                         texture: currentTextureData  // Include texture data
                     },
                     transform: {

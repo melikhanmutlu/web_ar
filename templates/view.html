@@ -2478,6 +2478,11 @@
             let meshBounds = null;
             let slicerPlane = null;
             let slicerPlaneHelper = null;
+            let clippingPlane = null;
+            let originalMaterials = new Map();
+            let previewModeEnabled = false;
+            let slicePlanes = {x: null, y: null, z: null}; // For multi-plane support
+            let activePlanes = new Set(['x']); // Currently active planes
             
             const toggleSlicerBtn = document.getElementById('toggleSlicer');
             const slicerControls = document.getElementById('slicerControls');
@@ -2608,6 +2613,160 @@
                     }
                     slicerPlaneHelper = null;
                 }
+                disableClipping();
+            }
+            
+            // Enable live clipping preview
+            function enableClipping() {
+                try {
+                    const scene = modelViewer[$scene];
+                    if (!scene || !meshBounds) return;
+                    
+                    // Calculate plane parameters
+                    const percent = parseInt(slicePositionSlider.value);
+                    const min = meshBounds.min;
+                    const max = meshBounds.max;
+                    
+                    let position, normal;
+                    
+                    if (slicerAxis === 'x') {
+                        const range = max[0] - min[0];
+                        position = min[0] + (percent / 100) * range;
+                        normal = new THREE.Vector3(slicerKeepSide === 'positive' ? -1 : 1, 0, 0);
+                        clippingPlane = new THREE.Plane(normal, slicerKeepSide === 'positive' ? position : -position);
+                    } else if (slicerAxis === 'y') {
+                        const range = max[1] - min[1];
+                        position = min[1] + (percent / 100) * range;
+                        normal = new THREE.Vector3(0, slicerKeepSide === 'positive' ? -1 : 1, 0);
+                        clippingPlane = new THREE.Plane(normal, slicerKeepSide === 'positive' ? position : -position);
+                    } else {
+                        const range = max[2] - min[2];
+                        position = min[2] + (percent / 100) * range;
+                        normal = new THREE.Vector3(0, 0, slicerKeepSide === 'positive' ? -1 : 1);
+                        clippingPlane = new THREE.Plane(normal, slicerKeepSide === 'positive' ? position : -position);
+                    }
+                    
+                    // Apply clipping to all materials in the scene
+                    scene.traverse((object) => {
+                        if (object.isMesh && object.material) {
+                            const materials = Array.isArray(object.material) ? object.material : [object.material];
+                            
+                            materials.forEach((material) => {
+                                if (!originalMaterials.has(material.uuid)) {
+                                    originalMaterials.set(material.uuid, {
+                                        clippingPlanes: material.clippingPlanes ? [...material.clippingPlanes] : null,
+                                        clipShadows: material.clipShadows
+                                    });
+                                }
+                                
+                                material.clippingPlanes = [clippingPlane];
+                                material.clipShadows = true;
+                                material.needsUpdate = true;
+                            });
+                        }
+                    });
+                    
+                    // Enable local clipping
+                    if (modelViewer.renderer) {
+                        modelViewer.renderer.localClippingEnabled = true;
+                    }
+                    
+                    // Update stats
+                    updateSliceStats();
+                    
+                } catch (error) {
+                    console.error('Error enabling clipping:', error);
+                }
+            }
+            
+            // Disable clipping preview
+            function disableClipping() {
+                try {
+                    const scene = modelViewer[$scene];
+                    if (!scene) return;
+                    
+                    // Restore original materials
+                    scene.traverse((object) => {
+                        if (object.isMesh && object.material) {
+                            const materials = Array.isArray(object.material) ? object.material : [object.material];
+                            
+                            materials.forEach((material) => {
+                                const original = originalMaterials.get(material.uuid);
+                                if (original) {
+                                    material.clippingPlanes = original.clippingPlanes;
+                                    material.clipShadows = original.clipShadows;
+                                    material.needsUpdate = true;
+                                }
+                            });
+                        }
+                    });
+                    
+                    originalMaterials.clear();
+                    clippingPlane = null;
+                    
+                    // Hide stats
+                    document.getElementById('sliceStats').classList.add('hidden');
+                    
+                } catch (error) {
+                    console.error('Error disabling clipping:', error);
+                }
+            }
+            
+            // Update slice statistics
+            function updateSliceStats() {
+                try {
+                    const scene = modelViewer[$scene];
+                    if (!scene || !clippingPlane) return;
+                    
+                    let totalVertices = 0;
+                    let totalFaces = 0;
+                    let clippedVertices = 0;
+                    let clippedFaces = 0;
+                    
+                    scene.traverse((object) => {
+                        if (object.isMesh && object.geometry) {
+                            const positions = object.geometry.attributes.position;
+                            if (!positions) return;
+                            
+                            const vertexCount = positions.count;
+                            totalVertices += vertexCount;
+                            
+                            if (object.geometry.index) {
+                                totalFaces += object.geometry.index.count / 3;
+                            } else {
+                                totalFaces += vertexCount / 3;
+                            }
+                            
+                            // Count vertices on the keep side
+                            for (let i = 0; i < vertexCount; i++) {
+                                const vertex = new THREE.Vector3(
+                                    positions.getX(i),
+                                    positions.getY(i),
+                                    positions.getZ(i)
+                                );
+                                object.localToWorld(vertex);
+                                
+                                if (clippingPlane.distanceToPoint(vertex) >= 0) {
+                                    clippedVertices++;
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Estimate clipped faces (rough approximation)
+                    clippedFaces = Math.round((clippedVertices / totalVertices) * totalFaces);
+                    
+                    const reduction = ((1 - clippedVertices / totalVertices) * 100).toFixed(1);
+                    
+                    // Update UI
+                    document.getElementById('statsVertices').textContent = `${clippedVertices} / ${totalVertices}`;
+                    document.getElementById('statsFaces').textContent = `${clippedFaces} / ${Math.round(totalFaces)}`;
+                    document.getElementById('statsReduction').textContent = `${reduction}%`;
+                    document.getElementById('sliceStats').classList.remove('hidden');
+                    
+                } catch (error) {
+                    console.error('Error updating stats:', error);
+                }
             }
             
             // Load mesh bounds
@@ -2658,6 +2817,11 @@
                     btn.classList.remove('border-gray-300', 'dark:border-gray-600');
                     slicerAxis = btn.dataset.axis;
                     updateSlicerPlane();
+                    
+                    // Update clipping if preview mode is on
+                    if (previewModeEnabled) {
+                        enableClipping();
+                    }
                 });
             });
             
@@ -2672,7 +2836,23 @@
                     btn.classList.remove('border-gray-300', 'dark:border-gray-600');
                     slicerKeepSide = btn.dataset.side;
                     updateSlicerPlane();
+                    
+                    // Update clipping if preview mode is on
+                    if (previewModeEnabled) {
+                        enableClipping();
+                    }
                 });
+            });
+            
+            // Preview Mode Toggle
+            document.getElementById('previewMode').addEventListener('change', (e) => {
+                previewModeEnabled = e.target.checked;
+                
+                if (previewModeEnabled && slicerEnabled) {
+                    enableClipping();
+                } else {
+                    disableClipping();
+                }
             });
             
             // Position slider with percentage and cm display
@@ -2689,6 +2869,11 @@
                 }
                 
                 updateSlicerPlane();
+                
+                // Update clipping if preview mode is on
+                if (previewModeEnabled) {
+                    enableClipping();
+                }
             });
             
             // Quick Presets
@@ -2709,8 +2894,11 @@
                             slicerKeepSide = 'positive';
                             break;
                         case 'middle':
-                            // TODO: Implement double slice
-                            alert('Ortasını al özelliği yakında eklenecek!');
+                            // Double slice: keep middle 50%
+                            if (!confirm('Bu işlem iki kesim yapacak (üst %25 ve alt %25 atılacak). Devam edilsin mi?')) {
+                                return;
+                            }
+                            applyDoubleSlice(25, 75);
                             return;
                     }
                     
@@ -2761,6 +2949,149 @@
                 document.getElementById('animateSlice').classList.remove('hidden');
                 document.getElementById('stopAnimation').classList.add('hidden');
             });
+            
+            // Apply double slice (for "middle" preset)
+            async function applyDoubleSlice(percent1, percent2) {
+                if (!meshBounds) {
+                    alert('Mesh bounds not loaded. Please try again.');
+                    return;
+                }
+                
+                const originalHTML = applySliceBtn.innerHTML;
+                
+                try {
+                    // Show loading
+                    applySliceBtn.disabled = true;
+                    applySliceBtn.innerHTML = `
+                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Slicing (1/2)...
+                    `;
+                    
+                    const modelId = getCurrentModelId();
+                    const min = meshBounds.min;
+                    const max = meshBounds.max;
+                    const center = meshBounds.center;
+                    
+                    // First slice: cut bottom
+                    let planeOrigin1, planeNormal1;
+                    if (slicerAxis === 'x') {
+                        const range = max[0] - min[0];
+                        const position = min[0] + (percent1 / 100) * range;
+                        planeOrigin1 = [position, center[1], center[2]];
+                        planeNormal1 = [1, 0, 0];
+                    } else if (slicerAxis === 'y') {
+                        const range = max[1] - min[1];
+                        const position = min[1] + (percent1 / 100) * range;
+                        planeOrigin1 = [center[0], position, center[2]];
+                        planeNormal1 = [0, 1, 0];
+                    } else {
+                        const range = max[2] - min[2];
+                        const position = min[2] + (percent1 / 100) * range;
+                        planeOrigin1 = [center[0], center[1], position];
+                        planeNormal1 = [0, 0, 1];
+                    }
+                    
+                    const response1 = await fetch('/slice_model', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            model_id: modelId,
+                            plane_origin: planeOrigin1,
+                            plane_normal: planeNormal1,
+                            keep_side: 'positive'
+                        })
+                    });
+                    
+                    const result1 = await response1.json();
+                    if (!result1.success) {
+                        throw new Error('First slice failed: ' + (result1.error || 'Unknown error'));
+                    }
+                    
+                    // Update loading message
+                    applySliceBtn.innerHTML = `
+                        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Slicing (2/2)...
+                    `;
+                    
+                    // Reload bounds after first slice
+                    const boundsResponse = await fetch(`/get_mesh_bounds/${modelId}`);
+                    const boundsResult = await boundsResponse.json();
+                    if (boundsResult.success) {
+                        meshBounds = boundsResult.bounds;
+                    }
+                    
+                    // Second slice: cut top
+                    let planeOrigin2, planeNormal2;
+                    const min2 = meshBounds.min;
+                    const max2 = meshBounds.max;
+                    const center2 = meshBounds.center;
+                    
+                    if (slicerAxis === 'x') {
+                        const range = max2[0] - min2[0];
+                        const position = min2[0] + (percent2 / 100) * range;
+                        planeOrigin2 = [position, center2[1], center2[2]];
+                        planeNormal2 = [1, 0, 0];
+                    } else if (slicerAxis === 'y') {
+                        const range = max2[1] - min2[1];
+                        const position = min2[1] + (percent2 / 100) * range;
+                        planeOrigin2 = [center2[0], position, center2[2]];
+                        planeNormal2 = [0, 1, 0];
+                    } else {
+                        const range = max2[2] - min2[2];
+                        const position = min2[2] + (percent2 / 100) * range;
+                        planeOrigin2 = [center2[0], center2[1], position];
+                        planeNormal2 = [0, 0, 1];
+                    }
+                    
+                    const response2 = await fetch('/slice_model', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            model_id: modelId,
+                            plane_origin: planeOrigin2,
+                            plane_normal: planeNormal2,
+                            keep_side: 'negative'
+                        })
+                    });
+                    
+                    const result2 = await response2.json();
+                    if (!result2.success) {
+                        throw new Error('Second slice failed: ' + (result2.error || 'Unknown error'));
+                    }
+                    
+                    applySliceBtn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Success! Reloading...
+                    `;
+                    
+                    setTimeout(() => {
+                        window.location.href = window.location.pathname + '?t=' + Date.now();
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('Double slice error:', error);
+                    applySliceBtn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                        Slice Failed
+                    `;
+                    alert('Failed to slice model: ' + error.message);
+                    
+                    setTimeout(() => {
+                        applySliceBtn.innerHTML = originalHTML;
+                        applySliceBtn.disabled = false;
+                    }, 2000);
+                }
+            }
             
             // Apply slice
             applySliceBtn.addEventListener('click', async () => {

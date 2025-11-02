@@ -2918,18 +2918,18 @@
                         if (plane === 'y') {
                             // Y axis - Vertical slice (top/bottom)
                             if (keepSide === 'above') {
-                                // Keep top, hide bottom
+                                // Keep top, hide bottom - overlay shows bottom part
                                 overlay.style.left = '0';
                                 overlay.style.bottom = '0';
                                 overlay.style.width = '100%';
-                                overlay.style.height = (100 - slicePosition) + '%';
+                                overlay.style.height = slicePosition + '%';
                                 overlay.style.background = `rgba(${color}, 0.25)`;
                             } else {
-                                // Keep bottom, hide top
+                                // Keep bottom, hide top - overlay shows top part
                                 overlay.style.left = '0';
                                 overlay.style.top = '0';
                                 overlay.style.width = '100%';
-                                overlay.style.height = slicePosition + '%';
+                                overlay.style.height = (100 - slicePosition) + '%';
                                 overlay.style.background = `rgba(${color}, 0.25)`;
                             }
                         } else if (plane === 'x') {
@@ -2968,37 +2968,7 @@
                             }
                         }
                         
-                        // Add animated slice line (single line per plane)
-                        const sliceLine = document.createElement('div');
-                        sliceLine.style.position = 'absolute';
-                        sliceLine.style.background = `rgb(${color})`;
-                        sliceLine.style.boxShadow = `0 0 10px rgba(${color}, 0.8), 0 0 20px rgba(${color}, 0.5)`;
-                        sliceLine.style.zIndex = '12';
-                        sliceLine.style.pointerEvents = 'none';
-                        
-                        // Pulsing animation for slice line
-                        sliceLine.style.animation = 'slicePulse 2s ease-in-out infinite';
-                        
-                        // Position slice line based on plane
-                        if (plane === 'y') {
-                            // Horizontal plane (Y axis)
-                            sliceLine.style.left = '0';
-                            sliceLine.style.width = '100%';
-                            sliceLine.style.height = '3px';
-                            sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
-                        } else if (plane === 'x') {
-                            // Vertical plane (X axis)
-                            sliceLine.style.top = '0';
-                            sliceLine.style.height = '100%';
-                            sliceLine.style.width = '3px';
-                            sliceLine.style[keepSide === 'above' ? 'left' : 'right'] = (keepSide === 'above' ? slicePosition : (100 - slicePosition)) + '%';
-                        } else if (plane === 'z') {
-                            // Depth plane (Z axis)
-                            sliceLine.style.left = '0';
-                            sliceLine.style.width = '100%';
-                            sliceLine.style.height = '3px';
-                            sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
-                        }
+                        // No slice line - cleaner overlay only
                         
                         // Add label with enhanced styling
                         const label = document.createElement('div');
@@ -3034,7 +3004,6 @@
                             label.style.left = '10px';
                         }
                         
-                        overlay.appendChild(sliceLine);
                         overlay.appendChild(label);
                         
                         // Add hover effect
@@ -3348,7 +3317,20 @@
                         }
                         
                         // Convert above/below to positive/negative for backend
-                        const backendKeepSide = settings.keepSide === 'above' ? 'positive' : 'negative';
+                        // For Y axis: above=positive (keep top), below=negative (keep bottom)
+                        // For X axis: above=positive (keep right), below=negative (keep left)
+                        // For Z axis: above=positive (keep front), below=negative (keep back)
+                        let backendKeepSide;
+                        if (plane === 'y') {
+                            // Y axis: above means keep upper part (positive Y direction)
+                            backendKeepSide = settings.keepSide === 'above' ? 'positive' : 'negative';
+                        } else if (plane === 'x') {
+                            // X axis: above means keep right part (positive X direction)
+                            backendKeepSide = settings.keepSide === 'above' ? 'positive' : 'negative';
+                        } else {
+                            // Z axis: above means keep front part (positive Z direction)
+                            backendKeepSide = settings.keepSide === 'above' ? 'positive' : 'negative';
+                        }
                         
                         const response = await fetch('/slice_model', {
                             method: 'POST',

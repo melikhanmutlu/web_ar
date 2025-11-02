@@ -2988,22 +2988,7 @@
                             }
                         }
                         
-                        // Add plane helper (yellow striped pattern like Three.js PlaneHelper)
-                        const planeHelper = document.createElement('div');
-                        planeHelper.style.position = 'absolute';
-                        planeHelper.style.background = `repeating-linear-gradient(
-                            45deg,
-                            rgba(255, 255, 0, 0.3),
-                            rgba(255, 255, 0, 0.3) 10px,
-                            transparent 10px,
-                            transparent 20px
-                        )`;
-                        planeHelper.style.border = '2px dashed rgba(255, 255, 0, 0.6)';
-                        planeHelper.style.zIndex = '11';
-                        planeHelper.style.pointerEvents = 'none';
-                        planeHelper.style.opacity = '0.5';
-                        
-                        // Add animated slice line
+                        // Add animated slice line (single line per plane)
                         const sliceLine = document.createElement('div');
                         sliceLine.style.position = 'absolute';
                         sliceLine.style.background = `rgb(${color})`;
@@ -3014,36 +2999,21 @@
                         // Pulsing animation for slice line
                         sliceLine.style.animation = 'slicePulse 2s ease-in-out infinite';
                         
-                        // Position plane helper and slice line based on plane
+                        // Position slice line based on plane
                         if (plane === 'y') {
                             // Horizontal plane (Y axis)
-                            planeHelper.style.left = '0';
-                            planeHelper.style.width = '100%';
-                            planeHelper.style.height = '30px';
-                            planeHelper.style[keepSide === 'above' ? 'bottom' : 'top'] = `calc(${keepSide === 'above' ? (100 - slicePosition) : slicePosition}% - 15px)`;
-                            
                             sliceLine.style.left = '0';
                             sliceLine.style.width = '100%';
                             sliceLine.style.height = '3px';
                             sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
                         } else if (plane === 'x') {
                             // Vertical plane (X axis)
-                            planeHelper.style.top = '0';
-                            planeHelper.style.height = '100%';
-                            planeHelper.style.width = '30px';
-                            planeHelper.style[keepSide === 'above' ? 'left' : 'right'] = `calc(${keepSide === 'above' ? slicePosition : (100 - slicePosition)}% - 15px)`;
-                            
                             sliceLine.style.top = '0';
                             sliceLine.style.height = '100%';
                             sliceLine.style.width = '3px';
                             sliceLine.style[keepSide === 'above' ? 'left' : 'right'] = (keepSide === 'above' ? slicePosition : (100 - slicePosition)) + '%';
                         } else if (plane === 'z') {
                             // Depth plane (Z axis)
-                            planeHelper.style.left = '0';
-                            planeHelper.style.width = '100%';
-                            planeHelper.style.height = '30px';
-                            planeHelper.style[keepSide === 'above' ? 'bottom' : 'top'] = `calc(${keepSide === 'above' ? (100 - slicePosition) : slicePosition}% - 15px)`;
-                            
                             sliceLine.style.left = '0';
                             sliceLine.style.width = '100%';
                             sliceLine.style.height = '3px';
@@ -3085,7 +3055,6 @@
                         }
                         
                         overlay.appendChild(gridOverlay);
-                        overlay.appendChild(planeHelper);
                         overlay.appendChild(sliceLine);
                         overlay.appendChild(label);
                         

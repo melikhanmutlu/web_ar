@@ -1289,29 +1289,21 @@
                 <div id="slicerPanel" class="panel-content p-4 hidden">
                     <!-- Slicer Toggle -->
                     <div class="mb-4">
-                        <button id="toggleSlicer" class="btn-primary w-full px-3 py-2 text-xs rounded font-semibold">
+                        <button id="toggleSlicer" class="nav-button w-full justify-center">
                             Enable Slicer
                         </button>
                     </div>
 
                     <!-- Slicer Controls (hidden by default) -->
                     <div id="slicerControls" class="hidden">
-                        <!-- Preview Mode Toggle -->
-                        <div class="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                            <label class="flex items-center cursor-pointer">
-                                <input type="checkbox" id="previewMode" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600">
-                                <span class="ml-2 text-xs font-medium text-gray-700 dark:text-gray-300">Preview Mode</span>
-                            </label>
-                        </div>
-
                         <!-- Quick Presets -->
                         <div class="mb-4">
                             <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Quick Presets</label>
                             <div class="grid grid-cols-2 gap-2">
-                                <button class="preset-btn px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-preset="half">Half Cut</button>
-                                <button class="preset-btn px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-preset="top25">Top 25%</button>
-                                <button class="preset-btn px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-preset="bottom25">Bottom 25%</button>
-                                <button class="preset-btn px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-preset="middle">Middle</button>
+                                <button class="preset-btn nav-button text-xs justify-center" data-preset="half">Half Cut</button>
+                                <button class="preset-btn nav-button text-xs justify-center" data-preset="top25">Top 25%</button>
+                                <button class="preset-btn nav-button text-xs justify-center" data-preset="bottom25">Bottom 25%</button>
+                                <button class="preset-btn nav-button text-xs justify-center" data-preset="middle">Middle</button>
                             </div>
                         </div>
 
@@ -1319,11 +1311,11 @@
                         <div class="mb-4">
                             <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Planes</label>
                             <div class="flex gap-2">
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold transition-colors" data-plane="x">X Plane</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="y">Y Plane</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="z">Z Plane</button>
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold transition-colors" data-plane="x">X</button>
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="y">Y</button>
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="z">Z</button>
                             </div>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Click to toggle planes. Multiple planes can be active.</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Toggle planes (multiple allowed)</p>
                         </div>
 
                         <!-- Individual Plane Controls -->
@@ -1349,10 +1341,10 @@
 
                         <!-- Animation Controls -->
                         <div class="mb-4 flex gap-2">
-                            <button id="animateSlice" class="flex-1 px-3 py-2 text-xs rounded-lg border border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 font-medium transition-colors">
+                            <button id="animateSlice" class="flex-1 nav-button text-xs justify-center">
                                 Animate
                             </button>
-                            <button id="stopAnimation" class="flex-1 px-3 py-2 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 font-medium transition-colors hidden">
+                            <button id="stopAnimation" class="flex-1 nav-button text-xs justify-center hidden">
                                 Stop
                             </button>
                         </div>
@@ -1365,7 +1357,7 @@
                             Apply Slice
                         </button>
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center italic">
-                            This will permanently cut the model
+                            Permanently cuts the model
                         </p>
                     </div>
                 </div>
@@ -2457,14 +2449,13 @@
             
             let slicerEnabled = false;
             let meshBounds = null;
-            let previewModeEnabled = false;
             
             // Multi-plane support
             let activePlanes = new Set(['x']); // Currently active planes
             let planeSettings = {
-                x: { position: 50, keepSide: 'positive' },
-                y: { position: 50, keepSide: 'positive' },
-                z: { position: 50, keepSide: 'positive' }
+                x: { position: 50, keepSide: 'above' },
+                y: { position: 50, keepSide: 'above' },
+                z: { position: 50, keepSide: 'above' }
             };
             
             const toggleSlicerBtn = document.getElementById('toggleSlicer');
@@ -2484,9 +2475,12 @@
                     
                     const controlDiv = document.createElement('div');
                     controlDiv.className = `mb-4 p-3 bg-${planeColor}-50 dark:bg-${planeColor}-900/20 rounded-lg border border-${planeColor}-200 dark:border-${planeColor}-800`;
+                    const keepAbove = settings.keepSide === 'above';
+                    const keepBelow = settings.keepSide === 'below';
+                    
                     controlDiv.innerHTML = `
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-xs font-semibold text-${planeColor}-700 dark:text-${planeColor}-300">${plane.toUpperCase()} Plane</span>
+                            <span class="text-xs font-semibold text-${planeColor}-700 dark:text-${planeColor}-300">${plane.toUpperCase()} Axis</span>
                             <div class="flex gap-2 items-center">
                                 <span class="plane-percent text-xs text-${planeColor}-600 dark:text-${planeColor}-400 font-semibold">${settings.position}%</span>
                                 <span class="plane-cm text-xs text-gray-500 dark:text-gray-400">0.0 cm</span>
@@ -2495,10 +2489,10 @@
                         <input type="range" class="plane-slider w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 mb-2" 
                                data-plane="${plane}" min="0" max="100" step="1" value="${settings.position}">
                         <div class="flex gap-2">
-                            <button class="plane-keep-btn flex-1 px-2 py-1.5 text-xs rounded-lg border-2 ${settings.keepSide === 'positive' ? `border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold` : `border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300`} transition-colors" 
-                                    data-plane="${plane}" data-side="positive">Positive (+)</button>
-                            <button class="plane-keep-btn flex-1 px-2 py-1.5 text-xs rounded-lg border-2 ${settings.keepSide === 'negative' ? `border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold` : `border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300`} transition-colors" 
-                                    data-plane="${plane}" data-side="negative">Negative (-)</button>
+                            <button class="plane-keep-btn nav-button flex-1 text-xs justify-center ${keepAbove ? 'bg-green-100 dark:bg-green-900/50 border-green-500' : ''}" 
+                                    data-plane="${plane}" data-side="above">Keep Above</button>
+                            <button class="plane-keep-btn nav-button flex-1 text-xs justify-center ${keepBelow ? 'bg-green-100 dark:bg-green-900/50 border-green-500' : ''}" 
+                                    data-plane="${plane}" data-side="below">Keep Below</button>
                         </div>
                     `;
                     container.appendChild(controlDiv);
@@ -2529,8 +2523,8 @@
                             controlDiv.querySelector('.plane-cm').textContent = (position * 100).toFixed(2) + ' cm';
                         }
                         
-                        // Update preview
-                        if (previewModeEnabled) {
+                        // Update preview if slicer is enabled
+                        if (slicerEnabled) {
                             enableClipping();
                         }
                     });
@@ -2547,14 +2541,14 @@
                         const controlDiv = btn.closest('div').parentElement;
                         controlDiv.querySelectorAll('.plane-keep-btn').forEach(b => {
                             if (b.dataset.side === side) {
-                                b.className = 'plane-keep-btn flex-1 px-2 py-1.5 text-xs rounded-lg border-2 border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-semibold transition-colors';
+                                b.classList.add('bg-green-100', 'dark:bg-green-900/50', 'border-green-500');
                             } else {
-                                b.className = 'plane-keep-btn flex-1 px-2 py-1.5 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors';
+                                b.classList.remove('bg-green-100', 'dark:bg-green-900/50', 'border-green-500');
                             }
                         });
                         
-                        // Update preview
-                        if (previewModeEnabled) {
+                        // Update preview if slicer is enabled
+                        if (slicerEnabled) {
                             enableClipping();
                         }
                     });
@@ -2799,8 +2793,7 @@
                 
                 if (slicerEnabled) {
                     toggleSlicerBtn.textContent = 'Disable Slicer';
-                    toggleSlicerBtn.classList.remove('btn-primary');
-                    toggleSlicerBtn.classList.add('btn-danger');
+                    toggleSlicerBtn.classList.add('bg-red-100', 'dark:bg-red-900/50', 'border-red-500');
                     slicerControls.classList.remove('hidden');
                     
                     // Load mesh bounds
@@ -2808,10 +2801,12 @@
                     
                     // Create plane controls
                     createPlaneControls();
+                    
+                    // Enable clipping immediately
+                    enableClipping();
                 } else {
                     toggleSlicerBtn.textContent = 'Enable Slicer';
-                    toggleSlicerBtn.classList.remove('btn-danger');
-                    toggleSlicerBtn.classList.add('btn-primary');
+                    toggleSlicerBtn.classList.remove('bg-red-100', 'dark:bg-red-900/50', 'border-red-500');
                     slicerControls.classList.add('hidden');
                     disableClipping();
                 }
@@ -2846,22 +2841,11 @@
                     // Recreate plane controls
                     createPlaneControls();
                     
-                    // Update preview
-                    if (previewModeEnabled) {
+                    // Update preview if slicer is enabled
+                    if (slicerEnabled) {
                         enableClipping();
                     }
                 });
-            });
-            
-            // Preview Mode Toggle
-            document.getElementById('previewMode').addEventListener('change', (e) => {
-                previewModeEnabled = e.target.checked;
-                
-                if (previewModeEnabled && slicerEnabled) {
-                    enableClipping();
-                } else {
-                    disableClipping();
-                }
             });
             
             // Quick Presets - apply to first active plane
@@ -2875,15 +2859,15 @@
                     switch(preset) {
                         case 'half':
                             planeSettings[firstPlane].position = 50;
-                            planeSettings[firstPlane].keepSide = 'positive';
+                            planeSettings[firstPlane].keepSide = 'above';
                             break;
                         case 'top25':
                             planeSettings[firstPlane].position = 75;
-                            planeSettings[firstPlane].keepSide = 'negative';
+                            planeSettings[firstPlane].keepSide = 'below';
                             break;
                         case 'bottom25':
                             planeSettings[firstPlane].position = 25;
-                            planeSettings[firstPlane].keepSide = 'positive';
+                            planeSettings[firstPlane].keepSide = 'above';
                             break;
                         case 'middle':
                             // Double slice: keep middle 50%
@@ -2897,8 +2881,8 @@
                     // Recreate controls to reflect changes
                     createPlaneControls();
                     
-                    // Update preview
-                    if (previewModeEnabled) {
+                    // Update preview if slicer is enabled
+                    if (slicerEnabled) {
                         enableClipping();
                     }
                 });
@@ -2931,7 +2915,7 @@
                     planeSettings[firstPlane].position = value;
                     createPlaneControls();
                     
-                    if (previewModeEnabled) {
+                    if (slicerEnabled) {
                         enableClipping();
                     }
                 }, 50);
@@ -3013,6 +2997,9 @@
                             planeNormal = [0, 0, 1];
                         }
                         
+                        // Convert above/below to positive/negative for backend
+                        const backendKeepSide = settings.keepSide === 'above' ? 'positive' : 'negative';
+                        
                         const response = await fetch('/slice_model', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -3020,7 +3007,7 @@
                                 model_id: modelId,
                                 plane_origin: planeOrigin,
                                 plane_normal: planeNormal,
-                                keep_side: settings.keepSide
+                                keep_side: backendKeepSide
                             })
                         });
                         

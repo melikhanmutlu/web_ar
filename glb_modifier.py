@@ -230,17 +230,88 @@ def apply_texture_modifications(gltf, texture_data_base64):
         return gltf
 
 
+def calculate_model_center(gltf):
+    """
+    Calculate the center point of the model's bounding box
+    
+    Returns:
+        tuple: (center_x, center_y, center_z)
+    """
+    if not gltf.meshes:
+        return (0.0, 0.0, 0.0)
+    
+    min_x = min_y = min_z = float('inf')
+    max_x = max_y = max_z = float('-inf')
+    
+    try:
+        for mesh in gltf.meshes:
+            if not mesh.primitives:
+                continue
+            
+            for primitive in mesh.primitives:
+                if primitive.attributes is None:
+                    continue
+                
+                # Get POSITION accessor
+                if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
+                    pos_accessor_idx = primitive.attributes.POSITION
+                    accessor = gltf.accessors[pos_accessor_idx]
+                    buffer_view = gltf.bufferViews[accessor.bufferView]
+                    buffer = gltf.buffers[buffer_view.buffer]
+                    
+                    # Get binary data
+                    if buffer.uri and buffer.uri.startswith('data:'):
+                        data_start = buffer.uri.find(',') + 1
+                        binary_data = base64.b64decode(buffer.uri[data_start:])
+                    elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                        binary_data = gltf.binary_blob()
+                    else:
+                        continue
+                    
+                    # Parse vertex positions
+                    offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                    offset += accessor.byteOffset if accessor.byteOffset else 0
+                    vertex_count = accessor.count
+                    stride = buffer_view.byteStride if buffer_view.byteStride else 12
+                    
+                    for i in range(vertex_count):
+                        pos = offset + i * stride
+                        x, y, z = struct.unpack_from('fff', binary_data, pos)
+                        
+                        min_x = min(min_x, x)
+                        min_y = min(min_y, y)
+                        min_z = min(min_z, z)
+                        max_x = max(max_x, x)
+                        max_y = max(max_y, y)
+                        max_z = max(max_z, z)
+        
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+        center_z = (min_z + max_z) / 2.0
+        
+        logger.info(f"Model center calculated: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
+        return (center_x, center_y, center_z)
+        
+    except Exception as e:
+        logger.error(f"Failed to calculate model center: {e}")
+        return (0.0, 0.0, 0.0)
+
+
 def apply_transform_modifications(gltf, transform_mods):
     """
-    Apply transform modifications to GLTF
-    - Scale: Applied to mesh vertices (permanent geometry change)
-    - Rotation: Applied to node transforms (preserves animations)
+    Apply transform modifications to GLTF with model center as pivot
+    - Scale: Applied to mesh vertices around model center
+    - Rotation: Applied to node transforms around model center
     
     Args:
         gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
+    
+    # Calculate model center to use as pivot
+    center_x, center_y, center_z = calculate_model_center(gltf)
+    logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
     # Apply scale to mesh vertices (permanent geometry change)
     if 'scale' in transform_mods:
@@ -290,10 +361,23 @@ def apply_transform_modifications(gltf, transform_mods):
                                 pos = offset + i * stride
                                 # Read XYZ
                                 x, y, z = struct.unpack_from('fff', binary_data, pos)
-                                # Scale
+                                
+                                # Scale around model center (pivot)
+                                # 1. Translate to origin (relative to center)
+                                x -= center_x
+                                y -= center_y
+                                z -= center_z
+                                
+                                # 2. Scale
                                 x *= scale_factor
                                 y *= scale_factor
                                 z *= scale_factor
+                                
+                                # 3. Translate back
+                                x += center_x
+                                y += center_y
+                                z += center_z
+                                
                                 # Write back
                                 struct.pack_into('fff', new_data, pos, x, y, z)
                             
@@ -341,7 +425,7 @@ def apply_transform_modifications(gltf, transform_mods):
         
         # Note: Scale is now applied to geometry vertices, not node transform
         
-        # Apply rotation (convert Euler angles to quaternion)
+        # Apply rotation around model center
         if 'rotation' in transform_mods:
             try:
                 rotation = transform_mods['rotation']
@@ -349,10 +433,19 @@ def apply_transform_modifications(gltf, transform_mods):
                 ry = np.radians(float(rotation.get('y', 0)))
                 rz = np.radians(float(rotation.get('z', 0)))
                 
-                # Convert Euler angles (ZYX order) to quaternion
+                # If model center is not at origin, adjust node translation
+                # to rotate around the center instead of origin
+                if center_x != 0.0 or center_y != 0.0 or center_z != 0.0:
+                    # Translate node so model center is at origin
+                    node.translation[0] -= center_x
+                    node.translation[1] -= center_y
+                    node.translation[2] -= center_z
+                    logger.info(f"Adjusted translation for center pivot: {node.translation}")
+                
+                # Convert Euler angles to quaternion
                 quat = euler_to_quaternion(rx, ry, rz)
                 node.rotation = quat
-                logger.info(f"Applied rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) to node {node_idx}")
+                logger.info(f"Applied rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) around model center to node {node_idx}")
             except Exception as e:
                 logger.error(f"Failed to apply rotation to node {node_idx}: {e}")
     

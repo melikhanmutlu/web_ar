@@ -37,6 +37,46 @@
 
     <!-- Custom Styles -->
     <style>
+        /* Slice line pulse animation */
+        @keyframes slicePulse {
+            0%, 100% {
+                opacity: 0.8;
+                box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+            }
+            50% {
+                opacity: 1;
+                box-shadow: 0 0 20px currentColor, 0 0 40px currentColor, 0 0 60px currentColor;
+            }
+        }
+        
+        /* Grid fade animation */
+        @keyframes gridFade {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 0.4; }
+        }
+        
+        /* Label entrance animation */
+        @keyframes labelEntrance {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+        
+        /* Overlay fade in */
+        @keyframes overlayFadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        
         .action-button {
             background: white;
             border: none;
@@ -2442,6 +2482,8 @@
             let slicerEnabled = false;
             let meshBounds = null;
             let clippingPlanes = {}; // Store Three.js clipping planes
+            let modelRotation = { x: 0, y: 0, z: 0 }; // Track model rotation
+            let cameraOrbit = { theta: 0, phi: 0, radius: 0 }; // Track camera orbit
             
             // Multi-plane support
             let activePlanes = new Set(['x']); // Currently active planes
@@ -2784,7 +2826,24 @@
                         overlay.style.position = 'absolute';
                         overlay.style.pointerEvents = 'none';
                         overlay.style.zIndex = '10';
-                        overlay.style.transition = 'all 0.15s ease';
+                        overlay.style.transition = 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
+                        overlay.style.animation = 'overlayFadeIn 0.5s ease-out';
+                        
+                        // Add grid pattern for better depth perception
+                        const gridOverlay = document.createElement('div');
+                        gridOverlay.style.position = 'absolute';
+                        gridOverlay.style.top = '0';
+                        gridOverlay.style.left = '0';
+                        gridOverlay.style.width = '100%';
+                        gridOverlay.style.height = '100%';
+                        gridOverlay.style.backgroundImage = `
+                            linear-gradient(0deg, rgba(255,255,255,0.1) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+                        `;
+                        gridOverlay.style.backgroundSize = '20px 20px';
+                        gridOverlay.style.opacity = '0.3';
+                        gridOverlay.style.pointerEvents = 'none';
+                        gridOverlay.style.animation = 'gridFade 3s ease-in-out infinite';
                         
                         // Color coding for different planes
                         const colors = {
@@ -2862,17 +2921,56 @@
                             }
                         }
                         
-                        // Add label to show which plane this is
+                        // Add animated slice line
+                        const sliceLine = document.createElement('div');
+                        sliceLine.style.position = 'absolute';
+                        sliceLine.style.background = `rgb(${color})`;
+                        sliceLine.style.boxShadow = `0 0 10px rgba(${color}, 0.8), 0 0 20px rgba(${color}, 0.5)`;
+                        sliceLine.style.zIndex = '12';
+                        sliceLine.style.pointerEvents = 'none';
+                        
+                        // Pulsing animation for slice line
+                        sliceLine.style.animation = 'slicePulse 2s ease-in-out infinite';
+                        
+                        // Position slice line based on plane
+                        if (plane === 'y') {
+                            sliceLine.style.left = '0';
+                            sliceLine.style.width = '100%';
+                            sliceLine.style.height = '3px';
+                            sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
+                        } else if (plane === 'x') {
+                            sliceLine.style.top = '0';
+                            sliceLine.style.height = '100%';
+                            sliceLine.style.width = '3px';
+                            sliceLine.style[keepSide === 'above' ? 'left' : 'right'] = (keepSide === 'above' ? slicePosition : (100 - slicePosition)) + '%';
+                        } else if (plane === 'z') {
+                            sliceLine.style.left = '0';
+                            sliceLine.style.width = '100%';
+                            sliceLine.style.height = '3px';
+                            sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
+                        }
+                        
+                        // Add label with enhanced styling
                         const label = document.createElement('div');
+                        const cmValue = ((percent / 100) * (meshBounds.max[plane === 'x' ? 0 : (plane === 'y' ? 1 : 2)] - meshBounds.min[plane === 'x' ? 0 : (plane === 'y' ? 1 : 2)]) * 100).toFixed(1);
+                        label.innerHTML = `
+                            <div style="font-weight: bold; font-size: 14px;">${colors[plane].name} Axis</div>
+                            <div style="font-size: 11px; opacity: 0.9;">${percent}% • ${cmValue} cm</div>
+                            <div style="font-size: 10px; opacity: 0.7; margin-top: 2px;">Keep ${keepSide === 'above' ? '→' : '←'}</div>
+                        `;
                         label.style.position = 'absolute';
-                        label.style.padding = '4px 8px';
-                        label.style.background = `rgba(${color},0.9)`;
+                        label.style.padding = '8px 12px';
+                        label.style.background = `linear-gradient(135deg, rgba(${color}, 0.95), rgba(${color}, 0.85))`;
                         label.style.color = 'white';
-                        label.style.fontSize = '11px';
-                        label.style.fontWeight = 'bold';
-                        label.style.borderRadius = '3px';
-                        label.style.zIndex = '11';
-                        label.textContent = `${colors[plane].name}: ${percent}%`;
+                        label.style.borderRadius = '8px';
+                        label.style.fontSize = '12px';
+                        label.style.zIndex = '13';
+                        label.style.pointerEvents = 'none';
+                        label.style.boxShadow = `0 4px 12px rgba(0,0,0,0.4), 0 0 20px rgba(${color}, 0.3)`;
+                        label.style.backdropFilter = 'blur(8px)';
+                        label.style.border = `1px solid rgba(255,255,255,0.3)`;
+                        label.style.transition = 'all 0.3s ease';
+                        label.style.animation = 'labelEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
                         
                         // Position label based on plane
                         if (plane === 'y') {
@@ -2886,7 +2984,20 @@
                             label.style.left = '10px';
                         }
                         
+                        overlay.appendChild(gridOverlay);
+                        overlay.appendChild(sliceLine);
                         overlay.appendChild(label);
+                        
+                        // Add hover effect
+                        overlay.addEventListener('mouseenter', () => {
+                            overlay.style.opacity = '0.9';
+                            label.style.transform = 'scale(1.05)';
+                        });
+                        overlay.addEventListener('mouseleave', () => {
+                            overlay.style.opacity = '1';
+                            label.style.transform = 'scale(1)';
+                        });
+                        
                         modelViewer.appendChild(overlay);
                     });
                     
@@ -2966,9 +3077,25 @@
                 }
             }
             
+            // Track camera orbit changes
+            modelViewer.addEventListener('camera-change', () => {
+                const orbit = modelViewer.getCameraOrbit();
+                cameraOrbit = {
+                    theta: orbit.theta,
+                    phi: orbit.phi,
+                    radius: orbit.radius
+                };
+                // Update overlays when camera moves
+                if (slicerEnabled && meshBounds) {
+                    enableClipping();
+                }
+            });
+            
             // Wait for model to load before enabling clipping
             modelViewer.addEventListener('load', () => {
                 console.log('Model loaded, ready for clipping');
+                // Reset camera to front view for consistent slicing
+                modelViewer.cameraOrbit = '0deg 75deg 105%';
                 // If slicer was enabled before model loaded, enable it now
                 if (slicerEnabled && meshBounds) {
                     setTimeout(() => {

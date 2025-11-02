@@ -1317,6 +1317,33 @@
                 </div>
             </div>
 
+            <!-- Version History Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('versionPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">📜 Version History</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="versionPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="versionPanel" class="panel-content p-4 hidden">
+                    <!-- Version List -->
+                    <div id="versionList" class="space-y-2 max-h-96 overflow-y-auto">
+                        <div class="text-center py-4">
+                            <svg class="animate-spin h-6 w-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Loading versions...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Refresh Button -->
+                    <button id="refreshVersions" class="btn-secondary w-full px-3 py-2 mt-3 text-xs rounded">
+                        🔄 Refresh
+                    </button>
+                </div>
+            </div>
+
             <!-- Model Slicer Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
@@ -1710,7 +1737,7 @@
     <script>
         // ========== ACCORDION PANEL FUNCTIONALITY ==========
         // List of all panel IDs
-        const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel'];
+        const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
         
         function togglePanel(panelId) {
             const panel = document.getElementById(panelId);
@@ -3541,6 +3568,238 @@
                 applyMultiPlaneSlice();
             });
         });
+
+        // ========== VERSION MANAGEMENT ==========
+        
+        let versionHistory = [];
+        
+        // Load version history
+        async function loadVersionHistory() {
+            try {
+                const modelId = getCurrentModelId();
+                const response = await fetch(`/api/versions/${modelId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    versionHistory = data.versions;
+                    displayVersions(data.versions);
+                } else {
+                    showVersionError('Failed to load version history');
+                }
+            } catch (error) {
+                console.error('Error loading versions:', error);
+                showVersionError('Error loading version history');
+            }
+        }
+        
+        // Display versions in UI
+        function displayVersions(versions) {
+            const versionList = document.getElementById('versionList');
+            
+            if (!versions || versions.length === 0) {
+                versionList.innerHTML = `
+                    <div class="text-center py-8">
+                        <svg class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">No version history yet</p>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Versions will appear after modifications</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            versionList.innerHTML = versions.map((version, index) => {
+                const isLatest = index === 0;
+                const operationIcon = getOperationIcon(version.operation_type);
+                const operationColor = getOperationColor(version.operation_type);
+                
+                return `
+                    <div class="version-item bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border-2 ${isLatest ? 'border-blue-500' : 'border-transparent'} hover:border-gray-300 dark:hover:border-gray-600 transition-all">
+                        <!-- Header -->
+                        <div class="flex items-start justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">${operationIcon}</span>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-semibold text-sm text-gray-900 dark:text-white">Version ${version.version_number}</span>
+                                        ${isLatest ? '<span class="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Current</span>' : ''}
+                                    </div>
+                                    <span class="text-xs ${operationColor}">${formatOperationType(version.operation_type)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Details -->
+                        <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1 mb-2">
+                            <div class="flex justify-between">
+                                <span>📅 ${version.created_at}</span>
+                                <span>💾 ${version.file_size_formatted}</span>
+                            </div>
+                            ${version.dimensions ? `
+                                <div class="text-xs text-gray-500 dark:text-gray-500">
+                                    📏 ${version.dimensions.x}×${version.dimensions.y}×${version.dimensions.z} cm
+                                </div>
+                            ` : ''}
+                            ${version.comment ? `
+                                <div class="text-xs italic text-gray-500 dark:text-gray-500">
+                                    💬 ${version.comment}
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        <!-- Actions -->
+                        <div class="flex gap-2">
+                            ${!isLatest ? `
+                                <button onclick="restoreVersion(${version.version_number})" 
+                                        class="flex-1 px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
+                                    ↩️ Restore
+                                </button>
+                            ` : ''}
+                            <button onclick="downloadVersion(${version.version_number})" 
+                                    class="flex-1 px-2 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors">
+                                ⬇️ Download
+                            </button>
+                            ${!isLatest ? `
+                                <button onclick="deleteVersion(${version.version_number})" 
+                                        class="px-2 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors">
+                                    🗑️
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Get operation icon
+        function getOperationIcon(type) {
+            const icons = {
+                'upload': '📤',
+                'transform': '🔄',
+                'material': '🎨',
+                'transform+material': '✨',
+                'slice': '✂️',
+                'restore': '↩️'
+            };
+            return icons[type] || '📝';
+        }
+        
+        // Get operation color
+        function getOperationColor(type) {
+            const colors = {
+                'upload': 'text-blue-600 dark:text-blue-400',
+                'transform': 'text-purple-600 dark:text-purple-400',
+                'material': 'text-pink-600 dark:text-pink-400',
+                'transform+material': 'text-indigo-600 dark:text-indigo-400',
+                'slice': 'text-orange-600 dark:text-orange-400',
+                'restore': 'text-green-600 dark:text-green-400'
+            };
+            return colors[type] || 'text-gray-600 dark:text-gray-400';
+        }
+        
+        // Format operation type
+        function formatOperationType(type) {
+            const names = {
+                'upload': 'Initial Upload',
+                'transform': 'Transform Applied',
+                'material': 'Material Changed',
+                'transform+material': 'Transform & Material',
+                'slice': 'Model Sliced',
+                'restore': 'Version Restored'
+            };
+            return names[type] || type;
+        }
+        
+        // Show version error
+        function showVersionError(message) {
+            const versionList = document.getElementById('versionList');
+            versionList.innerHTML = `
+                <div class="text-center py-8">
+                    <svg class="w-12 h-12 mx-auto text-red-300 dark:text-red-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <p class="text-xs text-red-500 dark:text-red-400">${message}</p>
+                </div>
+            `;
+        }
+        
+        // Restore version
+        async function restoreVersion(versionNumber) {
+            if (!confirm(`Restore to version ${versionNumber}? This will create a new version with the current state.`)) {
+                return;
+            }
+            
+            try {
+                const modelId = getCurrentModelId();
+                const response = await fetch(`/api/versions/${modelId}/restore/${versionNumber}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Version restored successfully! Reloading...');
+                    window.location.reload();
+                } else {
+                    alert('❌ Failed to restore version: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error restoring version:', error);
+                alert('❌ Error restoring version');
+            }
+        }
+        
+        // Download version
+        function downloadVersion(versionNumber) {
+            const modelId = getCurrentModelId();
+            window.location.href = `/api/versions/${modelId}/download/${versionNumber}`;
+        }
+        
+        // Delete version
+        async function deleteVersion(versionNumber) {
+            if (!confirm(`Delete version ${versionNumber}? This cannot be undone.`)) {
+                return;
+            }
+            
+            try {
+                const modelId = getCurrentModelId();
+                const response = await fetch(`/api/versions/${modelId}/delete/${versionNumber}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('✅ Version deleted successfully!');
+                    loadVersionHistory();  // Reload list
+                } else {
+                    alert('❌ Failed to delete version: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error deleting version:', error);
+                alert('❌ Error deleting version');
+            }
+        }
+        
+        // Refresh versions button
+        document.getElementById('refreshVersions').addEventListener('click', () => {
+            loadVersionHistory();
+        });
+        
+        // Load versions when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadVersionHistory();
+        });
+        
+        // Reload versions after save/slice operations
+        const originalSaveModifications = window.saveModifications;
+        if (originalSaveModifications) {
+            window.saveModifications = async function() {
+                await originalSaveModifications();
+                setTimeout(() => loadVersionHistory(), 1000);
+            };
+        }
     </script>
 </body>
 </html>

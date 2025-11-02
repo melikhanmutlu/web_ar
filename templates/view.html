@@ -3616,6 +3616,10 @@
                 const operationIcon = getOperationIcon(version.operation_type);
                 const operationColor = getOperationColor(version.operation_type);
                 
+                // Check if this is a restore operation and get the restored version number
+                const restoredFrom = version.operation_details?.restored_from;
+                const isRestore = version.operation_type === 'restore';
+                
                 return `
                     <div class="version-item bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border-2 ${isLatest ? 'border-blue-500' : 'border-transparent'} hover:border-gray-300 dark:hover:border-gray-600 transition-all">
                         <!-- Header -->
@@ -3624,7 +3628,10 @@
                                 <span class="text-lg">${operationIcon}</span>
                                 <div>
                                     <div class="flex items-center gap-2">
-                                        <span class="font-semibold text-sm text-gray-900 dark:text-white">Version ${version.version_number}</span>
+                                        <span class="font-semibold text-sm text-gray-900 dark:text-white">
+                                            Version ${version.version_number}
+                                            ${isRestore && restoredFrom ? `<span class="text-xs text-gray-500">(= v${restoredFrom})</span>` : ''}
+                                        </span>
                                         ${isLatest ? '<span class="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Current</span>' : ''}
                                     </div>
                                     <span class="text-xs ${operationColor}">${formatOperationType(version.operation_type)}</span>
@@ -3641,6 +3648,11 @@
                             ${version.dimensions ? `
                                 <div class="text-xs text-gray-500 dark:text-gray-500">
                                     📏 ${version.dimensions.x}×${version.dimensions.y}×${version.dimensions.z} cm
+                                </div>
+                            ` : ''}
+                            ${isRestore && restoredFrom ? `
+                                <div class="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 p-2 rounded">
+                                    ℹ️ This is Version ${restoredFrom} restored as Version ${version.version_number}
                                 </div>
                             ` : ''}
                             ${version.comment ? `

@@ -1863,7 +1863,13 @@
                         });
                     }
                 });
+                
+                // Force multiple render updates for immediate visual feedback
                 modelViewer.requestUpdate();
+                requestAnimationFrame(() => {
+                    modelViewer.requestUpdate();
+                    requestAnimationFrame(() => modelViewer.requestUpdate());
+                });
             }
 
             // Roughness
@@ -1891,7 +1897,13 @@
                         });
                     }
                 });
+                
+                // Force multiple render updates for immediate visual feedback
                 modelViewer.requestUpdate();
+                requestAnimationFrame(() => {
+                    modelViewer.requestUpdate();
+                    requestAnimationFrame(() => modelViewer.requestUpdate());
+                });
             }
 
             // Texture Upload

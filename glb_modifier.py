@@ -351,22 +351,30 @@ def apply_transform_modifications(gltf, transform_mods):
     return gltf
 
 
-def euler_to_quaternion(roll, pitch, yaw):
+def euler_to_quaternion(rx, ry, rz):
     """
-    Convert Euler angles to quaternion (x, y, z, w)
-    Order: ZYX (yaw, pitch, roll)
+    Convert Euler angles (in radians) to quaternion (x, y, z, w)
+    Rotation order: XYZ (intrinsic rotations)
+    Args:
+        rx: rotation around X axis (radians)
+        ry: rotation around Y axis (radians)
+        rz: rotation around Z axis (radians)
+    Returns:
+        [x, y, z, w] quaternion
     """
-    cy = np.cos(yaw * 0.5)
-    sy = np.sin(yaw * 0.5)
-    cp = np.cos(pitch * 0.5)
-    sp = np.sin(pitch * 0.5)
-    cr = np.cos(roll * 0.5)
-    sr = np.sin(roll * 0.5)
+    # Calculate half angles
+    cx = np.cos(rx * 0.5)
+    sx = np.sin(rx * 0.5)
+    cy = np.cos(ry * 0.5)
+    sy = np.sin(ry * 0.5)
+    cz = np.cos(rz * 0.5)
+    sz = np.sin(rz * 0.5)
     
-    w = cr * cp * cy + sr * sp * sy
-    x = sr * cp * cy - cr * sp * sy
-    y = cr * sp * cy + sr * cp * sy
-    z = cr * cp * sy - sr * sp * cy
+    # XYZ rotation order
+    w = cx * cy * cz + sx * sy * sz
+    x = sx * cy * cz - cx * sy * sz
+    y = cx * sy * cz + sx * cy * sz
+    z = cx * cy * sz - sx * sy * cz
     
     return [x, y, z, w]
 

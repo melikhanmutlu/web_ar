@@ -2323,7 +2323,7 @@
             // Reset Transform
             document.getElementById('resetTransform').addEventListener('click', () => {
                 scaleSlider.value = 1;
-                scaleValue.textContent = '1.0x';
+                scaleInput.value = '1.0';
                 rotateXSlider.value = 0;
                 rotateXValue.textContent = '0°';
                 rotateYSlider.value = 0;
@@ -2333,6 +2333,7 @@
                 
                 modelViewer.scale = '1 1 1';
                 modelViewer.orientation = '0deg 0deg 0deg';
+                updateDimensionDisplay(1);
             });
 
             // ========== ANNOTATIONS FUNCTIONALITY ==========

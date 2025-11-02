@@ -357,12 +357,14 @@
         }
 
         .logo-text {
-            @apply text-4xl font-bold;
-            @apply text-gray-900 dark:text-white;
-            @apply tracking-tight;
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: #111827;
+            letter-spacing: -0.025em;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         .dark .logo-text {
+            color: #ffffff;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
@@ -1877,7 +1879,7 @@
                         <div class="flex-1">
                             <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Applied Color</p>
                             <div class="flex items-center gap-2">
-                                <div class="w-6 h-6 rounded border border-gray-300 dark:border-gray-600" style="background-color: {{ model.color }}"></div>
+                                <div class="w-6 h-6 rounded border border-gray-300 dark:border-gray-600" style="background-color: {{ model.color|default('#808080') }}"></div>
                                 <p class="text-sm text-gray-900 dark:text-white">{{ model.color }}</p>
                             </div>
                         </div>
@@ -2026,7 +2028,7 @@
 
             // Display cumulative scale from backend
             const cumulativeScaleElement = document.getElementById('cumulativeScale');
-            const cumulativeScale = {{ cumulative_scale }};
+            const cumulativeScale = {{ cumulative_scale|default(1.0) }};
             if (cumulativeScaleElement) {
                 cumulativeScaleElement.textContent = cumulativeScale.toFixed(2) + 'x';
             }

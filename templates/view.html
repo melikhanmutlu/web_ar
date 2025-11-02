@@ -670,9 +670,96 @@
             color: #fca5a5;
         }
         
-        .dark .btn-danger:hover {
-            background: #991b1b;
-            border-color: #b91c1c;
+        /* Hotspot Item Styles in Panel */
+        .hotspot-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: #f9fafb;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            transition: all 0.2s;
+        }
+        
+        .dark .hotspot-item {
+            background: #374151;
+            border-color: #4b5563;
+        }
+        
+        .hotspot-item:hover {
+            background: #f3f4f6;
+            border-color: #d1d5db;
+        }
+        
+        .dark .hotspot-item:hover {
+            background: #4b5563;
+            border-color: #6b7280;
+        }
+        
+        .hotspot-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .hotspot-item-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #111827;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .dark .hotspot-item-title {
+            color: #f9fafb;
+        }
+        
+        .hotspot-item-desc {
+            font-size: 11px;
+            color: #6b7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .dark .hotspot-item-desc {
+            color: #9ca3af;
+        }
+        
+        .hotspot-item-actions {
+            display: flex;
+            gap: 4px;
+            margin-left: 8px;
+        }
+        
+        .hotspot-item-btn {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            white-space: nowrap;
+        }
+        
+        .hotspot-item-btn-edit {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .hotspot-item-btn-edit:hover {
+            background: #2563eb;
+        }
+        
+        .hotspot-item-btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .hotspot-item-btn-delete:hover {
+            background: #dc2626;
         }
 
         /* Hotspot Popup Styles */
@@ -683,13 +770,12 @@
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             padding: 20px;
             min-width: 280px;
-            max-width: 350px;
+            max-width: 400px;
             z-index: 1000;
             pointer-events: auto;
-            transform: translate(-50%, -120%);
             animation: popupFadeIn 0.3s ease-out;
         }
-
+        
         .dark .hotspot-popup {
             background: #1f2937;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
@@ -1455,7 +1541,7 @@
                         <p class="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
                             Enable mode, then click anywhere on the model to place a hotspot
                         </p>
-                        <div id="hotspotsList" class="space-y-1 max-h-32 overflow-y-auto">
+                        <div id="hotspotsList" class="space-y-2 max-h-64 overflow-y-auto">
                             <p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>
                         </div>
                     </div>
@@ -2554,12 +2640,6 @@
                     </div>
                     ${hotspotData.description ? `<p class="hotspot-popup-description">${hotspotData.description}</p>` : ''}
                     <div class="hotspot-popup-actions">
-                        <button class="hotspot-popup-btn hotspot-popup-btn-edit" onclick="editHotspot('${hotspotData.id}')">
-                            Edit
-                        </button>
-                        <button class="hotspot-popup-btn hotspot-popup-btn-delete" onclick="deleteHotspot('${hotspotData.id}')">
-                            Delete
-                        </button>
                         <button class="hotspot-popup-btn hotspot-popup-btn-close" onclick="closeHotspotPopup()">
                             Close
                         </button>
@@ -2813,21 +2893,23 @@
                     list.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>';
                 } else {
                     list.innerHTML = hotspots.map((h, i) => `
-                        <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded">
-                            <span class="text-xs text-gray-700 dark:text-gray-300">${h.title || 'Hotspot ' + (i + 1)}</span>
-                            <button onclick="removeHotspot('${h.id}')" class="text-red-500 hover:text-red-700 text-xs">✕</button>
+                        <div class="hotspot-item">
+                            <div class="hotspot-item-info">
+                                <div class="hotspot-item-title">${h.title || 'Hotspot ' + (i + 1)}</div>
+                                ${h.description ? `<div class="hotspot-item-desc">${h.description}</div>` : ''}
+                            </div>
+                            <div class="hotspot-item-actions">
+                                <button onclick="editHotspot('${h.id}')" class="hotspot-item-btn hotspot-item-btn-edit">Edit</button>
+                                <button onclick="removeHotspot('${h.id}')" class="hotspot-item-btn hotspot-item-btn-delete">Delete</button>
+                            </div>
                         </div>
                     `).join('');
                 }
             }
 
             window.removeHotspot = function(id) {
-                const index = hotspots.findIndex(h => h.id === id);
-                if (index !== -1) {
-                    hotspots[index].element.remove();
-                    hotspots.splice(index, 1);
-                    updateHotspotsList();
-                }
+                // Redirect to deleteHotspot for consistency
+                deleteHotspot(id);
             };
 
             // ========== EXPORT MODIFIED MODEL FUNCTIONALITY ==========

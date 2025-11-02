@@ -2618,12 +2618,18 @@
             function applyThreeJSClipping() {
                 try {
                     // Wait for model to be loaded
-                    if (!modelViewer || !modelViewer.model || !meshBounds) {
+                    if (!modelViewer || !meshBounds) {
                         console.log('Model not ready for clipping');
                         return;
                     }
                     
-                    const scene = modelViewer.model;
+                    // Get Three.js scene - model-viewer uses internal Three.js
+                    // Access the actual Three.js scene through the shadowRoot
+                    const scene = modelViewer[$scene] || modelViewer.model;
+                    if (!scene) {
+                        console.log('Scene not accessible yet');
+                        return;
+                    }
                     
                     // Get Three.js from model-viewer's context
                     const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;
@@ -2631,6 +2637,8 @@
                         console.error('THREE.js not accessible');
                         return;
                     }
+                    
+                    console.log('Scene type:', scene.constructor.name, 'Has traverse:', typeof scene.traverse);
                     
                     // Create clipping planes array
                     const planes = [];
@@ -2751,14 +2759,14 @@
                 }
             }
             
-            // Enable live clipping preview using CSS overlays + Three.js clipping
+            // Enable live clipping preview using CSS overlays
             // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
                     if (!meshBounds || activePlanes.size === 0) return;
                     
-                    // Apply Three.js clipping to hide model parts
-                    applyThreeJSClipping();
+                    // Note: Three.js clipping disabled due to model-viewer access limitations
+                    // Using CSS overlays for visual preview instead
                     
                     // Remove all existing overlays first
                     document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
@@ -2893,9 +2901,6 @@
             // Disable clipping preview
             function disableClipping() {
                 try {
-                    // Remove Three.js clipping
-                    removeThreeJSClipping();
-                    
                     // Remove all visual overlays
                     document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     

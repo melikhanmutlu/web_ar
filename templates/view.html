@@ -1074,7 +1074,6 @@
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
                 shadow-intensity="1"
                 camera-controls
-                auto-rotate
                 ar
                 ar-modes="scene-viewer webxr quick-look"
                 ar-placement="floor"
@@ -2416,7 +2415,11 @@
             
             const autoRotateToggle = document.getElementById('autoRotateToggle');
             const autoRotateIcon = document.getElementById('autoRotateIcon');
-            let isAutoRotating = true;  // Default is on
+            let isAutoRotating = false;  // Default is OFF
+            
+            // Set initial state
+            autoRotateToggle.classList.add('bg-red-500');
+            autoRotateToggle.title = 'Auto-Rotate: OFF (Click to turn ON)';
             
             autoRotateToggle.addEventListener('click', () => {
                 isAutoRotating = !isAutoRotating;

@@ -20,7 +20,8 @@ from slugify import slugify
 import trimesh
 from converters import OBJConverter, FBXConverter, STLConverter
 import numpy as np
-from glb_modifier import modify_glb
+from glb_modifier import modify_glb, normalize_model_to_center
+from pygltflib import GLTF2
 import time
 from version_manager import create_version, get_version_history, restore_version, delete_version
 
@@ -1099,6 +1100,17 @@ def upload_model():
              logger.warning(f"[upload_model - {unique_id}] WARNING: Final file size of {output_path} is 0 bytes!")
              # Decide if 0-byte file is an error
              # return jsonify({'error': 'Internal server error: Processed file is empty'}), 500
+
+        # Normalize model to center origin for consistent pivot behavior
+        try:
+            logger.info(f"[upload_model - {unique_id}] Normalizing model to center origin")
+            gltf = GLTF2().load(output_path)
+            gltf = normalize_model_to_center(gltf)
+            gltf.save(output_path)
+            logger.info(f"[upload_model - {unique_id}] Model normalized and saved")
+        except Exception as e:
+            logger.error(f"[upload_model - {unique_id}] Error normalizing model: {e}", exc_info=True)
+            # Continue even if normalization fails
 
         # Clean up temporary file and directory
         try:

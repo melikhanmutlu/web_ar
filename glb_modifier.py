@@ -230,6 +230,86 @@ def apply_texture_modifications(gltf, texture_data_base64):
         return gltf
 
 
+def normalize_model_to_center(gltf):
+    """
+    Normalize model by moving its center to origin (0, 0, 0)
+    This ensures consistent pivot behavior in viewer
+    
+    Returns:
+        GLTF2: Modified GLTF object
+    """
+    logger.info("Normalizing model to center origin")
+    
+    # Calculate current center
+    center_x, center_y, center_z = calculate_model_center(gltf)
+    
+    # If already centered, no need to modify
+    if abs(center_x) < 0.0001 and abs(center_y) < 0.0001 and abs(center_z) < 0.0001:
+        logger.info("Model already centered at origin")
+        return gltf
+    
+    logger.info(f"Moving model center from ({center_x:.3f}, {center_y:.3f}, {center_z:.3f}) to origin")
+    
+    try:
+        # Move all vertices to center the model at origin
+        for mesh_idx, mesh in enumerate(gltf.meshes):
+            if not mesh.primitives:
+                continue
+            
+            for prim_idx, primitive in enumerate(mesh.primitives):
+                if primitive.attributes is None:
+                    continue
+                
+                # Get POSITION accessor
+                if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
+                    pos_accessor_idx = primitive.attributes.POSITION
+                    accessor = gltf.accessors[pos_accessor_idx]
+                    buffer_view = gltf.bufferViews[accessor.bufferView]
+                    buffer = gltf.buffers[buffer_view.buffer]
+                    
+                    # Get binary data
+                    if buffer.uri and buffer.uri.startswith('data:'):
+                        data_start = buffer.uri.find(',') + 1
+                        binary_data = base64.b64decode(buffer.uri[data_start:])
+                    elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                        binary_data = gltf.binary_blob()
+                    else:
+                        continue
+                    
+                    # Parse and translate vertices
+                    offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                    offset += accessor.byteOffset if accessor.byteOffset else 0
+                    vertex_count = accessor.count
+                    stride = buffer_view.byteStride if buffer_view.byteStride else 12
+                    
+                    new_data = bytearray(binary_data)
+                    for i in range(vertex_count):
+                        pos = offset + i * stride
+                        x, y, z = struct.unpack_from('fff', binary_data, pos)
+                        
+                        # Translate to origin
+                        x -= center_x
+                        y -= center_y
+                        z -= center_z
+                        
+                        struct.pack_into('fff', new_data, pos, x, y, z)
+                    
+                    # Update buffer
+                    if buffer.uri and buffer.uri.startswith('data:'):
+                        buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
+                    else:
+                        gltf.set_binary_blob(bytes(new_data))
+                    
+                    logger.info(f"Translated {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
+        
+        logger.info("✅ Model normalized to center origin")
+        return gltf
+        
+    except Exception as e:
+        logger.error(f"Failed to normalize model: {e}", exc_info=True)
+        return gltf
+
+
 def calculate_model_center(gltf):
     """
     Calculate the center point of the model's bounding box

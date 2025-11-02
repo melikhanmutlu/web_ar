@@ -2890,13 +2890,17 @@
             // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
-                    if (!meshBounds || activePlanes.size === 0) return;
+                    // Remove all existing overlays first
+                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
+                    
+                    // If no active planes or no bounds, just remove overlays and return
+                    if (!meshBounds || activePlanes.size === 0) {
+                        console.log('No active planes or bounds, overlays removed');
+                        return;
+                    }
                     
                     // Note: Three.js clipping disabled due to model-viewer access limitations
                     // Using CSS overlays for visual preview instead
-                    
-                    // Remove all existing overlays first
-                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     
                     // Create overlay for each active plane
                     activePlanes.forEach(plane => {

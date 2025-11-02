@@ -82,6 +82,9 @@ class UserModel(db.Model):
     original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload
     cumulative_scale = db.Column(db.Float, default=1.0)  # Total scale factor applied
     
+    # Version tracking
+    versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
+    
     def __repr__(self):
         return f'<UserModel {self.filename}>'
 
@@ -106,3 +109,51 @@ class UserModel(db.Model):
         if not self.upload_date:
             return 'Unknown'
         return self.upload_date.strftime('%Y-%m-%d %H:%M')
+
+
+class ModelVersion(db.Model):
+    """
+    Tracks version history of model modifications
+    Each modification (transform, slice, material) creates a new version
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    version_number = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
+    filename = db.Column(db.String(255), nullable=False)  # Path to version file
+    file_size = db.Column(db.Integer)
+    
+    # What was done in this version
+    operation_type = db.Column(db.String(50), nullable=False)  # 'upload', 'transform', 'slice', 'material'
+    operation_details = db.Column(db.JSON, nullable=True)  # Details of the operation
+    
+    # Metadata
+    dimensions = db.Column(db.JSON, nullable=True)  # Model dimensions at this version
+    vertices = db.Column(db.Integer, nullable=True)
+    faces = db.Column(db.Integer, nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Optional: User comment
+    comment = db.Column(db.String(500), nullable=True)
+    
+    def __repr__(self):
+        return f'<ModelVersion {self.model_id} v{self.version_number}>'
+    
+    @property
+    def file_size_formatted(self):
+        if not self.file_size:
+            return 'Unknown'
+        
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+    
+    @property
+    def created_at_formatted(self):
+        if not self.created_at:
+            return 'Unknown'
+        return self.created_at.strftime('%Y-%m-%d %H:%M:%S')

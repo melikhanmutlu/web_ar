@@ -7,7 +7,7 @@ from werkzeug.utils import secure_filename
 import logging
 import shutil
 import subprocess
-from models import db, User, UserModel, Folder
+from models import db, User, UserModel, Folder, ModelVersion
 from auth import auth
 import re
 import traceback
@@ -22,6 +22,7 @@ from converters import OBJConverter, FBXConverter, STLConverter
 import numpy as np
 from glb_modifier import modify_glb
 import time
+from version_manager import create_version, get_version_history, restore_version, delete_version
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -1225,6 +1226,22 @@ def upload_model():
         db.session.commit()
         logger.info(f"[upload_model - {unique_id}] Model info saved to database. User: {'logged in' if current_user.is_authenticated else 'anonymous'}")
         
+        # Create initial version entry
+        try:
+            create_version(
+                model_id=unique_id,
+                operation_type='upload',
+                operation_details={
+                    'original_filename': file.filename,
+                    'file_type': file_extension,
+                    'max_dimension': max_dimension
+                },
+                comment='Initial upload'
+            )
+            logger.info(f"[upload_model - {unique_id}] Created initial version entry")
+        except Exception as version_error:
+            logger.error(f"[upload_model - {unique_id}] Failed to create initial version: {version_error}")
+        
         # Generate QR code (using the same unique_id)
         # qr_code_filename = generate_qr_code(unique_id)
         # logger.info(f"QR code generated: {qr_code_filename}")
@@ -2129,6 +2146,22 @@ def save_modifications():
             except Exception as dim_error:
                 logger.error(f"[save_modifications] Failed to update dimensions: {dim_error}")
             
+            # Create version entry
+            try:
+                operation_type = 'transform' if 'transform' in modifications else 'material'
+                if 'material' in modifications and 'transform' in modifications:
+                    operation_type = 'transform+material'
+                
+                create_version(
+                    model_id=model_id,
+                    operation_type=operation_type,
+                    operation_details=modifications,
+                    comment='Model modifications saved'
+                )
+                logger.info(f"[save_modifications] Created version entry for {model_id}")
+            except Exception as version_error:
+                logger.error(f"[save_modifications] Failed to create version: {version_error}")
+            
             return jsonify({
                 'success': True,
                 'message': 'Model saved successfully',
@@ -2263,6 +2296,22 @@ def slice_model():
             except Exception as dim_error:
                 logger.error(f"[slice_model] Failed to update dimensions: {dim_error}")
             
+            # Create version entry
+            try:
+                create_version(
+                    model_id=model_id,
+                    operation_type='slice',
+                    operation_details={
+                        'plane_origin': plane_origin,
+                        'plane_normal': plane_normal,
+                        'keep_side': keep_side
+                    },
+                    comment=f'Sliced model (keep {keep_side} side)'
+                )
+                logger.info(f"[slice_model] Created version entry for {model_id}")
+            except Exception as version_error:
+                logger.error(f"[slice_model] Failed to create version: {version_error}")
+            
             return jsonify({
                 'success': True,
                 'message': 'Model sliced successfully',
@@ -2274,6 +2323,83 @@ def slice_model():
             
     except Exception as e:
         logger.error(f"[slice_model] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========== MODEL VERSION MANAGEMENT ==========
+
+@app.route('/api/versions/<model_id>', methods=['GET'])
+def get_versions(model_id):
+    """Get version history for a model"""
+    try:
+        versions = get_version_history(model_id)
+        return jsonify({
+            'success': True,
+            'versions': [{
+                'id': v.id,
+                'version_number': v.version_number,
+                'operation_type': v.operation_type,
+                'operation_details': v.operation_details,
+                'dimensions': v.dimensions,
+                'vertices': v.vertices,
+                'faces': v.faces,
+                'file_size': v.file_size,
+                'file_size_formatted': v.file_size_formatted,
+                'created_at': v.created_at_formatted,
+                'comment': v.comment
+            } for v in versions]
+        })
+    except Exception as e:
+        logger.error(f"Failed to get versions for {model_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/versions/<model_id>/restore/<int:version_number>', methods=['POST'])
+def restore_model_version(model_id, version_number):
+    """Restore model to a specific version"""
+    try:
+        success = restore_version(model_id, version_number)
+        if success:
+            return jsonify({'success': True, 'message': f'Restored to version {version_number}'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to restore version'}), 500
+    except Exception as e:
+        logger.error(f"Failed to restore version {version_number} for {model_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/versions/<model_id>/delete/<int:version_number>', methods=['DELETE'])
+def delete_model_version(model_id, version_number):
+    """Delete a specific version"""
+    try:
+        success = delete_version(model_id, version_number)
+        if success:
+            return jsonify({'success': True, 'message': f'Deleted version {version_number}'})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to delete version'}), 500
+    except Exception as e:
+        logger.error(f"Failed to delete version {version_number} for {model_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/versions/<model_id>/download/<int:version_number>', methods=['GET'])
+def download_version(model_id, version_number):
+    """Download a specific version"""
+    try:
+        version = ModelVersion.query.filter_by(model_id=model_id, version_number=version_number).first()
+        if not version:
+            return jsonify({'success': False, 'error': 'Version not found'}), 404
+        
+        if not os.path.exists(version.filename):
+            return jsonify({'success': False, 'error': 'Version file not found'}), 404
+        
+        directory = os.path.dirname(version.filename)
+        filename = os.path.basename(version.filename)
+        
+        return send_from_directory(directory, filename, as_attachment=True, 
+                                   download_name=f'model_v{version_number}.glb')
+    except Exception as e:
+        logger.error(f"Failed to download version {version_number} for {model_id}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

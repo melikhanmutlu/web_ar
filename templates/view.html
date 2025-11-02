@@ -2763,9 +2763,28 @@
 
             // Collect all modifications
             function collectModifications() {
+                // Get actual color from model-viewer materials
+                let actualColor = materialColor.value;
+                try {
+                    if (modelViewer.model && modelViewer.model.materials && modelViewer.model.materials.length > 0) {
+                        const material = modelViewer.model.materials[0];
+                        const baseColor = material.pbrMetallicRoughness.baseColorFactor;
+                        if (baseColor && baseColor.length >= 3) {
+                            // Convert RGB (0-1) to hex
+                            const r = Math.round(baseColor[0] * 255).toString(16).padStart(2, '0');
+                            const g = Math.round(baseColor[1] * 255).toString(16).padStart(2, '0');
+                            const b = Math.round(baseColor[2] * 255).toString(16).padStart(2, '0');
+                            actualColor = `#${r}${g}${b}`;
+                            console.log('Using actual color from model:', actualColor);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not get actual color from model, using input value:', e);
+                }
+                
                 const mods = {
                     material: {
-                        color: materialColor.value,
+                        color: actualColor,
                         metalness: parseFloat(metalnessSlider.value),
                         roughness: parseFloat(roughnessSlider.value),
                         texture: currentTextureData  // Include texture data

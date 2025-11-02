@@ -64,18 +64,14 @@ def apply_material_modifications(gltf, material_mods):
             except Exception as e:
                 logger.warning(f"Failed to apply foliage defaults on {name}: {e}")
         
-        # Apply base color (only if not default white)
+        # Apply base color
         if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
                 color_hex = material_mods['color']
-                # Skip if color is default white (#ffffff) - preserve original
-                if color_hex.lower() != '#ffffff':
-                    color_rgb = hex_to_rgb(color_hex)
-                    # Set baseColorFactor (RGBA)
-                    pbr.baseColorFactor = list(color_rgb) + [1.0]
-                    logger.info(f"Applied color {color_hex} to material {i}")
-                else:
-                    logger.info(f"Skipping default white color for material {i} - preserving original")
+                color_rgb = hex_to_rgb(color_hex)
+                # Set baseColorFactor (RGBA)
+                pbr.baseColorFactor = list(color_rgb) + [1.0]
+                logger.info(f"Applied color {color_hex} to material {i}")
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
         

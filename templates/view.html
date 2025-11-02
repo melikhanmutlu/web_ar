@@ -12,6 +12,9 @@
     <!-- Google Model Viewer -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
     
+    <!-- Three.js for slicer preview -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    
     <!-- QR Code library -->
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
@@ -2423,12 +2426,108 @@
             let slicerAxis = 'x';
             let slicerKeepSide = 'positive';
             let meshBounds = null;
+            let slicerPlane = null;
+            let slicerPlaneHelper = null;
             
             const toggleSlicerBtn = document.getElementById('toggleSlicer');
             const slicerControls = document.getElementById('slicerControls');
             const slicePositionSlider = document.getElementById('slicePositionSlider');
             const slicePositionValue = document.getElementById('slicePositionValue');
             const applySliceBtn = document.getElementById('applySlice');
+            
+            // Create slicer plane visualization
+            function createSlicerPlane() {
+                if (!window.THREE || !meshBounds) return;
+                
+                // Get model-viewer's Three.js scene
+                const scene = modelViewer.model;
+                if (!scene) return;
+                
+                // Remove old plane if exists
+                if (slicerPlaneHelper) {
+                    scene.parent.remove(slicerPlaneHelper);
+                }
+                
+                // Calculate plane size based on model bounds
+                const size = Math.max(
+                    meshBounds.max[0] - meshBounds.min[0],
+                    meshBounds.max[1] - meshBounds.min[1],
+                    meshBounds.max[2] - meshBounds.min[2]
+                ) * 2;
+                
+                // Create plane geometry
+                const geometry = new THREE.PlaneGeometry(size, size);
+                const material = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.3,
+                    depthWrite: false
+                });
+                
+                slicerPlaneHelper = new THREE.Mesh(geometry, material);
+                
+                // Add to scene
+                scene.parent.add(slicerPlaneHelper);
+                
+                updateSlicerPlane();
+            }
+            
+            // Update slicer plane position and orientation
+            function updateSlicerPlane() {
+                if (!slicerPlaneHelper || !meshBounds) return;
+                
+                const position = parseFloat(slicePositionSlider.value);
+                const center = meshBounds.center;
+                const min = meshBounds.min;
+                const max = meshBounds.max;
+                
+                // Reset rotation
+                slicerPlaneHelper.rotation.set(0, 0, 0);
+                
+                if (slicerAxis === 'x') {
+                    const range = max[0] - min[0];
+                    slicerPlaneHelper.position.set(
+                        center[0] + position * range / 2,
+                        center[1],
+                        center[2]
+                    );
+                    slicerPlaneHelper.rotation.y = Math.PI / 2;
+                } else if (slicerAxis === 'y') {
+                    const range = max[1] - min[1];
+                    slicerPlaneHelper.position.set(
+                        center[0],
+                        center[1] + position * range / 2,
+                        center[2]
+                    );
+                    slicerPlaneHelper.rotation.x = Math.PI / 2;
+                } else {
+                    const range = max[2] - min[2];
+                    slicerPlaneHelper.position.set(
+                        center[0],
+                        center[1],
+                        center[2] + position * range / 2
+                    );
+                }
+                
+                // Change color based on keep side
+                if (slicerKeepSide === 'positive') {
+                    slicerPlaneHelper.material.color.setHex(0x00ff00);
+                } else {
+                    slicerPlaneHelper.material.color.setHex(0xff0000);
+                }
+            }
+            
+            // Remove slicer plane
+            function removeSlicerPlane() {
+                if (slicerPlaneHelper) {
+                    const scene = modelViewer.model;
+                    if (scene) {
+                        scene.parent.remove(slicerPlaneHelper);
+                    }
+                    slicerPlaneHelper = null;
+                }
+            }
             
             // Load mesh bounds
             async function loadMeshBounds() {
@@ -2447,7 +2546,7 @@
             }
             
             // Toggle slicer
-            toggleSlicerBtn.addEventListener('click', () => {
+            toggleSlicerBtn.addEventListener('click', async () => {
                 slicerEnabled = !slicerEnabled;
                 
                 if (slicerEnabled) {
@@ -2455,12 +2554,15 @@
                     toggleSlicerBtn.classList.remove('btn-primary');
                     toggleSlicerBtn.classList.add('btn-danger');
                     slicerControls.classList.remove('hidden');
-                    loadMeshBounds();
+                    await loadMeshBounds();
+                    // Wait for model to load, then create plane
+                    setTimeout(() => createSlicerPlane(), 500);
                 } else {
                     toggleSlicerBtn.textContent = 'Enable Slicer';
                     toggleSlicerBtn.classList.remove('btn-danger');
                     toggleSlicerBtn.classList.add('btn-primary');
                     slicerControls.classList.add('hidden');
+                    removeSlicerPlane();
                 }
             });
             
@@ -2474,6 +2576,7 @@
                     btn.classList.add('border-red-500', 'bg-red-50', 'dark:bg-red-900', 'font-semibold');
                     btn.classList.remove('border-gray-300', 'dark:border-gray-600');
                     slicerAxis = btn.dataset.axis;
+                    updateSlicerPlane();
                 });
             });
             
@@ -2487,12 +2590,14 @@
                     btn.classList.add('border-green-500', 'bg-green-50', 'dark:bg-green-900', 'font-semibold');
                     btn.classList.remove('border-gray-300', 'dark:border-gray-600');
                     slicerKeepSide = btn.dataset.side;
+                    updateSlicerPlane();
                 });
             });
             
             // Position slider
             slicePositionSlider.addEventListener('input', (e) => {
                 slicePositionValue.textContent = parseFloat(e.target.value).toFixed(2);
+                updateSlicerPlane();
             });
             
             // Apply slice

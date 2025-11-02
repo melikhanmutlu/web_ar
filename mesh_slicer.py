@@ -50,11 +50,41 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
         
         logger.info(f"Slicing with plane: origin={plane_origin}, normal={plane_normal}, keep={keep_side}")
         
-        # Slice the mesh
-        sliced_mesh = mesh.slice_plane(
-            plane_origin=plane_origin,
-            plane_normal=plane_normal if keep_side == 'positive' else -plane_normal,
-            cap=True  # Cap the holes created by slicing
+        # Calculate signed distances from vertices to plane
+        vertices = mesh.vertices
+        distances = np.dot(vertices - plane_origin, plane_normal)
+        
+        # Determine which vertices to keep based on side
+        if keep_side == 'positive':
+            keep_mask = distances >= 0
+        else:
+            keep_mask = distances <= 0
+        
+        # Filter faces: keep faces where all vertices are on the keep side
+        face_mask = np.all(keep_mask[mesh.faces], axis=1)
+        
+        if not np.any(face_mask):
+            logger.error("Slicing would result in empty mesh (no faces kept)")
+            return False
+        
+        # Create new mesh with filtered faces
+        new_faces = mesh.faces[face_mask]
+        
+        # Get unique vertices used by kept faces
+        used_vertices = np.unique(new_faces.flatten())
+        
+        # Create vertex mapping (old index -> new index)
+        vertex_map = np.full(len(vertices), -1, dtype=int)
+        vertex_map[used_vertices] = np.arange(len(used_vertices))
+        
+        # Remap faces to new vertex indices
+        remapped_faces = vertex_map[new_faces]
+        
+        # Create sliced mesh
+        sliced_mesh = trimesh.Trimesh(
+            vertices=vertices[used_vertices],
+            faces=remapped_faces,
+            process=False
         )
         
         if sliced_mesh is None or len(sliced_mesh.vertices) == 0:

@@ -2142,6 +2142,122 @@ def save_modifications():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/get_mesh_bounds/<model_id>')
+def get_mesh_bounds(model_id):
+    """Get mesh bounding box for slicer"""
+    try:
+        from mesh_slicer import get_mesh_bounds as get_bounds
+        
+        model_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        
+        if not os.path.exists(model_path):
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        bounds = get_bounds(model_path)
+        
+        if bounds:
+            return jsonify({'success': True, 'bounds': bounds})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to get bounds'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error getting mesh bounds: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/slice_model', methods=['POST'])
+def slice_model():
+    """Slice a 3D model with a plane"""
+    try:
+        from mesh_slicer import slice_mesh
+        
+        data = request.json
+        model_id = data.get('model_id')
+        plane_origin = data.get('plane_origin')  # [x, y, z]
+        plane_normal = data.get('plane_normal')  # [x, y, z]
+        keep_side = data.get('keep_side', 'positive')  # 'positive' or 'negative'
+        
+        if not all([model_id, plane_origin, plane_normal]):
+            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
+        
+        input_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        
+        if not os.path.exists(input_path):
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        # Create backup
+        import time
+        backup_path = os.path.join(
+            app.config['CONVERTED_FOLDER'], 
+            model_id, 
+            f'model_backup_{int(time.time())}.glb'
+        )
+        import shutil
+        shutil.copy2(input_path, backup_path)
+        logger.info(f"[slice_model] Created backup: {backup_path}")
+        
+        # Slice the mesh
+        temp_output = os.path.join(
+            app.config['CONVERTED_FOLDER'], 
+            model_id, 
+            f'temp_sliced_{int(time.time())}.glb'
+        )
+        
+        success = slice_mesh(
+            input_path=input_path,
+            output_path=temp_output,
+            plane_origin=plane_origin,
+            plane_normal=plane_normal,
+            keep_side=keep_side
+        )
+        
+        if success and os.path.exists(temp_output):
+            # Replace original with sliced version
+            shutil.move(temp_output, input_path)
+            logger.info(f"[slice_model] Successfully replaced original with sliced mesh")
+            
+            # Update dimensions in database
+            try:
+                import trimesh
+                mesh = trimesh.load(input_path, force='mesh')
+                
+                if isinstance(mesh, trimesh.Scene):
+                    meshes = list(mesh.geometry.values())
+                    if meshes:
+                        mesh = trimesh.util.concatenate(meshes)
+                
+                bounds = mesh.bounds
+                dimensions = bounds[1] - bounds[0]
+                new_dims = {
+                    'x': round(float(dimensions[0] * 100), 2),
+                    'y': round(float(dimensions[1] * 100), 2),
+                    'z': round(float(dimensions[2] * 100), 2),
+                    'max': round(float(max(dimensions) * 100), 2)
+                }
+                
+                model = UserModel.query.filter_by(filename=f'converted/{model_id}/model.glb').first()
+                if model:
+                    model.dimensions = new_dims
+                    db.session.commit()
+                    logger.info(f"[slice_model] Updated dimensions: {new_dims}")
+                    
+            except Exception as dim_error:
+                logger.error(f"[slice_model] Failed to update dimensions: {dim_error}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Model sliced successfully',
+                'backup': os.path.basename(backup_path)
+            })
+        else:
+            logger.error("[slice_model] Slicing failed")
+            return jsonify({'success': False, 'error': 'Failed to slice model'}), 500
+            
+    except Exception as e:
+        logger.error(f"[slice_model] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     if init_app_dependencies():
         app.logger.info("Dependencies initialized successfully")

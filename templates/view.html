@@ -2865,7 +2865,6 @@
                                 overlay.style.width = '100%';
                                 overlay.style.height = (100 - slicePosition) + '%';
                                 overlay.style.background = `linear-gradient(to top, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderTop = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
                             } else {
                                 // Keep bottom, hide top
@@ -2874,7 +2873,6 @@
                                 overlay.style.width = '100%';
                                 overlay.style.height = slicePosition + '%';
                                 overlay.style.background = `linear-gradient(to bottom, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderBottom = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
                             }
                         } else if (plane === 'x') {
@@ -2886,7 +2884,6 @@
                                 overlay.style.width = slicePosition + '%';
                                 overlay.style.height = '100%';
                                 overlay.style.background = `linear-gradient(to right, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderRight = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset -3px 0 10px rgba(${color},0.3)`;
                             } else {
                                 // Keep left, hide right
@@ -2895,7 +2892,6 @@
                                 overlay.style.width = (100 - slicePosition) + '%';
                                 overlay.style.height = '100%';
                                 overlay.style.background = `linear-gradient(to left, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderLeft = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset 3px 0 10px rgba(${color},0.3)`;
                             }
                         } else if (plane === 'z') {
@@ -2907,7 +2903,6 @@
                                 overlay.style.width = '100%';
                                 overlay.style.height = (100 - slicePosition) + '%';
                                 overlay.style.background = `linear-gradient(135deg, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderTop = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
                             } else {
                                 // Keep back, hide front
@@ -2916,7 +2911,6 @@
                                 overlay.style.width = '100%';
                                 overlay.style.height = slicePosition + '%';
                                 overlay.style.background = `linear-gradient(-135deg, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.borderBottom = `3px solid rgb(${color})`;
                                 overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
                             }
                         }

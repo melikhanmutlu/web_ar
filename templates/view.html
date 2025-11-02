@@ -1377,6 +1377,18 @@
                             </button>
                         </div>
 
+                        <!-- Show Original Toggle Button -->
+                        <button id="showOriginalToggle" class="w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                            <span id="showOriginalText">Show Original</span>
+                        </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2 text-center italic">
+                            Toggle preview on/off
+                        </p>
+
                         <!-- Apply Slice Button -->
                         <button id="applySlice" class="btn-primary w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2484,6 +2496,8 @@
             let clippingPlanes = {}; // Store Three.js clipping planes
             let modelRotation = { x: 0, y: 0, z: 0 }; // Track model rotation
             let cameraOrbit = { theta: 0, phi: 0, radius: 0 }; // Track camera orbit
+            let originalModelVisible = true; // Track if original model is visible
+            let slicingPaused = false; // Track if slicing preview is paused
             
             // Multi-plane support
             let activePlanes = new Set(['x']); // Currently active planes
@@ -2491,6 +2505,13 @@
                 x: { position: 50, keepSide: 'above' },
                 y: { position: 50, keepSide: 'above' },
                 z: { position: 50, keepSide: 'above' }
+            };
+            
+            // Axis vectors for bounds calculation
+            const AXIS_VECTORS = {
+                x: { x: 1, y: 0, z: 0 },
+                y: { x: 0, y: 1, z: 0 },
+                z: { x: 0, y: 0, z: 1 }
             };
             
             const toggleSlicerBtn = document.getElementById('toggleSlicer');
@@ -2801,6 +2822,58 @@
                 }
             }
             
+            // Calculate bounds with epsilon offset for better visibility at extremes
+            function calculateSlicePosition(percent, axis) {
+                if (!meshBounds) return 0;
+                
+                const axisIndex = axis === 'x' ? 0 : (axis === 'y' ? 1 : 2);
+                const min = meshBounds.min[axisIndex];
+                const max = meshBounds.max[axisIndex];
+                const range = max - min;
+                
+                // Add epsilon offset (0.1% of range) at extremes
+                const epsilon = range * 0.001;
+                let offset = 0;
+                
+                if (percent === 0) {
+                    offset = epsilon; // Push slightly past minimum
+                } else if (percent === 100) {
+                    offset = -epsilon; // Pull slightly before maximum
+                }
+                
+                return min + (percent / 100) * range + offset;
+            }
+            
+            // Recalculate bounds when axis changes
+            function recalculateBoundsForAxis(axis) {
+                if (!meshBounds) return;
+                
+                console.log(`Recalculating bounds for axis: ${axis}`);
+                // Bounds are already calculated in loadMeshBounds
+                // This function is for future enhancements if needed
+            }
+            
+            // Show/Hide original model (toggle slicing preview)
+            function toggleOriginalModel() {
+                slicingPaused = !slicingPaused;
+                
+                if (slicingPaused) {
+                    // Hide overlays, show original
+                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => {
+                        el.style.display = 'none';
+                    });
+                    console.log('Slicing preview paused - showing original model');
+                } else {
+                    // Show overlays
+                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => {
+                        el.style.display = '';
+                    });
+                    console.log('Slicing preview resumed');
+                }
+                
+                return slicingPaused;
+            }
+            
             // Enable live clipping preview using CSS overlays
             // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
@@ -2915,6 +2988,21 @@
                             }
                         }
                         
+                        // Add plane helper (yellow striped pattern like Three.js PlaneHelper)
+                        const planeHelper = document.createElement('div');
+                        planeHelper.style.position = 'absolute';
+                        planeHelper.style.background = `repeating-linear-gradient(
+                            45deg,
+                            rgba(255, 255, 0, 0.3),
+                            rgba(255, 255, 0, 0.3) 10px,
+                            transparent 10px,
+                            transparent 20px
+                        )`;
+                        planeHelper.style.border = '2px dashed rgba(255, 255, 0, 0.6)';
+                        planeHelper.style.zIndex = '11';
+                        planeHelper.style.pointerEvents = 'none';
+                        planeHelper.style.opacity = '0.5';
+                        
                         // Add animated slice line
                         const sliceLine = document.createElement('div');
                         sliceLine.style.position = 'absolute';
@@ -2926,18 +3014,36 @@
                         // Pulsing animation for slice line
                         sliceLine.style.animation = 'slicePulse 2s ease-in-out infinite';
                         
-                        // Position slice line based on plane
+                        // Position plane helper and slice line based on plane
                         if (plane === 'y') {
+                            // Horizontal plane (Y axis)
+                            planeHelper.style.left = '0';
+                            planeHelper.style.width = '100%';
+                            planeHelper.style.height = '30px';
+                            planeHelper.style[keepSide === 'above' ? 'bottom' : 'top'] = `calc(${keepSide === 'above' ? (100 - slicePosition) : slicePosition}% - 15px)`;
+                            
                             sliceLine.style.left = '0';
                             sliceLine.style.width = '100%';
                             sliceLine.style.height = '3px';
                             sliceLine.style[keepSide === 'above' ? 'bottom' : 'top'] = (keepSide === 'above' ? (100 - slicePosition) : slicePosition) + '%';
                         } else if (plane === 'x') {
+                            // Vertical plane (X axis)
+                            planeHelper.style.top = '0';
+                            planeHelper.style.height = '100%';
+                            planeHelper.style.width = '30px';
+                            planeHelper.style[keepSide === 'above' ? 'left' : 'right'] = `calc(${keepSide === 'above' ? slicePosition : (100 - slicePosition)}% - 15px)`;
+                            
                             sliceLine.style.top = '0';
                             sliceLine.style.height = '100%';
                             sliceLine.style.width = '3px';
                             sliceLine.style[keepSide === 'above' ? 'left' : 'right'] = (keepSide === 'above' ? slicePosition : (100 - slicePosition)) + '%';
                         } else if (plane === 'z') {
+                            // Depth plane (Z axis)
+                            planeHelper.style.left = '0';
+                            planeHelper.style.width = '100%';
+                            planeHelper.style.height = '30px';
+                            planeHelper.style[keepSide === 'above' ? 'bottom' : 'top'] = `calc(${keepSide === 'above' ? (100 - slicePosition) : slicePosition}% - 15px)`;
+                            
                             sliceLine.style.left = '0';
                             sliceLine.style.width = '100%';
                             sliceLine.style.height = '3px';
@@ -2979,6 +3085,7 @@
                         }
                         
                         overlay.appendChild(gridOverlay);
+                        overlay.appendChild(planeHelper);
                         overlay.appendChild(sliceLine);
                         overlay.appendChild(label);
                         
@@ -3095,6 +3202,28 @@
                     setTimeout(() => {
                         enableClipping();
                     }, 100);
+                }
+            });
+            
+            // Show Original Toggle
+            const showOriginalToggle = document.getElementById('showOriginalToggle');
+            const showOriginalText = document.getElementById('showOriginalText');
+            
+            showOriginalToggle.addEventListener('click', () => {
+                if (!slicerEnabled) return; // Only works when slicer is enabled
+                
+                const isPaused = toggleOriginalModel();
+                
+                if (isPaused) {
+                    // Showing original
+                    showOriginalToggle.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                    showOriginalToggle.classList.add('bg-green-500', 'hover:bg-green-600');
+                    showOriginalText.textContent = 'Show Preview';
+                } else {
+                    // Showing preview
+                    showOriginalToggle.classList.remove('bg-green-500', 'hover:bg-green-600');
+                    showOriginalToggle.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                    showOriginalText.textContent = 'Show Original';
                 }
             });
             

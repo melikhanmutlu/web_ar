@@ -675,6 +675,136 @@
             border-color: #b91c1c;
         }
 
+        /* Hotspot Popup Styles */
+        .hotspot-popup {
+            position: absolute;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            min-width: 280px;
+            max-width: 350px;
+            z-index: 1000;
+            pointer-events: auto;
+            transform: translate(-50%, -120%);
+            animation: popupFadeIn 0.3s ease-out;
+        }
+
+        .dark .hotspot-popup {
+            background: #1f2937;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        @keyframes popupFadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -100%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -120%);
+            }
+        }
+
+        .hotspot-popup::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid white;
+        }
+
+        .dark .hotspot-popup::after {
+            border-top-color: #1f2937;
+        }
+
+        .hotspot-popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .hotspot-popup-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            margin: 0;
+            flex: 1;
+        }
+
+        .dark .hotspot-popup-title {
+            color: #f9fafb;
+        }
+
+        .hotspot-popup-description {
+            font-size: 14px;
+            color: #6b7280;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .dark .hotspot-popup-description {
+            color: #9ca3af;
+        }
+
+        .hotspot-popup-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .hotspot-popup-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .hotspot-popup-btn-edit {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .hotspot-popup-btn-edit:hover {
+            background: #2563eb;
+        }
+
+        .hotspot-popup-btn-close {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .dark .hotspot-popup-btn-close {
+            background: #374151;
+            color: #e5e7eb;
+        }
+
+        .hotspot-popup-btn-close:hover {
+            background: #d1d5db;
+        }
+
+        .dark .hotspot-popup-btn-close:hover {
+            background: #4b5563;
+        }
+
+        .hotspot-popup-btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+
+        .hotspot-popup-btn-delete:hover {
+            background: #dc2626;
+        }
+
         @media (max-width: 640px) {
             .bottom-right-controls {
                 bottom: 0.5rem;
@@ -1136,6 +1266,14 @@
         <!-- Right Side Panels -->
         <div class="absolute right-6 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4" style="max-width: 320px;">
             
+            <!-- Reset Camera Button -->
+            <button id="resetCamera" class="w-full px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2 font-medium text-sm border border-gray-200 dark:border-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Reset Camera
+            </button>
+            
             <!-- Material Editor Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
@@ -1291,14 +1429,9 @@
                     <!-- Camera Views Section -->
                     <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Camera Views</label>
-                        <div class="flex gap-2 mb-2">
-                            <button id="saveCameraView" class="flex-1 btn-secondary px-3 py-2 text-xs rounded">
-                                Save View
-                            </button>
-                            <button id="resetCamera" class="flex-1 btn-secondary px-3 py-2 text-xs rounded">
-                                Reset Camera
-                            </button>
-                        </div>
+                        <button id="saveCameraView" class="w-full btn-secondary px-3 py-2 mb-2 text-xs rounded">
+                            Save Current View
+                        </button>
                         <div id="cameraViewsList" class="space-y-1 max-h-32 overflow-y-auto">
                             <p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>
                         </div>
@@ -2330,7 +2463,138 @@
             // ========== HOTSPOTS ==========
             
             let hotspotMode = false;
+            let currentPopup = null;
             const toggleHotspotBtn = document.getElementById('toggleHotspotMode');
+            
+            // Create and show hotspot popup
+            function showHotspotPopup(hotspot, hotspotData) {
+                // Close existing popup
+                if (currentPopup) {
+                    currentPopup.remove();
+                    currentPopup = null;
+                }
+                
+                // Create popup
+                const popup = document.createElement('div');
+                popup.className = 'hotspot-popup';
+                popup.innerHTML = `
+                    <div class="hotspot-popup-header">
+                        <h3 class="hotspot-popup-title">${hotspotData.title || 'Hotspot ' + hotspot.textContent}</h3>
+                    </div>
+                    ${hotspotData.description ? `<p class="hotspot-popup-description">${hotspotData.description}</p>` : ''}
+                    <div class="hotspot-popup-actions">
+                        <button class="hotspot-popup-btn hotspot-popup-btn-edit" onclick="editHotspot('${hotspotData.id}')">
+                            Edit
+                        </button>
+                        <button class="hotspot-popup-btn hotspot-popup-btn-delete" onclick="deleteHotspot('${hotspotData.id}')">
+                            Delete
+                        </button>
+                        <button class="hotspot-popup-btn hotspot-popup-btn-close" onclick="closeHotspotPopup()">
+                            Close
+                        </button>
+                    </div>
+                `;
+                
+                // Position popup
+                const rect = hotspot.getBoundingClientRect();
+                popup.style.left = rect.left + (rect.width / 2) + 'px';
+                popup.style.top = rect.top + 'px';
+                
+                document.body.appendChild(popup);
+                currentPopup = popup;
+                
+                // Close popup when clicking outside
+                setTimeout(() => {
+                    document.addEventListener('click', closePopupOnClickOutside);
+                }, 100);
+            }
+            
+            function closePopupOnClickOutside(e) {
+                if (currentPopup && !currentPopup.contains(e.target) && !e.target.classList.contains('hotspot')) {
+                    closeHotspotPopup();
+                }
+            }
+            
+            window.closeHotspotPopup = function() {
+                if (currentPopup) {
+                    currentPopup.remove();
+                    currentPopup = null;
+                    document.removeEventListener('click', closePopupOnClickOutside);
+                }
+            };
+            
+            window.editHotspot = function(hotspotId) {
+                const hotspotData = hotspots.find(h => h.id === hotspotId);
+                if (!hotspotData) return;
+                
+                const title = prompt('Hotspot Title:', hotspotData.title || '');
+                if (title === null) return;
+                
+                const description = prompt('Description:', hotspotData.description || '');
+                
+                const linkCamera = confirm('Do you want to link a camera view to this hotspot?\n\nClick OK to save current camera position, or Cancel to skip.');
+                
+                // Update hotspot data
+                hotspotData.title = title;
+                hotspotData.description = description || '';
+                hotspotData.element.setAttribute('data-title', title);
+                hotspotData.element.setAttribute('data-description', description || '');
+                
+                // Save camera view if requested
+                if (linkCamera) {
+                    const cameraOrbit = modelViewer.getCameraOrbit();
+                    const cameraTarget = modelViewer.getCameraTarget();
+                    const fieldOfView = modelViewer.getFieldOfView();
+                    
+                    const cameraViewId = 'camera-' + Date.now();
+                    const cameraView = {
+                        id: cameraViewId,
+                        name: title + ' View',
+                        orbit: {
+                            theta: cameraOrbit.theta,
+                            phi: cameraOrbit.phi,
+                            radius: cameraOrbit.radius
+                        },
+                        target: {
+                            x: cameraTarget.x,
+                            y: cameraTarget.y,
+                            z: cameraTarget.z
+                        },
+                        fov: fieldOfView
+                    };
+                    
+                    cameraViews.push(cameraView);
+                    hotspotData.cameraViewId = cameraViewId;
+                    updateCameraViewsList();
+                    
+                    // Visual feedback
+                    hotspotData.element.style.borderColor = '#3b82f6';
+                    hotspotData.element.style.backgroundColor = '#dbeafe';
+                }
+                
+                updateHotspotsList();
+                closeHotspotPopup();
+            };
+            
+            window.deleteHotspot = function(hotspotId) {
+                if (!confirm('Delete this hotspot?')) return;
+                
+                const index = hotspots.findIndex(h => h.id === hotspotId);
+                if (index !== -1) {
+                    const hotspotData = hotspots[index];
+                    
+                    // Remove from DOM
+                    hotspotData.element.remove();
+                    if (hotspotData.tooltip) hotspotData.tooltip.remove();
+                    
+                    // Remove from array
+                    hotspots.splice(index, 1);
+                    
+                    // Update list
+                    updateHotspotsList();
+                    closeHotspotPopup();
+                }
+            };
             
             // Toggle hotspot placement mode
             toggleHotspotBtn.addEventListener('click', () => {
@@ -2414,69 +2678,21 @@
                         tooltip.style.display = 'none';
                     });
                     
-                    // Add click event to edit or apply camera view
+                    // Add click event to show popup or apply camera view
                     hotspot.addEventListener('click', (e) => {
                         e.stopPropagation(); // Prevent triggering model click
                         
                         // Get hotspot data
                         const hotspotData = hotspots.find(h => h.id === hotspotId);
+                        if (!hotspotData) return;
                         
-                        // If hotspot has a camera view, apply it
-                        if (hotspotData && hotspotData.cameraViewId) {
+                        // If hotspot has a camera view, apply it first
+                        if (hotspotData.cameraViewId) {
                             applyCameraView(hotspotData.cameraViewId);
-                        } else {
-                            // Otherwise, edit hotspot
-                            const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'Hotspot ' + hotspot.textContent);
-                            if (title === null) return; // User cancelled
-                            
-                            const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
-                            
-                            // Ask if user wants to link a camera view
-                            const linkCamera = confirm('Do you want to link a camera view to this hotspot?\n\nClick OK to save current camera position, or Cancel to skip.');
-                            
-                            hotspot.setAttribute('data-title', title);
-                            hotspot.setAttribute('data-description', description || '');
-                            
-                            // Update hotspots array
-                            if (hotspotData) {
-                                hotspotData.title = title;
-                                hotspotData.description = description || '';
-                                
-                                // Save camera view if requested
-                                if (linkCamera) {
-                                    const cameraOrbit = modelViewer.getCameraOrbit();
-                                    const cameraTarget = modelViewer.getCameraTarget();
-                                    const fieldOfView = modelViewer.getFieldOfView();
-                                    
-                                    const cameraViewId = 'camera-' + Date.now();
-                                    const cameraView = {
-                                        id: cameraViewId,
-                                        name: title + ' View',
-                                        orbit: {
-                                            theta: cameraOrbit.theta,
-                                            phi: cameraOrbit.phi,
-                                            radius: cameraOrbit.radius
-                                        },
-                                        target: {
-                                            x: cameraTarget.x,
-                                            y: cameraTarget.y,
-                                            z: cameraTarget.z
-                                        },
-                                        fov: fieldOfView
-                                    };
-                                    
-                                    cameraViews.push(cameraView);
-                                    hotspotData.cameraViewId = cameraViewId;
-                                    updateCameraViewsList();
-                                    
-                                    // Visual feedback
-                                    hotspot.style.borderColor = '#3b82f6';
-                                    hotspot.style.backgroundColor = '#dbeafe';
-                                }
-                            }
-                            
-                            updateHotspotsList();
                         }
+                        
+                        // Show popup with hotspot info
+                        showHotspotPopup(hotspot, hotspotData);
                     });
 
                     modelViewer.appendChild(hotspot);

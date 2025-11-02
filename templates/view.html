@@ -2617,9 +2617,20 @@
             // Apply Three.js clipping to actually hide parts of the model
             function applyThreeJSClipping() {
                 try {
-                    // Access Three.js scene from model-viewer
+                    // Wait for model to be loaded
+                    if (!modelViewer || !modelViewer.model || !meshBounds) {
+                        console.log('Model not ready for clipping');
+                        return;
+                    }
+                    
                     const scene = modelViewer.model;
-                    if (!scene || !meshBounds) return;
+                    
+                    // Get Three.js from model-viewer's context
+                    const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;
+                    if (!THREE) {
+                        console.error('THREE.js not accessible');
+                        return;
+                    }
                     
                     // Create clipping planes array
                     const planes = [];
@@ -2631,29 +2642,53 @@
                         
                         const min = meshBounds.min;
                         const max = meshBounds.max;
+                        const center = meshBounds.center;
                         const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
                         const range = max[axisIndex] - min[axisIndex];
                         const position = min[axisIndex] + (percent / 100) * range;
                         
-                        // Create Three.js plane
+                        // Create Three.js plane with correct normal and constant
                         let normal, constant;
                         
                         if (plane === 'x') {
-                            // X axis clipping
-                            normal = new THREE.Vector3(keepSide === 'above' ? -1 : 1, 0, 0);
-                            constant = keepSide === 'above' ? position : -position;
+                            // X axis: normal points in direction we want to KEEP
+                            if (keepSide === 'above') {
+                                // Keep right (positive X), clip left (negative X)
+                                normal = new THREE.Vector3(1, 0, 0);
+                                constant = -position;
+                            } else {
+                                // Keep left (negative X), clip right (positive X)
+                                normal = new THREE.Vector3(-1, 0, 0);
+                                constant = position;
+                            }
                         } else if (plane === 'y') {
-                            // Y axis clipping
-                            normal = new THREE.Vector3(0, keepSide === 'above' ? -1 : 1, 0);
-                            constant = keepSide === 'above' ? position : -position;
+                            // Y axis: normal points in direction we want to KEEP
+                            if (keepSide === 'above') {
+                                // Keep top (positive Y), clip bottom (negative Y)
+                                normal = new THREE.Vector3(0, 1, 0);
+                                constant = -position;
+                            } else {
+                                // Keep bottom (negative Y), clip top (positive Y)
+                                normal = new THREE.Vector3(0, -1, 0);
+                                constant = position;
+                            }
                         } else {
-                            // Z axis clipping
-                            normal = new THREE.Vector3(0, 0, keepSide === 'above' ? -1 : 1);
-                            constant = keepSide === 'above' ? position : -position;
+                            // Z axis: normal points in direction we want to KEEP
+                            if (keepSide === 'above') {
+                                // Keep front (positive Z), clip back (negative Z)
+                                normal = new THREE.Vector3(0, 0, 1);
+                                constant = -position;
+                            } else {
+                                // Keep back (negative Z), clip front (positive Z)
+                                normal = new THREE.Vector3(0, 0, -1);
+                                constant = position;
+                            }
                         }
                         
                         const clippingPlane = new THREE.Plane(normal, constant);
                         planes.push(clippingPlane);
+                        
+                        console.log(`Clipping plane ${plane}: normal=${normal.x},${normal.y},${normal.z}, constant=${constant}`);
                     });
                     
                     // Apply clipping to all meshes in the scene
@@ -2675,9 +2710,14 @@
                     });
                     
                     // Enable local clipping on renderer
-                    const renderer = modelViewer[Symbol.for('renderer')];
-                    if (renderer) {
-                        renderer.localClippingEnabled = true;
+                    try {
+                        const renderer = modelViewer[Symbol.for('renderer')] || modelViewer.renderer;
+                        if (renderer) {
+                            renderer.localClippingEnabled = true;
+                            console.log('Clipping enabled on renderer');
+                        }
+                    } catch (e) {
+                        console.warn('Could not access renderer:', e);
                     }
                     
                 } catch (error) {
@@ -2921,6 +2961,17 @@
                 }
             }
             
+            // Wait for model to load before enabling clipping
+            modelViewer.addEventListener('load', () => {
+                console.log('Model loaded, ready for clipping');
+                // If slicer was enabled before model loaded, enable it now
+                if (slicerEnabled && meshBounds) {
+                    setTimeout(() => {
+                        enableClipping();
+                    }, 100);
+                }
+            });
+            
             // Toggle slicer
             toggleSlicerBtn.addEventListener('click', async () => {
                 slicerEnabled = !slicerEnabled;
@@ -2936,8 +2987,10 @@
                     // Create plane controls
                     createPlaneControls();
                     
-                    // Enable clipping immediately
-                    enableClipping();
+                    // Enable clipping immediately (with small delay for model to be ready)
+                    setTimeout(() => {
+                        enableClipping();
+                    }, 100);
                 } else {
                     toggleSlicerBtn.textContent = 'Enable Slicer';
                     toggleSlicerBtn.classList.remove('bg-red-100', 'dark:bg-red-900/50', 'border-red-500');

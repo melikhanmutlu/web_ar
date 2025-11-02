@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='positive'):
     """
     Slice a GLB mesh with a plane and keep one side
+    Uses trimesh's built-in slice_plane method for accurate slicing
     
     Args:
         input_path: Path to input GLB file
@@ -44,48 +45,63 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
         logger.info(f"Mesh loaded: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
         
         # Normalize plane normal
-        plane_normal = np.array(plane_normal)
+        plane_normal = np.array(plane_normal, dtype=float)
         plane_normal = plane_normal / np.linalg.norm(plane_normal)
-        plane_origin = np.array(plane_origin)
+        plane_origin = np.array(plane_origin, dtype=float)
         
         logger.info(f"Slicing with plane: origin={plane_origin}, normal={plane_normal}, keep={keep_side}")
         
-        # Calculate signed distances from vertices to plane
-        vertices = mesh.vertices
-        distances = np.dot(vertices - plane_origin, plane_normal)
+        # Use trimesh's built-in slice_plane method
+        # If keep_side is 'negative', flip the normal to keep the other side
+        if keep_side == 'negative':
+            plane_normal = -plane_normal
+            logger.info(f"Flipped normal for negative side: {plane_normal}")
         
-        # Determine which vertices to keep based on side
-        if keep_side == 'positive':
-            keep_mask = distances >= 0
-        else:
-            keep_mask = distances <= 0
-        
-        # Filter faces: keep faces where all vertices are on the keep side
-        face_mask = np.all(keep_mask[mesh.faces], axis=1)
-        
-        if not np.any(face_mask):
-            logger.error("Slicing would result in empty mesh (no faces kept)")
-            return False
-        
-        # Create new mesh with filtered faces
-        new_faces = mesh.faces[face_mask]
-        
-        # Get unique vertices used by kept faces
-        used_vertices = np.unique(new_faces.flatten())
-        
-        # Create vertex mapping (old index -> new index)
-        vertex_map = np.full(len(vertices), -1, dtype=int)
-        vertex_map[used_vertices] = np.arange(len(used_vertices))
-        
-        # Remap faces to new vertex indices
-        remapped_faces = vertex_map[new_faces]
-        
-        # Create sliced mesh
-        sliced_mesh = trimesh.Trimesh(
-            vertices=vertices[used_vertices],
-            faces=remapped_faces,
-            process=False
-        )
+        # Slice the mesh
+        try:
+            sliced_mesh = mesh.slice_plane(
+                plane_origin=plane_origin,
+                plane_normal=plane_normal,
+                cap=True  # Cap the slice with a face
+            )
+        except Exception as slice_error:
+            logger.error(f"slice_plane failed: {slice_error}")
+            # Fallback to manual slicing
+            logger.info("Attempting manual slicing fallback...")
+            
+            # Calculate signed distances from vertices to plane
+            vertices = mesh.vertices
+            distances = np.dot(vertices - plane_origin, plane_normal)
+            
+            # Determine which vertices to keep
+            keep_mask = distances >= -1e-6  # Small epsilon for numerical stability
+            
+            # Filter faces: keep faces where all vertices are on the keep side
+            face_mask = np.all(keep_mask[mesh.faces], axis=1)
+            
+            if not np.any(face_mask):
+                logger.error("Slicing would result in empty mesh (no faces kept)")
+                return False
+            
+            # Create new mesh with filtered faces
+            new_faces = mesh.faces[face_mask]
+            
+            # Get unique vertices used by kept faces
+            used_vertices = np.unique(new_faces.flatten())
+            
+            # Create vertex mapping (old index -> new index)
+            vertex_map = np.full(len(vertices), -1, dtype=int)
+            vertex_map[used_vertices] = np.arange(len(used_vertices))
+            
+            # Remap faces to new vertex indices
+            remapped_faces = vertex_map[new_faces]
+            
+            # Create sliced mesh
+            sliced_mesh = trimesh.Trimesh(
+                vertices=vertices[used_vertices],
+                faces=remapped_faces,
+                process=False
+            )
         
         if sliced_mesh is None or len(sliced_mesh.vertices) == 0:
             logger.error("Slicing resulted in empty mesh")

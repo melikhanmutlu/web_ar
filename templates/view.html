@@ -1291,9 +1291,14 @@
                     <!-- Camera Views Section -->
                     <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Camera Views</label>
-                        <button id="saveCameraView" class="btn-primary w-full px-3 py-2 mb-2 text-xs rounded">
-                            Save Current View
-                        </button>
+                        <div class="flex gap-2 mb-2">
+                            <button id="saveCameraView" class="flex-1 btn-secondary px-3 py-2 text-xs rounded">
+                                Save View
+                            </button>
+                            <button id="resetCamera" class="flex-1 btn-secondary px-3 py-2 text-xs rounded">
+                                Reset Camera
+                            </button>
+                        </div>
                         <div id="cameraViewsList" class="space-y-1 max-h-32 overflow-y-auto">
                             <p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>
                         </div>
@@ -2228,19 +2233,49 @@
                 updateCameraViewsList();
             });
             
+            // Store initial camera state
+            let initialCameraState = null;
+            
+            // Save initial camera state when model loads
+            modelViewer.addEventListener('load', () => {
+                if (!initialCameraState) {
+                    const orbit = modelViewer.getCameraOrbit();
+                    const fieldOfView = modelViewer.getFieldOfView();
+                    initialCameraState = {
+                        orbit: { theta: orbit.theta, phi: orbit.phi, radius: orbit.radius },
+                        fov: fieldOfView
+                    };
+                }
+            });
+            
+            // Reset Camera to initial position
+            document.getElementById('resetCamera').addEventListener('click', () => {
+                if (initialCameraState) {
+                    modelViewer.cameraOrbit = `${initialCameraState.orbit.theta}rad ${initialCameraState.orbit.phi}rad ${initialCameraState.orbit.radius}m`;
+                    modelViewer.fieldOfView = `${initialCameraState.fov}deg`;
+                } else {
+                    // Fallback: reset to default
+                    modelViewer.resetTurntableRotation();
+                    modelViewer.cameraOrbit = 'auto auto auto';
+                    modelViewer.fieldOfView = 'auto';
+                }
+            });
+            
             // Update Camera Views List
             function updateCameraViewsList() {
                 const list = document.getElementById('cameraViewsList');
                 
                 if (cameraViews.length === 0) {
-                    list.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>';
+                    list.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">Click "Save View" to save camera positions</p>';
                 } else {
                     list.innerHTML = cameraViews.map((view, i) => `
-                        <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs">
-                            <button onclick="applyCameraView('${view.id}')" class="flex-1 text-left text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400">
+                        <div class="flex items-center gap-2 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded hover:border-gray-400 dark:hover:border-gray-500 transition-all">
+                            <button onclick="applyCameraView('${view.id}')" class="flex-1 text-left text-xs text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-medium">
                                 ${view.name}
                             </button>
-                            <button onclick="removeCameraView('${view.id}')" class="text-red-500 hover:text-red-700 ml-2">✕</button>
+                            <button onclick="removeCameraView('${view.id}')" class="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-xs px-2">
+                                Delete
+                            </button>
                         </div>
                     `).join('');
                 }
@@ -2351,20 +2386,59 @@
                         tooltip.style.display = 'none';
                     });
                     
-                    // Add click event to edit
+                    // Add click event to edit or apply camera view
                     hotspot.addEventListener('click', (e) => {
                         e.stopPropagation(); // Prevent triggering model click
-                        const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'Hotspot ' + hotspot.textContent);
-                        const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
-                        if (title) {
+                        
+                        // Get hotspot data
+                        const hotspotData = hotspots.find(h => h.id === hotspotId);
+                        
+                        // If hotspot has a camera view, apply it
+                        if (hotspotData && hotspotData.cameraViewId) {
+                            applyCameraView(hotspotData.cameraViewId);
+                        } else {
+                            // Otherwise, edit hotspot
+                            const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'Hotspot ' + hotspot.textContent);
+                            if (title === null) return; // User cancelled
+                            
+                            const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
+                            
+                            // Ask if user wants to link a camera view
+                            const linkCamera = confirm('Do you want to link a camera view to this hotspot?\n\nClick OK to save current camera position, or Cancel to skip.');
+                            
                             hotspot.setAttribute('data-title', title);
-                            hotspot.setAttribute('data-description', description);
+                            hotspot.setAttribute('data-description', description || '');
                             
                             // Update hotspots array
-                            const hotspotData = hotspots.find(h => h.id === hotspotId);
                             if (hotspotData) {
                                 hotspotData.title = title;
-                                hotspotData.description = description;
+                                hotspotData.description = description || '';
+                                
+                                // Save camera view if requested
+                                if (linkCamera) {
+                                    const cameraOrbit = modelViewer.getCameraOrbit();
+                                    const fieldOfView = modelViewer.getFieldOfView();
+                                    
+                                    const cameraViewId = 'camera-' + Date.now();
+                                    const cameraView = {
+                                        id: cameraViewId,
+                                        name: title + ' View',
+                                        orbit: {
+                                            theta: cameraOrbit.theta,
+                                            phi: cameraOrbit.phi,
+                                            radius: cameraOrbit.radius
+                                        },
+                                        fov: fieldOfView
+                                    };
+                                    
+                                    cameraViews.push(cameraView);
+                                    hotspotData.cameraViewId = cameraViewId;
+                                    updateCameraViewsList();
+                                    
+                                    // Visual feedback
+                                    hotspot.style.borderColor = '#3b82f6';
+                                    hotspot.style.backgroundColor = '#dbeafe';
+                                }
                             }
                             
                             updateHotspotsList();
@@ -3409,7 +3483,32 @@
                     return;
                 }
                 
+                // Get current camera state before slicing
+                const currentCameraOrbit = modelViewer.getCameraOrbit();
+                const currentFieldOfView = modelViewer.getFieldOfView();
+                
+                // Ask user if they want to use current camera view or reset
+                const useCurrentView = confirm(
+                    'Slice Options:\n\n' +
+                    'OK = Use current camera view (model will be sliced from current angle)\n' +
+                    'Cancel = Reset to initial view first (recommended for accurate slicing)'
+                );
+                
+                // Reset camera to initial position if user chose to
+                if (!useCurrentView && initialCameraState) {
+                    modelViewer.cameraOrbit = `${initialCameraState.orbit.theta}rad ${initialCameraState.orbit.phi}rad ${initialCameraState.orbit.radius}m`;
+                    modelViewer.fieldOfView = `${initialCameraState.fov}deg`;
+                    
+                    // Wait for camera to settle
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                
                 if (!confirm(`This will apply ${activePlanes.size} slice(s). Continue?`)) {
+                    // Restore camera if user cancels
+                    if (!useCurrentView) {
+                        modelViewer.cameraOrbit = `${currentCameraOrbit.theta}rad ${currentCameraOrbit.phi}rad ${currentCameraOrbit.radius}m`;
+                        modelViewer.fieldOfView = `${currentFieldOfView}deg`;
+                    }
                     return;
                 }
                 

@@ -1302,9 +1302,12 @@
                     <!-- Hotspots Section -->
                     <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Hotspots</label>
-                        <button id="addHotspot" class="btn-primary w-full px-3 py-2 mb-2 text-xs rounded">
-                            + Add Pin
+                        <button id="toggleHotspotMode" class="btn-secondary w-full px-3 py-2 mb-2 text-xs rounded">
+                            Click Model to Add Hotspot
                         </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
+                            Enable mode, then click anywhere on the model to place a hotspot
+                        </p>
                         <div id="hotspotsList" class="space-y-1 max-h-32 overflow-y-auto">
                             <p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>
                         </div>
@@ -1320,7 +1323,7 @@
             <!-- Version History Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('versionPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">📜 Version History</span>
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Version History</span>
                     <svg class="w-4 h-4 transform transition-transform" id="versionPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
@@ -1339,7 +1342,7 @@
                     
                     <!-- Refresh Button -->
                     <button id="refreshVersions" class="btn-secondary w-full px-3 py-2 mt-3 text-xs rounded">
-                        🔄 Refresh
+                        Refresh
                     </button>
                 </div>
             </div>
@@ -2225,69 +2228,131 @@
 
             // ========== HOTSPOTS ==========
             
-            // Add Hotspot
-            document.getElementById('addHotspot').addEventListener('click', () => {
-                const hotspotId = 'hotspot-' + Date.now();
-                const hotspot = document.createElement('button');
-                hotspot.setAttribute('slot', hotspotId);
-                hotspot.setAttribute('data-position', '0m 0m 0m');
-                hotspot.setAttribute('data-normal', '0m 1m 0m');
-                hotspot.className = 'hotspot';
-                hotspot.textContent = '📍';
-                hotspot.style.cssText = 'background: #4CAF50; border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 16px;';
+            let hotspotMode = false;
+            const toggleHotspotBtn = document.getElementById('toggleHotspotMode');
+            
+            // Toggle hotspot placement mode
+            toggleHotspotBtn.addEventListener('click', () => {
+                hotspotMode = !hotspotMode;
                 
-                // Add tooltip div
-                const tooltip = document.createElement('div');
-                tooltip.className = 'hotspot-tooltip';
-                tooltip.style.cssText = 'display: none; position: absolute; background: rgba(0,0,0,0.9); color: white; padding: 8px 12px; border-radius: 6px; font-size: 12px; max-width: 200px; z-index: 1000; pointer-events: none;';
-                document.body.appendChild(tooltip);
+                if (hotspotMode) {
+                    toggleHotspotBtn.textContent = 'Cancel (Click to Exit)';
+                    toggleHotspotBtn.classList.remove('btn-secondary');
+                    toggleHotspotBtn.classList.add('btn-primary');
+                    modelViewer.style.cursor = 'crosshair';
+                } else {
+                    toggleHotspotBtn.textContent = 'Click Model to Add Hotspot';
+                    toggleHotspotBtn.classList.remove('btn-primary');
+                    toggleHotspotBtn.classList.add('btn-secondary');
+                    modelViewer.style.cursor = 'grab';
+                }
+            });
+            
+            // Add hotspot on model click
+            modelViewer.addEventListener('click', (event) => {
+                if (!hotspotMode) return;
                 
-                // Add hover events
-                hotspot.addEventListener('mouseenter', (e) => {
-                    const title = hotspot.getAttribute('data-title') || 'New Hotspot';
-                    const description = hotspot.getAttribute('data-description') || '';
-                    tooltip.innerHTML = `<strong>${title}</strong>${description ? '<br>' + description : ''}`;
-                    tooltip.style.display = 'block';
-                });
+                // Get 3D position from click
+                const hit = modelViewer.positionAndNormalFromPoint(event.clientX, event.clientY);
                 
-                hotspot.addEventListener('mousemove', (e) => {
-                    tooltip.style.left = (e.clientX + 10) + 'px';
-                    tooltip.style.top = (e.clientY + 10) + 'px';
-                });
-                
-                hotspot.addEventListener('mouseleave', () => {
-                    tooltip.style.display = 'none';
-                });
-                
-                // Add click event to edit
-                hotspot.addEventListener('click', () => {
-                    const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'New Hotspot');
-                    const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
-                    if (title) {
-                        hotspot.setAttribute('data-title', title);
-                        hotspot.setAttribute('data-description', description);
-                        
-                        // Update hotspots array
-                        const hotspotData = hotspots.find(h => h.id === hotspotId);
-                        if (hotspotData) {
-                            hotspotData.title = title;
-                            hotspotData.description = description;
+                if (hit) {
+                    const hotspotId = 'hotspot-' + Date.now();
+                    const hotspot = document.createElement('button');
+                    hotspot.setAttribute('slot', hotspotId);
+                    hotspot.setAttribute('data-position', `${hit.position.x}m ${hit.position.y}m ${hit.position.z}m`);
+                    hotspot.setAttribute('data-normal', `${hit.normal.x}m ${hit.normal.y}m ${hit.normal.z}m`);
+                    hotspot.className = 'hotspot';
+                    hotspot.style.cssText = `
+                        background: white;
+                        border: 2px solid #374151;
+                        border-radius: 50%;
+                        width: 24px;
+                        height: 24px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        font-weight: bold;
+                        color: #374151;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    `;
+                    hotspot.textContent = hotspots.length + 1;
+                    
+                    // Add tooltip div
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'hotspot-tooltip';
+                    tooltip.style.cssText = `
+                        display: none;
+                        position: absolute;
+                        background: rgba(0,0,0,0.9);
+                        color: white;
+                        padding: 8px 12px;
+                        border-radius: 6px;
+                        font-size: 12px;
+                        max-width: 200px;
+                        z-index: 1000;
+                        pointer-events: none;
+                    `;
+                    document.body.appendChild(tooltip);
+                    
+                    // Add hover events
+                    hotspot.addEventListener('mouseenter', (e) => {
+                        const title = hotspot.getAttribute('data-title') || 'Hotspot ' + hotspot.textContent;
+                        const description = hotspot.getAttribute('data-description') || '';
+                        tooltip.innerHTML = `<strong>${title}</strong>${description ? '<br>' + description : ''}`;
+                        tooltip.style.display = 'block';
+                    });
+                    
+                    hotspot.addEventListener('mousemove', (e) => {
+                        tooltip.style.left = (e.clientX + 10) + 'px';
+                        tooltip.style.top = (e.clientY + 10) + 'px';
+                    });
+                    
+                    hotspot.addEventListener('mouseleave', () => {
+                        tooltip.style.display = 'none';
+                    });
+                    
+                    // Add click event to edit
+                    hotspot.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Prevent triggering model click
+                        const title = prompt('Hotspot Title:', hotspot.getAttribute('data-title') || 'Hotspot ' + hotspot.textContent);
+                        const description = prompt('Description:', hotspot.getAttribute('data-description') || '');
+                        if (title) {
+                            hotspot.setAttribute('data-title', title);
+                            hotspot.setAttribute('data-description', description);
+                            
+                            // Update hotspots array
+                            const hotspotData = hotspots.find(h => h.id === hotspotId);
+                            if (hotspotData) {
+                                hotspotData.title = title;
+                                hotspotData.description = description;
+                            }
+                            
+                            updateHotspotsList();
                         }
-                        
-                        updateHotspotsList();
-                    }
-                });
+                    });
 
-                modelViewer.appendChild(hotspot);
-                hotspots.push({
-                    id: hotspotId,
-                    element: hotspot,
-                    tooltip: tooltip,
-                    title: 'New Hotspot',
-                    description: ''
-                });
-                
-                updateHotspotsList();
+                    modelViewer.appendChild(hotspot);
+                    hotspots.push({
+                        id: hotspotId,
+                        element: hotspot,
+                        tooltip: tooltip,
+                        title: 'Hotspot ' + (hotspots.length + 1),
+                        description: '',
+                        position: hit.position,
+                        normal: hit.normal
+                    });
+                    
+                    updateHotspotsList();
+                    
+                    // Exit hotspot mode after adding
+                    hotspotMode = false;
+                    toggleHotspotBtn.textContent = 'Click Model to Add Hotspot';
+                    toggleHotspotBtn.classList.remove('btn-primary');
+                    toggleHotspotBtn.classList.add('btn-secondary');
+                    modelViewer.style.cursor = 'grab';
+                }
             });
 
             // Clear Annotations
@@ -3625,7 +3690,6 @@
                         <!-- Header -->
                         <div class="flex items-start justify-between mb-2">
                             <div class="flex items-center gap-2">
-                                <span class="text-lg">${operationIcon}</span>
                                 <div>
                                     <div class="flex items-center gap-2">
                                         <span class="font-semibold text-sm text-gray-900 dark:text-white">
@@ -3642,22 +3706,22 @@
                         <!-- Details -->
                         <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1 mb-2">
                             <div class="flex justify-between">
-                                <span>📅 ${version.created_at}</span>
-                                <span>💾 ${version.file_size_formatted}</span>
+                                <span>${version.created_at}</span>
+                                <span>${version.file_size_formatted}</span>
                             </div>
                             ${version.dimensions ? `
                                 <div class="text-xs text-gray-500 dark:text-gray-500">
-                                    📏 ${version.dimensions.x}×${version.dimensions.y}×${version.dimensions.z} cm
+                                    ${version.dimensions.x}×${version.dimensions.y}×${version.dimensions.z} cm
                                 </div>
                             ` : ''}
                             ${isRestore && restoredFrom ? `
                                 <div class="text-xs bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 p-2 rounded border border-gray-200 dark:border-gray-600">
-                                    ℹ️ This is Version ${restoredFrom} restored as Version ${version.version_number}
+                                    Restored from Version ${restoredFrom}
                                 </div>
                             ` : ''}
                             ${version.comment ? `
                                 <div class="text-xs italic text-gray-500 dark:text-gray-500">
-                                    💬 ${version.comment}
+                                    ${version.comment}
                                 </div>
                             ` : ''}
                         </div>
@@ -3667,17 +3731,17 @@
                             ${!isLatest ? `
                                 <button onclick="restoreVersion(${version.version_number})" 
                                         class="flex-1 px-2 py-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs rounded transition-all">
-                                    ↩️ Restore
+                                    Restore
                                 </button>
                             ` : ''}
                             <button onclick="downloadVersion(${version.version_number})" 
                                     class="flex-1 px-2 py-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs rounded transition-all">
-                                ⬇️ Download
+                                Download
                             </button>
                             ${!isLatest ? `
                                 <button onclick="deleteVersion(${version.version_number})" 
                                         class="px-2 py-1.5 bg-white dark:bg-gray-700 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 text-xs rounded transition-all">
-                                    🗑️
+                                    Delete
                                 </button>
                             ` : ''}
                         </div>

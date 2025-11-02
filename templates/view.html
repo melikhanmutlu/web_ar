@@ -1296,6 +1296,25 @@
 
                     <!-- Slicer Controls (hidden by default) -->
                     <div id="slicerControls" class="hidden">
+                        <!-- Preview Mode Toggle -->
+                        <div class="mb-4 p-2 bg-blue-50 dark:bg-blue-900 rounded">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="previewMode" class="mr-2">
+                                <span class="text-xs font-medium text-gray-700 dark:text-gray-300">👁️ Preview Mode</span>
+                            </label>
+                        </div>
+
+                        <!-- Quick Presets -->
+                        <div class="mb-4">
+                            <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">⚡ Quick Presets</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button class="preset-btn px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" data-preset="half">Yarıya Böl</button>
+                                <button class="preset-btn px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" data-preset="top25">Üst %25</button>
+                                <button class="preset-btn px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" data-preset="bottom25">Alt %25</button>
+                                <button class="preset-btn px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" data-preset="middle">Ortasını Al</button>
+                            </div>
+                        </div>
+
                         <!-- Axis Selection -->
                         <div class="mb-4">
                             <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Slice Axis</label>
@@ -1306,13 +1325,16 @@
                             </div>
                         </div>
 
-                        <!-- Slice Position -->
+                        <!-- Slice Position with % -->
                         <div class="mb-4">
                             <div class="flex justify-between items-center mb-2">
                                 <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Position</label>
-                                <span id="slicePositionValue" class="text-xs text-gray-500 dark:text-gray-400">0.0</span>
+                                <div class="flex gap-2 items-center">
+                                    <span id="slicePositionPercent" class="text-xs text-blue-600 dark:text-blue-400 font-semibold">50%</span>
+                                    <span id="slicePositionCm" class="text-xs text-gray-500 dark:text-gray-400">0.0 cm</span>
+                                </div>
                             </div>
-                            <input type="range" id="slicePositionSlider" min="-1" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                            <input type="range" id="slicePositionSlider" min="0" max="100" step="1" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                         </div>
 
                         <!-- Keep Side Selection -->
@@ -1322,6 +1344,34 @@
                                 <button class="keep-side-btn flex-1 px-2 py-1.5 text-xs rounded border-2 border-green-500 bg-green-50 dark:bg-green-900 font-semibold" data-side="positive">Positive (+)</button>
                                 <button class="keep-side-btn flex-1 px-2 py-1.5 text-xs rounded border-2 border-gray-300 dark:border-gray-600" data-side="negative">Negative (-)</button>
                             </div>
+                        </div>
+
+                        <!-- Slice Stats -->
+                        <div id="sliceStats" class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded hidden">
+                            <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                <div class="flex justify-between">
+                                    <span>Vertices:</span>
+                                    <span id="statsVertices">--</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Faces:</span>
+                                    <span id="statsFaces">--</span>
+                                </div>
+                                <div class="flex justify-between font-semibold text-blue-600 dark:text-blue-400">
+                                    <span>Reduction:</span>
+                                    <span id="statsReduction">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Animation Controls -->
+                        <div class="mb-4 flex gap-2">
+                            <button id="animateSlice" class="flex-1 px-2 py-1.5 text-xs rounded border border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900">
+                                🎬 Animate
+                            </button>
+                            <button id="stopAnimation" class="flex-1 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 hidden">
+                                ⏹️ Stop
+                            </button>
                         </div>
 
                         <!-- Apply Slice Button -->
@@ -2435,86 +2485,117 @@
             const slicePositionValue = document.getElementById('slicePositionValue');
             const applySliceBtn = document.getElementById('applySlice');
             
-            // Create slicer plane visualization
+            // Create slicer plane visualization using model-viewer's API
             function createSlicerPlane() {
-                if (!window.THREE || !meshBounds) return;
+                if (!meshBounds) return;
                 
-                // Get model-viewer's Three.js scene
-                const scene = modelViewer.model;
-                if (!scene) return;
+                // Wait for model to load
+                modelViewer.addEventListener('load', () => {
+                    try {
+                        // Access Three.js scene through model-viewer
+                        const scene = modelViewer[$scene];
+                        if (!scene) {
+                            console.warn('Could not access Three.js scene');
+                            return;
+                        }
+                        
+                        // Remove old plane if exists
+                        if (slicerPlaneHelper) {
+                            scene.remove(slicerPlaneHelper);
+                        }
+                        
+                        // Calculate plane size based on model bounds
+                        const size = Math.max(
+                            meshBounds.max[0] - meshBounds.min[0],
+                            meshBounds.max[1] - meshBounds.min[1],
+                            meshBounds.max[2] - meshBounds.min[2]
+                        ) * 3;
+                        
+                        // Create plane with grid
+                        const geometry = new THREE.PlaneGeometry(size, size, 10, 10);
+                        const material = new THREE.MeshBasicMaterial({
+                            color: 0xff0000,
+                            side: THREE.DoubleSide,
+                            transparent: true,
+                            opacity: 0.4,
+                            wireframe: false,
+                            depthWrite: false
+                        });
+                        
+                        slicerPlaneHelper = new THREE.Mesh(geometry, material);
+                        
+                        // Add grid lines
+                        const gridHelper = new THREE.GridHelper(size, 10, 0xffffff, 0xffffff);
+                        gridHelper.material.transparent = true;
+                        gridHelper.material.opacity = 0.3;
+                        slicerPlaneHelper.add(gridHelper);
+                        
+                        // Add to scene
+                        scene.add(slicerPlaneHelper);
+                        
+                        updateSlicerPlane();
+                    } catch (error) {
+                        console.error('Error creating slicer plane:', error);
+                    }
+                }, { once: true });
                 
-                // Remove old plane if exists
-                if (slicerPlaneHelper) {
-                    scene.parent.remove(slicerPlaneHelper);
+                // Trigger load event if already loaded
+                if (modelViewer.loaded) {
+                    modelViewer.dispatchEvent(new Event('load'));
                 }
-                
-                // Calculate plane size based on model bounds
-                const size = Math.max(
-                    meshBounds.max[0] - meshBounds.min[0],
-                    meshBounds.max[1] - meshBounds.min[1],
-                    meshBounds.max[2] - meshBounds.min[2]
-                ) * 2;
-                
-                // Create plane geometry
-                const geometry = new THREE.PlaneGeometry(size, size);
-                const material = new THREE.MeshBasicMaterial({
-                    color: 0xff0000,
-                    side: THREE.DoubleSide,
-                    transparent: true,
-                    opacity: 0.3,
-                    depthWrite: false
-                });
-                
-                slicerPlaneHelper = new THREE.Mesh(geometry, material);
-                
-                // Add to scene
-                scene.parent.add(slicerPlaneHelper);
-                
-                updateSlicerPlane();
             }
             
             // Update slicer plane position and orientation
             function updateSlicerPlane() {
                 if (!slicerPlaneHelper || !meshBounds) return;
                 
-                const position = parseFloat(slicePositionSlider.value);
-                const center = meshBounds.center;
+                const percent = parseInt(slicePositionSlider.value);
                 const min = meshBounds.min;
                 const max = meshBounds.max;
                 
                 // Reset rotation
                 slicerPlaneHelper.rotation.set(0, 0, 0);
                 
+                let axisIndex, position;
+                
                 if (slicerAxis === 'x') {
+                    axisIndex = 0;
                     const range = max[0] - min[0];
+                    position = min[0] + (percent / 100) * range;
                     slicerPlaneHelper.position.set(
-                        center[0] + position * range / 2,
-                        center[1],
-                        center[2]
+                        position,
+                        (min[1] + max[1]) / 2,
+                        (min[2] + max[2]) / 2
                     );
                     slicerPlaneHelper.rotation.y = Math.PI / 2;
                 } else if (slicerAxis === 'y') {
+                    axisIndex = 1;
                     const range = max[1] - min[1];
+                    position = min[1] + (percent / 100) * range;
                     slicerPlaneHelper.position.set(
-                        center[0],
-                        center[1] + position * range / 2,
-                        center[2]
+                        (min[0] + max[0]) / 2,
+                        position,
+                        (min[2] + max[2]) / 2
                     );
                     slicerPlaneHelper.rotation.x = Math.PI / 2;
                 } else {
+                    axisIndex = 2;
                     const range = max[2] - min[2];
+                    position = min[2] + (percent / 100) * range;
                     slicerPlaneHelper.position.set(
-                        center[0],
-                        center[1],
-                        center[2] + position * range / 2
+                        (min[0] + max[0]) / 2,
+                        (min[1] + max[1]) / 2,
+                        position
                     );
                 }
                 
                 // Change color based on keep side
                 if (slicerKeepSide === 'positive') {
                     slicerPlaneHelper.material.color.setHex(0x00ff00);
+                    slicerPlaneHelper.material.opacity = 0.4;
                 } else {
                     slicerPlaneHelper.material.color.setHex(0xff0000);
+                    slicerPlaneHelper.material.opacity = 0.4;
                 }
             }
             
@@ -2594,10 +2675,91 @@
                 });
             });
             
-            // Position slider
+            // Position slider with percentage and cm display
             slicePositionSlider.addEventListener('input', (e) => {
-                slicePositionValue.textContent = parseFloat(e.target.value).toFixed(2);
+                const percent = parseInt(e.target.value);
+                document.getElementById('slicePositionPercent').textContent = percent + '%';
+                
+                // Calculate cm position
+                if (meshBounds) {
+                    const axisIndex = slicerAxis === 'x' ? 0 : (slicerAxis === 'y' ? 1 : 2);
+                    const range = meshBounds.max[axisIndex] - meshBounds.min[axisIndex];
+                    const position = meshBounds.min[axisIndex] + (percent / 100) * range;
+                    document.getElementById('slicePositionCm').textContent = (position * 100).toFixed(2) + ' cm';
+                }
+                
                 updateSlicerPlane();
+            });
+            
+            // Quick Presets
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const preset = btn.dataset.preset;
+                    switch(preset) {
+                        case 'half':
+                            slicePositionSlider.value = 50;
+                            slicerKeepSide = 'positive';
+                            break;
+                        case 'top25':
+                            slicePositionSlider.value = 75;
+                            slicerKeepSide = 'negative';
+                            break;
+                        case 'bottom25':
+                            slicePositionSlider.value = 25;
+                            slicerKeepSide = 'positive';
+                            break;
+                        case 'middle':
+                            // TODO: Implement double slice
+                            alert('Ortasını al özelliği yakında eklenecek!');
+                            return;
+                    }
+                    
+                    // Update UI
+                    slicePositionSlider.dispatchEvent(new Event('input'));
+                    document.querySelectorAll('.keep-side-btn').forEach(b => {
+                        b.classList.remove('border-green-500', 'bg-green-50', 'dark:bg-green-900', 'font-semibold');
+                        b.classList.add('border-gray-300', 'dark:border-gray-600');
+                    });
+                    document.querySelector(`[data-side="${slicerKeepSide}"]`).classList.add('border-green-500', 'bg-green-50', 'dark:bg-green-900', 'font-semibold');
+                    document.querySelector(`[data-side="${slicerKeepSide}"]`).classList.remove('border-gray-300', 'dark:border-gray-600');
+                    
+                    updateSlicerPlane();
+                });
+            });
+            
+            // Animation
+            let animationInterval = null;
+            document.getElementById('animateSlice').addEventListener('click', () => {
+                if (animationInterval) return;
+                
+                document.getElementById('animateSlice').classList.add('hidden');
+                document.getElementById('stopAnimation').classList.remove('hidden');
+                
+                let direction = 1;
+                animationInterval = setInterval(() => {
+                    let value = parseInt(slicePositionSlider.value);
+                    value += direction * 2;
+                    
+                    if (value >= 100) {
+                        value = 100;
+                        direction = -1;
+                    } else if (value <= 0) {
+                        value = 0;
+                        direction = 1;
+                    }
+                    
+                    slicePositionSlider.value = value;
+                    slicePositionSlider.dispatchEvent(new Event('input'));
+                }, 50);
+            });
+            
+            document.getElementById('stopAnimation').addEventListener('click', () => {
+                if (animationInterval) {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                }
+                document.getElementById('animateSlice').classList.remove('hidden');
+                document.getElementById('stopAnimation').classList.add('hidden');
             });
             
             // Apply slice
@@ -2624,25 +2786,28 @@
                         Slicing...
                     `;
                     
-                    // Calculate plane origin and normal
-                    const position = parseFloat(slicePositionSlider.value);
-                    const center = meshBounds.center;
+                    // Calculate plane origin and normal using percentage
+                    const percent = parseInt(slicePositionSlider.value);
                     const min = meshBounds.min;
                     const max = meshBounds.max;
+                    const center = meshBounds.center;
                     
                     let planeOrigin, planeNormal;
                     
                     if (slicerAxis === 'x') {
                         const range = max[0] - min[0];
-                        planeOrigin = [center[0] + position * range / 2, center[1], center[2]];
+                        const position = min[0] + (percent / 100) * range;
+                        planeOrigin = [position, center[1], center[2]];
                         planeNormal = [1, 0, 0];
                     } else if (slicerAxis === 'y') {
                         const range = max[1] - min[1];
-                        planeOrigin = [center[0], center[1] + position * range / 2, center[2]];
+                        const position = min[1] + (percent / 100) * range;
+                        planeOrigin = [center[0], position, center[2]];
                         planeNormal = [0, 1, 0];
                     } else {
                         const range = max[2] - min[2];
-                        planeOrigin = [center[0], center[1], center[2] + position * range / 2];
+                        const position = min[2] + (percent / 100) * range;
+                        planeOrigin = [center[0], center[1], position];
                         planeNormal = [0, 0, 1];
                     }
                     

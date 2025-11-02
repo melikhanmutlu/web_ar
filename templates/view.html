@@ -2614,100 +2614,132 @@
             }
             
             // Enable live clipping preview using CSS/visual approach
+            // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
                     if (!meshBounds || activePlanes.size === 0) return;
                     
-                    // Get first active plane settings
-                    const firstPlane = Array.from(activePlanes)[0];
-                    const settings = planeSettings[firstPlane];
-                    const percent = settings.position;
-                    const keepSide = settings.keepSide;
+                    // Remove all existing overlays first
+                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     
-                    // Create visual overlay to simulate clipping
-                    let overlayId = 'slicerOverlay';
-                    let overlay = document.getElementById(overlayId);
-                    
-                    if (!overlay) {
-                        overlay = document.createElement('div');
+                    // Create overlay for each active plane
+                    activePlanes.forEach(plane => {
+                        const settings = planeSettings[plane];
+                        const percent = settings.position;
+                        const keepSide = settings.keepSide;
+                        
+                        // Create visual overlay for this plane
+                        const overlayId = `slicerOverlay-${plane}`;
+                        let overlay = document.createElement('div');
                         overlay.id = overlayId;
                         overlay.style.position = 'absolute';
                         overlay.style.pointerEvents = 'none';
                         overlay.style.zIndex = '10';
-                        overlay.style.transition = 'all 0.1s ease';
+                        overlay.style.transition = 'all 0.15s ease';
+                        
+                        // Color coding for different planes
+                        const colors = {
+                            x: { main: '255,0,0', name: 'X' },    // Red
+                            y: { main: '0,255,0', name: 'Y' },    // Green
+                            z: { main: '0,100,255', name: 'Z' }  // Blue
+                        };
+                        const color = colors[plane].main;
+                        
+                        // Calculate overlay position based on axis and percentage
+                        const slicePosition = percent; // 0-100%
+                        
+                        if (plane === 'y') {
+                            // Y axis - Vertical slice (top/bottom)
+                            if (keepSide === 'above') {
+                                // Keep top, hide bottom
+                                overlay.style.left = '0';
+                                overlay.style.bottom = '0';
+                                overlay.style.width = '100%';
+                                overlay.style.height = (100 - slicePosition) + '%';
+                                overlay.style.background = `linear-gradient(to top, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderTop = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
+                            } else {
+                                // Keep bottom, hide top
+                                overlay.style.left = '0';
+                                overlay.style.top = '0';
+                                overlay.style.width = '100%';
+                                overlay.style.height = slicePosition + '%';
+                                overlay.style.background = `linear-gradient(to bottom, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderBottom = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
+                            }
+                        } else if (plane === 'x') {
+                            // X axis - Horizontal slice (left/right)
+                            if (keepSide === 'above') {
+                                // Keep right, hide left
+                                overlay.style.left = '0';
+                                overlay.style.top = '0';
+                                overlay.style.width = slicePosition + '%';
+                                overlay.style.height = '100%';
+                                overlay.style.background = `linear-gradient(to right, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderRight = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset -3px 0 10px rgba(${color},0.3)`;
+                            } else {
+                                // Keep left, hide right
+                                overlay.style.right = '0';
+                                overlay.style.top = '0';
+                                overlay.style.width = (100 - slicePosition) + '%';
+                                overlay.style.height = '100%';
+                                overlay.style.background = `linear-gradient(to left, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderLeft = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset 3px 0 10px rgba(${color},0.3)`;
+                            }
+                        } else if (plane === 'z') {
+                            // Z axis - Depth slice (show as diagonal)
+                            if (keepSide === 'above') {
+                                // Keep front, hide back
+                                overlay.style.left = '0';
+                                overlay.style.bottom = '0';
+                                overlay.style.width = '100%';
+                                overlay.style.height = (100 - slicePosition) + '%';
+                                overlay.style.background = `linear-gradient(135deg, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderTop = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
+                            } else {
+                                // Keep back, hide front
+                                overlay.style.left = '0';
+                                overlay.style.top = '0';
+                                overlay.style.width = '100%';
+                                overlay.style.height = slicePosition + '%';
+                                overlay.style.background = `linear-gradient(-135deg, rgba(${color},0.35), rgba(${color},0.05))`;
+                                overlay.style.borderBottom = `3px solid rgb(${color})`;
+                                overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
+                            }
+                        }
+                        
+                        // Add label to show which plane this is
+                        const label = document.createElement('div');
+                        label.style.position = 'absolute';
+                        label.style.padding = '4px 8px';
+                        label.style.background = `rgba(${color},0.9)`;
+                        label.style.color = 'white';
+                        label.style.fontSize = '11px';
+                        label.style.fontWeight = 'bold';
+                        label.style.borderRadius = '3px';
+                        label.style.zIndex = '11';
+                        label.textContent = `${colors[plane].name}: ${percent}%`;
+                        
+                        // Position label based on plane
+                        if (plane === 'y') {
+                            label.style.right = '10px';
+                            label.style[keepSide === 'above' ? 'top' : 'bottom'] = '10px';
+                        } else if (plane === 'x') {
+                            label.style.top = '10px';
+                            label.style[keepSide === 'above' ? 'left' : 'right'] = '10px';
+                        } else {
+                            label.style.bottom = '10px';
+                            label.style.left = '10px';
+                        }
+                        
+                        overlay.appendChild(label);
                         modelViewer.appendChild(overlay);
-                    }
-                    
-                    // Reset all styles first
-                    overlay.style.left = '';
-                    overlay.style.right = '';
-                    overlay.style.top = '';
-                    overlay.style.bottom = '';
-                    overlay.style.width = '';
-                    overlay.style.height = '';
-                    overlay.style.border = '';
-                    
-                    // Calculate overlay position based on axis and percentage
-                    const slicePosition = percent; // 0-100%
-                    
-                    if (firstPlane === 'y') {
-                        // Y axis - Vertical slice (top/bottom)
-                        if (keepSide === 'above') {
-                            // Keep top, hide bottom
-                            overlay.style.left = '0';
-                            overlay.style.bottom = '0';
-                            overlay.style.width = '100%';
-                            overlay.style.height = (100 - slicePosition) + '%';
-                            overlay.style.background = 'linear-gradient(to top, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderTop = '3px solid #ff0000';
-                        } else {
-                            // Keep bottom, hide top
-                            overlay.style.left = '0';
-                            overlay.style.top = '0';
-                            overlay.style.width = '100%';
-                            overlay.style.height = slicePosition + '%';
-                            overlay.style.background = 'linear-gradient(to bottom, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderBottom = '3px solid #ff0000';
-                        }
-                    } else if (firstPlane === 'x') {
-                        // X axis - Horizontal slice (left/right)
-                        if (keepSide === 'above') {
-                            // Keep right, hide left
-                            overlay.style.left = '0';
-                            overlay.style.top = '0';
-                            overlay.style.width = slicePosition + '%';
-                            overlay.style.height = '100%';
-                            overlay.style.background = 'linear-gradient(to right, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderRight = '3px solid #ff0000';
-                        } else {
-                            // Keep left, hide right
-                            overlay.style.right = '0';
-                            overlay.style.top = '0';
-                            overlay.style.width = (100 - slicePosition) + '%';
-                            overlay.style.height = '100%';
-                            overlay.style.background = 'linear-gradient(to left, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderLeft = '3px solid #ff0000';
-                        }
-                    } else if (firstPlane === 'z') {
-                        // Z axis - Depth slice (show as diagonal or vertical)
-                        if (keepSide === 'above') {
-                            // Keep front, hide back
-                            overlay.style.left = '0';
-                            overlay.style.bottom = '0';
-                            overlay.style.width = '100%';
-                            overlay.style.height = (100 - slicePosition) + '%';
-                            overlay.style.background = 'linear-gradient(135deg, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderTop = '3px solid #ff0000';
-                        } else {
-                            // Keep back, hide front
-                            overlay.style.left = '0';
-                            overlay.style.top = '0';
-                            overlay.style.width = '100%';
-                            overlay.style.height = slicePosition + '%';
-                            overlay.style.background = 'linear-gradient(-135deg, rgba(255,0,0,0.4), rgba(255,0,0,0.1))';
-                            overlay.style.borderBottom = '3px solid #ff0000';
-                        }
-                    }
+                    });
                     
                     // Show stats
                     updateSliceStats();
@@ -2720,11 +2752,8 @@
             // Disable clipping preview
             function disableClipping() {
                 try {
-                    // Remove visual overlay
-                    const overlay = document.getElementById('slicerOverlay');
-                    if (overlay) {
-                        overlay.remove();
-                    }
+                    // Remove all visual overlays
+                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     
                     // Hide stats
                     document.getElementById('sliceStats').classList.add('hidden');

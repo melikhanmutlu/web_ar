@@ -3621,7 +3621,7 @@
                 const isRestore = version.operation_type === 'restore';
                 
                 return `
-                    <div class="version-item bg-gray-50 dark:bg-gray-700 rounded-lg p-3 border-2 ${isLatest ? 'border-blue-500' : 'border-transparent'} hover:border-gray-300 dark:hover:border-gray-600 transition-all">
+                    <div class="version-item bg-white dark:bg-gray-800 rounded-lg p-3 border ${isLatest ? 'border-gray-900 dark:border-gray-100 shadow-md' : 'border-gray-200 dark:border-gray-700'} hover:border-gray-400 dark:hover:border-gray-500 transition-all">
                         <!-- Header -->
                         <div class="flex items-start justify-between mb-2">
                             <div class="flex items-center gap-2">
@@ -3630,9 +3630,9 @@
                                     <div class="flex items-center gap-2">
                                         <span class="font-semibold text-sm text-gray-900 dark:text-white">
                                             Version ${version.version_number}
-                                            ${isRestore && restoredFrom ? `<span class="text-xs text-gray-500">(= v${restoredFrom})</span>` : ''}
+                                            ${isRestore && restoredFrom ? `<span class="text-xs text-gray-500 dark:text-gray-400">(= v${restoredFrom})</span>` : ''}
                                         </span>
-                                        ${isLatest ? '<span class="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Current</span>' : ''}
+                                        ${isLatest ? '<span class="text-xs bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 px-2 py-0.5 rounded font-medium">Current</span>' : ''}
                                     </div>
                                     <span class="text-xs ${operationColor}">${formatOperationType(version.operation_type)}</span>
                                 </div>
@@ -3651,7 +3651,7 @@
                                 </div>
                             ` : ''}
                             ${isRestore && restoredFrom ? `
-                                <div class="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 p-2 rounded">
+                                <div class="text-xs bg-gray-100 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 p-2 rounded border border-gray-200 dark:border-gray-600">
                                     ℹ️ This is Version ${restoredFrom} restored as Version ${version.version_number}
                                 </div>
                             ` : ''}
@@ -3666,17 +3666,17 @@
                         <div class="flex gap-2">
                             ${!isLatest ? `
                                 <button onclick="restoreVersion(${version.version_number})" 
-                                        class="flex-1 px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition-colors">
+                                        class="flex-1 px-2 py-1.5 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 text-xs rounded transition-all">
                                     ↩️ Restore
                                 </button>
                             ` : ''}
                             <button onclick="downloadVersion(${version.version_number})" 
-                                    class="flex-1 px-2 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors">
+                                    class="flex-1 px-2 py-1.5 bg-gray-900 dark:bg-gray-100 hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-gray-900 text-xs rounded transition-all">
                                 ⬇️ Download
                             </button>
                             ${!isLatest ? `
                                 <button onclick="deleteVersion(${version.version_number})" 
-                                        class="px-2 py-1.5 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition-colors">
+                                        class="px-2 py-1.5 bg-white dark:bg-gray-700 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 text-xs rounded transition-all">
                                     🗑️
                                 </button>
                             ` : ''}
@@ -3699,15 +3699,15 @@
             return icons[type] || '📝';
         }
         
-        // Get operation color
+        // Get operation color (subtle gray tones for minimal theme)
         function getOperationColor(type) {
             const colors = {
-                'upload': 'text-blue-600 dark:text-blue-400',
-                'transform': 'text-purple-600 dark:text-purple-400',
-                'material': 'text-pink-600 dark:text-pink-400',
-                'transform+material': 'text-indigo-600 dark:text-indigo-400',
-                'slice': 'text-orange-600 dark:text-orange-400',
-                'restore': 'text-green-600 dark:text-green-400'
+                'upload': 'text-gray-700 dark:text-gray-300',
+                'transform': 'text-gray-600 dark:text-gray-400',
+                'material': 'text-gray-600 dark:text-gray-400',
+                'transform+material': 'text-gray-700 dark:text-gray-300',
+                'slice': 'text-gray-600 dark:text-gray-400',
+                'restore': 'text-gray-700 dark:text-gray-300'
             };
             return colors[type] || 'text-gray-600 dark:text-gray-400';
         }

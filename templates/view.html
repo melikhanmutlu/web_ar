@@ -2902,21 +2902,7 @@
                         overlay.style.transition = 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
                         overlay.style.animation = 'overlayFadeIn 0.5s ease-out';
                         
-                        // Add grid pattern for better depth perception
-                        const gridOverlay = document.createElement('div');
-                        gridOverlay.style.position = 'absolute';
-                        gridOverlay.style.top = '0';
-                        gridOverlay.style.left = '0';
-                        gridOverlay.style.width = '100%';
-                        gridOverlay.style.height = '100%';
-                        gridOverlay.style.backgroundImage = `
-                            linear-gradient(0deg, rgba(255,255,255,0.1) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
-                        `;
-                        gridOverlay.style.backgroundSize = '20px 20px';
-                        gridOverlay.style.opacity = '0.3';
-                        gridOverlay.style.pointerEvents = 'none';
-                        gridOverlay.style.animation = 'gridFade 3s ease-in-out infinite';
+                        // Removed grid pattern for cleaner look
                         
                         // Color coding for different planes
                         const colors = {
@@ -2937,16 +2923,14 @@
                                 overlay.style.bottom = '0';
                                 overlay.style.width = '100%';
                                 overlay.style.height = (100 - slicePosition) + '%';
-                                overlay.style.background = `linear-gradient(to top, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             } else {
                                 // Keep bottom, hide top
                                 overlay.style.left = '0';
                                 overlay.style.top = '0';
                                 overlay.style.width = '100%';
                                 overlay.style.height = slicePosition + '%';
-                                overlay.style.background = `linear-gradient(to bottom, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             }
                         } else if (plane === 'x') {
                             // X axis - Horizontal slice (left/right)
@@ -2956,16 +2940,14 @@
                                 overlay.style.top = '0';
                                 overlay.style.width = slicePosition + '%';
                                 overlay.style.height = '100%';
-                                overlay.style.background = `linear-gradient(to right, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset -3px 0 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             } else {
                                 // Keep left, hide right
                                 overlay.style.right = '0';
                                 overlay.style.top = '0';
                                 overlay.style.width = (100 - slicePosition) + '%';
                                 overlay.style.height = '100%';
-                                overlay.style.background = `linear-gradient(to left, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset 3px 0 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             }
                         } else if (plane === 'z') {
                             // Z axis - Depth slice (show as diagonal)
@@ -2975,16 +2957,14 @@
                                 overlay.style.bottom = '0';
                                 overlay.style.width = '100%';
                                 overlay.style.height = (100 - slicePosition) + '%';
-                                overlay.style.background = `linear-gradient(135deg, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset 0 -3px 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             } else {
                                 // Keep back, hide front
                                 overlay.style.left = '0';
                                 overlay.style.top = '0';
                                 overlay.style.width = '100%';
                                 overlay.style.height = slicePosition + '%';
-                                overlay.style.background = `linear-gradient(-135deg, rgba(${color},0.35), rgba(${color},0.05))`;
-                                overlay.style.boxShadow = `inset 0 3px 10px rgba(${color},0.3)`;
+                                overlay.style.background = `rgba(${color}, 0.25)`;
                             }
                         }
                         
@@ -3054,7 +3034,6 @@
                             label.style.left = '10px';
                         }
                         
-                        overlay.appendChild(gridOverlay);
                         overlay.appendChild(sliceLine);
                         overlay.appendChild(label);
                         

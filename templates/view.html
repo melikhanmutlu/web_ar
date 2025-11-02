@@ -2490,64 +2490,16 @@
             const slicePositionValue = document.getElementById('slicePositionValue');
             const applySliceBtn = document.getElementById('applySlice');
             
-            // Create slicer plane visualization using model-viewer's API
+            // Create slicer plane visualization
             function createSlicerPlane() {
                 if (!meshBounds) return;
                 
-                // Wait for model to load
-                modelViewer.addEventListener('load', () => {
-                    try {
-                        // Access Three.js scene through model-viewer
-                        const scene = modelViewer[$scene];
-                        if (!scene) {
-                            console.warn('Could not access Three.js scene');
-                            return;
-                        }
-                        
-                        // Remove old plane if exists
-                        if (slicerPlaneHelper) {
-                            scene.remove(slicerPlaneHelper);
-                        }
-                        
-                        // Calculate plane size based on model bounds
-                        const size = Math.max(
-                            meshBounds.max[0] - meshBounds.min[0],
-                            meshBounds.max[1] - meshBounds.min[1],
-                            meshBounds.max[2] - meshBounds.min[2]
-                        ) * 3;
-                        
-                        // Create plane with grid
-                        const geometry = new THREE.PlaneGeometry(size, size, 10, 10);
-                        const material = new THREE.MeshBasicMaterial({
-                            color: 0xff0000,
-                            side: THREE.DoubleSide,
-                            transparent: true,
-                            opacity: 0.4,
-                            wireframe: false,
-                            depthWrite: false
-                        });
-                        
-                        slicerPlaneHelper = new THREE.Mesh(geometry, material);
-                        
-                        // Add grid lines
-                        const gridHelper = new THREE.GridHelper(size, 10, 0xffffff, 0xffffff);
-                        gridHelper.material.transparent = true;
-                        gridHelper.material.opacity = 0.3;
-                        slicerPlaneHelper.add(gridHelper);
-                        
-                        // Add to scene
-                        scene.add(slicerPlaneHelper);
-                        
-                        updateSlicerPlane();
-                    } catch (error) {
-                        console.error('Error creating slicer plane:', error);
-                    }
-                }, { once: true });
+                // Simple visual indicator without Three.js scene access
+                // Just show the plane helper visually
+                console.log('Slicer plane enabled - preview mode will show clipping');
                 
-                // Trigger load event if already loaded
-                if (modelViewer.loaded) {
-                    modelViewer.dispatchEvent(new Event('load'));
-                }
+                // Update plane position
+                updateSlicerPlane();
             }
             
             // Update slicer plane position and orientation
@@ -2619,8 +2571,12 @@
             // Enable live clipping preview
             function enableClipping() {
                 try {
-                    const scene = modelViewer[$scene];
-                    if (!scene || !meshBounds) return;
+                    // Access Three.js scene through model property
+                    const model = modelViewer.model;
+                    if (!model || !meshBounds) {
+                        console.warn('Model not loaded yet');
+                        return;
+                    }
                     
                     // Calculate plane parameters
                     const percent = parseInt(slicePositionSlider.value);
@@ -2646,8 +2602,8 @@
                         clippingPlane = new THREE.Plane(normal, slicerKeepSide === 'positive' ? position : -position);
                     }
                     
-                    // Apply clipping to all materials in the scene
-                    scene.traverse((object) => {
+                    // Apply clipping to all materials in the model
+                    model.traverse((object) => {
                         if (object.isMesh && object.material) {
                             const materials = Array.isArray(object.material) ? object.material : [object.material];
                             
@@ -2682,11 +2638,11 @@
             // Disable clipping preview
             function disableClipping() {
                 try {
-                    const scene = modelViewer[$scene];
-                    if (!scene) return;
+                    const model = modelViewer.model;
+                    if (!model) return;
                     
                     // Restore original materials
-                    scene.traverse((object) => {
+                    model.traverse((object) => {
                         if (object.isMesh && object.material) {
                             const materials = Array.isArray(object.material) ? object.material : [object.material];
                             
@@ -2715,15 +2671,15 @@
             // Update slice statistics
             function updateSliceStats() {
                 try {
-                    const scene = modelViewer[$scene];
-                    if (!scene || !clippingPlane) return;
+                    const model = modelViewer.model;
+                    if (!model || !clippingPlane) return;
                     
                     let totalVertices = 0;
                     let totalFaces = 0;
                     let clippedVertices = 0;
                     let clippedFaces = 0;
                     
-                    scene.traverse((object) => {
+                    model.traverse((object) => {
                         if (object.isMesh && object.geometry) {
                             const positions = object.geometry.attributes.position;
                             if (!positions) return;

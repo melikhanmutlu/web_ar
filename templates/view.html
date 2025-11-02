@@ -1855,12 +1855,27 @@
             });
 
             function applyMaterialColor(hexColor) {
-                const scene = getInternalScene();
-                if (!scene) return;
-
                 const r = parseInt(hexColor.substr(1, 2), 16) / 255;
                 const g = parseInt(hexColor.substr(3, 2), 16) / 255;
                 const b = parseInt(hexColor.substr(5, 2), 16) / 255;
+                
+                // Try model-viewer's material API first
+                if (modelViewer.model) {
+                    const materials = modelViewer.model.materials;
+                    if (materials && materials.length > 0) {
+                        materials.forEach(material => {
+                            material.pbrMetallicRoughness.setBaseColorFactor([r, g, b, 1]);
+                        });
+                        return;
+                    }
+                }
+                
+                // Fallback to internal scene
+                const scene = getInternalScene();
+                if (!scene) {
+                    console.warn('Scene not ready yet');
+                    return;
+                }
 
                 scene.traverse((child) => {
                     if (child.isMesh) {
@@ -1873,6 +1888,7 @@
                         });
                     }
                 });
+                
                 modelViewer.requestUpdate();
             }
 

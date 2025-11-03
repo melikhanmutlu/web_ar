@@ -233,22 +233,17 @@ def apply_texture_modifications(gltf, texture_data_base64):
 def normalize_model_to_center(gltf):
     """
     Normalize model by moving its center to origin (0, 0, 0)
-    This ensures consistent pivot behavior in viewer
+    Also applies basis correction: STL is Z-up, GLB is Y-up
+    Rotate -90° around X axis to convert Z-up to Y-up
     
     Returns:
         GLTF2: Modified GLTF object
     """
     logger.info("Normalizing model to center origin")
+    logger.info("Applying basis correction: Z-up to Y-up (-90° X rotation)")
     
     # Calculate current center
     center_x, center_y, center_z = calculate_model_center(gltf)
-    
-    # If already centered, no need to modify
-    if abs(center_x) < 0.0001 and abs(center_y) < 0.0001 and abs(center_z) < 0.0001:
-        logger.info("Model already centered at origin")
-        return gltf
-    
-    logger.info(f"Moving model center from ({center_x:.3f}, {center_y:.3f}, {center_z:.3f}) to origin")
     
     try:
         # Move all vertices to center the model at origin
@@ -282,17 +277,27 @@ def normalize_model_to_center(gltf):
                     vertex_count = accessor.count
                     stride = buffer_view.byteStride if buffer_view.byteStride else 12
                     
+                    # Basis correction rotation matrix: -90° around X axis (Z-up to Y-up)
+                    # cos(-90°) = 0, sin(-90°) = -1
+                    # Rx = [[1, 0, 0], [0, 0, 1], [0, -1, 0]]
+                    
                     new_data = bytearray(binary_data)
                     for i in range(vertex_count):
                         pos = offset + i * stride
                         x, y, z = struct.unpack_from('fff', binary_data, pos)
                         
-                        # Translate to origin
-                        x -= center_x
-                        y -= center_y
-                        z -= center_z
+                        # 1. Apply basis correction rotation: -90° X
+                        # New coordinates: x' = x, y' = z, z' = -y
+                        x_rot = x
+                        y_rot = z
+                        z_rot = -y
                         
-                        struct.pack_into('fff', new_data, pos, x, y, z)
+                        # 2. Translate to origin
+                        x_rot -= center_x
+                        y_rot -= center_y
+                        z_rot -= center_z
+                        
+                        struct.pack_into('fff', new_data, pos, x_rot, y_rot, z_rot)
                     
                     # Update buffer
                     if buffer.uri and buffer.uri.startswith('data:'):

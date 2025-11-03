@@ -160,21 +160,9 @@ class STLConverter(BaseConverter):
                 except Exception as e:
                     self.log_operation(f"Warning: Could not apply default material: {str(e)}", "WARNING")
 
-            # Apply basis correction: STL is Z-up, GLB is Y-up
-            # Rotate -90° around X axis to convert Z-up to Y-up
-            # This prevents trimesh from adding a baked rotation node
-            self.log_operation("Applying basis correction: Z-up to Y-up (-90° X rotation)")
-            rotation_matrix = trimesh.transformations.rotation_matrix(
-                angle=np.radians(-90),  # -90 degrees
-                direction=[1, 0, 0]      # X axis
-            )
-            
-            if isinstance(mesh, trimesh.Trimesh):
-                mesh.apply_transform(rotation_matrix)
-            elif isinstance(mesh, trimesh.Scene):
-                for geom in mesh.geometry.values():
-                    if isinstance(geom, trimesh.Trimesh):
-                        geom.apply_transform(rotation_matrix)
+            # Note: Basis correction (Z-up to Y-up) is NOT applied here
+            # It will be handled in glb_modifier during normalization
+            # This keeps the model in its original orientation on upload
             
             # Convert to scene if it's a single mesh
             if isinstance(mesh, trimesh.Trimesh):

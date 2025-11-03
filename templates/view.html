@@ -2489,9 +2489,10 @@
                     return;
                 }
 
-                const scene = modelViewer.model;
-                if (!scene) {
-                    console.warn('Model not yet available for rotation update');
+                const model = modelViewer.model;
+                const root = model?.scene || model?.modelViewerScene;
+                if (!root) {
+                    console.warn('Model root not available for rotation update');
                     return;
                 }
 
@@ -2503,10 +2504,11 @@
                 const euler = new THREE.Euler(x, y, z, 'YXZ');
                 const quaternion = new THREE.Quaternion().setFromEuler(euler);
 
-                // Apply to the model's root so preview matches saved rotation
-                if (scene && scene.traverse) {
-                    const root = scene;
-                    root.quaternion.copy(quaternion);
+                root.quaternion.copy(quaternion);
+                root.updateMatrixWorld(true);
+
+                if (typeof modelViewer.requestRender === 'function') {
+                    modelViewer.requestRender();
                 }
             }
 
@@ -2523,6 +2525,18 @@
                 
                 modelViewer.scale = '1 1 1';
                 modelViewer.orientation = '0deg 0deg 0deg';
+
+                const model = modelViewer.model;
+                const root = model?.scene || model?.modelViewerScene;
+                if (root) {
+                    root.quaternion.identity();
+                    root.updateMatrixWorld(true);
+                }
+
+                if (typeof modelViewer.requestRender === 'function') {
+                    modelViewer.requestRender();
+                }
+
                 updateDimensionDisplay(1);
             });
 

@@ -994,22 +994,23 @@
                 initialFieldOfView = modelViewer.fieldOfView;
                 initialCameraTarget = modelViewer.cameraTarget;
 
-                // Apply saved rotation from backend directly to modelRoot
-                // NOT: Slider'ları güncellemiyoruz çünkü rotasyon zaten vertex'lere baked
-                // Slider'lar 0'da kalmalı, böylece kullanıcı ek rotasyon uygulayabilir
+                // ABSOLUTE ROTATION: Slider'lar toplam rotasyonu gösterir
+                // Backend her zaman orijinal modele (v1) toplam rotasyonu uygular
                 const savedRotation = {{ applied_rotation|tojson }};
                 
-                // Slider'ları her zaman 0'da tut (rotasyon zaten vertex'lerde)
-                rotationState.x = 0;
-                rotationState.y = 0;
-                rotationState.z = 0;
+                // Slider'ları kaydedilen toplam rotasyonla başlat
+                rotationState.x = savedRotation.x || 0;
+                rotationState.y = savedRotation.y || 0;
+                rotationState.z = savedRotation.z || 0;
                 
-                document.getElementById('rotateXSlider').value = 0;
-                document.getElementById('rotateXValue').textContent = '0°';
-                document.getElementById('rotateYSlider').value = 0;
-                document.getElementById('rotateYValue').textContent = '0°';
-                document.getElementById('rotateZSlider').value = 0;
-                document.getElementById('rotateZValue').textContent = '0°';
+                document.getElementById('rotateXSlider').value = rotationState.x;
+                document.getElementById('rotateXValue').textContent = rotationState.x + '°';
+                document.getElementById('rotateYSlider').value = rotationState.y;
+                document.getElementById('rotateYValue').textContent = rotationState.y + '°';
+                document.getElementById('rotateZSlider').value = rotationState.z;
+                document.getElementById('rotateZValue').textContent = rotationState.z + '°';
+                
+                console.log(`📐 Loaded total rotation: (${rotationState.x}°, ${rotationState.y}°, ${rotationState.z}°)`);
 
                 // Initialize modelRoot for transform panel
                 // Use setTimeout to ensure model property is ready

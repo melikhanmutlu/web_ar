@@ -2108,12 +2108,34 @@ def save_modifications():
         logger.info(f"[save_modifications] Model ID: {model_id}")
         logger.info(f"[save_modifications] Modifications: {modifications}")
         
-        # Get original GLB path
-        original_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        # ABSOLUTE ROTATION: Always start from version 1 (original upload)
+        # Find version 1 (original upload) from database
+        model = UserModel.query.get(model_id)
+        if not model or not model.versions:
+            logger.error(f"Model or versions not found for ID: {model_id}")
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        # Get version 1 (original upload)
+        version_1 = None
+        for version in model.versions:
+            if version.version_number == 1 and version.operation_type == 'upload':
+                version_1 = version
+                break
+        
+        if not version_1:
+            logger.error(f"Version 1 (original upload) not found for model {model_id}")
+            return jsonify({'success': False, 'error': 'Original upload version not found'}), 404
+        
+        # Use version 1's file as the base for modifications
+        original_path = version_1.filename
+        logger.info(f"[save_modifications] Using version 1 as base: {original_path}")
         
         if not os.path.exists(original_path):
-            logger.error(f"Original GLB not found: {original_path}")
-            return jsonify({'success': False, 'error': 'Original model not found'}), 404
+            logger.error(f"Version 1 GLB not found: {original_path}")
+            return jsonify({'success': False, 'error': 'Original model file not found'}), 404
+        
+        # Current model.glb path (will be replaced)
+        current_model_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
         
         # Create backup of original
         backup_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'model_backup_{int(time.time())}.glb')
@@ -2130,13 +2152,13 @@ def save_modifications():
         success = modify_glb(original_path, temp_output, modifications)
         
         if success and os.path.exists(temp_output):
-            # Replace original with modified version
-            shutil.move(temp_output, original_path)
-            logger.info(f"[save_modifications] Successfully replaced original GLB")
+            # Replace current model.glb with modified version (based on version 1)
+            shutil.move(temp_output, current_model_path)
+            logger.info(f"[save_modifications] Successfully replaced model.glb with version based on v1")
             
-            # Update database dimensions after scale
+            # Update database dimensions after modifications
             try:
-                mesh = trimesh.load(original_path, force='scene')
+                mesh = trimesh.load(current_model_path, force='scene')
                 if isinstance(mesh, trimesh.Scene):
                     bounds = mesh.bounds
                 else:

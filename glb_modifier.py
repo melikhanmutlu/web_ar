@@ -380,51 +380,49 @@ def calculate_model_center(gltf):
 def create_rotation_matrix(rx, ry, rz):
     """
     Create a 3x3 rotation matrix from Euler angles (in radians)
-    Uses scipy for accurate rotation matching model-viewer
+    Orientation follows model-viewer's yaw (Y), pitch (X), roll (Z) convention.
+    Rotation order: intrinsic YXZ (yaw -> pitch -> roll).
     
     Args:
-        rx: Rotation around X axis (radians)
-        ry: Rotation around Y axis (radians)
-        rz: Rotation around Z axis (radians)
+        rx: Rotation around X axis (pitch, radians)
+        ry: Rotation around Y axis (yaw, radians)
+        rz: Rotation around Z axis (roll, radians)
     
     Returns:
         3x3 numpy rotation matrix
     """
     try:
         from scipy.spatial.transform import Rotation as R
-        # model-viewer uses extrinsic XYZ rotation (applied in order: X, then Y, then Z)
-        # In scipy, this is 'xyz' with extrinsic=True or 'XYZ' (uppercase = extrinsic)
-        rot = R.from_euler('XYZ', [rx, ry, rz], degrees=False)
+        # Use intrinsic YXZ (yaw, pitch, roll) to mirror model-viewer orientation
+        rot = R.from_euler('YXZ', [ry, rx, rz], degrees=False)
         return rot.as_matrix()
     except ImportError:
         # Fallback to manual matrix multiplication if scipy not available
         logger.warning("scipy not available, using manual rotation matrix")
         
-        # Rotation matrix around X axis
+        # Rotation matrix around X axis (pitch)
         Rx = np.array([
             [1, 0, 0],
             [0, np.cos(rx), -np.sin(rx)],
             [0, np.sin(rx), np.cos(rx)]
         ])
         
-        # Rotation matrix around Y axis
+        # Rotation matrix around Y axis (yaw)
         Ry = np.array([
             [np.cos(ry), 0, np.sin(ry)],
             [0, 1, 0],
             [-np.sin(ry), 0, np.cos(ry)]
         ])
         
-        # Rotation matrix around Z axis
+        # Rotation matrix around Z axis (roll)
         Rz = np.array([
             [np.cos(rz), -np.sin(rz), 0],
             [np.sin(rz), np.cos(rz), 0],
             [0, 0, 1]
         ])
         
-        # Intrinsic XYZ (apply in order: X, then Y, then Z)
-        # For intrinsic rotations, multiply in reverse: Rz @ Ry @ Rx
-        # But model-viewer uses a specific convention, so we use: Rx @ Ry @ Rz
-        return Rx @ Ry @ Rz
+        # Intrinsic YXZ: first yaw (Y), then pitch (X), finally roll (Z)
+        return Ry @ Rx @ Rz
 
 
 def apply_transform_modifications(gltf, transform_mods):
@@ -447,15 +445,15 @@ def apply_transform_modifications(gltf, transform_mods):
     rotation_matrix = None
     if 'rotation' in transform_mods:
         rotation = transform_mods['rotation']
-        # model-viewer's orientation attribute rotates the model
-        # We apply the same rotation to vertices
+        # model-viewer uses Z-up convention while GLB uses Y-up
+        # Map model-viewer axes to GLB axes: X→X, Y→Z, Z→-Y
         rx = np.radians(float(rotation.get('x', 0)))
-        ry = np.radians(float(rotation.get('y', 0)))
-        rz = np.radians(float(rotation.get('z', 0)))
+        ry = np.radians(float(rotation.get('z', 0)))  # Swap: Y from UI -> Z in GLB
+        rz = -np.radians(float(rotation.get('y', 0)))  # Swap and negate: Z from UI -> -Y in GLB
         
         if rx != 0 or ry != 0 or rz != 0:
             rotation_matrix = create_rotation_matrix(rx, ry, rz)
-            logger.info(f"Created rotation matrix for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+            logger.info(f"Created rotation matrix for UI({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> GLB({np.degrees(rx):.0f}°, {np.degrees(ry):.0f}°, {np.degrees(rz):.0f}°)")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

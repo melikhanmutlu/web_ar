@@ -2528,44 +2528,22 @@
             // modelRoot is now initialized in the main load event listener above
 
             function applyRotationToRoot() {
-                const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;
-                if (!THREE) {
-                    console.warn('THREE.js context not available for rotation update');
-                    return;
-                }
+                // TEMPORARY: Use orientation attribute for live preview
+                // This rotates the camera view, not the model itself, but provides visual feedback
+                // The actual model rotation is applied on the backend when saving
+                const x = rotationState.x;
+                const y = rotationState.y;
+                const z = rotationState.z;
 
-                if (!modelRoot) {
-                    console.warn('Model root not available for rotation update');
-                    return;
-                }
-
-                const x = THREE.MathUtils.degToRad(rotationState.x);
-                const y = THREE.MathUtils.degToRad(rotationState.y);
-                const z = THREE.MathUtils.degToRad(rotationState.z);
-
-                console.log(`🔄 Applying rotation: X=${rotationState.x}°, Y=${rotationState.y}°, Z=${rotationState.z}°`);
-
-                const euler = new THREE.Euler(x, y, z, 'YXZ');
-                const quaternion = new THREE.Quaternion().setFromEuler(euler);
-
-                console.log('   Quaternion:', quaternion);
-                console.log('   Before:', modelRoot.quaternion);
-
-                modelRoot.quaternion.copy(quaternion);
-                modelRoot.updateMatrixWorld(true);
-
-                console.log('   After:', modelRoot.quaternion);
-                console.log('   Requesting render...');
-
-                if (typeof modelViewer.requestRender === 'function') {
-                    modelViewer.requestRender();
-                } else {
-                    console.warn('   requestRender not available');
-                }
+                console.log(`🔄 Applying rotation preview: X=${x}°, Y=${y}°, Z=${z}°`);
+                
+                // Apply to model-viewer orientation for live preview
+                modelViewer.orientation = `${x}deg ${y}deg ${z}deg`;
+                
+                console.log('   Applied to orientation attribute');
             }
 
             function updateRotation() {
-                if (!modelRoot) return;
                 applyRotationToRoot();
             }
 

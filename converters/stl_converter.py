@@ -72,13 +72,44 @@ class STLConverter(BaseConverter):
             if not isinstance(mesh, (trimesh.Trimesh, trimesh.Scene)):
                 self.handle_error(f"Invalid mesh type: {type(mesh)}")
                 return False
-            
-            # Get model dimensions
-            if isinstance(mesh, trimesh.Scene):
-                bounds = mesh.bounds
-                extents = bounds[1] - bounds[0]
+
+            # Ensure we have a scene to process and flatten all node transforms
+            if isinstance(mesh, trimesh.Trimesh):
+                scene = trimesh.Scene([mesh])
             else:
-                extents = mesh.extents
+                scene = mesh
+
+            flattened_meshes = []
+            for node_name in scene.graph.nodes_geometry:
+                transform, geom_name = scene.graph[node_name]
+                geometry = scene.geometry.get(geom_name)
+                if geometry is None:
+                    continue
+                geom_copy = geometry.copy()
+                geom_copy.apply_transform(transform)
+                flattened_meshes.append(geom_copy)
+
+            if not flattened_meshes:
+                self.handle_error("No geometry found in STL scene")
+                return False
+
+            if len(flattened_meshes) == 1:
+                mesh = flattened_meshes[0]
+            else:
+                mesh = trimesh.util.concatenate(flattened_meshes)
+
+            self.log_operation(f"Flattened scene: {len(flattened_meshes)} geometries merged into single mesh")
+
+            # Apply basis correction once (Z-up -> Y-up) directly to vertices
+            basis_correction = trimesh.transformations.rotation_matrix(
+                angle=np.radians(-90),
+                direction=[1, 0, 0]
+            )
+            mesh.apply_transform(basis_correction)
+            self.log_operation("Applied basis correction: -90° around X (Z-up to Y-up)")
+
+            # Get model dimensions
+            extents = mesh.extents
             
             dimensions = {
                 'x': extents[0],

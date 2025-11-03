@@ -439,31 +439,23 @@ def apply_transform_modifications(gltf, transform_mods):
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
     # Apply rotation via node transforms
-    # When rotation is applied, also apply basis correction (Z-up to Y-up)
+    # Note: Basis correction (Z-up to Y-up) is already handled by trimesh during model loading
+    # Applying it again here would result in 180° opposite rotation
     if 'rotation' in transform_mods and gltf.nodes:
         rotation = transform_mods['rotation']
         rx = np.radians(float(rotation.get('x', 0)))
         ry = np.radians(float(rotation.get('y', 0)))
         rz = np.radians(float(rotation.get('z', 0)))
         
-        # Basis correction: -90° around X axis (Z-up to Y-up)
-        basis_correction_rx = np.radians(-90)
-        
-        if rx != 0 or ry != 0 or rz != 0 or basis_correction_rx != 0:
-            # Combine basis correction with user rotation
-            # First apply basis correction, then user rotation
-            combined_rx = basis_correction_rx + rx
-            combined_ry = ry
-            combined_rz = rz
-            
-            # Convert combined Euler to quaternion for node rotation
-            quat = euler_to_quaternion(combined_rx, combined_ry, combined_rz)
+        if rx != 0 or ry != 0 or rz != 0:
+            # Convert user rotation directly to quaternion (no basis correction)
+            quat = euler_to_quaternion(rx, ry, rz)
             
             # Apply rotation to all nodes
             for node in gltf.nodes:
                 node.rotation = quat
             
-            logger.info(f"Applied rotation with basis correction: User({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) + Basis(-90°, 0°, 0°) -> Quaternion {quat}")
+            logger.info(f"Applied rotation to nodes: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> Quaternion {quat}")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

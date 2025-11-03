@@ -380,7 +380,7 @@ def calculate_model_center(gltf):
 def create_rotation_matrix(rx, ry, rz):
     """
     Create a 3x3 rotation matrix from Euler angles (in radians)
-    Rotation order: YXZ (same as model-viewer orientation attribute)
+    Uses scipy for accurate rotation matching model-viewer
     
     Args:
         rx: Rotation around X axis (radians)
@@ -390,30 +390,39 @@ def create_rotation_matrix(rx, ry, rz):
     Returns:
         3x3 numpy rotation matrix
     """
-    # Rotation matrix around X axis
-    Rx = np.array([
-        [1, 0, 0],
-        [0, np.cos(rx), -np.sin(rx)],
-        [0, np.sin(rx), np.cos(rx)]
-    ])
-    
-    # Rotation matrix around Y axis
-    Ry = np.array([
-        [np.cos(ry), 0, np.sin(ry)],
-        [0, 1, 0],
-        [-np.sin(ry), 0, np.cos(ry)]
-    ])
-    
-    # Rotation matrix around Z axis
-    Rz = np.array([
-        [np.cos(rz), -np.sin(rz), 0],
-        [np.sin(rz), np.cos(rz), 0],
-        [0, 0, 1]
-    ])
-    
-    # Combined rotation: Y * X * Z order (intrinsic YXZ)
-    # This matches model-viewer's orientation attribute behavior
-    return Ry @ Rx @ Rz
+    try:
+        from scipy.spatial.transform import Rotation as R
+        # model-viewer uses extrinsic XYZ rotation (applied in order: X, then Y, then Z)
+        # In scipy, this is 'xyz' with extrinsic=True or 'XYZ' (uppercase = extrinsic)
+        rot = R.from_euler('XYZ', [rx, ry, rz], degrees=False)
+        return rot.as_matrix()
+    except ImportError:
+        # Fallback to manual matrix multiplication if scipy not available
+        logger.warning("scipy not available, using manual rotation matrix")
+        
+        # Rotation matrix around X axis
+        Rx = np.array([
+            [1, 0, 0],
+            [0, np.cos(rx), -np.sin(rx)],
+            [0, np.sin(rx), np.cos(rx)]
+        ])
+        
+        # Rotation matrix around Y axis
+        Ry = np.array([
+            [np.cos(ry), 0, np.sin(ry)],
+            [0, 1, 0],
+            [-np.sin(ry), 0, np.cos(ry)]
+        ])
+        
+        # Rotation matrix around Z axis
+        Rz = np.array([
+            [np.cos(rz), -np.sin(rz), 0],
+            [np.sin(rz), np.cos(rz), 0],
+            [0, 0, 1]
+        ])
+        
+        # Extrinsic XYZ = Rz @ Ry @ Rx
+        return Rz @ Ry @ Rx
 
 
 def apply_transform_modifications(gltf, transform_mods):

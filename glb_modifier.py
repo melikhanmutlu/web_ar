@@ -421,8 +421,10 @@ def create_rotation_matrix(rx, ry, rz):
             [0, 0, 1]
         ])
         
-        # Extrinsic XYZ = Rz @ Ry @ Rx
-        return Rz @ Ry @ Rx
+        # Intrinsic XYZ (apply in order: X, then Y, then Z)
+        # For intrinsic rotations, multiply in reverse: Rz @ Ry @ Rx
+        # But model-viewer uses a specific convention, so we use: Rx @ Ry @ Rz
+        return Rx @ Ry @ Rz
 
 
 def apply_transform_modifications(gltf, transform_mods):

@@ -987,9 +987,27 @@
 
                 // Initialize modelRoot for transform panel
                 const model = modelViewer.model;
+                console.log('Model object:', model);
+                console.log('model.scene:', model?.scene);
+                console.log('model.modelViewerScene:', model?.modelViewerScene);
+                
+                // Try multiple paths to find the actual Three.js scene
                 modelRoot = model?.scene || model?.modelViewerScene;
+                
+                if (!modelRoot && model) {
+                    // Try to find scene in model's children
+                    if (model.children && model.children.length > 0) {
+                        modelRoot = model.children[0];
+                        console.log('Using model.children[0] as root:', modelRoot);
+                    }
+                }
+                
                 if (!modelRoot) {
                     console.warn('Model root could not be resolved on load');
+                } else {
+                    console.log('Model root resolved:', modelRoot);
+                    console.log('Model root type:', modelRoot.type);
+                    console.log('Model root has quaternion:', !!modelRoot.quaternion);
                 }
             });
 

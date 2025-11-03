@@ -25,6 +25,7 @@ def hex_to_rgb(hex_color):
 def euler_to_rotation_matrix(rx, ry, rz):
     """
     Convert Euler angles (in radians, YXZ intrinsic order) to a 3x3 rotation matrix
+    Positive angles rotate clockwise when looking along the positive axis direction
     
     Args:
         rx, ry, rz: Rotation angles in radians (X, Y, Z axes)
@@ -32,22 +33,23 @@ def euler_to_rotation_matrix(rx, ry, rz):
     Returns:
         3x3 numpy rotation matrix
     """
-    # Rotation matrices for each axis
+    # Rotation matrices for each axis (clockwise direction)
+    # Inverted sin signs for clockwise rotation
     Rx = np.array([
         [1, 0, 0],
-        [0, np.cos(rx), -np.sin(rx)],
-        [0, np.sin(rx), np.cos(rx)]
+        [0, np.cos(rx), np.sin(rx)],   # Inverted sin for clockwise
+        [0, -np.sin(rx), np.cos(rx)]
     ])
     
     Ry = np.array([
-        [np.cos(ry), 0, np.sin(ry)],
+        [np.cos(ry), 0, -np.sin(ry)],  # Inverted sin for clockwise
         [0, 1, 0],
-        [-np.sin(ry), 0, np.cos(ry)]
+        [np.sin(ry), 0, np.cos(ry)]
     ])
     
     Rz = np.array([
-        [np.cos(rz), -np.sin(rz), 0],
-        [np.sin(rz), np.cos(rz), 0],
+        [np.cos(rz), np.sin(rz), 0],   # Inverted sin for clockwise
+        [-np.sin(rz), np.cos(rz), 0],
         [0, 0, 1]
     ])
     

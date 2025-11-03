@@ -2531,11 +2531,12 @@
                 // TEMPORARY: Use orientation attribute for live preview
                 // This rotates the camera view, not the model itself, but provides visual feedback
                 // The actual model rotation is applied on the backend when saving
-                const x = rotationState.x;
-                const y = rotationState.y;
-                const z = rotationState.z;
+                // NOTE: orientation rotates camera, so we invert signs to match vertex rotation direction
+                const x = -rotationState.x;  // Invert to match backend vertex rotation
+                const y = -rotationState.y;
+                const z = -rotationState.z;
 
-                console.log(`🔄 Applying rotation preview: X=${x}°, Y=${y}°, Z=${z}°`);
+                console.log(`🔄 Applying rotation preview: X=${rotationState.x}°, Y=${rotationState.y}°, Z=${rotationState.z}° (inverted for camera)`);
                 
                 // Apply to model-viewer orientation for live preview
                 modelViewer.orientation = `${x}deg ${y}deg ${z}deg`;

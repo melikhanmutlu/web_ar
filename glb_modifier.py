@@ -22,6 +22,39 @@ def hex_to_rgb(hex_color):
     return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 
+def euler_to_rotation_matrix(rx, ry, rz):
+    """
+    Convert Euler angles (in radians, YXZ intrinsic order) to a 3x3 rotation matrix
+    
+    Args:
+        rx, ry, rz: Rotation angles in radians (X, Y, Z axes)
+    
+    Returns:
+        3x3 numpy rotation matrix
+    """
+    # Rotation matrices for each axis
+    Rx = np.array([
+        [1, 0, 0],
+        [0, np.cos(rx), -np.sin(rx)],
+        [0, np.sin(rx), np.cos(rx)]
+    ])
+    
+    Ry = np.array([
+        [np.cos(ry), 0, np.sin(ry)],
+        [0, 1, 0],
+        [-np.sin(ry), 0, np.cos(ry)]
+    ])
+    
+    Rz = np.array([
+        [np.cos(rz), -np.sin(rz), 0],
+        [np.sin(rz), np.cos(rz), 0],
+        [0, 0, 1]
+    ])
+    
+    # YXZ intrinsic order: R = Rz * Rx * Ry
+    return Rz @ Rx @ Ry
+
+
 def apply_material_modifications(gltf, material_mods):
     """
     Apply material modifications to all materials in the GLTF
@@ -438,30 +471,29 @@ def apply_transform_modifications(gltf, transform_mods):
     center_x, center_y, center_z = calculate_model_center(gltf)
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
-    # Apply rotation via node transforms
-    # Note: Basis correction (Z-up to Y-up) is already handled by trimesh during model loading
-    # Applying it again here would result in 180° opposite rotation
-    if 'rotation' in transform_mods and gltf.nodes:
-        rotation = transform_mods['rotation']
-        rx = np.radians(float(rotation.get('x', 0)))
-        ry = np.radians(float(rotation.get('y', 0)))
-        rz = np.radians(float(rotation.get('z', 0)))
-        
-        if rx != 0 or ry != 0 or rz != 0:
-            # Convert user rotation directly to quaternion (no basis correction)
-            quat = euler_to_quaternion(rx, ry, rz)
-            
-            # Apply rotation to all nodes
-            for node in gltf.nodes:
-                node.rotation = quat
-            
-            logger.info(f"Applied rotation to nodes: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> Quaternion {quat}")
+    # Get rotation parameters
+    rotation = transform_mods.get('rotation', {})
+    rx = np.radians(float(rotation.get('x', 0)))
+    ry = np.radians(float(rotation.get('y', 0)))
+    rz = np.radians(float(rotation.get('z', 0)))
+    has_rotation = (rx != 0 or ry != 0 or rz != 0)
+    
+    # Calculate rotation matrix if needed
+    rotation_matrix = None
+    if has_rotation:
+        rotation_matrix = euler_to_rotation_matrix(rx, ry, rz)
+        logger.info(f"Rotation matrix calculated for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))
     
-    if scale_factor != 1.0 and gltf.meshes:
-            logger.info(f"Applying scale {scale_factor} to mesh vertices")
+    if (scale_factor != 1.0 or has_rotation) and gltf.meshes:
+            transforms = []
+            if has_rotation:
+                transforms.append(f"rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+            if scale_factor != 1.0:
+                transforms.append(f"scale {scale_factor}")
+            logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
             try:
                 for mesh_idx, mesh in enumerate(gltf.meshes):
                     if not mesh.primitives:
@@ -512,13 +544,19 @@ def apply_transform_modifications(gltf, transform_mods):
                                 y -= center_y
                                 z -= center_z
                                 
-                                # 2. Apply scale
+                                # 2. Apply rotation (if any)
+                                if rotation_matrix is not None:
+                                    vertex = np.array([x, y, z])
+                                    rotated = rotation_matrix @ vertex
+                                    x, y, z = rotated[0], rotated[1], rotated[2]
+                                
+                                # 3. Apply scale
                                 if scale_factor != 1.0:
                                     x *= scale_factor
                                     y *= scale_factor
                                     z *= scale_factor
                                 
-                                # 3. Translate back
+                                # 4. Translate back
                                 x += center_x
                                 y += center_y
                                 z += center_z
@@ -535,20 +573,22 @@ def apply_transform_modifications(gltf, transform_mods):
                                 gltf.set_binary_blob(bytes(new_data))
                             
                             transform_desc = []
+                            if has_rotation:
+                                transform_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
                             if scale_factor != 1.0:
                                 transform_desc.append(f"scaled {scale_factor}x")
                             logger.info(f"Transformed {vertex_count} vertices ({', '.join(transform_desc)}) in mesh {mesh_idx}, primitive {prim_idx}")
                 
                 result_desc = []
+                if has_rotation:
+                    result_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
                 if scale_factor != 1.0:
                     result_desc.append(f"scaled by {scale_factor}")
                 logger.info(f"✅ Geometry transformed: {', '.join(result_desc) if result_desc else 'no changes'}")
             except Exception as e:
                 logger.error(f"Failed to transform geometry: {e}", exc_info=True)
     
-    # Note: Scale is applied to geometry vertices, rotation is applied to node transforms
-    # This ensures rotation matches model-viewer's orientation behavior
-    logger.info("Transform modifications applied (rotation via nodes, scale via vertices)")
+    logger.info("Transform modifications applied (rotation and scale baked into vertices)")
     
     return gltf
 

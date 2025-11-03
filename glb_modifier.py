@@ -445,13 +445,16 @@ def apply_transform_modifications(gltf, transform_mods):
     rotation_matrix = None
     if 'rotation' in transform_mods:
         rotation = transform_mods['rotation']
+        # Note: model-viewer's orientation rotates the camera view, not the model
+        # To match the visual result, we need to apply inverse rotation to the model
+        # Or negate the Y and Z rotations (depending on coordinate system)
         rx = np.radians(float(rotation.get('x', 0)))
-        ry = np.radians(float(rotation.get('y', 0)))
+        ry = -np.radians(float(rotation.get('y', 0)))  # Negate Y
         rz = np.radians(float(rotation.get('z', 0)))
         
         if rx != 0 or ry != 0 or rz != 0:
             rotation_matrix = create_rotation_matrix(rx, ry, rz)
-            logger.info(f"Created rotation matrix for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+            logger.info(f"Created rotation matrix for ({rotation.get('x', 0)}°, {-rotation.get('y', 0)}°, {rotation.get('z', 0)}°) [Y negated]")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

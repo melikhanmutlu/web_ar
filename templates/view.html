@@ -994,6 +994,17 @@
                 initialFieldOfView = modelViewer.fieldOfView;
                 initialCameraTarget = modelViewer.cameraTarget;
 
+                // Apply saved rotation from backend (inverted for camera orientation)
+                const savedRotation = {{ applied_rotation|tojson }};
+                if (savedRotation && (savedRotation.x !== 0 || savedRotation.y !== 0 || savedRotation.z !== 0)) {
+                    // Invert rotation for camera orientation to match vertex rotation
+                    const invertedX = -savedRotation.x;
+                    const invertedY = -savedRotation.y;
+                    const invertedZ = -savedRotation.z;
+                    modelViewer.orientation = `${invertedX}deg ${invertedY}deg ${invertedZ}deg`;
+                    console.log(`📐 Applied saved rotation: (${savedRotation.x}°, ${savedRotation.y}°, ${savedRotation.z}°) as orientation (${invertedX}°, ${invertedY}°, ${invertedZ}°)`);
+                }
+
                 // Initialize modelRoot for transform panel
                 // Use setTimeout to ensure model property is ready
                 setTimeout(() => {

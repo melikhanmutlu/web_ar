@@ -1450,13 +1450,24 @@ def view_model(model_id):
         flash('Error processing model path.', 'error')
         return redirect(url_for('index'))
     
+    # Get last applied rotation from latest version
+    applied_rotation = {'x': 0, 'y': 0, 'z': 0}
+    if model.versions:
+        latest_version = model.versions[0]  # Already ordered by created_at desc
+        if latest_version.operation_details and 'transform' in latest_version.operation_details:
+            transform_details = latest_version.operation_details['transform']
+            if 'rotation' in transform_details:
+                applied_rotation = transform_details['rotation']
+                app.logger.info(f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}")
+    
     return render_template('view.html', 
                            model_id=model_id, 
                            model=model, 
                            model_unique_id=model_unique_id, 
                            actual_filename=actual_filename,
                            model_dimensions=model_dimensions,
-                           cumulative_scale=model.cumulative_scale or 1.0)
+                           cumulative_scale=model.cumulative_scale or 1.0,
+                           applied_rotation=applied_rotation)
 
 # Route to serve converted model files
 @app.route('/converted_files/<path:unique_id>/<path:filename>')

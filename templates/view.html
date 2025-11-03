@@ -919,11 +919,13 @@
     </style>
 
     <script>
+        // Shared state for model root and rotation (accessible by all panels)
+        let modelRoot = null;
+        const rotationState = { x: 0, y: 0, z: 0 };
+
         // Get all the necessary DOM elements
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');
-            let modelRoot = null;
-            const rotationState = { x: 0, y: 0, z: 0 };
             const fullscreenButton = document.querySelector('#fullscreenButton');
             const downloadButton = document.querySelector('#downloadButton');
             const colorPicker = document.querySelector('#colorPicker');
@@ -982,6 +984,13 @@
                 initialCameraOrbit = modelViewer.cameraOrbit;
                 initialFieldOfView = modelViewer.fieldOfView;
                 initialCameraTarget = modelViewer.cameraTarget;
+
+                // Initialize modelRoot for transform panel
+                const model = modelViewer.model;
+                modelRoot = model?.scene || model?.modelViewerScene;
+                if (!modelRoot) {
+                    console.warn('Model root could not be resolved on load');
+                }
             });
 
             // Fullscreen button handler
@@ -2487,25 +2496,7 @@
                 updateRotation();
             });
 
-            modelViewer.addEventListener('load', () => {
-                const model = modelViewer.model;
-                modelRoot = model?.scene || model?.modelViewerScene;
-
-                if (!modelRoot) {
-                    const internalScene = getInternalScene();
-                    if (internalScene?.model) {
-                        modelRoot = internalScene.model;
-                    } else if (internalScene) {
-                        modelRoot = internalScene;
-                    }
-                }
-
-                if (!modelRoot) {
-                    console.warn('Model root could not be resolved on load');
-                } else {
-                    applyRotationToRoot();
-                }
-            });
+            // modelRoot is now initialized in the main load event listener above
 
             function applyRotationToRoot() {
                 const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;

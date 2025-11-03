@@ -2483,11 +2483,31 @@
             });
 
             function updateRotation() {
-                const x = parseInt(rotateXSlider.value);
-                const y = parseInt(rotateYSlider.value);
-                const z = parseInt(rotateZSlider.value);
-                
-                modelViewer.orientation = `${x}deg ${y}deg ${z}deg`;
+                const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;
+                if (!THREE) {
+                    console.warn('THREE.js context not available for rotation update');
+                    return;
+                }
+
+                const scene = modelViewer.model;
+                if (!scene) {
+                    console.warn('Model not yet available for rotation update');
+                    return;
+                }
+
+                const x = THREE.MathUtils.degToRad(parseInt(rotateXSlider.value));
+                const y = THREE.MathUtils.degToRad(parseInt(rotateYSlider.value));
+                const z = THREE.MathUtils.degToRad(parseInt(rotateZSlider.value));
+
+                // Apply intrinsic YXZ rotation (yaw -> pitch -> roll) to match backend logic
+                const euler = new THREE.Euler(x, y, z, 'YXZ');
+                const quaternion = new THREE.Quaternion().setFromEuler(euler);
+
+                // Apply to the model's root so preview matches saved rotation
+                if (scene && scene.traverse) {
+                    const root = scene;
+                    root.quaternion.copy(quaternion);
+                }
             }
 
             // Reset Transform

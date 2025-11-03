@@ -380,7 +380,7 @@ def calculate_model_center(gltf):
 def create_rotation_matrix(rx, ry, rz):
     """
     Create a 3x3 rotation matrix from Euler angles (in radians)
-    Rotation order: ZYX (same as model-viewer)
+    Rotation order: YXZ (same as model-viewer orientation attribute)
     
     Args:
         rx: Rotation around X axis (radians)
@@ -411,8 +411,9 @@ def create_rotation_matrix(rx, ry, rz):
         [0, 0, 1]
     ])
     
-    # Combined rotation: Rz * Ry * Rx (ZYX order)
-    return Rz @ Ry @ Rx
+    # Combined rotation: Y * X * Z order (intrinsic YXZ)
+    # This matches model-viewer's orientation attribute behavior
+    return Ry @ Rx @ Rz
 
 
 def apply_transform_modifications(gltf, transform_mods):

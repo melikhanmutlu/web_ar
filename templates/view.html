@@ -995,22 +995,21 @@
                 initialCameraTarget = modelViewer.cameraTarget;
 
                 // Apply saved rotation from backend directly to modelRoot
+                // NOT: Slider'ları güncellemiyoruz çünkü rotasyon zaten vertex'lere baked
+                // Slider'lar 0'da kalmalı, böylece kullanıcı ek rotasyon uygulayabilir
                 const savedRotation = {{ applied_rotation|tojson }};
-                if (savedRotation && (savedRotation.x !== 0 || savedRotation.y !== 0 || savedRotation.z !== 0)) {
-                    
-                    // 1. Rotasyon state'ini ve slider'ları güncelle
-                    rotationState.x = savedRotation.x;
-                    rotationState.y = savedRotation.y;
-                    rotationState.z = savedRotation.z;
-                    
-                    // Slider'ları güncelle
-                    document.getElementById('rotateXSlider').value = savedRotation.x;
-                    document.getElementById('rotateXValue').textContent = savedRotation.x + '°';
-                    document.getElementById('rotateYSlider').value = savedRotation.y;
-                    document.getElementById('rotateYValue').textContent = savedRotation.y + '°';
-                    document.getElementById('rotateZSlider').value = savedRotation.z;
-                    document.getElementById('rotateZValue').textContent = savedRotation.z + '°';
-                }
+                
+                // Slider'ları her zaman 0'da tut (rotasyon zaten vertex'lerde)
+                rotationState.x = 0;
+                rotationState.y = 0;
+                rotationState.z = 0;
+                
+                document.getElementById('rotateXSlider').value = 0;
+                document.getElementById('rotateXValue').textContent = '0°';
+                document.getElementById('rotateYSlider').value = 0;
+                document.getElementById('rotateYValue').textContent = '0°';
+                document.getElementById('rotateZSlider').value = 0;
+                document.getElementById('rotateZValue').textContent = '0°';
 
                 // Initialize modelRoot for transform panel
                 // Use setTimeout to ensure model property is ready
@@ -1042,23 +1041,10 @@
                         console.log('   Has quaternion:', !!modelRoot.quaternion);
                         console.log('   Children count:', modelRoot.children?.length);
                         
-                        // Apply saved rotation to modelRoot if exists
-                        const savedRotation = {{ applied_rotation|tojson }};
-                        if (savedRotation && (savedRotation.x !== 0 || savedRotation.y !== 0 || savedRotation.z !== 0)) {
-                            console.log(`📐 Applying saved rotation directly to modelRoot: (${savedRotation.x}°, ${savedRotation.y}°, ${savedRotation.z}°)`);
-                            
-                            const radX = savedRotation.x * (Math.PI / 180);
-                            const radY = savedRotation.y * (Math.PI / 180);
-                            const radZ = savedRotation.z * (Math.PI / 180);
-
-                            // Rotasyonu modele YXZ sırasında uygula
-                            modelRoot.rotation.order = 'YXZ';
-                            modelRoot.rotation.set(radX, radY, radZ, 'YXZ');
-                            
-                            if (typeof modelViewer.requestRender === 'function') {
-                                modelViewer.requestRender();
-                            }
-                        }
+                        // NOT: Kaydedilen rotasyonu modelRoot'a UYGULAMIYORUZ
+                        // Çünkü rotasyon zaten vertex'lere baked edilmiş durumda
+                        // modelRoot identity (0,0,0) rotasyonda kalmalı
+                        console.log('📐 Rotation already baked into vertices, modelRoot stays at identity');
                     }
                 }, 100);
             });
@@ -2570,11 +2556,10 @@
                     return;
                 }
 
-                // 2. Rotasyon değerlerini state'ten al (ARTIK İŞARET DEĞİŞTİRMEYİN)
+                // 2. Rotasyon değerlerini state'ten al
                 const rx = rotationState.x;
                 const ry = rotationState.y;
                 const rz = rotationState.z;
-                console.log(`🔄 Applying MODEL rotation preview: X=${rx}°, Y=${ry}°, Z=${rz}°`);
 
                 // 3. Dereceleri radyana çevir (Three.js radyan kullanır)
                 const radX = rx * (Math.PI / 180);
@@ -2582,19 +2567,21 @@
                 const radZ = rz * (Math.PI / 180);
 
                 // 4. ROTASYON SIRASINI 'YXZ' OLARAK AYARLA (Backend ile Eşleşmesi İçin KRİTİK)
-                // Bu, modelRoot.rotation.set() fonksiyonunun (radX, radY, radZ) değerlerini
-                // hangi sırayla uygulayacağını belirler.
                 modelRoot.rotation.order = 'YXZ';
 
                 // 5. Rotasyonu modele uygula
-                // .set(x, y, z, order) kullanarak rotasyonu tek adımda uygula
                 modelRoot.rotation.set(radX, radY, radZ, 'YXZ');
 
-                // 6. model-viewer'ın değişikliği render etmesini sağla
+                // 6. Matrix'i güncelle (smooth render için kritik)
+                modelRoot.updateMatrixWorld(true);
+
+                // 7. Render'ı zorla (smooth preview için)
                 if (typeof modelViewer.requestRender === 'function') {
                     modelViewer.requestRender();
                 }
-                console.log('   Applied to modelRoot (Three.js object) with YXZ order.');
+                
+                // Alternatif: Eğer requestRender çalışmazsa, interaction tetikle
+                modelViewer.dispatchEvent(new Event('camera-change'));
             }
 
             function updateRotation() {

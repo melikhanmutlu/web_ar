@@ -2543,14 +2543,24 @@
                 const y = THREE.MathUtils.degToRad(rotationState.y);
                 const z = THREE.MathUtils.degToRad(rotationState.z);
 
+                console.log(`🔄 Applying rotation: X=${rotationState.x}°, Y=${rotationState.y}°, Z=${rotationState.z}°`);
+
                 const euler = new THREE.Euler(x, y, z, 'YXZ');
                 const quaternion = new THREE.Quaternion().setFromEuler(euler);
+
+                console.log('   Quaternion:', quaternion);
+                console.log('   Before:', modelRoot.quaternion);
 
                 modelRoot.quaternion.copy(quaternion);
                 modelRoot.updateMatrixWorld(true);
 
+                console.log('   After:', modelRoot.quaternion);
+                console.log('   Requesting render...');
+
                 if (typeof modelViewer.requestRender === 'function') {
                     modelViewer.requestRender();
+                } else {
+                    console.warn('   requestRender not available');
                 }
             }
 

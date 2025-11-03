@@ -441,25 +441,33 @@ def apply_transform_modifications(gltf, transform_mods):
     center_x, center_y, center_z = calculate_model_center(gltf)
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
-    # Prepare rotation matrix if rotation is specified
-    rotation_matrix = None
-    if 'rotation' in transform_mods:
+    # Handle rotation via node transforms (not vertex manipulation)
+    # This matches model-viewer's orientation behavior
+    if 'rotation' in transform_mods and gltf.nodes:
         rotation = transform_mods['rotation']
-        # model-viewer's orientation rotates the camera, not the model
-        # To match visual result, apply INVERSE rotation to model vertices
-        # Also map axes: X→X, Y→Z, Z→-Y (Z-up to Y-up conversion)
-        rx = -np.radians(float(rotation.get('x', 0)))  # Inverse X
-        ry = -np.radians(float(rotation.get('z', 0)))  # Inverse Z (mapped from UI Y)
-        rz = np.radians(float(rotation.get('y', 0)))   # Inverse Y (mapped to GLB Z, negated back)
+        rx = np.radians(float(rotation.get('x', 0)))
+        ry = np.radians(float(rotation.get('y', 0)))
+        rz = np.radians(float(rotation.get('z', 0)))
         
         if rx != 0 or ry != 0 or rz != 0:
-            rotation_matrix = create_rotation_matrix(rx, ry, rz)
-            logger.info(f"Created INVERSE rotation matrix for UI({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> GLB({np.degrees(rx):.0f}°, {np.degrees(ry):.0f}°, {np.degrees(rz):.0f}°)")
+            # Convert Euler to quaternion for node rotation
+            quat = euler_to_quaternion(rx, ry, rz)
+            
+            # Apply rotation to root node
+            for node in gltf.nodes:
+                if node.rotation is None:
+                    node.rotation = quat
+                else:
+                    # Combine with existing rotation
+                    logger.info(f"Node already has rotation: {node.rotation}")
+                    node.rotation = quat
+            
+            logger.info(f"Applied rotation to nodes: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> Quaternion {quat}")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))
     
-    if (scale_factor != 1.0 or rotation_matrix is not None) and gltf.meshes:
+    if scale_factor != 1.0 and gltf.meshes:
             logger.info(f"Applying scale {scale_factor} to mesh vertices")
             try:
                 for mesh_idx, mesh in enumerate(gltf.meshes):
@@ -511,19 +519,13 @@ def apply_transform_modifications(gltf, transform_mods):
                                 y -= center_y
                                 z -= center_z
                                 
-                                # 2. Apply rotation if specified
-                                if rotation_matrix is not None:
-                                    vertex = np.array([x, y, z])
-                                    rotated = rotation_matrix @ vertex
-                                    x, y, z = rotated[0], rotated[1], rotated[2]
-                                
-                                # 3. Apply scale
+                                # 2. Apply scale
                                 if scale_factor != 1.0:
                                     x *= scale_factor
                                     y *= scale_factor
                                     z *= scale_factor
                                 
-                                # 4. Translate back
+                                # 3. Translate back
                                 x += center_x
                                 y += center_y
                                 z += center_z
@@ -540,24 +542,20 @@ def apply_transform_modifications(gltf, transform_mods):
                                 gltf.set_binary_blob(bytes(new_data))
                             
                             transform_desc = []
-                            if rotation_matrix is not None:
-                                transform_desc.append("rotated")
                             if scale_factor != 1.0:
                                 transform_desc.append(f"scaled {scale_factor}x")
                             logger.info(f"Transformed {vertex_count} vertices ({', '.join(transform_desc)}) in mesh {mesh_idx}, primitive {prim_idx}")
                 
                 result_desc = []
-                if rotation_matrix is not None:
-                    result_desc.append(f"rotation applied")
                 if scale_factor != 1.0:
                     result_desc.append(f"scaled by {scale_factor}")
-                logger.info(f"✅ Geometry transformed: {', '.join(result_desc)}")
+                logger.info(f"✅ Geometry transformed: {', '.join(result_desc) if result_desc else 'no changes'}")
             except Exception as e:
                 logger.error(f"Failed to transform geometry: {e}", exc_info=True)
     
-    # Note: Both scale and rotation are now applied directly to geometry vertices
-    # This ensures consistent behavior between preview and saved model
-    logger.info("Transform modifications applied to geometry vertices")
+    # Note: Scale is applied to geometry vertices, rotation is applied to node transforms
+    # This ensures rotation matches model-viewer's orientation behavior
+    logger.info("Transform modifications applied (rotation via nodes, scale via vertices)")
     
     return gltf
 

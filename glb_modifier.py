@@ -445,15 +445,16 @@ def apply_transform_modifications(gltf, transform_mods):
     rotation_matrix = None
     if 'rotation' in transform_mods:
         rotation = transform_mods['rotation']
-        # model-viewer uses Z-up convention while GLB uses Y-up
-        # Map model-viewer axes to GLB axes: X→X, Y→Z, Z→-Y
-        rx = np.radians(float(rotation.get('x', 0)))
-        ry = np.radians(float(rotation.get('z', 0)))  # Swap: Y from UI -> Z in GLB
-        rz = -np.radians(float(rotation.get('y', 0)))  # Swap and negate: Z from UI -> -Y in GLB
+        # model-viewer's orientation rotates the camera, not the model
+        # To match visual result, apply INVERSE rotation to model vertices
+        # Also map axes: X→X, Y→Z, Z→-Y (Z-up to Y-up conversion)
+        rx = -np.radians(float(rotation.get('x', 0)))  # Inverse X
+        ry = -np.radians(float(rotation.get('z', 0)))  # Inverse Z (mapped from UI Y)
+        rz = np.radians(float(rotation.get('y', 0)))   # Inverse Y (mapped to GLB Z, negated back)
         
         if rx != 0 or ry != 0 or rz != 0:
             rotation_matrix = create_rotation_matrix(rx, ry, rz)
-            logger.info(f"Created rotation matrix for UI({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> GLB({np.degrees(rx):.0f}°, {np.degrees(ry):.0f}°, {np.degrees(rz):.0f}°)")
+            logger.info(f"Created INVERSE rotation matrix for UI({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> GLB({np.degrees(rx):.0f}°, {np.degrees(ry):.0f}°, {np.degrees(rz):.0f}°)")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

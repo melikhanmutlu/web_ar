@@ -988,31 +988,32 @@
                 // Initialize modelRoot for transform panel
                 // Use setTimeout to ensure model property is ready
                 setTimeout(() => {
-                    const model = modelViewer.model;
-                    console.log('Model object:', model);
+                    // Use getInternalScene to access Three.js scene
+                    const internalScene = getInternalScene();
+                    console.log('Internal scene:', internalScene);
                     
-                    if (!model) {
-                        console.error('modelViewer.model is not available');
-                        return;
-                    }
-                    
-                    console.log('model.scene:', model.scene);
-                    console.log('model.modelViewerScene:', model.modelViewerScene);
-                    
-                    // Try multiple paths to find the actual Three.js scene
-                    modelRoot = model.scene || model.modelViewerScene;
-                    
-                    if (!modelRoot && model.children && model.children.length > 0) {
-                        modelRoot = model.children[0];
-                        console.log('Using model.children[0] as root:', modelRoot);
+                    if (internalScene) {
+                        // The scene contains the model, find the root object
+                        let found = false;
+                        internalScene.traverse((obj) => {
+                            if (!found && obj.type === 'Group' && obj.children.length > 0) {
+                                modelRoot = obj;
+                                found = true;
+                            }
+                        });
+                        
+                        if (!modelRoot && internalScene.children && internalScene.children.length > 0) {
+                            modelRoot = internalScene.children[0];
+                        }
                     }
                     
                     if (!modelRoot) {
                         console.warn('Model root could not be resolved on load');
                     } else {
-                        console.log('Model root resolved:', modelRoot);
-                        console.log('Model root type:', modelRoot.type);
-                        console.log('Model root has quaternion:', !!modelRoot.quaternion);
+                        console.log('✅ Model root resolved:', modelRoot);
+                        console.log('   Type:', modelRoot.type);
+                        console.log('   Has quaternion:', !!modelRoot.quaternion);
+                        console.log('   Children count:', modelRoot.children?.length);
                     }
                 }, 100);
             });

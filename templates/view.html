@@ -923,6 +923,15 @@
         let modelRoot = null;
         const rotationState = { x: 0, y: 0, z: 0 };
 
+        // Get internal scene for material/transform manipulation
+        function getInternalScene() {
+            const modelViewer = document.querySelector('model-viewer');
+            if (!modelViewer) return null;
+            const symbols = Object.getOwnPropertySymbols(modelViewer);
+            const sceneSymbol = symbols.find(s => s.description === 'scene');
+            return sceneSymbol ? modelViewer[sceneSymbol] : null;
+        }
+
         // Get all the necessary DOM elements
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');
@@ -2069,12 +2078,7 @@
                 cumulativeScaleElement.textContent = cumulativeScale.toFixed(2) + 'x';
             }
 
-            // Get internal scene for material manipulation
-            function getInternalScene() {
-                const symbols = Object.getOwnPropertySymbols(modelViewer);
-                const sceneSymbol = symbols.find(s => s.description === 'scene');
-                return sceneSymbol ? modelViewer[sceneSymbol] : null;
-            }
+            // getInternalScene is now defined in global scope
 
             // Material Color
             const materialColor = document.getElementById('materialColor');

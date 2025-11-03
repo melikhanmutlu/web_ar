@@ -441,13 +441,23 @@ def apply_transform_modifications(gltf, transform_mods):
     center_x, center_y, center_z = calculate_model_center(gltf)
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
-    # Note: Rotation handling via node transforms is complex due to coordinate system differences
-    # between model-viewer (Z-up) and GLB (Y-up). For now, rotation is NOT applied to preserve
-    # consistency. Only scale is applied to geometry.
-    # TODO: Implement proper rotation that matches model-viewer's orientation semantics
-    if 'rotation' in transform_mods:
+    # Apply rotation via node transforms
+    # Now that basis correction is in STL converter, we can apply rotation directly
+    if 'rotation' in transform_mods and gltf.nodes:
         rotation = transform_mods['rotation']
-        logger.info(f"Rotation requested but not applied: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+        rx = np.radians(float(rotation.get('x', 0)))
+        ry = np.radians(float(rotation.get('y', 0)))
+        rz = np.radians(float(rotation.get('z', 0)))
+        
+        if rx != 0 or ry != 0 or rz != 0:
+            # Convert Euler to quaternion for node rotation
+            quat = euler_to_quaternion(rx, ry, rz)
+            
+            # Apply rotation to all nodes
+            for node in gltf.nodes:
+                node.rotation = quat
+            
+            logger.info(f"Applied rotation to nodes: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> Quaternion {quat}")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

@@ -377,6 +377,44 @@ def calculate_model_center(gltf):
         return (0.0, 0.0, 0.0)
 
 
+def create_rotation_matrix(rx, ry, rz):
+    """
+    Create a 3x3 rotation matrix from Euler angles (in radians)
+    Rotation order: ZYX (same as model-viewer)
+    
+    Args:
+        rx: Rotation around X axis (radians)
+        ry: Rotation around Y axis (radians)
+        rz: Rotation around Z axis (radians)
+    
+    Returns:
+        3x3 numpy rotation matrix
+    """
+    # Rotation matrix around X axis
+    Rx = np.array([
+        [1, 0, 0],
+        [0, np.cos(rx), -np.sin(rx)],
+        [0, np.sin(rx), np.cos(rx)]
+    ])
+    
+    # Rotation matrix around Y axis
+    Ry = np.array([
+        [np.cos(ry), 0, np.sin(ry)],
+        [0, 1, 0],
+        [-np.sin(ry), 0, np.cos(ry)]
+    ])
+    
+    # Rotation matrix around Z axis
+    Rz = np.array([
+        [np.cos(rz), -np.sin(rz), 0],
+        [np.sin(rz), np.cos(rz), 0],
+        [0, 0, 1]
+    ])
+    
+    # Combined rotation: Rz * Ry * Rx (ZYX order)
+    return Rz @ Ry @ Rx
+
+
 def apply_transform_modifications(gltf, transform_mods):
     """
     Apply transform modifications to GLTF with model center as pivot
@@ -393,10 +431,22 @@ def apply_transform_modifications(gltf, transform_mods):
     center_x, center_y, center_z = calculate_model_center(gltf)
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
-    # Apply scale to mesh vertices (permanent geometry change)
-    if 'scale' in transform_mods:
-        scale_factor = float(transform_mods['scale'])
-        if scale_factor != 1.0 and gltf.meshes:
+    # Prepare rotation matrix if rotation is specified
+    rotation_matrix = None
+    if 'rotation' in transform_mods:
+        rotation = transform_mods['rotation']
+        rx = np.radians(float(rotation.get('x', 0)))
+        ry = np.radians(float(rotation.get('y', 0)))
+        rz = np.radians(float(rotation.get('z', 0)))
+        
+        if rx != 0 or ry != 0 or rz != 0:
+            rotation_matrix = create_rotation_matrix(rx, ry, rz)
+            logger.info(f"Created rotation matrix for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+    
+    # Apply scale and rotation to mesh vertices (permanent geometry change)
+    scale_factor = float(transform_mods.get('scale', 1.0))
+    
+    if (scale_factor != 1.0 or rotation_matrix is not None) and gltf.meshes:
             logger.info(f"Applying scale {scale_factor} to mesh vertices")
             try:
                 for mesh_idx, mesh in enumerate(gltf.meshes):
@@ -442,18 +492,25 @@ def apply_transform_modifications(gltf, transform_mods):
                                 # Read XYZ
                                 x, y, z = struct.unpack_from('fff', binary_data, pos)
                                 
-                                # Scale around model center (pivot)
+                                # Transform around model center (pivot)
                                 # 1. Translate to origin (relative to center)
                                 x -= center_x
                                 y -= center_y
                                 z -= center_z
                                 
-                                # 2. Scale
-                                x *= scale_factor
-                                y *= scale_factor
-                                z *= scale_factor
+                                # 2. Apply rotation if specified
+                                if rotation_matrix is not None:
+                                    vertex = np.array([x, y, z])
+                                    rotated = rotation_matrix @ vertex
+                                    x, y, z = rotated[0], rotated[1], rotated[2]
                                 
-                                # 3. Translate back
+                                # 3. Apply scale
+                                if scale_factor != 1.0:
+                                    x *= scale_factor
+                                    y *= scale_factor
+                                    z *= scale_factor
+                                
+                                # 4. Translate back
                                 x += center_x
                                 y += center_y
                                 z += center_z
@@ -469,65 +526,25 @@ def apply_transform_modifications(gltf, transform_mods):
                                 # Update GLB binary chunk
                                 gltf.set_binary_blob(bytes(new_data))
                             
-                            logger.info(f"Scaled {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
+                            transform_desc = []
+                            if rotation_matrix is not None:
+                                transform_desc.append("rotated")
+                            if scale_factor != 1.0:
+                                transform_desc.append(f"scaled {scale_factor}x")
+                            logger.info(f"Transformed {vertex_count} vertices ({', '.join(transform_desc)}) in mesh {mesh_idx}, primitive {prim_idx}")
                 
-                logger.info(f"✅ Geometry scaled by {scale_factor}")
+                result_desc = []
+                if rotation_matrix is not None:
+                    result_desc.append(f"rotation applied")
+                if scale_factor != 1.0:
+                    result_desc.append(f"scaled by {scale_factor}")
+                logger.info(f"✅ Geometry transformed: {', '.join(result_desc)}")
             except Exception as e:
-                logger.error(f"Failed to scale geometry: {e}", exc_info=True)
+                logger.error(f"Failed to transform geometry: {e}", exc_info=True)
     
-    if not gltf.nodes:
-        logger.warning("No nodes found in GLB")
-        return gltf
-    
-    # Find root nodes (nodes without parents)
-    root_nodes = []
-    all_child_indices = set()
-    
-    for node in gltf.nodes:
-        if node.children:
-            all_child_indices.update(node.children)
-    
-    for i, node in enumerate(gltf.nodes):
-        if i not in all_child_indices:
-            root_nodes.append(i)
-    
-    logger.info(f"Found {len(root_nodes)} root nodes: {root_nodes}")
-    
-    # Apply transforms to root nodes only
-    for node_idx in root_nodes:
-        node = gltf.nodes[node_idx]
-        
-        # Initialize transform components if not present
-        if node.rotation is None:
-            node.rotation = [0.0, 0.0, 0.0, 1.0]  # Quaternion (x, y, z, w)
-        if node.translation is None:
-            node.translation = [0.0, 0.0, 0.0]
-        
-        # Note: Scale is now applied to geometry vertices, not node transform
-        
-        # Apply rotation around model center
-        if 'rotation' in transform_mods:
-            try:
-                rotation = transform_mods['rotation']
-                rx = np.radians(float(rotation.get('x', 0)))
-                ry = np.radians(float(rotation.get('y', 0)))
-                rz = np.radians(float(rotation.get('z', 0)))
-                
-                # If model center is not at origin, adjust node translation
-                # to rotate around the center instead of origin
-                if center_x != 0.0 or center_y != 0.0 or center_z != 0.0:
-                    # Translate node so model center is at origin
-                    node.translation[0] -= center_x
-                    node.translation[1] -= center_y
-                    node.translation[2] -= center_z
-                    logger.info(f"Adjusted translation for center pivot: {node.translation}")
-                
-                # Convert Euler angles to quaternion
-                quat = euler_to_quaternion(rx, ry, rz)
-                node.rotation = quat
-                logger.info(f"Applied rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) around model center to node {node_idx}")
-            except Exception as e:
-                logger.error(f"Failed to apply rotation to node {node_idx}: {e}")
+    # Note: Both scale and rotation are now applied directly to geometry vertices
+    # This ensures consistent behavior between preview and saved model
+    logger.info("Transform modifications applied to geometry vertices")
     
     return gltf
 

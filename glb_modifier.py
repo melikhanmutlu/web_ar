@@ -233,14 +233,16 @@ def apply_texture_modifications(gltf, texture_data_base64):
 def normalize_model_to_center(gltf):
     """
     Normalize model by moving its center to origin (0, 0, 0)
-    Also applies basis correction: STL is Z-up, GLB is Y-up
-    Rotate -90° around X axis to convert Z-up to Y-up
+    This ensures consistent pivot behavior in viewer
+    
+    Note: Basis correction (Z-up to Y-up) is applied only when rotation is applied
+    via apply_transform_modifications, not during initial normalization.
+    This keeps the model in its original orientation on upload.
     
     Returns:
         GLTF2: Modified GLTF object
     """
     logger.info("Normalizing model to center origin")
-    logger.info("Applying basis correction: Z-up to Y-up (-90° X rotation)")
     
     # Calculate current center
     center_x, center_y, center_z = calculate_model_center(gltf)
@@ -277,27 +279,17 @@ def normalize_model_to_center(gltf):
                     vertex_count = accessor.count
                     stride = buffer_view.byteStride if buffer_view.byteStride else 12
                     
-                    # Basis correction rotation matrix: -90° around X axis (Z-up to Y-up)
-                    # cos(-90°) = 0, sin(-90°) = -1
-                    # Rx = [[1, 0, 0], [0, 0, 1], [0, -1, 0]]
-                    
                     new_data = bytearray(binary_data)
                     for i in range(vertex_count):
                         pos = offset + i * stride
                         x, y, z = struct.unpack_from('fff', binary_data, pos)
                         
-                        # 1. Apply basis correction rotation: -90° X
-                        # New coordinates: x' = x, y' = z, z' = -y
-                        x_rot = x
-                        y_rot = z
-                        z_rot = -y
+                        # Translate to origin
+                        x -= center_x
+                        y -= center_y
+                        z -= center_z
                         
-                        # 2. Translate to origin
-                        x_rot -= center_x
-                        y_rot -= center_y
-                        z_rot -= center_z
-                        
-                        struct.pack_into('fff', new_data, pos, x_rot, y_rot, z_rot)
+                        struct.pack_into('fff', new_data, pos, x, y, z)
                     
                     # Update buffer
                     if buffer.uri and buffer.uri.startswith('data:'):
@@ -447,22 +439,31 @@ def apply_transform_modifications(gltf, transform_mods):
     logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
     
     # Apply rotation via node transforms
-    # Now that basis correction is in STL converter, we can apply rotation directly
+    # When rotation is applied, also apply basis correction (Z-up to Y-up)
     if 'rotation' in transform_mods and gltf.nodes:
         rotation = transform_mods['rotation']
         rx = np.radians(float(rotation.get('x', 0)))
         ry = np.radians(float(rotation.get('y', 0)))
         rz = np.radians(float(rotation.get('z', 0)))
         
-        if rx != 0 or ry != 0 or rz != 0:
-            # Convert Euler to quaternion for node rotation
-            quat = euler_to_quaternion(rx, ry, rz)
+        # Basis correction: -90° around X axis (Z-up to Y-up)
+        basis_correction_rx = np.radians(-90)
+        
+        if rx != 0 or ry != 0 or rz != 0 or basis_correction_rx != 0:
+            # Combine basis correction with user rotation
+            # First apply basis correction, then user rotation
+            combined_rx = basis_correction_rx + rx
+            combined_ry = ry
+            combined_rz = rz
+            
+            # Convert combined Euler to quaternion for node rotation
+            quat = euler_to_quaternion(combined_rx, combined_ry, combined_rz)
             
             # Apply rotation to all nodes
             for node in gltf.nodes:
                 node.rotation = quat
             
-            logger.info(f"Applied rotation to nodes: ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) -> Quaternion {quat}")
+            logger.info(f"Applied rotation with basis correction: User({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°) + Basis(-90°, 0°, 0°) -> Quaternion {quat}")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))

@@ -1,157 +1,121 @@
-"""
-Mesh Slicer Module
-Handles 3D mesh slicing operations using trimesh
-"""
+import trimesh
 import os
 import logging
-import trimesh
-import numpy as np
-from pygltflib import GLTF2
+from werkzeug.utils import secure_filename
 
+# Configure logging
 logger = logging.getLogger(__name__)
 
-
-def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='positive'):
+def slice_model_with_plane(model_path, plane_origin, plane_normal, keep_side='positive'):
     """
-    Slice a GLB mesh with a plane and keep one side
-    Uses trimesh's built-in slice_plane method for accurate slicing
-    
+    Slices a 3D model using a defined plane and keeps one side.
+
     Args:
-        input_path: Path to input GLB file
-        output_path: Path to output GLB file
-        plane_origin: [x, y, z] coordinates of a point on the plane
-        plane_normal: [x, y, z] normal vector of the plane
-        keep_side: 'positive' or 'negative' - which side of the plane to keep
-    
+        model_path (str): The absolute path to the GLB model file.
+        plane_origin (list): A list of 3 floats representing the plane's origin point [x, y, z].
+        plane_normal (list): A list of 3 floats representing the plane's normal vector [x, y, z].
+        keep_side (str): Which side of the sliced mesh to keep. 'positive' or 'negative'.
+
     Returns:
-        bool: True if successful, False otherwise
+        trimesh.Trimesh or None: The sliced mesh object, or None if slicing fails.
     """
     try:
-        logger.info(f"Loading mesh from {input_path}")
-        
-        # Load the GLB file
-        mesh = trimesh.load(input_path, force='mesh')
-        
-        # Handle scene vs single mesh
-        if isinstance(mesh, trimesh.Scene):
-            logger.info(f"Scene detected with {len(mesh.geometry)} geometries")
-            # Combine all geometries
-            meshes = list(mesh.geometry.values())
-            if not meshes:
-                logger.error("No geometries found in scene")
-                return False
-            mesh = trimesh.util.concatenate(meshes)
-        
-        logger.info(f"Mesh loaded: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
-        
-        # Normalize plane normal
-        plane_normal = np.array(plane_normal, dtype=float)
-        plane_normal = plane_normal / np.linalg.norm(plane_normal)
-        plane_origin = np.array(plane_origin, dtype=float)
-        
-        logger.info(f"Slicing with plane: origin={plane_origin}, normal={plane_normal}, keep={keep_side}")
-        
-        # Use trimesh's built-in slice_plane method
-        # If keep_side is 'negative', flip the normal to keep the other side
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found at: {model_path}")
+
+        # Load the mesh from the file
+        mesh = trimesh.load(model_path, force='mesh')
+
+        # Perform the slice operation
+        # The slice_mesh_plane function returns the part of the mesh on the positive side of the normal
+        sliced_mesh = trimesh.intersections.slice_mesh_plane(
+            mesh=mesh,
+            plane_normal=plane_normal,
+            plane_origin=plane_origin
+        )
+
+        # If the user wants to keep the negative side, we need to flip the normal and slice again
         if keep_side == 'negative':
-            plane_normal = -plane_normal
-            logger.info(f"Flipped normal for negative side: {plane_normal}")
-        
-        # Slice the mesh
-        try:
-            sliced_mesh = mesh.slice_plane(
-                plane_origin=plane_origin,
-                plane_normal=plane_normal,
-                cap=True  # Cap the slice with a face
+            flipped_normal = [-n for n in plane_normal]
+            sliced_mesh = trimesh.intersections.slice_mesh_plane(
+                mesh=mesh,
+                plane_normal=flipped_normal,
+                plane_origin=plane_origin
             )
-        except Exception as slice_error:
-            logger.error(f"slice_plane failed: {slice_error}")
-            # Fallback to manual slicing
-            logger.info("Attempting manual slicing fallback...")
+
+        if not sliced_mesh or sliced_mesh.is_empty:
+            logger.warning("Slicing resulted in an empty mesh.")
+            return None
             
-            # Calculate signed distances from vertices to plane
-            vertices = mesh.vertices
-            distances = np.dot(vertices - plane_origin, plane_normal)
-            
-            # Determine which vertices to keep
-            keep_mask = distances >= -1e-6  # Small epsilon for numerical stability
-            
-            # Filter faces: keep faces where all vertices are on the keep side
-            face_mask = np.all(keep_mask[mesh.faces], axis=1)
-            
-            if not np.any(face_mask):
-                logger.error("Slicing would result in empty mesh (no faces kept)")
-                return False
-            
-            # Create new mesh with filtered faces
-            new_faces = mesh.faces[face_mask]
-            
-            # Get unique vertices used by kept faces
-            used_vertices = np.unique(new_faces.flatten())
-            
-            # Create vertex mapping (old index -> new index)
-            vertex_map = np.full(len(vertices), -1, dtype=int)
-            vertex_map[used_vertices] = np.arange(len(used_vertices))
-            
-            # Remap faces to new vertex indices
-            remapped_faces = vertex_map[new_faces]
-            
-            # Create sliced mesh
-            sliced_mesh = trimesh.Trimesh(
-                vertices=vertices[used_vertices],
-                faces=remapped_faces,
-                process=False
-            )
-        
-        if sliced_mesh is None or len(sliced_mesh.vertices) == 0:
-            logger.error("Slicing resulted in empty mesh")
-            return False
-        
-        logger.info(f"Sliced mesh: {len(sliced_mesh.vertices)} vertices, {len(sliced_mesh.faces)} faces")
-        
-        # Export as GLB
-        sliced_mesh.export(output_path, file_type='glb')
-        
-        if os.path.exists(output_path):
-            file_size = os.path.getsize(output_path)
-            logger.info(f"✅ Sliced mesh exported successfully: {file_size} bytes")
-            return True
+        # The result might be a Scene object if the original had multiple meshes.
+        # We need to ensure we return a single Trimesh object.
+        if isinstance(sliced_mesh, trimesh.Scene):
+            # Combine all geometries in the scene into a single mesh
+            consolidated_mesh = trimesh.util.concatenate(sliced_mesh.geometry.values())
+            return consolidated_mesh
+        elif isinstance(sliced_mesh, trimesh.Trimesh):
+            return sliced_mesh
         else:
-            logger.error("Output file was not created")
-            return False
-            
+            return None
+
+    except FileNotFoundError as e:
+        logger.error(f"Error: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Error slicing mesh: {e}", exc_info=True)
-        return False
+        logger.exception(f"An unexpected error occurred during slicing: {e}")
+        return None
 
-
-def get_mesh_bounds(glb_path):
+def get_mesh_bounds(model_path):
     """
-    Get the bounding box of a mesh
-    
+    Calculates the bounding box of a 3D model.
+
     Args:
-        glb_path: Path to GLB file
-    
+        model_path (str): The absolute path to the model file.
+
     Returns:
-        dict: {'min': [x, y, z], 'max': [x, y, z], 'center': [x, y, z]}
+        dict or None: A dictionary with 'min', 'max', and 'center' bounds, or None on failure.
     """
     try:
-        mesh = trimesh.load(glb_path, force='mesh')
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found at: {model_path}")
+
+        # Load the mesh as a scene to correctly handle transforms
+        scene = trimesh.load(model_path, force='scene')
         
-        if isinstance(mesh, trimesh.Scene):
-            meshes = list(mesh.geometry.values())
-            if not meshes:
-                return None
-            mesh = trimesh.util.concatenate(meshes)
-        
-        bounds = mesh.bounds
-        center = mesh.centroid
-        
+        # Use scene.bounds to get the overall axis-aligned bounding box
+        min_bound, max_bound = scene.bounds
+        center_bound = scene.centroid.tolist()
+
         return {
-            'min': bounds[0].tolist(),
-            'max': bounds[1].tolist(),
-            'center': center.tolist()
+            'min': min_bound.tolist(),
+            'max': max_bound.tolist(),
+            'center': center_bound
         }
     except Exception as e:
-        logger.error(f"Error getting mesh bounds: {e}")
+        logger.exception(f"An unexpected error occurred while getting mesh bounds: {e}")
         return None
+
+def save_sliced_model(mesh, original_path):
+    """
+    Saves the sliced Trimesh object back to the original file path.
+
+    Args:
+        mesh (trimesh.Trimesh): The mesh object to save.
+        original_path (str): The file path to save the new GLB to.
+
+    Returns:
+        bool: True if saving was successful, False otherwise.
+    """
+    try:
+        # Export the sliced mesh back to a GLB file in-memory
+        export_data = mesh.export(file_type='glb')
+
+        # Write the in-memory data to the original file path, overwriting it
+        with open(original_path, 'wb') as f:
+            f.write(export_data)
+
+        logger.info(f"Successfully saved sliced model to {original_path}")
+        return True
+    except Exception as e:
+        logger.exception(f"An error occurred while saving the sliced model: {e}")
+        return False

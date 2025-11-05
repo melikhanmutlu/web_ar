@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs-18_x", "stdenv.cc.cc.lib"]
+nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs-18_x"]
+aptPkgs = ["libstdc++6", "libgomp1"]
 
 [phases.install]
 cmds = [

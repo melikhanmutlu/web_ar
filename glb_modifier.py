@@ -53,8 +53,8 @@ def euler_to_rotation_matrix(rx, ry, rz):
         [0, 0, 1]
     ])
     
-    # YXZ intrinsic order: R = Rz * Rx * Ry
-    return Rz @ Rx @ Ry
+    # YXZ intrinsic order: R = Ry * Rx * Rz
+    return Ry @ Rx @ Rz
 
 
 def apply_material_modifications(gltf, material_mods):

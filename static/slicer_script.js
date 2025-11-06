@@ -1,5 +1,3 @@
-
-<script>
 // ========== MODEL SLICER (V2 - THREE.JS CLIPPING) ==========
 document.addEventListener('DOMContentLoaded', () => {
     const modelViewer = document.querySelector('model-viewer');
@@ -344,4 +342,3 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('dimDepth').textContent = `${depth} cm`;
     }
 });
-</script>

@@ -2011,15 +2011,15 @@
         </p>
     </div>
 
-    <!-- Advanced Features JavaScript -->
+    <!-- Panel Toggle Function - Must be loaded first -->
     <script>
-        // ========== ACCORDION PANEL FUNCTIONALITY ==========
-        // List of all panel IDs
-        const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
-        
         window.togglePanel = function(panelId) {
+            const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
             const panel = document.getElementById(panelId);
             const icon = document.getElementById(panelId + 'Icon');
+            
+            if (!panel || !icon) return;
+            
             const isCurrentlyOpen = !panel.classList.contains('hidden');
             
             // Close all panels first
@@ -2037,8 +2037,11 @@
                 panel.classList.remove('hidden');
                 icon.style.transform = 'rotate(180deg)';
             }
-            // If it was already open, it stays closed (accordion behavior)
-        }
+        };
+    </script>
+
+    <!-- Advanced Features JavaScript -->
+    <script>
 
         // ========== GLOBAL UTILITY FUNCTIONS ==========
         

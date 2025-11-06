@@ -2017,7 +2017,7 @@
         // List of all panel IDs
         const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
         
-        function togglePanel(panelId) {
+        window.togglePanel = function(panelId) {
             const panel = document.getElementById(panelId);
             const icon = document.getElementById(panelId + 'Icon');
             const isCurrentlyOpen = !panel.classList.contains('hidden');

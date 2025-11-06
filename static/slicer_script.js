@@ -318,16 +318,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const showOriginalToggle = document.getElementById('showOriginalToggle');
     const showOriginalText = document.getElementById('showOriginalText');
 
-    showOriginalToggle.addEventListener('click', () => {
-        showOriginal = !showOriginal;
-        if (showOriginal) {
-            removeThreeJSClipping();
-            showOriginalText.textContent = 'Show Sliced';
-        } else {
-            applyThreeJSClipping();
-            showOriginalText.textContent = 'Show Original';
-        }
-    });
+    if (showOriginalToggle && showOriginalText) {
+        showOriginalToggle.addEventListener('click', () => {
+            showOriginal = !showOriginal;
+            if (showOriginal) {
+                removeThreeJSClipping();
+                showOriginalText.textContent = 'Show Sliced';
+            } else {
+                applyThreeJSClipping();
+                showOriginalText.textContent = 'Show Original';
+            }
+        });
+    }
 
     // Update dimension display
     function updateDimensionDisplay(scale) {
@@ -337,8 +339,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const height = ((meshBounds.max[1] - meshBounds.min[1]) * scale * 100).toFixed(1);
         const depth = ((meshBounds.max[2] - meshBounds.min[2]) * scale * 100).toFixed(1);
 
-        document.getElementById('dimWidth').textContent = `${width} cm`;
-        document.getElementById('dimHeight').textContent = `${height} cm`;
-        document.getElementById('dimDepth').textContent = `${depth} cm`;
+        const dimWidth = document.getElementById('dimWidth');
+        const dimHeight = document.getElementById('dimHeight');
+        const dimDepth = document.getElementById('dimDepth');
+        
+        if (dimWidth) dimWidth.textContent = `${width} cm`;
+        if (dimHeight) dimHeight.textContent = `${height} cm`;
+        if (dimDepth) dimDepth.textContent = `${depth} cm`;
     }
 });

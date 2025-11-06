@@ -21,11 +21,10 @@ class OBJConverter(BaseConverter):
         
         # Platform-aware npx path
         if platform.system() == 'Windows':
-            self.npx_path = r"C:\Program Files\nodejs\npx.cmd"
+            self.npx_path = os.environ.get('NPX_PATH', r"C:\Program Files\nodejs\npx.cmd")
         else:
-            # Linux/Mac - use npx from PATH
-            npx_location = shutil.which('npx')
-            self.npx_path = npx_location if npx_location else 'npx'
+            # Linux/Mac - use npx from environment variable or PATH
+            self.npx_path = os.environ.get('NPX_PATH', shutil.which('npx') or 'npx')
         
         self.texture_files: List[str] = []
         self.mtl_file: Optional[str] = None

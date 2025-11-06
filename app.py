@@ -2280,6 +2280,7 @@ def slice_model():
             # Overwrite the original file with the sliced mesh
             if save_sliced_model(sliced_mesh, model_path):
                 # Update dimensions in database
+                new_bounds_dict = None
                 try:
                     bounds = sliced_mesh.bounds
                     dimensions = bounds[1] - bounds[0]
@@ -2290,10 +2291,17 @@ def slice_model():
                         'max': round(float(max(dimensions) * 100), 2)
                     }
                     model.bounds = json.dumps(new_dims)
-                    # Since the model is sliced, the original dimensions are no longer valid
                     model.original_dimensions = None
                     db.session.commit()
                     logger.info(f"Updated database dimensions for model {model_id} after slicing: {new_dims}")
+
+                    # Prepare the new bounds to be returned to the frontend
+                    min_bound, max_bound = sliced_mesh.bounds
+                    new_bounds_dict = {
+                        'min': min_bound.tolist(),
+                        'max': max_bound.tolist(),
+                        'center': sliced_mesh.centroid.tolist()
+                    }
                 except Exception as dim_error:
                     logger.error(f"Failed to update dimensions for model {model_id} after slicing: {dim_error}")
 
@@ -2311,9 +2319,12 @@ def slice_model():
                     )
                 except Exception as version_error:
                     logger.error(f"Failed to create version for slice op on model {model_id}: {version_error}")
-                    # Non-fatal, proceed with success response
 
-                return jsonify({'success': True, 'message': 'Model sliced and saved successfully.'})
+                return jsonify({
+                    'success': True,
+                    'message': 'Model sliced and saved successfully.',
+                    'new_bounds': new_bounds_dict
+                })
             else:
                 return jsonify({'success': False, 'error': 'Failed to save the sliced model.'}), 500
         else:

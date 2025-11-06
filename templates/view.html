@@ -2011,8 +2011,9 @@
         </p>
     </div>
 
-    <!-- Panel Toggle Function - Must be loaded first -->
+    <!-- Global Functions - Must be loaded first -->
     <script>
+        // Panel toggle function
         window.togglePanel = function(panelId) {
             const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
             const panel = document.getElementById(panelId);
@@ -2038,19 +2039,16 @@
                 icon.style.transform = 'rotate(180deg)';
             }
         };
+        
+        // Get current model ID from URL
+        window.getCurrentModelId = function() {
+            const pathParts = window.location.pathname.split('/');
+            return pathParts[pathParts.length - 1];
+        };
     </script>
 
     <!-- Advanced Features JavaScript -->
     <script>
-
-        // ========== GLOBAL UTILITY FUNCTIONS ==========
-        
-        // Get current model ID from URL (used by multiple features)
-        function getCurrentModelId() {
-            const pathParts = window.location.pathname.split('/');
-            return pathParts[pathParts.length - 1];
-        }
-
         // ========== MATERIAL EDITOR FUNCTIONALITY ==========
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');

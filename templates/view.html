@@ -2364,9 +2364,23 @@
                     if (child.isMesh) {
                         const materials = Array.isArray(child.material) ? child.material : [child.material];
                         materials.forEach(mat => {
+                            // Store original side if not already stored
+                            if (!window.materialState.originalSide.has(mat)) {
+                                window.materialState.originalSide.set(mat, mat.side);
+                            }
+                            
                             mat.opacity = value;
                             mat.transparent = value < 1.0;
-                            mat.side = 2; // THREE.DoubleSide
+                            
+                            // Only set DoubleSide if slicer is not active
+                            if (!window.materialState.slicerActive) {
+                                mat.side = 2; // THREE.DoubleSide
+                            }
+                            // If slicer is active, it already set DoubleSide
+                            
+                            // Track opacity state
+                            window.materialState.opacityActive = (value < 1.0);
+                            
                             mat.needsUpdate = true;
                         });
                     }
@@ -3293,7 +3307,8 @@
             let slicingPaused = false; // Track if slicing preview is paused
             
             // Material state management to prevent conflicts with opacity slider
-            const materialState = {
+            // Make it global so opacity slider can access it
+            window.materialState = {
                 originalSide: new Map(),  // Store original material.side values
                 slicerActive: false,
                 opacityActive: false
@@ -3478,6 +3493,7 @@
             }
             
             // Apply Three.js clipping to actually hide parts of the model
+            // Planes are in LOCAL space so they rotate with the model
             function applyThreeJSClipping() {
                 try {
                     // Wait for model to be loaded
@@ -3500,77 +3516,83 @@
                         return;
                     }
                     
-                    console.log('Scene type:', scene.constructor.name, 'Has traverse:', typeof scene.traverse);
+                    console.log('Applying local-space clipping planes');
                     
-                    // Create clipping planes array
-                    const planes = [];
-                    
-                    activePlanes.forEach(plane => {
-                        const settings = planeSettings[plane];
-                        const percent = settings.position;
-                        const keepSide = settings.keepSide;
-                        
-                        const min = meshBounds.min;
-                        const max = meshBounds.max;
-                        const center = meshBounds.center;
-                        const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
-                        const range = max[axisIndex] - min[axisIndex];
-                        const position = min[axisIndex] + (percent / 100) * range;
-                        
-                        // Create Three.js plane with correct normal and constant
-                        let normal, constant;
-                        
-                        if (plane === 'x') {
-                            // X axis: normal points in direction we want to KEEP
-                            if (keepSide === 'above') {
-                                // Keep right (positive X), clip left (negative X)
-                                normal = new THREE.Vector3(1, 0, 0);
-                                constant = -position;
-                            } else {
-                                // Keep left (negative X), clip right (positive X)
-                                normal = new THREE.Vector3(-1, 0, 0);
-                                constant = position;
-                            }
-                        } else if (plane === 'y') {
-                            // Y axis: normal points in direction we want to KEEP
-                            if (keepSide === 'above') {
-                                // Keep top (positive Y), clip bottom (negative Y)
-                                normal = new THREE.Vector3(0, 1, 0);
-                                constant = -position;
-                            } else {
-                                // Keep bottom (negative Y), clip top (positive Y)
-                                normal = new THREE.Vector3(0, -1, 0);
-                                constant = position;
-                            }
-                        } else {
-                            // Z axis: normal points in direction we want to KEEP
-                            if (keepSide === 'above') {
-                                // Keep front (positive Z), clip back (negative Z)
-                                normal = new THREE.Vector3(0, 0, 1);
-                                constant = -position;
-                            } else {
-                                // Keep back (negative Z), clip front (positive Z)
-                                normal = new THREE.Vector3(0, 0, -1);
-                                constant = position;
-                            }
+                    // Enable local clipping on renderer FIRST
+                    try {
+                        const renderer = modelViewer[Symbol.for('renderer')] || modelViewer.renderer;
+                        if (renderer) {
+                            renderer.localClippingEnabled = true;
+                            console.log('Local clipping enabled on renderer');
                         }
-                        
-                        const clippingPlane = new THREE.Plane(normal, constant);
-                        planes.push(clippingPlane);
-                        
-                        console.log(`Clipping plane ${plane}: normal=${normal.x},${normal.y},${normal.z}, constant=${constant}`);
-                    });
+                    } catch (e) {
+                        console.warn('Could not access renderer:', e);
+                    }
                     
                     // Apply clipping to all meshes in the scene
-                    materialState.slicerActive = true;
+                    window.materialState.slicerActive = true;
                     scene.traverse((child) => {
                         if (child.isMesh && child.material) {
-                            // Enable clipping on material
+                            // Create clipping planes array for THIS mesh (in local space)
+                            const planes = [];
+                            
+                            activePlanes.forEach(plane => {
+                                const settings = planeSettings[plane];
+                                const percent = settings.position;
+                                const keepSide = settings.keepSide;
+                                
+                                const min = meshBounds.min;
+                                const max = meshBounds.max;
+                                const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
+                                const range = max[axisIndex] - min[axisIndex];
+                                const position = min[axisIndex] + (percent / 100) * range;
+                                
+                                // Create Three.js plane with correct normal and constant
+                                // These are in LOCAL space (object coordinates)
+                                let normal, constant;
+                                
+                                if (plane === 'x') {
+                                    if (keepSide === 'above') {
+                                        // Keep right (positive X), clip left (negative X)
+                                        normal = new THREE.Vector3(1, 0, 0);
+                                        constant = -position;
+                                    } else {
+                                        // Keep left (negative X), clip right (positive X)
+                                        normal = new THREE.Vector3(-1, 0, 0);
+                                        constant = position;
+                                    }
+                                } else if (plane === 'y') {
+                                    if (keepSide === 'above') {
+                                        // Keep top (positive Y), clip bottom (negative Y)
+                                        normal = new THREE.Vector3(0, 1, 0);
+                                        constant = -position;
+                                    } else {
+                                        // Keep bottom (negative Y), clip top (positive Y)
+                                        normal = new THREE.Vector3(0, -1, 0);
+                                        constant = position;
+                                    }
+                                } else {
+                                    if (keepSide === 'above') {
+                                        // Keep front (positive Z), clip back (negative Z)
+                                        normal = new THREE.Vector3(0, 0, 1);
+                                        constant = -position;
+                                    } else {
+                                        // Keep back (negative Z), clip front (positive Z)
+                                        normal = new THREE.Vector3(0, 0, -1);
+                                        constant = position;
+                                    }
+                                }
+                                
+                                const clippingPlane = new THREE.Plane(normal, constant);
+                                planes.push(clippingPlane);
+                            });
+                            
+                            // Apply planes to material (local clipping)
                             if (Array.isArray(child.material)) {
                                 child.material.forEach(mat => {
                                     // Store original side if not already stored
-                                    if (!materialState.originalSide.has(mat)) {
-                                        materialState.originalSide.set(mat, mat.side);
+                                    if (!window.materialState.originalSide.has(mat)) {
+                                        window.materialState.originalSide.set(mat, mat.side);
                                     }
                                     // Set to DoubleSide to see inside of sliced model
                                     mat.side = THREE.DoubleSide;
@@ -3580,8 +3602,8 @@
                                 });
                             } else {
                                 // Store original side if not already stored
-                                if (!materialState.originalSide.has(child.material)) {
-                                    materialState.originalSide.set(child.material, child.material.side);
+                                if (!window.materialState.originalSide.has(child.material)) {
+                                    window.materialState.originalSide.set(child.material, child.material.side);
                                 }
                                 // Set to DoubleSide to see inside of sliced model
                                 child.material.side = THREE.DoubleSide;
@@ -3592,16 +3614,7 @@
                         }
                     });
                     
-                    // Enable local clipping on renderer
-                    try {
-                        const renderer = modelViewer[Symbol.for('renderer')] || modelViewer.renderer;
-                        if (renderer) {
-                            renderer.localClippingEnabled = true;
-                            console.log('Clipping enabled on renderer');
-                        }
-                    } catch (e) {
-                        console.warn('Could not access renderer:', e);
-                    }
+                    console.log('Local-space clipping applied to', activePlanes.size, 'plane(s)');
                     
                 } catch (error) {
                     console.error('Error applying Three.js clipping:', error);
@@ -3614,7 +3627,7 @@
                     const scene = window.getInternalScene();
                     if (!scene) return;
                     
-                    materialState.slicerActive = false;
+                    window.materialState.slicerActive = false;
                     
                     // Remove clipping from all meshes and restore original material.side
                     scene.traverse((child) => {
@@ -3623,16 +3636,16 @@
                                 child.material.forEach(mat => {
                                     mat.clippingPlanes = [];
                                     // Restore original side only if opacity is not active
-                                    if (!materialState.opacityActive && materialState.originalSide.has(mat)) {
-                                        mat.side = materialState.originalSide.get(mat);
+                                    if (!window.materialState.opacityActive && window.materialState.originalSide.has(mat)) {
+                                        mat.side = window.materialState.originalSide.get(mat);
                                     }
                                     mat.needsUpdate = true;
                                 });
                             } else {
                                 child.material.clippingPlanes = [];
                                 // Restore original side only if opacity is not active
-                                if (!materialState.opacityActive && materialState.originalSide.has(child.material)) {
-                                    child.material.side = materialState.originalSide.get(child.material);
+                                if (!window.materialState.opacityActive && window.materialState.originalSide.has(child.material)) {
+                                    child.material.side = window.materialState.originalSide.get(child.material);
                                 }
                                 child.material.needsUpdate = true;
                             }
@@ -3682,16 +3695,12 @@
                 slicingPaused = !slicingPaused;
                 
                 if (slicingPaused) {
-                    // Hide overlays, show original
-                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => {
-                        el.style.display = 'none';
-                    });
+                    // Disable clipping to show original
+                    removeThreeJSClipping();
                     console.log('Slicing preview paused - showing original model');
                 } else {
-                    // Show overlays
-                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => {
-                        el.style.display = '';
-                    });
+                    // Re-enable clipping
+                    applyThreeJSClipping();
                     console.log('Slicing preview resumed');
                 }
                 
@@ -3699,163 +3708,19 @@
             }
             
             // Enable live clipping preview using THREE.js clipping planes
-            // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
-                    // Remove all existing overlays first
-                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
-                    
-                    // If no active planes or no bounds, just remove overlays and return
+                    // If no active planes or no bounds, disable and return
                     if (!meshBounds || activePlanes.size === 0) {
-                        console.log('No active planes or bounds, overlays removed');
+                        console.log('No active planes or bounds');
                         disableClipping();
                         return;
                     }
                     
-                    // Get Three.js scene from model-viewer
-                    const scene = window.getInternalScene();
-                    if (!scene) {
-                        console.warn('Could not access Three.js scene, using CSS overlays only');
-                    } else {
-                        // Apply real Three.js clipping
-                        applyThreeJSClipping();
-                    }
+                    // Apply real Three.js clipping (no CSS overlays)
+                    applyThreeJSClipping();
                     
-                    // Create overlay for each active plane
-                    activePlanes.forEach(plane => {
-                        const settings = planeSettings[plane];
-                        const percent = settings.position;
-                        const keepSide = settings.keepSide;
-                        
-                        // Create visual overlay for this plane
-                        const overlayId = `slicerOverlay-${plane}`;
-                        let overlay = document.createElement('div');
-                        overlay.id = overlayId;
-                        overlay.style.position = 'absolute';
-                        overlay.style.pointerEvents = 'none';
-                        overlay.style.zIndex = '10';
-                        overlay.style.transition = 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
-                        overlay.style.animation = 'overlayFadeIn 0.5s ease-out';
-                        
-                        // Removed grid pattern for cleaner look
-                        
-                        // Color coding for different planes
-                        const colors = {
-                            x: { main: '255,0,0', name: 'X' },    // Red
-                            y: { main: '0,255,0', name: 'Y' },    // Green
-                            z: { main: '0,100,255', name: 'Z' }  // Blue
-                        };
-                        const color = colors[plane].main;
-                        
-                        // Calculate overlay position based on axis and percentage
-                        const slicePosition = percent; // 0-100%
-                        
-                        if (plane === 'y') {
-                            // Y axis - Vertical slice (top/bottom)
-                            if (keepSide === 'above') {
-                                // Keep top, hide bottom - overlay shows bottom part
-                                overlay.style.left = '0';
-                                overlay.style.bottom = '0';
-                                overlay.style.width = '100%';
-                                overlay.style.height = slicePosition + '%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            } else {
-                                // Keep bottom, hide top - overlay shows top part
-                                overlay.style.left = '0';
-                                overlay.style.top = '0';
-                                overlay.style.width = '100%';
-                                overlay.style.height = (100 - slicePosition) + '%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            }
-                        } else if (plane === 'x') {
-                            // X axis - Horizontal slice (left/right)
-                            if (keepSide === 'above') {
-                                // Keep right, hide left
-                                overlay.style.left = '0';
-                                overlay.style.top = '0';
-                                overlay.style.width = slicePosition + '%';
-                                overlay.style.height = '100%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            } else {
-                                // Keep left, hide right
-                                overlay.style.right = '0';
-                                overlay.style.top = '0';
-                                overlay.style.width = (100 - slicePosition) + '%';
-                                overlay.style.height = '100%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            }
-                        } else if (plane === 'z') {
-                            // Z axis - Depth slice (show as diagonal)
-                            if (keepSide === 'above') {
-                                // Keep front, hide back
-                                overlay.style.left = '0';
-                                overlay.style.bottom = '0';
-                                overlay.style.width = '100%';
-                                overlay.style.height = (100 - slicePosition) + '%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            } else {
-                                // Keep back, hide front
-                                overlay.style.left = '0';
-                                overlay.style.top = '0';
-                                overlay.style.width = '100%';
-                                overlay.style.height = slicePosition + '%';
-                                overlay.style.background = `rgba(${color}, 0.25)`;
-                            }
-                        }
-                        
-                        // No slice line - cleaner overlay only
-                        
-                        // Add label with enhanced styling
-                        const label = document.createElement('div');
-                        const cmValue = ((percent / 100) * (meshBounds.max[plane === 'x' ? 0 : (plane === 'y' ? 1 : 2)] - meshBounds.min[plane === 'x' ? 0 : (plane === 'y' ? 1 : 2)]) * 100).toFixed(1);
-                        label.innerHTML = `
-                            <div style="font-weight: bold; font-size: 14px;">${colors[plane].name} Axis</div>
-                            <div style="font-size: 11px; opacity: 0.9;">${percent}% • ${cmValue} cm</div>
-                            <div style="font-size: 10px; opacity: 0.7; margin-top: 2px;">Keep ${keepSide === 'above' ? '→' : '←'}</div>
-                        `;
-                        label.style.position = 'absolute';
-                        label.style.padding = '8px 12px';
-                        label.style.background = `linear-gradient(135deg, rgba(${color}, 0.95), rgba(${color}, 0.85))`;
-                        label.style.color = 'white';
-                        label.style.borderRadius = '8px';
-                        label.style.fontSize = '12px';
-                        label.style.zIndex = '13';
-                        label.style.pointerEvents = 'none';
-                        label.style.boxShadow = `0 4px 12px rgba(0,0,0,0.4), 0 0 20px rgba(${color}, 0.3)`;
-                        label.style.backdropFilter = 'blur(8px)';
-                        label.style.border = `1px solid rgba(255,255,255,0.3)`;
-                        label.style.transition = 'all 0.3s ease';
-                        label.style.animation = 'labelEntrance 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                        
-                        // Position label based on plane
-                        if (plane === 'y') {
-                            label.style.right = '10px';
-                            label.style[keepSide === 'above' ? 'top' : 'bottom'] = '10px';
-                        } else if (plane === 'x') {
-                            label.style.top = '10px';
-                            label.style[keepSide === 'above' ? 'left' : 'right'] = '10px';
-                        } else {
-                            label.style.bottom = '10px';
-                            label.style.left = '10px';
-                        }
-                        
-                        overlay.appendChild(label);
-                        
-                        // Add hover effect
-                        overlay.addEventListener('mouseenter', () => {
-                            overlay.style.opacity = '0.9';
-                            label.style.transform = 'scale(1.05)';
-                        });
-                        overlay.addEventListener('mouseleave', () => {
-                            overlay.style.opacity = '1';
-                            label.style.transform = 'scale(1)';
-                        });
-                        
-                        modelViewer.appendChild(overlay);
-                    });
-                    
-                    // Show stats
-                    updateSliceStats();
+                    console.log('Three.js clipping enabled for', activePlanes.size, 'plane(s)');
                     
                 } catch (error) {
                     console.error('Error enabling clipping:', error);
@@ -3865,17 +3730,10 @@
             // Disable clipping preview
             function disableClipping() {
                 try {
-                    // Remove all visual overlays
-                    document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
-                    
                     // Remove Three.js clipping
                     removeThreeJSClipping();
                     
-                    // Hide stats
-                    const statsEl = document.getElementById('sliceStats');
-                    if (statsEl) {
-                        statsEl.classList.add('hidden');
-                    }
+                    console.log('Three.js clipping disabled');
                     
                 } catch (error) {
                     console.error('Error disabling clipping:', error);
@@ -3938,7 +3796,7 @@
                 }
             }
             
-            // Track camera orbit changes
+            // Track camera orbit changes (for future use)
             modelViewer.addEventListener('camera-change', () => {
                 const orbit = modelViewer.getCameraOrbit();
                 cameraOrbit = {
@@ -3946,10 +3804,7 @@
                     phi: orbit.phi,
                     radius: orbit.radius
                 };
-                // Update overlays when camera moves
-                if (slicerEnabled && meshBounds) {
-                    enableClipping();
-                }
+                // No need to update clipping - it's in local space and rotates with model
             });
             
             // Wait for model to load before enabling clipping
@@ -3996,6 +3851,9 @@
                     toggleSlicerBtn.classList.add('bg-red-100', 'dark:bg-red-900/50', 'border-red-500');
                     slicerControls.classList.remove('hidden');
                     
+                    // Disable pan (right-click drag) when slicer is active
+                    modelViewer.disablePan = true;
+                    
                     // Load mesh bounds
                     await loadMeshBounds();
                     
@@ -4010,6 +3868,10 @@
                     toggleSlicerBtn.textContent = 'Enable Slicer';
                     toggleSlicerBtn.classList.remove('bg-red-100', 'dark:bg-red-900/50', 'border-red-500');
                     slicerControls.classList.add('hidden');
+                    
+                    // Re-enable pan when slicer is disabled
+                    modelViewer.disablePan = false;
+                    
                     disableClipping();
                 }
             });

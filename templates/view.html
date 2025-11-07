@@ -3373,6 +3373,9 @@
                 attachPlaneControlListeners();
             }
             
+            // Throttle function for slider updates
+            let clippingUpdateTimeout = null;
+            
             // Attach event listeners to plane controls
             function attachPlaneControlListeners() {
                 // Slider listeners
@@ -3394,9 +3397,14 @@
                             controlDiv.querySelector('.plane-cm').textContent = (position * 100).toFixed(2) + ' cm';
                         }
                         
-                        // Update preview if slicer is enabled
+                        // Throttle clipping updates (only update every 100ms)
                         if (slicerEnabled) {
-                            enableClipping();
+                            if (clippingUpdateTimeout) {
+                                clearTimeout(clippingUpdateTimeout);
+                            }
+                            clippingUpdateTimeout = setTimeout(() => {
+                                updateClippingPlanes();
+                            }, 50); // 50ms throttle for smooth updates
                         }
                     });
                 });
@@ -3420,7 +3428,12 @@
                         
                         // Update preview if slicer is enabled
                         if (slicerEnabled) {
-                            enableClipping();
+                            if (clippingUpdateTimeout) {
+                                clearTimeout(clippingUpdateTimeout);
+                            }
+                            clippingUpdateTimeout = setTimeout(() => {
+                                updateClippingPlanes();
+                            }, 50);
                         }
                     });
                 });
@@ -3516,14 +3529,11 @@
                         return;
                     }
                     
-                    console.log('Applying local-space clipping planes');
-                    
                     // Enable local clipping on renderer FIRST
                     try {
                         const renderer = modelViewer[Symbol.for('renderer')] || modelViewer.renderer;
                         if (renderer) {
                             renderer.localClippingEnabled = true;
-                            console.log('Local clipping enabled on renderer');
                         }
                     } catch (e) {
                         console.warn('Could not access renderer:', e);
@@ -3613,8 +3623,6 @@
                             }
                         }
                     });
-                    
-                    console.log('Local-space clipping applied to', activePlanes.size, 'plane(s)');
                     
                 } catch (error) {
                     console.error('Error applying Three.js clipping:', error);
@@ -3707,6 +3715,27 @@
                 return slicingPaused;
             }
             
+            // Update clipping planes (called by slider/button changes)
+            function updateClippingPlanes() {
+                try {
+                    // If no active planes or no bounds, disable and return
+                    if (!meshBounds || activePlanes.size === 0) {
+                        console.log('No active planes or bounds');
+                        disableClipping();
+                        return;
+                    }
+                    
+                    // Apply real Three.js clipping (no CSS overlays)
+                    applyThreeJSClipping();
+                    
+                    // Update visual helpers
+                    updatePlaneHelpers();
+                    
+                } catch (error) {
+                    console.error('Error updating clipping:', error);
+                }
+            }
+            
             // Enable live clipping preview using THREE.js clipping planes
             function enableClipping() {
                 try {
@@ -3720,6 +3749,9 @@
                     // Apply real Three.js clipping (no CSS overlays)
                     applyThreeJSClipping();
                     
+                    // Create visual helpers
+                    createPlaneHelpers();
+                    
                     console.log('Three.js clipping enabled for', activePlanes.size, 'plane(s)');
                     
                 } catch (error) {
@@ -3727,11 +3759,112 @@
                 }
             }
             
+            // Store plane helpers
+            let planeHelpers = new Map();
+            
+            // Create visual plane helpers
+            function createPlaneHelpers() {
+                const scene = window.getInternalScene();
+                const THREE = window.THREE;
+                if (!scene || !THREE || !meshBounds) return;
+                
+                // Remove old helpers
+                removePlaneHelpers();
+                
+                activePlanes.forEach(plane => {
+                    const settings = planeSettings[plane];
+                    const percent = settings.position;
+                    const keepSide = settings.keepSide;
+                    
+                    const min = meshBounds.min;
+                    const max = meshBounds.max;
+                    const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
+                    const range = max[axisIndex] - min[axisIndex];
+                    const position = min[axisIndex] + (percent / 100) * range;
+                    
+                    // Create plane geometry for visualization
+                    const size = Math.max(...meshBounds.extents) * 1.5;
+                    const planeGeometry = new THREE.PlaneGeometry(size, size);
+                    
+                    // Color based on axis
+                    const colors = { x: 0xff0000, y: 0x00ff00, z: 0x0064ff };
+                    const planeMaterial = new THREE.MeshBasicMaterial({
+                        color: colors[plane],
+                        transparent: true,
+                        opacity: 0.2,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    });
+                    
+                    const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+                    
+                    // Position and rotate plane
+                    if (plane === 'x') {
+                        planeMesh.rotation.y = Math.PI / 2;
+                        planeMesh.position.x = position;
+                    } else if (plane === 'y') {
+                        planeMesh.rotation.x = Math.PI / 2;
+                        planeMesh.position.y = position;
+                    } else {
+                        planeMesh.position.z = position;
+                    }
+                    
+                    scene.add(planeMesh);
+                    planeHelpers.set(plane, planeMesh);
+                });
+                
+                console.log('Created', planeHelpers.size, 'plane helpers');
+            }
+            
+            // Update plane helper positions
+            function updatePlaneHelpers() {
+                if (!meshBounds || planeHelpers.size === 0) return;
+                
+                activePlanes.forEach(plane => {
+                    const helper = planeHelpers.get(plane);
+                    if (!helper) return;
+                    
+                    const settings = planeSettings[plane];
+                    const percent = settings.position;
+                    
+                    const min = meshBounds.min;
+                    const max = meshBounds.max;
+                    const axisIndex = plane === 'x' ? 0 : (plane === 'y' ? 1 : 2);
+                    const range = max[axisIndex] - min[axisIndex];
+                    const position = min[axisIndex] + (percent / 100) * range;
+                    
+                    // Update position
+                    if (plane === 'x') {
+                        helper.position.x = position;
+                    } else if (plane === 'y') {
+                        helper.position.y = position;
+                    } else {
+                        helper.position.z = position;
+                    }
+                });
+            }
+            
+            // Remove plane helpers
+            function removePlaneHelpers() {
+                const scene = window.getInternalScene();
+                if (!scene) return;
+                
+                planeHelpers.forEach((helper, plane) => {
+                    scene.remove(helper);
+                    helper.geometry.dispose();
+                    helper.material.dispose();
+                });
+                planeHelpers.clear();
+            }
+            
             // Disable clipping preview
             function disableClipping() {
                 try {
                     // Remove Three.js clipping
                     removeThreeJSClipping();
+                    
+                    // Remove visual helpers
+                    removePlaneHelpers();
                     
                     console.log('Three.js clipping disabled');
                     
@@ -4027,7 +4160,12 @@
                         
                         const min = meshBounds.min;
                         const max = meshBounds.max;
-                        const center = meshBounds.center;
+                        // Calculate center from min and max
+                        const center = [
+                            (min[0] + max[0]) / 2,
+                            (min[1] + max[1]) / 2,
+                            (min[2] + max[2]) / 2
+                        ];
                         const percent = settings.position;
                         
                         let planeOrigin, planeNormal;

@@ -2088,6 +2088,32 @@
             return pathParts[pathParts.length - 1];
         }
 
+        // Get internal Three.js scene from model-viewer
+        window.getInternalScene = function() {
+            const modelViewer = document.querySelector('model-viewer');
+            if (!modelViewer) {
+                console.error('model-viewer element not found');
+                return null;
+            }
+            
+            // Try to access internal scene using symbol lookup
+            const symbols = Object.getOwnPropertySymbols(modelViewer);
+            
+            // Look for scene symbol (supports both old and new versions)
+            const sceneSymbol = symbols.find(s => 
+                s.description === 'scene' || s.description === 'scene$'
+            );
+            
+            if (sceneSymbol) {
+                const scene = modelViewer[sceneSymbol];
+                console.log('Internal scene accessed successfully');
+                return scene;
+            }
+            
+            console.error('Could not find scene symbol in model-viewer');
+            return null;
+        };
+
         // ========== MATERIAL EDITOR FUNCTIONALITY ==========
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');
@@ -3266,6 +3292,13 @@
             let originalModelVisible = true; // Track if original model is visible
             let slicingPaused = false; // Track if slicing preview is paused
             
+            // Material state management to prevent conflicts with opacity slider
+            const materialState = {
+                originalSide: new Map(),  // Store original material.side values
+                slicerActive: false,
+                opacityActive: false
+            };
+            
             // Multi-plane support
             let activePlanes = new Set(['x']); // Currently active planes
             let planeSettings = {
@@ -3453,16 +3486,15 @@
                         return;
                     }
                     
-                    // Get Three.js scene - model-viewer uses internal Three.js
-                    // Access the actual Three.js scene through the shadowRoot
-                    const scene = modelViewer[$scene] || modelViewer.model;
+                    // Get Three.js scene using getInternalScene()
+                    const scene = window.getInternalScene();
                     if (!scene) {
                         console.log('Scene not accessible yet');
                         return;
                     }
                     
-                    // Get Three.js from model-viewer's context
-                    const THREE = window.THREE || modelViewer.constructor.modelViewerElement?.THREE;
+                    // Get THREE.js from global scope
+                    const THREE = window.THREE;
                     if (!THREE) {
                         console.error('THREE.js not accessible');
                         return;
@@ -3530,16 +3562,29 @@
                     });
                     
                     // Apply clipping to all meshes in the scene
+                    materialState.slicerActive = true;
                     scene.traverse((child) => {
                         if (child.isMesh && child.material) {
                             // Enable clipping on material
                             if (Array.isArray(child.material)) {
                                 child.material.forEach(mat => {
+                                    // Store original side if not already stored
+                                    if (!materialState.originalSide.has(mat)) {
+                                        materialState.originalSide.set(mat, mat.side);
+                                    }
+                                    // Set to DoubleSide to see inside of sliced model
+                                    mat.side = THREE.DoubleSide;
                                     mat.clippingPlanes = planes;
                                     mat.clipShadows = true;
                                     mat.needsUpdate = true;
                                 });
                             } else {
+                                // Store original side if not already stored
+                                if (!materialState.originalSide.has(child.material)) {
+                                    materialState.originalSide.set(child.material, child.material.side);
+                                }
+                                // Set to DoubleSide to see inside of sliced model
+                                child.material.side = THREE.DoubleSide;
                                 child.material.clippingPlanes = planes;
                                 child.material.clipShadows = true;
                                 child.material.needsUpdate = true;
@@ -3566,23 +3611,35 @@
             // Remove Three.js clipping
             function removeThreeJSClipping() {
                 try {
-                    const scene = modelViewer.model;
+                    const scene = window.getInternalScene();
                     if (!scene) return;
                     
-                    // Remove clipping from all meshes
+                    materialState.slicerActive = false;
+                    
+                    // Remove clipping from all meshes and restore original material.side
                     scene.traverse((child) => {
                         if (child.isMesh && child.material) {
                             if (Array.isArray(child.material)) {
                                 child.material.forEach(mat => {
                                     mat.clippingPlanes = [];
+                                    // Restore original side only if opacity is not active
+                                    if (!materialState.opacityActive && materialState.originalSide.has(mat)) {
+                                        mat.side = materialState.originalSide.get(mat);
+                                    }
                                     mat.needsUpdate = true;
                                 });
                             } else {
                                 child.material.clippingPlanes = [];
+                                // Restore original side only if opacity is not active
+                                if (!materialState.opacityActive && materialState.originalSide.has(child.material)) {
+                                    child.material.side = materialState.originalSide.get(child.material);
+                                }
                                 child.material.needsUpdate = true;
                             }
                         }
                     });
+                    
+                    console.log('Three.js clipping removed');
                     
                 } catch (error) {
                     console.error('Error removing Three.js clipping:', error);
@@ -3641,7 +3698,7 @@
                 return slicingPaused;
             }
             
-            // Enable live clipping preview using CSS overlays
+            // Enable live clipping preview using THREE.js clipping planes
             // Shows overlays for ALL active planes simultaneously
             function enableClipping() {
                 try {
@@ -3651,11 +3708,18 @@
                     // If no active planes or no bounds, just remove overlays and return
                     if (!meshBounds || activePlanes.size === 0) {
                         console.log('No active planes or bounds, overlays removed');
+                        disableClipping();
                         return;
                     }
                     
-                    // Note: Three.js clipping disabled due to model-viewer access limitations
-                    // Using CSS overlays for visual preview instead
+                    // Get Three.js scene from model-viewer
+                    const scene = window.getInternalScene();
+                    if (!scene) {
+                        console.warn('Could not access Three.js scene, using CSS overlays only');
+                    } else {
+                        // Apply real Three.js clipping
+                        applyThreeJSClipping();
+                    }
                     
                     // Create overlay for each active plane
                     activePlanes.forEach(plane => {
@@ -3804,8 +3868,14 @@
                     // Remove all visual overlays
                     document.querySelectorAll('[id^="slicerOverlay-"]').forEach(el => el.remove());
                     
+                    // Remove Three.js clipping
+                    removeThreeJSClipping();
+                    
                     // Hide stats
-                    document.getElementById('sliceStats').classList.add('hidden');
+                    const statsEl = document.getElementById('sliceStats');
+                    if (statsEl) {
+                        statsEl.classList.add('hidden');
+                    }
                     
                 } catch (error) {
                     console.error('Error disabling clipping:', error);
@@ -3854,12 +3924,14 @@
             async function loadMeshBounds() {
                 try {
                     const modelId = getCurrentModelId();
-                    const response = await fetch(`/get_mesh_bounds/${modelId}`);
+                    const response = await fetch(`/api/models/${modelId}/bounds`);
                     const result = await response.json();
                     
                     if (result.success) {
                         meshBounds = result.bounds;
                         console.log('Mesh bounds loaded:', meshBounds);
+                    } else {
+                        console.error('Failed to load bounds:', result.error);
                     }
                 } catch (error) {
                     console.error('Error loading mesh bounds:', error);

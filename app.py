@@ -1469,6 +1469,69 @@ def view_model(model_id):
                            cumulative_scale=model.cumulative_scale or 1.0,
                            applied_rotation=applied_rotation)
 
+@app.route('/api/models/<model_id>/bounds')
+def get_model_bounds(model_id):
+    """Get model bounding box for slicer"""
+    try:
+        # Get model from database
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        # Check if model file exists
+        if not model.filename or not os.path.exists(model.filename):
+            return jsonify({'success': False, 'error': 'Model file not found'}), 404
+        
+        # Try to get bounds from database first
+        if model.bounds:
+            try:
+                import json
+                bounds_data = json.loads(model.bounds)
+                if 'min' in bounds_data and 'max' in bounds_data:
+                    return jsonify({
+                        'success': True,
+                        'bounds': {
+                            'min': bounds_data['min'],
+                            'max': bounds_data['max'],
+                            'extents': bounds_data['extents']
+                        }
+                    })
+            except Exception as e:
+                logger.warning(f"Could not parse bounds from database: {e}")
+        
+        # Calculate bounds from GLB file
+        try:
+            import trimesh
+            mesh = trimesh.load(model.filename, force='scene')
+            
+            # Get bounds
+            if isinstance(mesh, trimesh.Scene):
+                bounds = mesh.bounds
+            else:
+                bounds = mesh.bounds
+            
+            # Convert to list and meters
+            min_bounds = bounds[0].tolist()
+            max_bounds = bounds[1].tolist()
+            extents = (bounds[1] - bounds[0]).tolist()
+            
+            return jsonify({
+                'success': True,
+                'bounds': {
+                    'min': min_bounds,
+                    'max': max_bounds,
+                    'extents': extents
+                }
+            })
+            
+        except Exception as e:
+            logger.error(f"Error calculating bounds: {e}")
+            return jsonify({'success': False, 'error': 'Failed to calculate bounds'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error in get_model_bounds: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 # Route to serve converted model files
 @app.route('/converted_files/<path:unique_id>/<path:filename>')
 def serve_converted_file(unique_id, filename):

@@ -2171,53 +2171,40 @@ def save_modifications():
         logger.info(f"[save_modifications] Model ID: {model_id}")
         logger.info(f"[save_modifications] Modifications: {modifications}")
         
-        # ABSOLUTE ROTATION: Always start from version 1 (original upload)
-        # Find version 1 (original upload) from database
+        # Use current model.glb as base (which may be sliced or modified)
+        # This ensures modifications are applied to the current state, not original upload
         model = UserModel.query.get(model_id)
-        if not model or not model.versions:
-            logger.error(f"Model or versions not found for ID: {model_id}")
+        if not model:
+            logger.error(f"Model not found for ID: {model_id}")
             return jsonify({'success': False, 'error': 'Model not found'}), 404
         
-        # Get version 1 (original upload)
-        version_1 = None
-        for version in model.versions:
-            if version.version_number == 1 and version.operation_type == 'upload':
-                version_1 = version
-                break
-        
-        if not version_1:
-            logger.error(f"Version 1 (original upload) not found for model {model_id}")
-            return jsonify({'success': False, 'error': 'Original upload version not found'}), 404
-        
-        # Use version 1's file as the base for modifications
-        original_path = version_1.filename
-        logger.info(f"[save_modifications] Using version 1 as base: {original_path}")
-        
-        if not os.path.exists(original_path):
-            logger.error(f"Version 1 GLB not found: {original_path}")
-            return jsonify({'success': False, 'error': 'Original model file not found'}), 404
-        
-        # Current model.glb path (will be replaced)
+        # Use current model.glb file as the base for modifications
         current_model_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
         
-        # Create backup of original
+        if not os.path.exists(current_model_path):
+            logger.error(f"Current model.glb not found: {current_model_path}")
+            return jsonify({'success': False, 'error': 'Model file not found'}), 404
+        
+        logger.info(f"[save_modifications] Using current model.glb as base: {current_model_path}")
+        
+        # Create backup of current model
         backup_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'model_backup_{int(time.time())}.glb')
-        shutil.copy2(original_path, backup_path)
+        shutil.copy2(current_model_path, backup_path)
         logger.info(f"[save_modifications] Created backup: {backup_path}")
         
         # Create temporary output path
         temp_output = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'temp_{int(time.time())}.glb')
         
-        logger.info(f"[save_modifications] Input: {original_path}")
+        logger.info(f"[save_modifications] Input: {current_model_path}")
         logger.info(f"[save_modifications] Temp output: {temp_output}")
         
-        # Apply modifications
-        success = modify_glb(original_path, temp_output, modifications)
+        # Apply modifications to current model
+        success = modify_glb(current_model_path, temp_output, modifications)
         
         if success and os.path.exists(temp_output):
-            # Replace current model.glb with modified version (based on version 1)
+            # Replace current model.glb with modified version
             shutil.move(temp_output, current_model_path)
-            logger.info(f"[save_modifications] Successfully replaced model.glb with version based on v1")
+            logger.info(f"[save_modifications] Successfully replaced model.glb with modified version")
             
             # Update database dimensions after modifications
             try:

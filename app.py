@@ -1147,32 +1147,11 @@ def upload_model():
                 z_cm = round(orig_dims['z'] * scale_factor * 100, 2)
                 max_cm = round(orig_dims['max'] * scale_factor * 100, 2)
                 
-                # Get min/max bounds from GLB for slicer
-                try:
-                    import trimesh
-                    mesh = trimesh.load(output_path)
-                    if isinstance(mesh, trimesh.Scene):
-                        bounds = mesh.bounds
-                    else:
-                        bounds = mesh.bounds
-                    
-                    min_bounds_cm = [round(float(b) * 100, 4) for b in bounds[0]]
-                    max_bounds_cm = [round(float(b) * 100, 4) for b in bounds[1]]
-                    
-                    model_bounds = json.dumps({
-                        'min': min_bounds_cm,
-                        'max': max_bounds_cm,
-                        'extents': [x_cm, y_cm, z_cm]
-                    })
-                    logger.info(f"[upload_model - {unique_id}] Using FBX dimensions (after scaling): {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
-                    logger.info(f"[upload_model - {unique_id}] FBX Bounds: min={min_bounds_cm}, max={max_bounds_cm}")
-                except Exception as bounds_error:
-                    # Fallback to old format if bounds calculation fails
-                    model_bounds = json.dumps({
-                        'extents': [x_cm, y_cm, z_cm],
-                        'max': max_cm
-                    })
-                    logger.warning(f"[upload_model - {unique_id}] Could not calculate FBX bounds: {bounds_error}")
+                model_bounds = json.dumps({
+                    'extents': [x_cm, y_cm, z_cm],
+                    'max': max_cm
+                })
+                logger.info(f"[upload_model - {unique_id}] Using FBX dimensions (after scaling): {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
             except Exception as e:
                 logger.warning(f"[upload_model - {unique_id}] Could not use original FBX dimensions: {str(e)}")
         
@@ -1216,22 +1195,11 @@ def upload_model():
                     z_cm = round(float(extents[2]) * 100, 2)
                     max_cm = round(float(max(extents)) * 100, 2)
                     
-                    # Get min/max bounds for slicer
-                    if isinstance(mesh, trimesh.Scene):
-                        bounds = mesh.bounds
-                    else:
-                        bounds = mesh.bounds
-                    
-                    min_bounds_cm = [round(float(b) * 100, 4) for b in bounds[0]]
-                    max_bounds_cm = [round(float(b) * 100, 4) for b in bounds[1]]
-                    
                     model_bounds = json.dumps({
-                        'min': min_bounds_cm,
-                        'max': max_bounds_cm,
-                        'extents': [x_cm, y_cm, z_cm]
+                        'extents': [x_cm, y_cm, z_cm],
+                        'max': max_cm
                     })
                     logger.info(f"[upload_model - {unique_id}] Model dimensions: {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
-                    logger.info(f"[upload_model - {unique_id}] Bounds: min={min_bounds_cm}, max={max_bounds_cm}")
                 else:
                     logger.warning(f"[upload_model - {unique_id}] Extents too small or zero: {extents}")
             except Exception as e:
@@ -1243,12 +1211,11 @@ def upload_model():
             try:
                 import json
                 bounds_data = json.loads(model_bounds)
-                extents = bounds_data['extents']
                 original_dims = {
-                    'x': extents[0],
-                    'y': extents[1],
-                    'z': extents[2],
-                    'max': max(extents)  # Calculate max from extents
+                    'x': bounds_data['extents'][0],
+                    'y': bounds_data['extents'][1],
+                    'z': bounds_data['extents'][2],
+                    'max': bounds_data['max']
                 }
             except:
                 pass

@@ -2593,11 +2593,31 @@
             async function applyTexture(imageUrl) {
                 // Use THREE.js direct approach for texture application
                 // model-viewer's API doesn't have setBaseColorTexture method
-                const scene = getInternalScene();
-                if (!scene) {
-                    console.warn('Scene not available yet');
+                const modelViewer = document.getElementById('modelViewer');
+                if (!modelViewer) {
+                    console.warn('Model viewer not found');
                     return;
                 }
+                
+                // Wait for model to be loaded
+                await modelViewer.updateComplete;
+                
+                // Try multiple methods to get the scene
+                let scene = getInternalScene();
+                if (!scene) {
+                    // Alternative: try to get scene from model property
+                    if (modelViewer.model) {
+                        scene = modelViewer.model;
+                    }
+                }
+                
+                if (!scene) {
+                    console.warn('Scene not available yet - retrying in 500ms');
+                    setTimeout(() => applyTexture(imageUrl), 500);
+                    return;
+                }
+                
+                console.log('Scene found, applying texture...');
                 
                 const img = new Image();
                 img.crossOrigin = 'anonymous';

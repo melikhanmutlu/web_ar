@@ -16,7 +16,7 @@ class BaseConverter:
         self.start_time: Optional[datetime] = None
         self.end_time: Optional[datetime] = None
         self.logger = logging.getLogger(__name__)
-        self.max_dimension: float = 0.5  # 50 cm varsayılan maksimum boyut
+        self.max_dimension: float = 0  # No scaling by default - only scale if user explicitly sets it
 
     def validate(self, file_path: str) -> bool:
         """
@@ -136,14 +136,14 @@ class BaseConverter:
             "end_time": self.end_time.isoformat() if self.end_time else None
         }
 
-    def set_max_dimension(self, max_dimension_cm: float) -> None:
+    def set_max_dimension(self, max_dimension_meters: float) -> None:
         """
-        Set maximum dimension in centimeters
+        Set maximum dimension in meters
         Args:
-            max_dimension_cm: Maximum dimension in centimeters
+            max_dimension_meters: Maximum dimension in meters (already converted from cm)
         """
-        self.max_dimension = max_dimension_cm / 100.0  # Convert to meters
-        self.log_operation(f"Maximum dimension set to {max_dimension_cm} cm ({self.max_dimension} m)")
+        self.max_dimension = max_dimension_meters
+        self.log_operation(f"Maximum dimension set to {max_dimension_meters:.4f} m ({max_dimension_meters * 100:.2f} cm)")
 
     def calculate_scale_factor(self, dimensions: Dict[str, float]) -> float:
         """

@@ -1430,6 +1430,58 @@
                 Reset Camera
             </button>
             
+            <!-- Animation Panel (shown only if model has animations) -->
+            <div id="animationPanel" class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('animationContent')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">
+                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Animations
+                    </span>
+                    <svg class="w-4 h-4 transform transition-transform" id="animationContentIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="animationContent" class="panel-content p-4 hidden">
+                    <!-- Animation Select -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Select Animation</label>
+                        <select id="animationSelect" class="w-full px-3 py-2 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <option value="">-- No Animation --</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Play/Pause Controls -->
+                    <div class="mb-4 flex gap-2">
+                        <button id="playAnimation" class="flex-1 px-3 py-2 text-xs bg-green-500 hover:bg-green-600 text-white rounded flex items-center justify-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"></path>
+                            </svg>
+                            Play
+                        </button>
+                        <button id="pauseAnimation" class="flex-1 px-3 py-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white rounded flex items-center justify-center gap-1 hidden">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path>
+                            </svg>
+                            Pause
+                        </button>
+                        <button id="stopAnimationBtn" class="flex-1 px-3 py-2 text-xs bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 6h12v12H6z"></path>
+                            </svg>
+                            Stop
+                        </button>
+                    </div>
+                    
+                    <!-- Animation Info -->
+                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                        <p id="animationInfo">No animations detected</p>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Material Editor Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
@@ -2055,7 +2107,7 @@
     <script>
         // ========== ACCORDION PANEL FUNCTIONALITY ==========
         // List of all panel IDs
-        const allPanelIds = ['materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
+        const allPanelIds = ['animationContent', 'materialPanel', 'transformPanel', 'annotationsPanel', 'versionPanel', 'slicerPanel'];
         
         function togglePanel(panelId) {
             const panel = document.getElementById(panelId);
@@ -2113,6 +2165,112 @@
             console.error('Could not find scene symbol in model-viewer');
             return null;
         };
+
+        // ========== ANIMATION CONTROLS FUNCTIONALITY ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelViewer = document.querySelector('model-viewer');
+            
+            // Animation state
+            let isAnimationPlaying = false;
+            let availableAnimations = [];
+            
+            // Check for animations when model loads
+            modelViewer.addEventListener('load', () => {
+                // Use model-viewer's built-in animation API
+                availableAnimations = modelViewer.availableAnimations || [];
+                
+                console.log('Available animations:', availableAnimations);
+                
+                const animationPanel = document.getElementById('animationPanel');
+                const animationSelect = document.getElementById('animationSelect');
+                const animationInfo = document.getElementById('animationInfo');
+                
+                if (availableAnimations.length > 0) {
+                    // Show animation panel
+                    animationPanel.classList.remove('hidden');
+                    
+                    // Populate animation select
+                    animationSelect.innerHTML = '<option value="">-- Select Animation --</option>';
+                    availableAnimations.forEach((animName, index) => {
+                        const option = document.createElement('option');
+                        option.value = animName;
+                        option.textContent = animName || `Animation ${index + 1}`;
+                        animationSelect.appendChild(option);
+                    });
+                    
+                    // Update info
+                    animationInfo.textContent = `${availableAnimations.length} animation(s) available`;
+                    
+                    // Auto-select first animation if only one
+                    if (availableAnimations.length === 1) {
+                        animationSelect.value = availableAnimations[0];
+                    }
+                } else {
+                    animationPanel.classList.add('hidden');
+                    animationInfo.textContent = 'No animations detected';
+                }
+            });
+            
+            // Animation select change
+            document.getElementById('animationSelect').addEventListener('change', (e) => {
+                const animationName = e.target.value;
+                if (animationName) {
+                    modelViewer.animationName = animationName;
+                    console.log('Selected animation:', animationName);
+                } else {
+                    modelViewer.animationName = null;
+                    modelViewer.pause();
+                    isAnimationPlaying = false;
+                    updatePlayPauseButtons();
+                }
+            });
+            
+            // Play button
+            document.getElementById('playAnimation').addEventListener('click', () => {
+                const animationName = document.getElementById('animationSelect').value;
+                if (animationName || availableAnimations.length > 0) {
+                    if (!animationName && availableAnimations.length > 0) {
+                        // Auto-select first animation
+                        document.getElementById('animationSelect').value = availableAnimations[0];
+                        modelViewer.animationName = availableAnimations[0];
+                    }
+                    modelViewer.play();
+                    isAnimationPlaying = true;
+                    updatePlayPauseButtons();
+                    console.log('Playing animation');
+                }
+            });
+            
+            // Pause button
+            document.getElementById('pauseAnimation').addEventListener('click', () => {
+                modelViewer.pause();
+                isAnimationPlaying = false;
+                updatePlayPauseButtons();
+                console.log('Paused animation');
+            });
+            
+            // Stop button
+            document.getElementById('stopAnimationBtn').addEventListener('click', () => {
+                modelViewer.pause();
+                modelViewer.currentTime = 0;
+                isAnimationPlaying = false;
+                updatePlayPauseButtons();
+                console.log('Stopped animation');
+            });
+            
+            function updatePlayPauseButtons() {
+                const playBtn = document.getElementById('playAnimation');
+                const pauseBtn = document.getElementById('pauseAnimation');
+                
+                if (isAnimationPlaying) {
+                    playBtn.classList.add('hidden');
+                    pauseBtn.classList.remove('hidden');
+                } else {
+                    playBtn.classList.remove('hidden');
+                    pauseBtn.classList.add('hidden');
+                }
+            }
+        });
 
         // ========== MATERIAL EDITOR FUNCTIONALITY ==========
         document.addEventListener('DOMContentLoaded', () => {

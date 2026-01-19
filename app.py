@@ -984,14 +984,23 @@ def upload_model():
         
         color = request.form.get('color', '#4CAF50')
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
-        max_dimension_str = request.form.get('maxDimension')
+        
+        # Get maximum dimension setting (only if checkbox is checked)
+        use_max_dimension_raw = request.form.get('useMaxDimension')
+        use_max_dimension = use_max_dimension_raw == 'true' if use_max_dimension_raw else False
+        logger.info(f"useMaxDimension checkbox: {use_max_dimension}")
+        
         max_dimension = None
-        if max_dimension_str:
-            try:
-                max_dimension = float(max_dimension_str) / 100.0 # Convert cm to meters
-            except ValueError:
-                logger.warning(f"Invalid maxDimension value: {max_dimension_str}")
-                # Optionally return an error or proceed without scaling
+        if use_max_dimension:
+            max_dimension_str = request.form.get('maxDimension')
+            if max_dimension_str:
+                try:
+                    max_dimension = float(max_dimension_str) / 100.0  # Convert cm to meters
+                    logger.info(f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)")
+                except ValueError:
+                    logger.warning(f"Invalid maxDimension value: {max_dimension_str}")
+        else:
+            logger.info("Maximum dimension limit disabled - model will keep original size")
 
         # --- Start: Consistent File Handling Logic --- 
         unique_id = str(uuid.uuid4())
@@ -1050,7 +1059,7 @@ def upload_model():
             if temp_dir: shutil.rmtree(temp_dir)
             return jsonify({'error': 'Unsupported file format'}), 400
 
-        # Set max dimension if specified (max_dimension is already in cm)
+        # Set max dimension if specified (max_dimension is in meters)
         if max_dimension is not None:
             converter.set_max_dimension(max_dimension)
 

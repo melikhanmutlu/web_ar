@@ -119,18 +119,22 @@ class STLConverter(BaseConverter):
             
             self.log_operation(f"Model dimensions: {dimensions}")
             
-            # Calculate scale factor
-            scale_factor = self.calculate_scale_factor(dimensions)
-            
-            # ALWAYS apply scaling if max_dimension is set (standardize for AR)
+            # Calculate scale factor only if max_dimension was explicitly set by user
+            # Default max_dimension is 0.5 but we only scale if user checked the checkbox
             if self.max_dimension > 0:
-                self.log_operation(f"Applying scale factor: {scale_factor}")
-                if isinstance(mesh, trimesh.Scene):
-                    for geom in mesh.geometry.values():
-                        if isinstance(geom, trimesh.Trimesh):
-                            geom.apply_scale(scale_factor)
+                scale_factor = self.calculate_scale_factor(dimensions)
+                if scale_factor != 1.0:
+                    self.log_operation(f"Applying scale factor: {scale_factor}")
+                    if isinstance(mesh, trimesh.Scene):
+                        for geom in mesh.geometry.values():
+                            if isinstance(geom, trimesh.Trimesh):
+                                geom.apply_scale(scale_factor)
+                    else:
+                        mesh.apply_scale(scale_factor)
                 else:
-                    mesh.apply_scale(scale_factor)
+                    self.log_operation("No scaling needed - model already at target size")
+            else:
+                self.log_operation("No scaling applied - max_dimension not set by user")
             
             # Apply color if specified
             if color:

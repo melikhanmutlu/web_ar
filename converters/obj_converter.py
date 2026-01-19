@@ -158,12 +158,18 @@ class OBJConverter(BaseConverter):
                     extents = temp_mesh.extents
                 
                 dimensions = {'x': extents[0], 'y': extents[1], 'z': extents[2]}
-                scale_factor = self.calculate_scale_factor(dimensions)
+                self.log_operation(f"Model dimensions: {dimensions}")
                 
-                # ALWAYS scale if max_dimension is set (standardize for AR)
-                if self.max_dimension > 0 and scale_factor != 1.0:
-                    needs_scaling = True
-                    self.log_operation(f"Scaling needed - factor: {scale_factor}")
+                # Only scale if max_dimension was explicitly set by user
+                if self.max_dimension > 0:
+                    scale_factor = self.calculate_scale_factor(dimensions)
+                    if scale_factor != 1.0:
+                        needs_scaling = True
+                        self.log_operation(f"Scaling needed - factor: {scale_factor}")
+                    else:
+                        self.log_operation("No scaling needed - model already at target size")
+                else:
+                    self.log_operation("No scaling applied - max_dimension not set by user")
                 
                 del temp_mesh
             except Exception as e:

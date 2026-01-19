@@ -216,8 +216,11 @@ class FBXConverter(BaseConverter):
                         extents = max_bounds - min_bounds
                         
                         # Store original vertices for later use (in case GLB has zero vertices)
-                        self._fbx_vertices = combined_vertices / 1000.0  # Convert mm to m
-                        self.log_operation(f"Stored {len(combined_vertices)} original FBX vertices for mesh creation")
+                        # Note: FBX units vary (mm, cm, m) - we keep raw values and let FBX2glTF handle conversion
+                        # FBX2glTF outputs in meters, so we trust its output for final dimensions
+                        self._fbx_vertices = combined_vertices  # Keep raw units, will be scaled if needed
+                        self._fbx_raw_extents = extents  # Store raw extents for logging
+                        self.log_operation(f"Stored {len(combined_vertices)} original FBX vertices (raw units)")
                         
                         # Store UV coordinates
                         if all_uvs and any(uv is not None for uv in all_uvs):
@@ -253,20 +256,12 @@ class FBXConverter(BaseConverter):
                             self.log_operation("No faces found in FBX, will use vertices only")
                         
                         if max(extents) > 0.001:
-                            # FBX units are often in mm, convert to meters
-                            # Divide by 1000 to get meters (pyassimp reads raw units)
-                            extents_m = extents / 1000.0
-                            
-                            # Store in meters (app.py will convert to cm)
-                            original_dimensions = {
-                                'x': float(extents_m[0]),
-                                'y': float(extents_m[1]),
-                                'z': float(extents_m[2]),
-                                'max': float(max(extents_m))
-                            }
+                            # FBX units are unknown - we'll get accurate dimensions from FBX2glTF output
+                            # Store raw extents for reference only, actual dimensions come from GLB
                             self.log_operation(f"Original FBX dimensions (raw units): {extents}")
-                            self.log_operation(f"Original FBX dimensions (m, assuming mm units): {extents_m}")
-                            self.log_operation(f"Will be converted to cm in app.py: {extents_m * 100}")
+                            self.log_operation(f"Note: FBX units are unknown, will use FBX2glTF output for accurate dimensions")
+                            # Don't set original_dimensions here - let it be calculated from GLB output
+                            original_dimensions = None
                         else:
                             self.log_operation(f"Warning: Original FBX has zero dimensions: {extents}")
                     else:
@@ -315,27 +310,55 @@ class FBXConverter(BaseConverter):
                     self.log_operation(f"FBX2glTF output: {result.stdout}")
                     
                     # Post-processing: Only if color or scaling needed
+                    # IMPORTANT: Use pygltflib for post-processing to preserve animations
                     self.log_operation(f"Post-processing - color: {color}, max_dimension: {self.max_dimension}")
+                    
+                    # Check if GLB has animations - if so, use pygltflib to preserve them
+                    has_animations = False
+                    try:
+                        from pygltflib import GLTF2
+                        gltf_check = GLTF2().load(output_path)
+                        if gltf_check.animations and len(gltf_check.animations) > 0:
+                            has_animations = True
+                            self.log_operation(f"✅ GLB has {len(gltf_check.animations)} animations - will use pygltflib to preserve them")
+                        if gltf_check.skins and len(gltf_check.skins) > 0:
+                            self.log_operation(f"✅ GLB has {len(gltf_check.skins)} skins")
+                    except Exception as e:
+                        self.log_operation(f"Warning: Could not check for animations: {e}", "WARNING")
                     
                     # Check if we need post-processing
                     needs_processing = False
+                    needs_scaling = False
+                    scale_factor = 1.0
                     
                     # Check if color application needed
                     if color:
                         needs_processing = True
                         self.log_operation("Post-processing needed: color application")
                     
-                    # Check if scaling needed
-                    if original_dimensions and self.max_dimension > 0:
-                        max_dim_m = original_dimensions['max']
-                        max_allowed_m = self.max_dimension
-                        scale_factor = max_allowed_m / max_dim_m
-                        if scale_factor != 1.0:
-                            needs_processing = True
-                            self.log_operation(f"Post-processing needed: scaling from original FBX dims (factor: {scale_factor:.4f})")
-                            self.log_operation(f"Original max: {max_dim_m:.4f}m, Target: {max_allowed_m:.4f}m")
+                    # Check if scaling needed - get dimensions from GLB output (more accurate)
+                    if self.max_dimension > 0 and os.path.exists(output_path):
+                        try:
+                            temp_mesh = trimesh.load(output_path)
+                            if isinstance(temp_mesh, trimesh.Scene):
+                                bounds = temp_mesh.bounds
+                                extents = bounds[1] - bounds[0] if bounds is not None else np.array([0, 0, 0])
+                            else:
+                                extents = temp_mesh.extents
+                            
+                            max_dim_m = float(max(extents))
+                            if max_dim_m > 0:
+                                scale_factor = self.max_dimension / max_dim_m
+                                if abs(scale_factor - 1.0) > 0.001:  # Only scale if significant difference
+                                    needs_scaling = True
+                                    needs_processing = True
+                                    self.log_operation(f"Post-processing needed: scaling (factor: {scale_factor:.4f})")
+                                    self.log_operation(f"Current max: {max_dim_m:.4f}m, Target: {self.max_dimension:.4f}m")
+                            del temp_mesh
+                        except Exception as e:
+                            self.log_operation(f"Warning: Could not check dimensions: {e}", "WARNING")
                     
-                    # If no post-processing needed, embed external textures into GLB
+                    # If no post-processing needed, just embed external textures
                     if not needs_processing:
                         self.log_operation("No post-processing needed - embedding external textures into GLB")
                         try:
@@ -344,6 +367,57 @@ class FBXConverter(BaseConverter):
                             self.log_operation(f"Warning: Could not embed textures: {tex_error}", "WARNING")
                         self.update_status("COMPLETED")
                         return True
+                    
+                    # Use pygltflib for post-processing to preserve animations
+                    if has_animations or needs_scaling:
+                        self.log_operation("Using pygltflib for post-processing to preserve animations")
+                        try:
+                            from pygltflib import GLTF2
+                            import sys
+                            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+                            from glb_modifier import apply_material_modifications, apply_transform_modifications
+                            
+                            gltf = GLTF2().load(output_path)
+                            
+                            # Apply scaling using glb_modifier (preserves animations)
+                            if needs_scaling:
+                                transform_mods = {'scale': scale_factor, 'rotation': {'x': 0, 'y': 0, 'z': 0}}
+                                gltf = apply_transform_modifications(gltf, transform_mods)
+                                self.log_operation(f"Applied scale {scale_factor:.4f}x using pygltflib")
+                            
+                            # Apply color using glb_modifier (preserves animations)
+                            if color:
+                                hex_color = color.lstrip('#')
+                                material_mods = {
+                                    'color': color,
+                                    'metalness': 0.1,
+                                    'roughness': 0.9,
+                                    'opacity': 1.0
+                                }
+                                gltf = apply_material_modifications(gltf, material_mods)
+                                self.log_operation(f"Applied color {color} using pygltflib")
+                            
+                            # Embed textures
+                            try:
+                                self._embed_external_textures_gltf(gltf, input_path)
+                            except Exception as tex_error:
+                                self.log_operation(f"Warning: Could not embed textures: {tex_error}", "WARNING")
+                            
+                            # Save modified GLB
+                            gltf.save(output_path)
+                            
+                            # Verify animations preserved
+                            gltf_verify = GLTF2().load(output_path)
+                            if gltf_verify.animations:
+                                self.log_operation(f"✅ Animations preserved: {len(gltf_verify.animations)} animations")
+                            
+                            self.update_status("COMPLETED")
+                            return True
+                            
+                        except Exception as e:
+                            self.log_operation(f"Warning: pygltflib post-processing failed, falling back to trimesh: {e}", "WARNING")
+                            import traceback
+                            self.log_operation(f"Traceback: {traceback.format_exc()}")
                     
                     # Check if scaling is needed (fallback for non-FBX or if original_dimensions failed)
                     if os.path.exists(output_path):
@@ -592,6 +666,51 @@ class FBXConverter(BaseConverter):
             import traceback
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
+
+    def _embed_external_textures_gltf(self, gltf, fbx_path: str) -> None:
+        """Embed external texture files into an already-loaded GLTF object.
+        This version works with a gltf object that's already in memory.
+        """
+        try:
+            import base64
+            
+            fbx_dir = os.path.dirname(fbx_path)
+            
+            if not gltf.images:
+                self.log_operation("No images found in GLB to embed")
+                return
+            
+            # Convert buffer-embedded images to data URIs
+            binary_blob = gltf.binary_blob()
+            if not binary_blob:
+                return
+            
+            for i, img in enumerate(gltf.images):
+                if img.bufferView is not None:
+                    try:
+                        buffer_view = gltf.bufferViews[img.bufferView]
+                        offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                        length = buffer_view.byteLength
+                        
+                        image_data = binary_blob[offset:offset + length]
+                        
+                        # Determine MIME type
+                        mime_type = 'image/png'
+                        if image_data[:4] == b'\x89PNG':
+                            mime_type = 'image/png'
+                        elif image_data[:2] == b'\xff\xd8':
+                            mime_type = 'image/jpeg'
+                        
+                        # Convert to data URI
+                        data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
+                        img.uri = data_uri
+                        img.bufferView = None
+                        self.log_operation(f"Converted image {i} to data URI")
+                    except Exception as e:
+                        self.log_operation(f"Warning: Could not convert image {i}: {e}", "WARNING")
+                        
+        except Exception as e:
+            self.log_operation(f"Warning: Could not embed textures: {e}", "WARNING")
 
     def _embed_external_textures(self, glb_path: str, fbx_path: str) -> None:
         """Embed external texture files into GLB."""

@@ -369,7 +369,8 @@ class FBXConverter(BaseConverter):
                         return True
                     
                     # Use pygltflib for post-processing to preserve animations
-                    if has_animations or needs_scaling:
+                    # IMPORTANT: If model has animations, ALWAYS use pygltflib (never trimesh)
+                    if has_animations or needs_scaling or color:
                         self.log_operation("Using pygltflib for post-processing to preserve animations")
                         try:
                             from pygltflib import GLTF2
@@ -415,12 +416,18 @@ class FBXConverter(BaseConverter):
                             return True
                             
                         except Exception as e:
-                            self.log_operation(f"Warning: pygltflib post-processing failed, falling back to trimesh: {e}", "WARNING")
+                            self.log_operation(f"Warning: pygltflib post-processing failed: {e}", "WARNING")
                             import traceback
                             self.log_operation(f"Traceback: {traceback.format_exc()}")
+                            # If model has animations, don't fall back to trimesh - it will destroy animations
+                            if has_animations:
+                                self.log_operation("Model has animations - skipping trimesh fallback to preserve them")
+                                self.update_status("COMPLETED")
+                                return True
                     
+                    # Trimesh fallback - ONLY for models WITHOUT animations
                     # Check if scaling is needed (fallback for non-FBX or if original_dimensions failed)
-                    if os.path.exists(output_path):
+                    if not has_animations and os.path.exists(output_path):
                         try:
                             # Quick check for dimensions without full reload
                             temp_mesh = trimesh.load(output_path)
@@ -455,11 +462,11 @@ class FBXConverter(BaseConverter):
                         except Exception as e:
                             self.log_operation(f"Warning: Could not check dimensions: {str(e)}", "WARNING")
                     
-                    # Only reload and re-export if necessary
-                    if needs_processing and os.path.exists(output_path):
+                    # Only reload and re-export if necessary - SKIP if model has animations
+                    if needs_processing and not has_animations and os.path.exists(output_path):
                         try:
                             scene_or_mesh = trimesh.load(output_path)
-                            self.log_operation(f"Loaded GLB for post-processing")
+                            self.log_operation(f"Loaded GLB for post-processing (no animations, using trimesh)")
                             
                             # NEW APPROACH: Work with Scene directly to preserve textures
                             if isinstance(scene_or_mesh, trimesh.Scene):

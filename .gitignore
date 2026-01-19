@@ -184,6 +184,8 @@ qr_codes/*
 !qr_codes/.gitkeep
 tools/*
 !tools/.gitkeep
+!tools/blender_usdz_export.py
+!tools/blender_usdz_export.py
 
 # Environment
 .env

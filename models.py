@@ -66,6 +66,7 @@ class Folder(db.Model):
 class UserModel(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # Changed to String to support UUID
     filename = db.Column(db.String(255), nullable=False)
+    usdz_filename = db.Column(db.String(255), nullable=True)  # Path to USDZ file for iOS AR
     file_size = db.Column(db.Integer)
     file_type = db.Column(db.String(50))
     vertices = db.Column(db.Integer, nullable=True)

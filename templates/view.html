@@ -1398,6 +1398,9 @@
             <model-viewer 
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+                {% if usdz_filename %}
+                ios-src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"
+                {% endif %}
                 shadow-intensity="1"
                 camera-controls
                 ar

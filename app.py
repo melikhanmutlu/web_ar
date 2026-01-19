@@ -800,6 +800,71 @@ def init_app_dependencies():
 def index():
     return render_template('index.html')
 
+def convert_to_usdz(input_glb_path, output_usdz_path):
+    """
+    Convert GLB to USDZ using Blender script.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        logger.info(f"Starting USDZ conversion: {input_glb_path} -> {output_usdz_path}")
+        
+        # Path to the blender script
+        blender_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tools', 'blender_usdz_export.py')
+        
+        # Check for blender executable
+        blender_exec = 'blender'
+        # On Windows, try to find commonly used paths if not in PATH
+        if os.name == 'nt':
+            possible_paths = [
+                r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
+                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe"
+            ]
+            # Check if 'blender' is in PATH first
+            if shutil.which('blender'):
+                blender_exec = 'blender'
+            else:
+                for p in possible_paths:
+                    if os.path.exists(p):
+                        blender_exec = p
+                        break
+        
+        # Construct command
+        cmd = [
+            blender_exec,
+            '--background',
+            '--python', blender_script,
+            '--',
+            input_glb_path,
+            output_usdz_path
+        ]
+        
+        logger.info(f"Running Blender command: {cmd}")
+        
+        # Run conversion
+        process = subprocess.run(
+            cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True, 
+            timeout=300 # 5 minute timeout
+        )
+        
+        if process.returncode == 0 and os.path.exists(output_usdz_path):
+            logger.info(f"USDZ conversion successful: {output_usdz_path}")
+            return True
+        else:
+            logger.warning(f"USDZ conversion failed. Return code: {process.returncode}")
+            logger.warning(f"Stdout: {process.stdout}")
+            logger.warning(f"Stderr: {process.stderr}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error during USDZ conversion: {e}")
+        return False
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     try:
@@ -1121,6 +1186,68 @@ def upload_model():
             logger.error(f"[upload_model - {unique_id}] Error normalizing model: {e}", exc_info=True)
             # Continue even if normalization fails
 
+        # --- USDZ Conversion for iOS AR (using Blender) ---
+        usdz_output_path = os.path.join(converted_dir, 'model.usdz')
+        usdz_success = False
+        try:
+            logger.info(f"[upload_model - {unique_id}] Starting USDZ conversion")
+            
+            # Path to the blender script
+            blender_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tools', 'blender_usdz_export.py')
+            
+            # Check for blender executable
+            blender_exec = 'blender'
+            # On Windows, try to find commonly used paths if not in PATH
+            if os.name == 'nt':
+                possible_paths = [
+                    r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
+                    r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe"
+                ]
+                # Check if 'blender' is in PATH first
+                if shutil.which('blender'):
+                    blender_exec = 'blender'
+                else:
+                    for p in possible_paths:
+                        if os.path.exists(p):
+                            blender_exec = p
+                            break
+            
+            # Construct command
+            cmd = [
+                blender_exec,
+                '--background',
+                '--python', blender_script,
+                '--',
+                output_path,
+                usdz_output_path
+            ]
+            
+            logger.info(f"[upload_model - {unique_id}] Running Blender command: {cmd}")
+            
+            # Run conversion
+            process = subprocess.run(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True, 
+                timeout=300 # 5 minute timeout
+            )
+            
+            if process.returncode == 0 and os.path.exists(usdz_output_path):
+                logger.info(f"[upload_model - {unique_id}] USDZ conversion successful: {usdz_output_path}")
+                usdz_success = True
+            else:
+                logger.warning(f"[upload_model - {unique_id}] USDZ conversion failed. Return code: {process.returncode}")
+                logger.warning(f"Stdout: {process.stdout}")
+                logger.warning(f"Stderr: {process.stderr}")
+                
+        except Exception as e:
+            logger.error(f"[upload_model - {unique_id}] Error during USDZ conversion: {e}")
+            # Don't fail the whole upload if USDZ fails, just log it
+
         # Clean up temporary file and directory
         try:
             if temp_dir: 
@@ -1234,7 +1361,8 @@ def upload_model():
         model = UserModel(
             id=unique_id, # Use the same ID as the directory
             user_id=current_user.id if current_user.is_authenticated else None,
-            filename=output_path,  # Store the correct full absolute path
+            filename=output_path,  # Store the full path to the GLB file
+            usdz_filename=usdz_output_path if usdz_success else None, # Store USDZ path if conversion succeeded
             file_size=final_file_size, # Use the checked size
             file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
             upload_date=datetime.utcnow(),
@@ -1452,6 +1580,12 @@ def view_model(model_id):
             app.logger.error(f"Model path {full_path} does not start with converted folder {converted_folder_abs}")
             raise ValueError("Model path is not within the expected converted folder")
 
+        # Check for USDZ file
+        usdz_actual_filename = None
+        if hasattr(model, 'usdz_filename') and model.usdz_filename and os.path.exists(model.usdz_filename):
+            usdz_actual_filename = os.path.basename(model.usdz_filename)
+            app.logger.info(f"Found USDZ file: {usdz_actual_filename}")
+
     except Exception as e:
         import traceback as tb
         app.logger.error(f"Error parsing model path '{model.filename}': {e}")
@@ -1474,6 +1608,7 @@ def view_model(model_id):
                            model=model, 
                            model_unique_id=model_unique_id, 
                            actual_filename=actual_filename,
+                           usdz_filename=usdz_actual_filename,
                            model_dimensions=model_dimensions,
                            cumulative_scale=model.cumulative_scale or 1.0,
                            applied_rotation=applied_rotation)

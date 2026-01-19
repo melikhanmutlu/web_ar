@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs-18_x"]
+nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs-18_x", "blender"]
 
 [phases.install]
 cmds = [
@@ -11,4 +11,4 @@ cmds = [
 ]
 
 [start]
-cmd = "chmod +x /app/tools/FBX2glTF 2>/dev/null || true && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"
+cmd = "chmod +x /app/tools/FBX2glTF 2>/dev/null || true && /opt/venv/bin/python migrate_usdz_column.py && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"

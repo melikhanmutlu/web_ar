@@ -1284,29 +1284,44 @@
                 console.log('Model Viewer:', modelViewer);
                 console.log('Can Activate AR:', modelViewer?.canActivateAR);
                 console.log('Has AR attribute:', modelViewer?.hasAttribute('ar'));
+                console.log('User Agent:', navigator.userAgent);
                 
-                // Force AR activation on mobile
+                // Detect iOS specifically
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                const isAndroid = /Android/i.test(navigator.userAgent);
+                const isMobile = isIOS || isAndroid;
+                
+                console.log('Is iOS:', isIOS, 'Is Android:', isAndroid, 'Is Mobile:', isMobile);
+                
                 if (modelViewer) {
-                    // Check if we're on mobile
-                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                    
-                    if (isMobile && modelViewer.canActivateAR) {
-                        console.log('Attempting to activate AR...');
+                    if (isMobile) {
+                        console.log('Mobile device detected, attempting AR activation...');
+                        
+                        // For iOS, we need to ensure the model is loaded before AR
+                        if (isIOS) {
+                            console.log('iOS detected - using Quick Look');
+                            // Check if model is loaded
+                            if (!modelViewer.loaded) {
+                                console.log('Waiting for model to load...');
+                                await new Promise(resolve => {
+                                    modelViewer.addEventListener('load', resolve, { once: true });
+                                    setTimeout(resolve, 3000); // Timeout after 3s
+                                });
+                            }
+                        }
+                        
                         try {
+                            // Try to activate AR
+                            console.log('Calling activateAR()...');
                             await modelViewer.activateAR();
                             console.log('AR activated successfully');
                         } catch (error) {
                             console.error('AR activation failed:', error);
-                            showArModal();
-                        }
-                    } else if (isMobile) {
-                        // Mobile but canActivateAR is false - try anyway
-                        console.log('Mobile detected, forcing AR activation...');
-                        try {
-                            await modelViewer.activateAR();
-                            console.log('AR activated successfully (forced)');
-                        } catch (error) {
-                            console.error('Forced AR activation failed:', error);
+                            // On iOS, if AR fails, show helpful message
+                            if (isIOS) {
+                                alert('AR Quick Look başlatılamadı. Safari tarayıcısını kullandığınızdan emin olun.');
+                            }
                             showArModal();
                         }
                     } else {
@@ -1405,7 +1420,10 @@
                 camera-controls
                 ar
                 ar-modes="webxr scene-viewer quick-look"
+                ar-scale="auto"
                 ar-placement="floor"
+                quick-look-browsers="safari chrome"
+                xr-environment
                 autoplay
             >
             </model-viewer>
@@ -2572,32 +2590,71 @@
                 reader.readAsDataURL(file);
             });
 
-            function applyTexture(imageUrl) {
+            async function applyTexture(imageUrl) {
+                // Use model-viewer's createTexture API for proper texture application
+                if (!modelViewer.model) {
+                    console.warn('Model not loaded yet');
+                    return;
+                }
+                
+                try {
+                    // Create texture from image URL using model-viewer API
+                    const texture = await modelViewer.createTexture(imageUrl);
+                    
+                    if (texture) {
+                        // Apply texture to all materials
+                        const materials = modelViewer.model.materials;
+                        if (materials && materials.length > 0) {
+                            materials.forEach((material, index) => {
+                                // Store original texture for potential reset
+                                if (!material._originalBaseColorTexture) {
+                                    material._originalBaseColorTexture = material.pbrMetallicRoughness.baseColorTexture;
+                                }
+                                // Apply new texture
+                                material.pbrMetallicRoughness.setBaseColorTexture(texture);
+                                console.log(`Applied texture to material ${index}`);
+                            });
+                        }
+                        console.log('Texture applied successfully via model-viewer API');
+                    }
+                } catch (error) {
+                    console.error('Failed to apply texture via model-viewer API:', error);
+                    // Fallback: Try THREE.js direct approach
+                    applyTextureFallback(imageUrl);
+                }
+            }
+            
+            function applyTextureFallback(imageUrl) {
                 const scene = getInternalScene();
                 if (!scene) return;
-
-                const textureLoader = new (scene.children[0].material.map ? scene.children[0].material.map.constructor : Object)();
                 
                 const img = new Image();
+                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     scene.traverse((child) => {
-                        if (child.isMesh) {
+                        if (child.isMesh && child.material) {
                             const materials = Array.isArray(child.material) ? child.material : [child.material];
                             materials.forEach(mat => {
-                                // Create texture from image
+                                // Create canvas texture
                                 const canvas = document.createElement('canvas');
                                 canvas.width = img.width;
                                 canvas.height = img.height;
                                 const ctx = canvas.getContext('2d');
                                 ctx.drawImage(img, 0, 0);
                                 
-                                // Note: Full texture implementation requires THREE.js texture loader
-                                // This is a simplified version
-                                mat.needsUpdate = true;
+                                // Create THREE.js texture from canvas
+                                if (window.THREE) {
+                                    const texture = new THREE.CanvasTexture(canvas);
+                                    texture.flipY = false;
+                                    texture.encoding = THREE.sRGBEncoding;
+                                    mat.map = texture;
+                                    mat.needsUpdate = true;
+                                }
                             });
                         }
                     });
                     modelViewer.requestUpdate();
+                    console.log('Texture applied via fallback method');
                 };
                 img.src = imageUrl;
             }
@@ -2606,19 +2663,36 @@
                 currentTextureData = null;  // Clear stored texture
                 texturePreview.classList.add('hidden');
                 textureUpload.value = '';
-                // Reset to default material
-                const scene = getInternalScene();
-                if (!scene) return;
-
-                scene.traverse((child) => {
-                    if (child.isMesh) {
-                        const materials = Array.isArray(child.material) ? child.material : [child.material];
-                        materials.forEach(mat => {
-                            mat.map = null;
-                            mat.needsUpdate = true;
+                
+                // Try model-viewer API first
+                if (modelViewer.model) {
+                    const materials = modelViewer.model.materials;
+                    if (materials && materials.length > 0) {
+                        materials.forEach((material, index) => {
+                            // Restore original texture if saved, otherwise set to null
+                            if (material._originalBaseColorTexture) {
+                                material.pbrMetallicRoughness.setBaseColorTexture(material._originalBaseColorTexture);
+                            } else {
+                                material.pbrMetallicRoughness.setBaseColorTexture(null);
+                            }
+                            console.log(`Removed texture from material ${index}`);
                         });
                     }
-                });
+                }
+                
+                // Also try THREE.js fallback
+                const scene = getInternalScene();
+                if (scene) {
+                    scene.traverse((child) => {
+                        if (child.isMesh) {
+                            const materials = Array.isArray(child.material) ? child.material : [child.material];
+                            materials.forEach(mat => {
+                                mat.map = null;
+                                mat.needsUpdate = true;
+                            });
+                        }
+                    });
+                }
                 modelViewer.requestUpdate();
             };
 

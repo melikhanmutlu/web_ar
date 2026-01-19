@@ -7,7 +7,7 @@ Preserves animations, skins, and all other GLB features
 import numpy as np
 import logging
 from pathlib import Path
-from pygltflib import GLTF2, Image as GLTFImage, Texture, Sampler
+from pygltflib import GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo
 import struct
 import base64
 from PIL import Image
@@ -245,16 +245,16 @@ def apply_texture_modifications(gltf, texture_data_base64):
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
-                    # Preserve existing baseColorFactor if it exists
-                    existing_color = material.pbrMetallicRoughness.baseColorFactor
-                    if existing_color:
-                        logger.info(f"Preserving existing baseColorFactor for material {i}: {existing_color}")
+                    # Set baseColorFactor to white so texture is visible (not tinted)
+                    # This is crucial - if baseColorFactor is dark, texture will appear dark
+                    material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                    logger.info(f"Set baseColorFactor to white for material {i}")
                     
-                    # Apply texture
-                    material.pbrMetallicRoughness.baseColorTexture = type('obj', (object,), {
-                        'index': texture_index,
-                        'texCoord': 0
-                    })()
+                    # Apply texture using proper TextureInfo object
+                    texture_info = TextureInfo()
+                    texture_info.index = texture_index
+                    texture_info.texCoord = 0
+                    material.pbrMetallicRoughness.baseColorTexture = texture_info
                     logger.info(f"Applied texture to material {i}")
         
         logger.info("✅ Texture embedding completed successfully")

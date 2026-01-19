@@ -2591,42 +2591,13 @@
             });
 
             async function applyTexture(imageUrl) {
-                // Use model-viewer's createTexture API for proper texture application
-                if (!modelViewer.model) {
-                    console.warn('Model not loaded yet');
+                // Use THREE.js direct approach for texture application
+                // model-viewer's API doesn't have setBaseColorTexture method
+                const scene = getInternalScene();
+                if (!scene) {
+                    console.warn('Scene not available yet');
                     return;
                 }
-                
-                try {
-                    // Create texture from image URL using model-viewer API
-                    const texture = await modelViewer.createTexture(imageUrl);
-                    
-                    if (texture) {
-                        // Apply texture to all materials
-                        const materials = modelViewer.model.materials;
-                        if (materials && materials.length > 0) {
-                            materials.forEach((material, index) => {
-                                // Store original texture for potential reset
-                                if (!material._originalBaseColorTexture) {
-                                    material._originalBaseColorTexture = material.pbrMetallicRoughness.baseColorTexture;
-                                }
-                                // Apply new texture
-                                material.pbrMetallicRoughness.setBaseColorTexture(texture);
-                                console.log(`Applied texture to material ${index}`);
-                            });
-                        }
-                        console.log('Texture applied successfully via model-viewer API');
-                    }
-                } catch (error) {
-                    console.error('Failed to apply texture via model-viewer API:', error);
-                    // Fallback: Try THREE.js direct approach
-                    applyTextureFallback(imageUrl);
-                }
-            }
-            
-            function applyTextureFallback(imageUrl) {
-                const scene = getInternalScene();
-                if (!scene) return;
                 
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
@@ -2634,7 +2605,12 @@
                     scene.traverse((child) => {
                         if (child.isMesh && child.material) {
                             const materials = Array.isArray(child.material) ? child.material : [child.material];
-                            materials.forEach(mat => {
+                            materials.forEach((mat, index) => {
+                                // Store original texture for reset
+                                if (!mat._originalMap) {
+                                    mat._originalMap = mat.map;
+                                }
+                                
                                 // Create canvas texture
                                 const canvas = document.createElement('canvas');
                                 canvas.width = img.width;
@@ -2646,49 +2622,44 @@
                                 if (window.THREE) {
                                     const texture = new THREE.CanvasTexture(canvas);
                                     texture.flipY = false;
-                                    texture.encoding = THREE.sRGBEncoding;
+                                    // Use colorSpace instead of deprecated encoding
+                                    texture.colorSpace = THREE.SRGBColorSpace || 'srgb';
                                     mat.map = texture;
                                     mat.needsUpdate = true;
+                                    console.log(`Applied texture to material ${index}`);
                                 }
                             });
                         }
                     });
                     modelViewer.requestUpdate();
-                    console.log('Texture applied via fallback method');
+                    console.log('Texture applied successfully');
+                };
+                img.onerror = () => {
+                    console.error('Failed to load texture image');
                 };
                 img.src = imageUrl;
             }
-
+            
             window.removeTexture = function() {
                 currentTextureData = null;  // Clear stored texture
                 texturePreview.classList.add('hidden');
                 textureUpload.value = '';
                 
-                // Try model-viewer API first
-                if (modelViewer.model) {
-                    const materials = modelViewer.model.materials;
-                    if (materials && materials.length > 0) {
-                        materials.forEach((material, index) => {
-                            // Restore original texture if saved, otherwise set to null
-                            if (material._originalBaseColorTexture) {
-                                material.pbrMetallicRoughness.setBaseColorTexture(material._originalBaseColorTexture);
-                            } else {
-                                material.pbrMetallicRoughness.setBaseColorTexture(null);
-                            }
-                            console.log(`Removed texture from material ${index}`);
-                        });
-                    }
-                }
-                
-                // Also try THREE.js fallback
+                // Use THREE.js to restore original textures
                 const scene = getInternalScene();
                 if (scene) {
                     scene.traverse((child) => {
-                        if (child.isMesh) {
+                        if (child.isMesh && child.material) {
                             const materials = Array.isArray(child.material) ? child.material : [child.material];
-                            materials.forEach(mat => {
-                                mat.map = null;
+                            materials.forEach((mat, index) => {
+                                // Restore original texture if saved
+                                if (mat._originalMap !== undefined) {
+                                    mat.map = mat._originalMap;
+                                } else {
+                                    mat.map = null;
+                                }
                                 mat.needsUpdate = true;
+                                console.log(`Restored texture for material ${index}`);
                             });
                         }
                     });

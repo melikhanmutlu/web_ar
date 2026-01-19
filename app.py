@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 import logging
 import shutil
 import subprocess
+import threading
 from models import db, User, UserModel, Folder, ModelVersion
 from auth import auth
 import re
@@ -865,6 +866,33 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
         logger.error(f"Error during USDZ conversion: {e}")
         return False
 
+
+def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
+    """
+    Background task to convert GLB to USDZ and update database.
+    This runs in a separate thread to not block the upload response.
+    """
+    try:
+        logger.info(f"[USDZ Async - {model_id}] Starting background USDZ conversion")
+        
+        success = convert_to_usdz(input_glb_path, output_usdz_path)
+        
+        if success:
+            # Update database with USDZ path
+            with app.app_context():
+                model = UserModel.query.get(model_id)
+                if model:
+                    model.usdz_filename = output_usdz_path
+                    db.session.commit()
+                    logger.info(f"[USDZ Async - {model_id}] Database updated with USDZ path")
+                else:
+                    logger.warning(f"[USDZ Async - {model_id}] Model not found in database")
+        else:
+            logger.warning(f"[USDZ Async - {model_id}] USDZ conversion failed")
+            
+    except Exception as e:
+        logger.error(f"[USDZ Async - {model_id}] Error in background conversion: {e}")
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
     try:
@@ -1186,67 +1214,21 @@ def upload_model():
             logger.error(f"[upload_model - {unique_id}] Error normalizing model: {e}", exc_info=True)
             # Continue even if normalization fails
 
-        # --- USDZ Conversion for iOS AR (using Blender) ---
+        # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
+        # Start USDZ conversion in background thread to not block upload response
         usdz_output_path = os.path.join(converted_dir, 'model.usdz')
-        usdz_success = False
         try:
-            logger.info(f"[upload_model - {unique_id}] Starting USDZ conversion")
-            
-            # Path to the blender script
-            blender_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tools', 'blender_usdz_export.py')
-            
-            # Check for blender executable
-            blender_exec = 'blender'
-            # On Windows, try to find commonly used paths if not in PATH
-            if os.name == 'nt':
-                possible_paths = [
-                    r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
-                    r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
-                    r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
-                    r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-                    r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe"
-                ]
-                # Check if 'blender' is in PATH first
-                if shutil.which('blender'):
-                    blender_exec = 'blender'
-                else:
-                    for p in possible_paths:
-                        if os.path.exists(p):
-                            blender_exec = p
-                            break
-            
-            # Construct command
-            cmd = [
-                blender_exec,
-                '--background',
-                '--python', blender_script,
-                '--',
-                output_path,
-                usdz_output_path
-            ]
-            
-            logger.info(f"[upload_model - {unique_id}] Running Blender command: {cmd}")
-            
-            # Run conversion
-            process = subprocess.run(
-                cmd, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True, 
-                timeout=300 # 5 minute timeout
+            logger.info(f"[upload_model - {unique_id}] Starting ASYNC USDZ conversion in background")
+            usdz_thread = threading.Thread(
+                target=convert_usdz_async,
+                args=(unique_id, output_path, usdz_output_path),
+                daemon=True
             )
-            
-            if process.returncode == 0 and os.path.exists(usdz_output_path):
-                logger.info(f"[upload_model - {unique_id}] USDZ conversion successful: {usdz_output_path}")
-                usdz_success = True
-            else:
-                logger.warning(f"[upload_model - {unique_id}] USDZ conversion failed. Return code: {process.returncode}")
-                logger.warning(f"Stdout: {process.stdout}")
-                logger.warning(f"Stderr: {process.stderr}")
-                
+            usdz_thread.start()
+            logger.info(f"[upload_model - {unique_id}] USDZ conversion thread started")
         except Exception as e:
-            logger.error(f"[upload_model - {unique_id}] Error during USDZ conversion: {e}")
-            # Don't fail the whole upload if USDZ fails, just log it
+            logger.error(f"[upload_model - {unique_id}] Error starting USDZ conversion thread: {e}")
+            # Don't fail the whole upload if USDZ thread fails to start
 
         # Clean up temporary file and directory
         try:
@@ -1362,7 +1344,7 @@ def upload_model():
             id=unique_id, # Use the same ID as the directory
             user_id=current_user.id if current_user.is_authenticated else None,
             filename=output_path,  # Store the full path to the GLB file
-            usdz_filename=usdz_output_path if usdz_success else None, # Store USDZ path if conversion succeeded
+            usdz_filename=None, # USDZ conversion runs async, will be updated when complete
             file_size=final_file_size, # Use the checked size
             file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
             upload_date=datetime.utcnow(),

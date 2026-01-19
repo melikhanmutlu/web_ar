@@ -2624,6 +2624,18 @@
                                     texture.flipY = false;
                                     // Use colorSpace instead of deprecated encoding
                                     texture.colorSpace = THREE.SRGBColorSpace || 'srgb';
+                                    
+                                    // Store original color for reset
+                                    if (!mat._originalColor && mat.color) {
+                                        mat._originalColor = mat.color.clone();
+                                    }
+                                    
+                                    // Set material color to white so texture is visible
+                                    // (texture color is multiplied by material color)
+                                    if (mat.color) {
+                                        mat.color.setRGB(1, 1, 1);
+                                    }
+                                    
                                     mat.map = texture;
                                     mat.needsUpdate = true;
                                     console.log(`Applied texture to material ${index}`);
@@ -2645,7 +2657,7 @@
                 texturePreview.classList.add('hidden');
                 textureUpload.value = '';
                 
-                // Use THREE.js to restore original textures
+                // Use THREE.js to restore original textures and colors
                 const scene = getInternalScene();
                 if (scene) {
                     scene.traverse((child) => {
@@ -2658,8 +2670,12 @@
                                 } else {
                                     mat.map = null;
                                 }
+                                // Restore original color if saved
+                                if (mat._originalColor) {
+                                    mat.color.copy(mat._originalColor);
+                                }
                                 mat.needsUpdate = true;
-                                console.log(`Restored texture for material ${index}`);
+                                console.log(`Restored texture and color for material ${index}`);
                             });
                         }
                     });

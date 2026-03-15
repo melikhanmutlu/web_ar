@@ -564,16 +564,12 @@
             formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
             formData.append('maxDimension', document.getElementById('max-dimension').value);
             
-            const removeTexturesCheckbox = document.getElementById('removeTextures');
-            const shouldRemoveTextures = removeTexturesCheckbox && removeTexturesCheckbox.checked;
-            formData.append('removeTextures', shouldRemoveTextures ? 'true' : 'false');
             
             console.log('Upload settings:', {
                 useColor: shouldApplyColor,
                 color: document.getElementById('colorPicker').value,
                 useMaxDimension: shouldLimitDimension,
-                maxDimension: document.getElementById('max-dimension').value,
-                removeTextures: shouldRemoveTextures
+                maxDimension: document.getElementById('max-dimension').value
             });
             
             // Add MTL file if present (for OBJ files)

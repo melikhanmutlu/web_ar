@@ -46,7 +46,7 @@ SQLALCHEMY_ENGINE_OPTIONS = {
 
 # Dosya limitleri ve izinler
 MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 100 * 1024 * 1024))  # 100MB default
-ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx'}
+ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf'}
 
 # Klasörleri oluştur
 def create_directories():

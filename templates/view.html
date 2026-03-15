@@ -1248,6 +1248,41 @@
                 }
             }
 
+            // USDZ readiness polling for iOS AR
+            let usdzReady = {{ 'true' if usdz_filename else 'false' }};
+            let usdzPollInterval = null;
+            
+            function checkUsdzStatus() {
+                if (usdzReady) return;
+                
+                const modelId = getCurrentModelId();
+                fetch(`/api/models/${modelId}/usdz_status`)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success && data.usdz_ready) {
+                            usdzReady = true;
+                            if (usdzPollInterval) {
+                                clearInterval(usdzPollInterval);
+                                usdzPollInterval = null;
+                            }
+                            console.log('USDZ file is ready for iOS AR');
+                            // Update model-viewer ios-src if available
+                            const modelViewer = document.querySelector('model-viewer');
+                            if (modelViewer && data.usdz_filename) {
+                                const usdzUrl = `/converted_files/${modelId}/${data.usdz_filename}`;
+                                modelViewer.setAttribute('ios-src', usdzUrl);
+                            }
+                        }
+                    })
+                    .catch(err => console.warn('USDZ status check failed:', err));
+            }
+            
+            // Start polling if USDZ is not yet ready
+            if (!usdzReady) {
+                usdzPollInterval = setInterval(checkUsdzStatus, 5000);
+                checkUsdzStatus(); // Check immediately
+            }
+
             // Function to show QR modal
             function showQRModal() {
                 if (qrcode) {

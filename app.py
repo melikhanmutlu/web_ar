@@ -22,6 +22,7 @@ import trimesh
 from converters import OBJConverter, FBXConverter, STLConverter
 import numpy as np
 from glb_modifier import modify_glb, normalize_model_to_center
+from mesh_slicer import slice_mesh, get_mesh_bounds
 from pygltflib import GLTF2
 import time
 from version_manager import create_version, get_version_history, restore_version, delete_version
@@ -893,8 +894,72 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
     except Exception as e:
         logger.error(f"[USDZ Async - {model_id}] Error in background conversion: {e}")
 
+
+def cleanup_old_backups(model_dir, max_backups=3):
+    """Clean up old backup files, keeping only the most recent ones."""
+    try:
+        if not os.path.isdir(model_dir):
+            return
+        
+        backup_files = [
+            f for f in os.listdir(model_dir)
+            if f.startswith('model_backup_') and f.endswith('.glb')
+        ]
+        
+        if len(backup_files) <= max_backups:
+            return
+        
+        # Sort by modification time (oldest first)
+        backup_files.sort(
+            key=lambda f: os.path.getmtime(os.path.join(model_dir, f))
+        )
+        
+        # Remove oldest backups, keep most recent
+        for old_backup in backup_files[:-max_backups]:
+            old_path = os.path.join(model_dir, old_backup)
+            os.remove(old_path)
+            logger.info(f"Cleaned up old backup: {old_path}")
+            
+    except Exception as e:
+        logger.error(f"Error cleaning up backups: {e}")
+
+
+@app.route('/api/models/<model_id>/usdz_status')
+def get_usdz_status(model_id):
+    """Check if USDZ file is ready for iOS AR viewing."""
+    try:
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({'success': False, 'error': 'Model not found'}), 404
+        
+        usdz_ready = False
+        usdz_filename = None
+        
+        if model.usdz_filename and os.path.exists(model.usdz_filename):
+            usdz_ready = True
+            usdz_filename = os.path.basename(model.usdz_filename)
+        else:
+            # Also check the converted directory for usdz files
+            converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
+            if os.path.isdir(converted_dir):
+                usdz_files = [f for f in os.listdir(converted_dir) if f.endswith('.usdz')]
+                if usdz_files:
+                    usdz_ready = True
+                    usdz_filename = usdz_files[0]
+        
+        return jsonify({
+            'success': True,
+            'usdz_ready': usdz_ready,
+            'usdz_filename': usdz_filename
+        })
+    except Exception as e:
+        logger.error(f"Error checking USDZ status: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """DEPRECATED: Legacy upload route. Use /upload_model instead.
+    Kept for backward compatibility with existing tests."""
     try:
         logger.info("Starting upload process")
         
@@ -1002,8 +1067,9 @@ def upload_file():
         else:
             return jsonify({'error': 'Unsupported file format'}), 400
             
-        # Set maximum dimension (convert from meters to cm)
-        converter.set_max_dimension(max_dimension * 100)
+        # Set maximum dimension (already in cm from form)
+        if max_dimension is not None:
+            converter.set_max_dimension(max_dimension)
         
         # Apply color if specified
         if use_color and color:
@@ -1147,19 +1213,39 @@ def upload_model():
             converter = STLConverter()
         elif file_extension == '.fbx':
             converter = FBXConverter()
+        elif file_extension in ('.glb', '.gltf'):
+            # GLB is already the target format; GLTF can be loaded+exported as GLB
+            converter = None  # No converter needed, handle directly below
         
-        if not converter:
+        # Handle GLB/GLTF directly (no converter needed)
+        if file_extension in ('.glb', '.gltf'):
+            try:
+                if file_extension == '.glb':
+                    # GLB is already binary glTF - just copy it
+                    shutil.copy2(temp_file_path, output_path)
+                    logger.info(f"[upload_model - {unique_id}] GLB file copied directly to {output_path}")
+                else:
+                    # GLTF (text-based) needs to be loaded and re-exported as GLB
+                    import trimesh as tm_gltf
+                    gltf_mesh = tm_gltf.load(temp_file_path)
+                    gltf_mesh.export(output_path, file_type='glb')
+                    logger.info(f"[upload_model - {unique_id}] GLTF converted to GLB: {output_path}")
+                conversion_success = os.path.exists(output_path)
+            except Exception as e:
+                logger.error(f"[upload_model - {unique_id}] Error handling GLB/GLTF: {e}", exc_info=True)
+                conversion_success = False
+        elif not converter:
             if temp_dir: shutil.rmtree(temp_dir)
             return jsonify({'error': 'Unsupported file format'}), 400
+        else:
+            # Set max dimension if specified (max_dimension is in meters)
+            if max_dimension is not None:
+                converter.set_max_dimension(max_dimension)
 
-        # Set max dimension if specified (max_dimension is in meters)
-        if max_dimension is not None:
-            converter.set_max_dimension(max_dimension)
-
-        # Perform conversion
-        logger.info(f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}")
-        conversion_success = converter.convert(temp_file_path, output_path, color=color if use_color else None)
-        logger.info(f"[upload_model - {unique_id}] Conversion result: {conversion_success}")
+            # Perform conversion
+            logger.info(f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}")
+            conversion_success = converter.convert(temp_file_path, output_path, color=color if use_color else None)
+            logger.info(f"[upload_model - {unique_id}] Conversion result: {conversion_success}")
 
         if not conversion_success or not os.path.exists(output_path):
             logger.error(f"[upload_model - {unique_id}] Conversion failed or output file missing for {temp_file_path}")
@@ -1168,25 +1254,20 @@ def upload_model():
         else:
             logger.info(f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}")
 
-        # Apply size limit if specified
-        if max_dimension is not None and os.path.exists(output_path):
-            logger.info(f"[upload_model - {unique_id}] Applying size limit: {max_dimension}cm to {output_path}")
+        # Apply size limit for GLB/GLTF files that bypassed the converter
+        if file_extension in ('.glb', '.gltf') and max_dimension is not None and os.path.exists(output_path):
+            logger.info(f"[upload_model - {unique_id}] Applying size limit to GLB: {max_dimension}m to {output_path}")
             try:
-                # Convert cm to meters for apply_size_limit function
-                max_dimension_meters = max_dimension / 100.0
-                
-                # Load the mesh AFTER successful conversion
-                import trimesh as tm  # Import locally to avoid scope issues
-                mesh = tm.load(output_path) 
-                apply_size_limit(mesh, max_dimension_meters) # apply_size_limit modifies the mesh in-place
+                import trimesh as tm
+                mesh = tm.load(output_path)
+                apply_size_limit(mesh, max_dimension)  # max_dimension is already in meters
                 logger.info(f"[upload_model - {unique_id}] Scaling applied, attempting export...")
-                mesh.export(output_path) # Overwrite the file with the scaled version
+                mesh.export(output_path)
                 logger.info(f"[upload_model - {unique_id}] Export after scaling successful.")
             except Exception as e:
-                logger.error(f"[upload_model - {unique_id}] Error scaling or exporting model {output_path}: {str(e)}", exc_info=True)
-                # Log error but continue with unscaled model
+                logger.error(f"[upload_model - {unique_id}] Error scaling GLB model: {str(e)}", exc_info=True)
         else:
-             logger.info(f"[upload_model - {unique_id}] No max dimension specified or output file missing before scaling.")
+             logger.info(f"[upload_model - {unique_id}] Scaling handled by converter or not requested.")
 
         # Check file size before saving to DB
         final_file_size = 0
@@ -1380,7 +1461,7 @@ def upload_model():
 
         return jsonify({
             'success': True,
-            'message': 'Model uploaded and processed successfully (scaling disabled)',
+            'message': f'Model uploaded and processed successfully{" (scaled to " + str(round(max_dimension * 100, 1)) + "cm)" if max_dimension else ""}',
             'viewer_url': url_for('view_model', model_id=unique_id)
         })
         
@@ -1408,13 +1489,18 @@ def convert():
         model_id = data['modelId']
         selected_color = data.get('selectedColor', '#FFFFFF')
 
-        # Find original file
-        original_files = [f for f in os.listdir(app.config['UPLOAD_FOLDER']) if f.startswith(model_id)]
+        # Find original file in upload subfirectory
+        upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], model_id)
+        if not os.path.isdir(upload_subdir):
+            logger.error(f"Upload directory not found: {upload_subdir}")
+            return jsonify({'success': False, 'error': 'Upload directory not found'}), 404
+        
+        original_files = os.listdir(upload_subdir)
         if not original_files:
-            logger.error("No valid source file found")
-            return jsonify({'error': 'No valid source file found'}), 404
+            logger.error("No valid source file found in upload directory")
+            return jsonify({'success': False, 'error': 'No valid source file found'}), 404
 
-        source_file = os.path.join(app.config['UPLOAD_FOLDER'], original_files[0])
+        source_file = os.path.join(upload_subdir, original_files[0])
         
         # Create model-specific directory
         model_dir = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
@@ -1423,9 +1509,9 @@ def convert():
 
         # Convert the model
         file_ext = os.path.splitext(source_file)[1].lower()
-        if not convert_model_new(source_file, output_file):
+        if not convert_model_new(source_file, output_file, color=selected_color):
             logger.error(f"Model conversion failed for {model_id}")
-            return jsonify({'error': 'Model conversion failed'}), 500
+            return jsonify({'success': False, 'error': 'Model conversion failed'}), 500
 
         logger.info(f"Model converted successfully: {output_file}")
 
@@ -1741,7 +1827,7 @@ def download_model(model_id):
         if model.user_id != current_user.id:
             return "Unauthorized", 403
 
-        file_path = os.path.join(app.config['CONVERTED_FOLDER'], f"{model_id}.glb")
+        file_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
         if not os.path.exists(file_path):
             return "Dosya bulunamadı", 404
 
@@ -1779,30 +1865,40 @@ def update_model_color():
         color = data.get('color')
 
         if not model_id or not color:
-            return jsonify({'error': 'Gerekli alanlar eksik'}), 400
+            return jsonify({'success': False, 'error': 'Missing model_id or color'}), 400
 
         # Get the model
-        session = Session(db.engine)
-        model = session.get(UserModel, model_id)
+        model = UserModel.query.get(model_id)
         if not model or model.user_id != current_user.id:
-            return jsonify({'error': 'Model bulunamadı veya yetkisiz erişim'}), 404
+            return jsonify({'success': False, 'error': 'Model not found or unauthorized'}), 404
 
-        # Update the model's color
+        # Update the model's color in database
         model.color = color
         db.session.commit()
 
-        # Convert the model with the new color
-        input_path = os.path.join(app.config['UPLOAD_FOLDER'], model.filename)
+        # Find source file in upload directory
+        upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], model_id)
+        if not os.path.isdir(upload_subdir):
+            return jsonify({'success': False, 'error': 'Upload directory not found'}), 404
+        
+        source_files = os.listdir(upload_subdir)
+        if not source_files:
+            return jsonify({'success': False, 'error': 'Source file not found'}), 404
+        
+        input_path = os.path.join(upload_subdir, source_files[0])
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+
+        # Re-convert the model with the new color
         try:
-            convert_model_new(input_path, os.path.join(app.config['CONVERTED_FOLDER'], f"{model_id}.glb"), color=color)
+            convert_model_new(input_path, output_path, color=color)
             return jsonify({'success': True}), 200
         except Exception as e:
             logger.error(f"Error converting model with new color: {str(e)}")
-            return jsonify({'error': 'Model rengi güncellenirken bir hata oluştu'}), 500
+            return jsonify({'success': False, 'error': 'Failed to update model color'}), 500
 
     except Exception as e:
         logger.error(f"Error in update_model_color: {str(e)}")
-        return jsonify({'error': 'Sunucu hatası'}), 500
+        return jsonify({'success': False, 'error': 'Server error'}), 500
 
 @app.route('/temp/<filename>')
 def get_temp_file(filename):
@@ -2220,6 +2316,7 @@ def apply_modifications():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+
 @app.route('/download_modified/<model_id>/<filename>')
 def download_modified(model_id, filename):
     """Download modified GLB file"""
@@ -2283,6 +2380,9 @@ def get_model_dimensions(model_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+
+
+
 @app.route('/save_modifications', methods=['POST'])
 def save_modifications():
     """Save modifications to original GLB model (replaces model.glb)"""
@@ -2317,6 +2417,7 @@ def save_modifications():
         backup_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'model_backup_{int(time.time())}.glb')
         shutil.copy2(current_model_path, backup_path)
         logger.info(f"[save_modifications] Created backup: {backup_path}")
+        cleanup_old_backups(os.path.dirname(backup_path))
         
         # Create temporary output path
         temp_output = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'temp_{int(time.time())}.glb')
@@ -2349,7 +2450,7 @@ def save_modifications():
                 }
                 
                 # Update database
-                model = UserModel.query.filter_by(filename=f'converted/{model_id}/model.glb').first()
+                model = UserModel.query.get(model_id)
                 if model:
                     model.dimensions = new_dims
                     
@@ -2398,7 +2499,7 @@ def save_modifications():
 
 
 @app.route('/get_mesh_bounds/<model_id>')
-def get_mesh_bounds(model_id):
+def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
     try:
         from mesh_slicer import get_mesh_bounds as get_bounds
@@ -2468,6 +2569,7 @@ def slice_model():
         import shutil
         shutil.copy2(input_path, backup_path)
         logger.info(f"[slice_model] Created backup: {backup_path}")
+        cleanup_old_backups(os.path.dirname(backup_path))
         
         # Slice the mesh
         temp_output = os.path.join(
@@ -2508,7 +2610,7 @@ def slice_model():
                     'max': round(float(max(dimensions) * 100), 2)
                 }
                 
-                model = UserModel.query.filter_by(filename=f'converted/{model_id}/model.glb').first()
+                model = UserModel.query.get(model_id)
                 if model:
                     model.dimensions = new_dims
                     db.session.commit()

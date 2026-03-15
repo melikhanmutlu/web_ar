@@ -1,14 +1,13 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs-18_x", "blender"]
+nixPkgs = ["python311", "python311Packages.pip", "nodejs-18_x", "blender"]
 
 [phases.install]
 cmds = [
-    "python -m venv /opt/venv",
-    "/opt/venv/bin/pip install --upgrade pip",
-    "/opt/venv/bin/pip install -r requirements.txt",
+    "pip install --upgrade pip",
+    "pip install -r requirements.txt",
     "npm ci",
     "chmod +x tools/FBX2glTF"
 ]
 
 [start]
-cmd = "chmod +x /app/tools/FBX2glTF 2>/dev/null || true && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"
+cmd = "chmod +x /app/tools/FBX2glTF 2>/dev/null || true && gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"

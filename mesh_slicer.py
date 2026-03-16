@@ -59,53 +59,74 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
         
         # Slice the mesh
         try:
+            # We enforce process=True (default) to ensure face normals are consistent and mesh is clean
+            # before applying a slice with capping. A non-watertight mesh might fail to cap correctly.
             sliced_mesh = mesh.slice_plane(
                 plane_origin=plane_origin,
                 plane_normal=plane_normal,
-                cap=True  # Cap the slice with a face
+                cap=True,
+                cached_dots=None
             )
+            
+            # If trimesh failed to generate capping faces or output is completely empty
+            if sliced_mesh is None or len(sliced_mesh.vertices) == 0:
+                raise ValueError("Trimesh slice_plane returned empty mesh.")
+
         except Exception as slice_error:
-            logger.error(f"slice_plane failed: {slice_error}")
-            # Fallback to manual slicing
-            logger.info("Attempting manual slicing fallback...")
-            
-            # Calculate signed distances from vertices to plane
-            vertices = mesh.vertices
-            distances = np.dot(vertices - plane_origin, plane_normal)
-            
-            # Determine which vertices to keep
-            keep_mask = distances >= -1e-6  # Small epsilon for numerical stability
-            
-            # Filter faces: keep faces where all vertices are on the keep side
-            face_mask = np.all(keep_mask[mesh.faces], axis=1)
-            
-            if not np.any(face_mask):
-                logger.error("Slicing would result in empty mesh (no faces kept)")
-                return False
-            
-            # Create new mesh with filtered faces
-            new_faces = mesh.faces[face_mask]
-            
-            # Get unique vertices used by kept faces
-            used_vertices = np.unique(new_faces.flatten())
-            
-            # Create vertex mapping (old index -> new index)
-            vertex_map = np.full(len(vertices), -1, dtype=int)
-            vertex_map[used_vertices] = np.arange(len(used_vertices))
-            
-            # Remap faces to new vertex indices
-            remapped_faces = vertex_map[new_faces]
-            
-            # Create sliced mesh
-            sliced_mesh = trimesh.Trimesh(
-                vertices=vertices[used_vertices],
-                faces=remapped_faces,
-                process=False
-            )
+            logger.error(f"Trimesh slice_plane failed: {slice_error}")
+            # Fallback to manual slice without trying to cap (cap=False can be more stable)
+            logger.info("Attempting fallback with cap=False...")
+            try:
+                sliced_mesh = mesh.slice_plane(
+                    plane_origin=plane_origin,
+                    plane_normal=plane_normal,
+                    cap=False
+                )
+            except Exception as fallback_error:
+                logger.error(f"Fallback slice failed: {fallback_error}")
+                # Deep fallback using manual vertex culling
+                logger.info("Attempting deep manual slicing fallback...")
+
+                # Calculate signed distances from vertices to plane
+                vertices = mesh.vertices
+                distances = np.dot(vertices - plane_origin, plane_normal)
+
+                # Determine which vertices to keep
+                keep_mask = distances >= -1e-6  # Small epsilon for numerical stability
+
+                # Filter faces: keep faces where all vertices are on the keep side
+                face_mask = np.all(keep_mask[mesh.faces], axis=1)
+
+                if not np.any(face_mask):
+                    logger.error("Slicing would result in empty mesh (no faces kept)")
+                    return False
+
+                # Create new mesh with filtered faces
+                new_faces = mesh.faces[face_mask]
+
+                # Get unique vertices used by kept faces
+                used_vertices = np.unique(new_faces.flatten())
+
+                # Create vertex mapping (old index -> new index)
+                vertex_map = np.full(len(vertices), -1, dtype=int)
+                vertex_map[used_vertices] = np.arange(len(used_vertices))
+
+                # Remap faces to new vertex indices
+                remapped_faces = vertex_map[new_faces]
+
+                # Create sliced mesh
+                sliced_mesh = trimesh.Trimesh(
+                    vertices=vertices[used_vertices],
+                    faces=remapped_faces,
+                    process=False
+                )
         
         if sliced_mesh is None or len(sliced_mesh.vertices) == 0:
             logger.error("Slicing resulted in empty mesh")
             return False
+
+        # Ensure normals and vertex references are updated
+        sliced_mesh.fix_normals()
         
         logger.info(f"Sliced mesh: {len(sliced_mesh.vertices)} vertices, {len(sliced_mesh.faces)} faces")
         

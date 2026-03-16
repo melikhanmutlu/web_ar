@@ -1295,6 +1295,30 @@ def upload_model():
             logger.error(f"[upload_model - {unique_id}] Error normalizing model: {e}", exc_info=True)
             # Continue even if normalization fails
 
+        # --- Optimize with Draco Compression & WebP Textures ---
+        try:
+            logger.info(f"[upload_model - {unique_id}] Applying Draco compression and WebP textures")
+            import subprocess
+            temp_opt = output_path + ".opt.glb"
+
+            # Using gltf-transform to handle both Draco compression and WebP texture conversion
+            # This requires @gltf-transform/cli installed
+            cmd = [
+                'npx', 'gltf-transform', 'optimize',
+                output_path,
+                temp_opt,
+                '--texture-compress', 'webp',
+                '--compress', 'draco'
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            if os.path.exists(temp_opt):
+                os.replace(temp_opt, output_path)
+                logger.info(f"[upload_model - {unique_id}] Optimization (Draco + WebP) successful")
+        except Exception as e:
+            logger.error(f"[upload_model - {unique_id}] Optimization failed: {e}")
+            if os.path.exists(temp_opt):
+                os.remove(temp_opt)
+
         # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
         # Start USDZ conversion in background thread to not block upload response
         usdz_output_path = os.path.join(converted_dir, 'model.usdz')

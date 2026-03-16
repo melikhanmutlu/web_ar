@@ -120,6 +120,7 @@ class FBXConverter(BaseConverter):
             # FIRST: Read original FBX dimensions before conversion using pyassimp
             original_dimensions = None
             try:
+                # Attempt to load pyassimp and the underlying library
                 import pyassimp
                 from pyassimp import postprocess
                 
@@ -267,9 +268,11 @@ class FBXConverter(BaseConverter):
                     else:
                         self.log_operation("Warning: No vertices found in FBX file")
                         self._fbx_vertices = None
-            except Exception as e:
+            except (Exception, BaseException) as e:
                 import traceback
-                self.log_operation(f"Warning: Could not read original FBX dimensions with pyassimp: {str(e)}", "WARNING")
+                self.log_operation(f"Warning: pyassimp initialization failed: {str(e)}. "
+                                   "FBX dimension reading and texture extraction will be skipped. "
+                                   "Conversion will still proceed using FBX2glTF.", "WARNING")
                 self.log_operation(f"Traceback: {traceback.format_exc()}")
             
             # Store dimensions for later use

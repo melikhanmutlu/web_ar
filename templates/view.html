@@ -2391,21 +2391,21 @@
                 }, 500);
             });
             
-            materialColor.addEventListener('input', (e) => {
+            materialColor.addEventListener('input', async (e) => {
                 const color = e.target.value;
                 materialColorHex.value = color;
-                applyMaterialColor(color);
+                await applyMaterialColor(color);
             });
 
-            materialColorHex.addEventListener('input', (e) => {
+            materialColorHex.addEventListener('input', async (e) => {
                 const color = e.target.value;
                 if (/^#[0-9A-F]{6}$/i.test(color)) {
                     materialColor.value = color;
-                    applyMaterialColor(color);
+                    await applyMaterialColor(color);
                 }
             });
 
-            function applyMaterialColor(hexColor) {
+            async function applyMaterialColor(hexColor) {
                 const r = parseInt(hexColor.substr(1, 2), 16) / 255;
                 const g = parseInt(hexColor.substr(3, 2), 16) / 255;
                 const b = parseInt(hexColor.substr(5, 2), 16) / 255;
@@ -2414,9 +2414,10 @@
                 if (modelViewer.model) {
                     const materials = modelViewer.model.materials;
                     if (materials && materials.length > 0) {
-                        materials.forEach(material => {
+                        for (const material of materials) {
+                            await material.ensureLoaded();
                             material.pbrMetallicRoughness.setBaseColorFactor([r, g, b, 1]);
-                        });
+                        }
                         return;
                     }
                 }
@@ -2447,20 +2448,21 @@
             const metalnessSlider = document.getElementById('metalnessSlider');
             const metalnessValue = document.getElementById('metalnessValue');
             
-            metalnessSlider.addEventListener('input', (e) => {
+            metalnessSlider.addEventListener('input', async (e) => {
                 const value = parseFloat(e.target.value);
                 metalnessValue.textContent = value.toFixed(2);
-                applyMetalness(value);
+                await applyMetalness(value);
             });
 
-            function applyMetalness(value) {
+            async function applyMetalness(value) {
                 // Try model-viewer's material API first
                 if (modelViewer.model) {
                     const materials = modelViewer.model.materials;
                     if (materials && materials.length > 0) {
-                        materials.forEach(material => {
+                        for (const material of materials) {
+                            await material.ensureLoaded();
                             material.pbrMetallicRoughness.setMetallicFactor(value);
-                        });
+                        }
                         return;
                     }
                 }
@@ -2492,20 +2494,21 @@
             const roughnessSlider = document.getElementById('roughnessSlider');
             const roughnessValue = document.getElementById('roughnessValue');
             
-            roughnessSlider.addEventListener('input', (e) => {
+            roughnessSlider.addEventListener('input', async (e) => {
                 const value = parseFloat(e.target.value);
                 roughnessValue.textContent = value.toFixed(2);
-                applyRoughness(value);
+                await applyRoughness(value);
             });
 
-            function applyRoughness(value) {
+            async function applyRoughness(value) {
                 // Try model-viewer's material API first
                 if (modelViewer.model) {
                     const materials = modelViewer.model.materials;
                     if (materials && materials.length > 0) {
-                        materials.forEach(material => {
+                        for (const material of materials) {
+                            await material.ensureLoaded();
                             material.pbrMetallicRoughness.setRoughnessFactor(value);
-                        });
+                        }
                         return;
                     }
                 }
@@ -2537,18 +2540,19 @@
             const opacitySlider = document.getElementById('opacitySlider');
             const opacityValue = document.getElementById('opacityValue');
             
-            opacitySlider.addEventListener('input', (e) => {
+            opacitySlider.addEventListener('input', async (e) => {
                 const value = parseFloat(e.target.value);
                 opacityValue.textContent = value.toFixed(2);
-                applyOpacity(value);
+                await applyOpacity(value);
             });
 
-            function applyOpacity(value) {
+            async function applyOpacity(value) {
                 // Try model-viewer's material API first
                 if (modelViewer.model) {
                     const materials = modelViewer.model.materials;
                     if (materials && materials.length > 0) {
-                        materials.forEach(material => {
+                        for (const material of materials) {
+                            await material.ensureLoaded();
                             const baseColor = material.pbrMetallicRoughness.baseColorFactor;
                             if (baseColor && baseColor.length >= 4) {
                                 // Set alpha channel
@@ -2563,7 +2567,7 @@
                             } else {
                                 material.setAlphaMode('OPAQUE');
                             }
-                        });
+                        }
                         return;
                     }
                 }

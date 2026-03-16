@@ -287,6 +287,13 @@ class FBXConverter(BaseConverter):
                     # First convert FBX to GLB using FBX2glTF
                     # Use -i and -o parameters (based on working project)
                     # NOTE: Draco compression disabled - it corrupts textures and geometry
+                    # Ensure FBX2glTF has execute permissions
+                    try:
+                        os.chmod(self.fbx2gltf_path, 0o755)
+                        self.log_operation(f"Set execute permissions for {self.fbx2gltf_path}")
+                    except Exception as pe:
+                        self.log_operation(f"Warning: Could not set execute permissions: {pe}", "WARNING")
+
                     cmd = [
                         str(self.fbx2gltf_path),
                         '-i', str(input_path),

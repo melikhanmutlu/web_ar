@@ -1925,16 +1925,22 @@ def get_qr_code(filename):
 
 @app.route('/delete_model/<string:model_id>', methods=['POST'])
 def delete_model(model_id):
-    session = None
     try:
         logger.info(f"Attempting to delete model with ID: {model_id}")
-        session = Session(db.engine)
         
-        # Get the model and log its details
-        model = session.get(UserModel, model_id)
+        # Check permissions using Flask-Login and current_user
+        if not current_user.is_authenticated:
+             return jsonify({"error": "Unauthorized"}), 401
+
+        # Use db.session instead of creating a new Session engine bound
+        model = db.session.get(UserModel, model_id)
         if not model:
             logger.warning(f"Model {model_id} not found in database")
             return jsonify({"error": "Model not found"}), 404
+
+        if model.user_id != current_user.id:
+            logger.warning(f"Unauthorized deletion attempt for model {model_id} by user {current_user.id}")
+            return jsonify({"error": "Unauthorized"}), 403
         
         logger.info(f"Found model: ID={model.id}")
 
@@ -1959,12 +1965,12 @@ def delete_model(model_id):
 
         # Delete from database
         try:
-            session.delete(model)
-            session.commit()
+            db.session.delete(model)
+            db.session.commit()
             logger.info(f"Deleted model {model_id} from database")
             return jsonify({"success": True}), 200
         except Exception as e:
-            session.rollback()
+            db.session.rollback()
             logger.error(f"Database error while deleting model {model_id}: {str(e)}")
             logger.error(traceback.format_exc())
             return jsonify({"error": "Database error"}), 500
@@ -1973,19 +1979,13 @@ def delete_model(model_id):
         logger.error(f"Unexpected error deleting model {model_id}: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({"error": "Unexpected error"}), 500
-    finally:
-        # ALWAYS close the session
-        if session:
-            session.close()
-            logger.debug(f"Session closed for model {model_id}")
 
 @app.route('/delete_all_models', methods=['POST'])
 @login_required
 def delete_all_models():
     try:
-        # Get all models for the current user
-        session = Session(db.engine)
-        models = session.query(UserModel).filter_by(user_id=current_user.id).all()
+        # Get all models for the current user using db.session
+        models = db.session.query(UserModel).filter_by(user_id=current_user.id).all()
         deleted_count = 0
         failed_count = 0
 
@@ -2005,7 +2005,7 @@ def delete_all_models():
                     logger.info(f"Deleted upload directory: {upload_dir}")
 
                 # Delete from database
-                session.delete(model)
+                db.session.delete(model)
                 deleted_count += 1
                 
             except Exception as e:
@@ -2014,7 +2014,7 @@ def delete_all_models():
                 logger.error(f"Traceback: {traceback.format_exc()}")
 
         # Commit database changes
-        session.commit()
+        db.session.commit()
         logger.info(f"Deleted {deleted_count} models, failed to delete {failed_count} models")
 
         if failed_count > 0:
@@ -2024,6 +2024,7 @@ def delete_all_models():
         return jsonify({"message": f"Successfully deleted {deleted_count} models"}), 200
 
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Error deleting all models: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": "Error deleting models"}), 500

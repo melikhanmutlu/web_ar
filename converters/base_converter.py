@@ -148,11 +148,11 @@ class BaseConverter:
     def calculate_scale_factor(self, dimensions: Dict[str, float]) -> float:
         """
         Calculate scale factor based on maximum dimension.
-        ALWAYS scales to target dimension (both up and down) for AR standardization.
+        Only scales down if the model is larger than the target max dimension.
         Args:
             dimensions: Dictionary containing x, y, z dimensions in meters
         Returns:
-            float: Scale factor to apply to the model (always applied if max_dimension is set)
+            float: Scale factor to apply to the model
         """
         # Find the largest dimension
         max_current_dimension = max(dimensions.values())
@@ -165,14 +165,11 @@ class BaseConverter:
         if self.max_dimension <= 0:
             return 1.0
             
-        # ALWAYS calculate scale factor (both scale up and scale down)
-        scale_factor = self.max_dimension / max_current_dimension
-        
-        if scale_factor > 1.0:
-            self.log_operation(f"Scaling UP: {scale_factor:.4f}x (Current max: {max_current_dimension:.4f}m -> Target: {self.max_dimension:.4f}m)")
-        elif scale_factor < 1.0:
+        # Only scale DOWN if the model is larger than max_dimension
+        if max_current_dimension > self.max_dimension:
+            scale_factor = self.max_dimension / max_current_dimension
             self.log_operation(f"Scaling DOWN: {scale_factor:.4f}x (Current max: {max_current_dimension:.4f}m -> Target: {self.max_dimension:.4f}m)")
+            return scale_factor
         else:
-            self.log_operation(f"No scaling needed (already at target: {self.max_dimension:.4f}m)")
-        
-        return scale_factor
+            self.log_operation(f"No scaling needed (Current max {max_current_dimension:.4f}m is within target: {self.max_dimension:.4f}m)")
+            return 1.0

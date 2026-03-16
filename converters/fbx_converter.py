@@ -917,15 +917,19 @@ class FBXConverter(BaseConverter):
 
                             # FIX ALPHA/TRANSPARENCY
                             self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
-                            leaf_material.alphaMode = "BLEND"
+                            leaf_material.alphaMode = "MASK"  # MASK is usually better for foliage AR performance
+                            leaf_material.alphaCutoff = 0.5
                             leaf_material.doubleSided = True
-                            self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
+                            self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=MASK, alphaCutoff=0.5, doubleSided=True")
 
                             # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
                             try:
                                 if pbr is not None:
-                                    if not pbr.baseColorFactor or len(pbr.baseColorFactor) < 4 or pbr.baseColorFactor[3] < 0.9:
+                                    # Don't blindly override baseColorFactor if there's a valid color, just ensure opacity is 1
+                                    if not pbr.baseColorFactor or len(pbr.baseColorFactor) < 4:
                                         pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                                    else:
+                                        pbr.baseColorFactor[3] = 1.0 # Ensure full opacity base to let the mask handle it
                                     pbr.metallicFactor = 0.0
                                     pbr.roughnessFactor = 1.0
                                     self.log_operation("  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor alpha reset to 1")

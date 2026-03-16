@@ -2681,12 +2681,17 @@
                                 if (window.THREE) {
                                     const texture = new THREE.CanvasTexture(canvas);
                                     texture.flipY = false;
-                                    // Use colorSpace instead of deprecated encoding
-                                    texture.colorSpace = THREE.SRGBColorSpace || 'srgb';
+                                    // Using both approaches depending on THREE version compatibility
+                                    if (THREE.SRGBColorSpace) {
+                                        texture.colorSpace = THREE.SRGBColorSpace;
+                                    } else if (THREE.sRGBEncoding) {
+                                        texture.encoding = THREE.sRGBEncoding;
+                                    }
                                     
-                                    // Store original color for reset
-                                    if (!mat._originalColor && mat.color) {
+                                    // Ensure we ONLY store the real original color once
+                                    if (!mat._originalColorStored && mat.color) {
                                         mat._originalColor = mat.color.clone();
+                                        mat._originalColorStored = true;
                                     }
                                     
                                     // Set material color to white so texture is visible
@@ -2730,7 +2735,7 @@
                                     mat.map = null;
                                 }
                                 // Restore original color if saved
-                                if (mat._originalColor) {
+                                if (mat._originalColorStored && mat._originalColor) {
                                     mat.color.copy(mat._originalColor);
                                 }
                                 mat.needsUpdate = true;
@@ -2898,6 +2903,17 @@
                 // 6. Matrix'i güncelle (smooth render için kritik)
                 modelRoot.updateMatrixWorld(true);
 
+                // Eğer model döndürüldüyse, bounds ve center of mass de kayacağı için,
+                // dilimleme (slicer) aktif ise güncellememiz gerekebilir.
+                if (slicerEnabled) {
+                    if (clippingUpdateTimeout) {
+                        clearTimeout(clippingUpdateTimeout);
+                    }
+                    clippingUpdateTimeout = setTimeout(() => {
+                        updateClippingPlanes();
+                    }, 50);
+                }
+
                 // 7. Render'ı zorla (smooth preview için)
                 if (typeof modelViewer.requestRender === 'function') {
                     modelViewer.requestRender();
@@ -2907,8 +2923,14 @@
                 modelViewer.dispatchEvent(new Event('camera-change'));
             }
 
+            let rotationUpdateFrame = null;
             function updateRotation() {
-                applyRotationToRoot();
+                if (rotationUpdateFrame) {
+                    cancelAnimationFrame(rotationUpdateFrame);
+                }
+                rotationUpdateFrame = requestAnimationFrame(() => {
+                    applyRotationToRoot();
+                });
             }
 
             // Reset Transform
@@ -3840,42 +3862,69 @@
                                 const position = min[axisIndex] + (percent / 100) * range;
                                 
                                 // Create Three.js plane with correct normal and constant
-                                // These are in LOCAL space (object coordinates)
-                                let normal, constant;
+                                // Since we apply rotation to modelRoot, we must ensure clipping planes
+                                // are oriented according to the inverse of that rotation so they appear
+                                // fixed in world space.
+                                let worldNormal = new THREE.Vector3();
+                                let constant;
                                 
                                 if (plane === 'x') {
+                                    worldNormal.set(1, 0, 0);
                                     if (keepSide === 'above') {
-                                        // Keep right (positive X), clip left (negative X)
-                                        normal = new THREE.Vector3(1, 0, 0);
                                         constant = -position;
                                     } else {
-                                        // Keep left (negative X), clip right (positive X)
-                                        normal = new THREE.Vector3(-1, 0, 0);
+                                        worldNormal.negate();
                                         constant = position;
                                     }
                                 } else if (plane === 'y') {
+                                    worldNormal.set(0, 1, 0);
                                     if (keepSide === 'above') {
-                                        // Keep top (positive Y), clip bottom (negative Y)
-                                        normal = new THREE.Vector3(0, 1, 0);
                                         constant = -position;
                                     } else {
-                                        // Keep bottom (negative Y), clip top (positive Y)
-                                        normal = new THREE.Vector3(0, -1, 0);
+                                        worldNormal.negate();
                                         constant = position;
                                     }
                                 } else {
+                                    worldNormal.set(0, 0, 1);
                                     if (keepSide === 'above') {
-                                        // Keep front (positive Z), clip back (negative Z)
-                                        normal = new THREE.Vector3(0, 0, 1);
                                         constant = -position;
                                     } else {
-                                        // Keep back (negative Z), clip front (positive Z)
-                                        normal = new THREE.Vector3(0, 0, -1);
+                                        worldNormal.negate();
                                         constant = position;
                                     }
                                 }
+
+                                // We transform the world-aligned normal by the inverse of the object's rotation matrix
+                                // so that the plane visually stays still when the object rotates.
+                                let localNormal = worldNormal.clone();
+                                if (modelRoot) {
+                                    // Make sure model matrix is updated
+                                    modelRoot.updateMatrixWorld(true);
+
+                                    // Extract rotation from modelRoot and invert it
+                                    const inverseRotation = new THREE.Quaternion().copy(modelRoot.quaternion).invert();
+                                    localNormal.applyQuaternion(inverseRotation);
+
+                                    // Calculate the distance correctly in the local space
+                                    // We create a point on the plane in world space
+                                    let planePt = new THREE.Vector3();
+                                    if (plane === 'x') planePt.set(position, 0, 0);
+                                    if (plane === 'y') planePt.set(0, position, 0);
+                                    if (plane === 'z') planePt.set(0, 0, position);
+
+                                    // Transform this point into the object's local space
+                                    let inverseMatrix = new THREE.Matrix4().copy(modelRoot.matrixWorld).invert();
+                                    planePt.applyMatrix4(inverseMatrix);
+
+                                    // Compute the new constant using the local normal and the local point
+                                    // The plane equation is: normal.dot(pt) + constant = 0 => constant = -normal.dot(pt)
+                                    constant = -localNormal.dot(planePt);
+
+                                    // If keepSide was 'below', we initially flipped the normal and constant.
+                                    // Since we recalculate the constant using the flipped normal, it handles the direction natively.
+                                }
                                 
-                                const clippingPlane = new THREE.Plane(normal, constant);
+                                const clippingPlane = new THREE.Plane(localNormal, constant);
                                 planes.push(clippingPlane);
                             });
                             
@@ -4328,9 +4377,10 @@
             });
             
             // Animation - animates first active plane
-            let animationInterval = null;
+            let animationFrameId = null;
+            let lastAnimationTime = 0;
             document.getElementById('animateSlice').addEventListener('click', () => {
-                if (animationInterval) return;
+                if (animationFrameId) return;
                 
                 const firstPlane = Array.from(activePlanes)[0];
                 if (!firstPlane) return;
@@ -4339,31 +4389,37 @@
                 document.getElementById('stopAnimation').classList.remove('hidden');
                 
                 let direction = 1;
-                animationInterval = setInterval(() => {
-                    let value = planeSettings[firstPlane].position;
-                    value += direction * 2;
-                    
-                    if (value >= 100) {
-                        value = 100;
-                        direction = -1;
-                    } else if (value <= 0) {
-                        value = 0;
-                        direction = 1;
+                let value = planeSettings[firstPlane].position;
+
+                function animate(time) {
+                    if (time - lastAnimationTime >= 30) { // Limit to ~30fps for smooth yet performant slice updates
+                        value += direction * 1.5;
+
+                        if (value >= 100) {
+                            value = 100;
+                            direction = -1;
+                        } else if (value <= 0) {
+                            value = 0;
+                            direction = 1;
+                        }
+
+                        planeSettings[firstPlane].position = value;
+                        createPlaneControls();
+
+                        if (slicerEnabled) {
+                            enableClipping();
+                        }
+                        lastAnimationTime = time;
                     }
-                    
-                    planeSettings[firstPlane].position = value;
-                    createPlaneControls();
-                    
-                    if (slicerEnabled) {
-                        enableClipping();
-                    }
-                }, 50);
+                    animationFrameId = requestAnimationFrame(animate);
+                }
+                animationFrameId = requestAnimationFrame(animate);
             });
             
             document.getElementById('stopAnimation').addEventListener('click', () => {
-                if (animationInterval) {
-                    clearInterval(animationInterval);
-                    animationInterval = null;
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
                 }
                 document.getElementById('animateSlice').classList.remove('hidden');
                 document.getElementById('stopAnimation').classList.add('hidden');

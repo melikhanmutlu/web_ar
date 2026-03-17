@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <!-- Meta Tags and Title -->
@@ -70,6 +70,11 @@
 
         .dark .action-button:hover {
             background: #4B5563;
+        }
+
+        .active-axis, .active-side {
+            border-color: #4CAF50 !important;
+            background-color: rgba(76, 175, 80, 0.1);
         }
 
         .nav-button {
@@ -842,6 +847,90 @@
                 hideArModal();
                 showQRModal();
             });
+
+            // Slicer Modal Logic
+            const sliceButton = document.getElementById('sliceButton');
+            const slicerModal = document.getElementById('slicerModal');
+            const closeSlicerModal = document.getElementById('closeSlicerModal');
+            const applySliceBtn = document.getElementById('applySlice');
+            const sliceSpinner = document.getElementById('sliceSpinner');
+            
+            let selectedAxis = 'y';
+            let selectedSide = 'positive';
+
+            if (sliceButton) {
+                sliceButton.addEventListener('click', () => {
+                    slicerModal.classList.remove('hidden');
+                    slicerModal.classList.add('flex');
+                });
+            }
+
+            if (closeSlicerModal) {
+                closeSlicerModal.addEventListener('click', () => {
+                    slicerModal.classList.add('hidden');
+                    slicerModal.classList.remove('flex');
+                });
+            }
+
+            // Axis selection
+            document.querySelectorAll('.axis-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.axis-btn').forEach(b => b.classList.remove('active-axis', 'border-primary'));
+                    btn.classList.add('active-axis', 'border-primary');
+                    selectedAxis = btn.dataset.axis;
+                });
+            });
+
+            // Side selection
+            document.querySelectorAll('.side-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active-side', 'border-primary'));
+                    btn.classList.add('active-side', 'border-primary');
+                    selectedSide = btn.dataset.side;
+                });
+            });
+
+            if (applySliceBtn) {
+                applySliceBtn.addEventListener('click', async () => {
+                    applySliceBtn.disabled = true;
+                    applySliceBtn.classList.add('opacity-50');
+                    sliceSpinner.classList.remove('hidden');
+
+                    const planeNormal = [0, 0, 0];
+                    if (selectedAxis === 'x') planeNormal[0] = 1;
+                    else if (selectedAxis === 'y') planeNormal[1] = 1;
+                    else if (selectedAxis === 'z') planeNormal[2] = 1;
+
+                    try {
+                        const response = await fetch('/slice_model', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                model_id: '{{ model.unique_id }}',
+                                plane_origin: [0, 0, 0],
+                                plane_normal: planeNormal,
+                                keep_side: selectedSide
+                            })
+                        });
+
+                        const result = await response.json();
+                        if (result.status === 'success') {
+                            window.location.reload();
+                        } else {
+                            alert('Slice failed: ' + result.message);
+                        }
+                    } catch (error) {
+                        console.error('Error slicing model:', error);
+                        alert('An error occurred while slicing the model.');
+                    } finally {
+                        applySliceBtn.disabled = false;
+                        applySliceBtn.classList.remove('opacity-50');
+                        sliceSpinner.classList.add('hidden');
+                    }
+                });
+            }
         });
     </script>
 
@@ -975,6 +1064,13 @@
             <button id="fullscreenButton" class="rounded-full bg-white bg-opacity-50 backdrop-blur-sm p-1.5 flex items-center justify-center hover:bg-opacity-75 transition-all hover:scale-110 hover:shadow-lg dark:bg-gray-800 dark:hover:bg-gray-700" title="Toggle Fullscreen">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                </svg>
+            </button>
+
+            <!-- Slicer Button -->
+            <button id="sliceButton" class="rounded-full bg-white bg-opacity-50 backdrop-blur-sm p-1.5 flex items-center justify-center hover:bg-opacity-75 transition-all hover:scale-110 hover:shadow-lg dark:bg-gray-800 dark:hover:bg-gray-700" title="Slice Model">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
                 </svg>
             </button>
 
@@ -1201,6 +1297,79 @@
                         Close
                     </button>
                 </div>
+            </div>
+        </div>
+    <!-- Slicer Modal -->
+    <div id="slicerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-gray-700">
+            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center uppercase tracking-wider">
+                    <svg class="w-5 h-5 mr-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
+                    </svg>
+                    Slice Model
+                </h3>
+                <button id="closeSlicerModal" class="text-gray-400 hover:text-gray-500 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="p-6">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    Select an axis and direction to cut the model. This will create a new version of the 3D asset.
+                </p>
+
+                <div class="space-y-6">
+                    <!-- Axis Selection -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">Slice Axis</label>
+                        <div class="grid grid-cols-3 gap-3">
+                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1 active-axis" data-axis="y">
+                                <span class="text-xl font-black">Y</span>
+                                <span class="text-[10px] uppercase font-bold opacity-60">Height</span>
+                            </button>
+                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1" data-axis="x">
+                                <span class="text-xl font-black">X</span>
+                                <span class="text-[10px] uppercase font-bold opacity-60">Width</span>
+                            </button>
+                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1" data-axis="z">
+                                <span class="text-xl font-black">Z</span>
+                                <span class="text-[10px] uppercase font-bold opacity-60">Depth</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Direction Selection -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">Side to Keep</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all active-side group" data-side="positive">
+                                <div class="flex flex-col items-center gap-1">
+                                    <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Positive</span>
+                                    <span class="text-[10px] opacity-60">Upper / Front</span>
+                                </div>
+                            </button>
+                            <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all group" data-side="negative">
+                                <div class="flex flex-col items-center gap-1">
+                                    <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Negative</span>
+                                    <span class="text-[10px] opacity-60">Lower / Back</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                <button id="applySlice" class="w-full py-4 bg-primary hover:bg-opacity-90 text-white font-bold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
+                    <svg id="sliceSpinner" class="hidden animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="group-hover:translate-x-1 transition-transform">APPLY SLICE OPERATION</span>
+                </button>
             </div>
         </div>
     </div>

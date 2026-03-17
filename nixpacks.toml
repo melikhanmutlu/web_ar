@@ -11,4 +11,4 @@ cmds = [
 ]
 
 [start]
-cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"
+cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(find /nix/store -name libassimp.so* -printf '%h\n' | head -n 1) && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info"

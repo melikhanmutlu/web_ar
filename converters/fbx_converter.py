@@ -11,6 +11,7 @@ import platform
 from pathlib import Path
 from .base_converter import BaseConverter
 from .utils.file_utils import ensure_directory
+from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class FBXConverter(BaseConverter):
             self.fbx2gltf_path = os.path.join(tools_dir, 'FBX2glTF')
         
         self.remove_textures = False  # Option to remove existing textures
+        self._fbx_material_textures = {}  # Store material -> texture mapping from pyassimp
         
     def validate(self, file_path: str) -> bool:
         """Validate if the file exists and has .fbx extension."""
@@ -131,6 +133,9 @@ class FBXConverter(BaseConverter):
                         self.log_operation(f"Number of meshes: {scene.mNumMeshes}")
                     
                     # EXTRACT EMBEDDED TEXTURES
+                    self._fbx_material_textures = {}
+                    extracted_texture_paths = {} # index -> path
+                    
                     if hasattr(scene, 'textures') and scene.textures:
                         self.log_operation(f"Found {len(scene.textures)} embedded textures")
                         texture_dir = os.path.dirname(input_path)
@@ -152,6 +157,7 @@ class FBXConverter(BaseConverter):
                                     with open(texture_path, 'wb') as f:
                                         f.write(texture.pcData)
                                     self.log_operation(f"Extracted texture: {texture_filename}")
+                                    extracted_texture_paths[idx] = texture_path
                             except Exception as tex_error:
                                 self.log_operation(f"Warning: Could not extract texture {idx}: {tex_error}", "WARNING")
                     
@@ -159,6 +165,28 @@ class FBXConverter(BaseConverter):
                     all_faces = []
                     all_uvs = []  # Store UV coordinates
                     all_materials = []  # Store material info
+                    
+                    # EXTRACT MATERIAL TEXTURE MAPPINGS
+                    if hasattr(scene, 'materials'):
+                        for mat_idx, material in enumerate(scene.materials):
+                            mat_name = material.properties.get('?mat.name', f"Material_{mat_idx}")
+                            # Try multiple possible texture property names in pyassimp
+                            tex_file = material.properties.get('$tex.file')
+                            if not tex_file:
+                                # Try common keys for different slots
+                                for key in material.properties.keys():
+                                    if '$tex.file' in key:
+                                        tex_file = material.properties[key]
+                                        break
+                            
+                            if tex_file:
+                                self._fbx_material_textures[mat_name] = tex_file
+                                self.log_operation(f"Material '{mat_name}' Texture: {tex_file}")
+                            elif mat_name == 'DB2X2_L02' and extracted_texture_paths:
+                                # Special case for Tree model if property is missing but we have extracted textures
+                                # Usually the first extracted texture for this material
+                                self._fbx_material_textures[mat_name] = list(extracted_texture_paths.values())[0]
+                                self.log_operation(f"Assigned extracted texture to known material '{mat_name}'")
                     
                     # Try different pyassimp API approaches
                     # Approach 1: Direct meshes attribute (newer pyassimp)
@@ -692,7 +720,69 @@ class FBXConverter(BaseConverter):
             import base64
             
             fbx_dir = os.path.dirname(fbx_path)
+
+            # --- AGGRESSIVE TEXTURE RECOVERY ---
+            # If pyassimp found textures that aren't in the GLB, add them now
+            if hasattr(self, '_fbx_material_textures') and self._fbx_material_textures and gltf.materials:
+                self.log_operation(f"Attempting aggressive texture recovery for {len(gltf.materials)} materials")
+                for mat in gltf.materials:
+                    mat_name = mat.name
+                    if mat_name in self._fbx_material_textures:
+                        # Found a mapping from pyassimp
+                        tex_source = self._fbx_material_textures[mat_name]
+                        
+                        # If baseColorTexture is missing or points to a non-existent image
+                        has_texture = False
+                        if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
+                            has_texture = True
+                        
+                        if not has_texture:
+                            # Find the texture file
+                            texture_file = None
+                            search_paths = [
+                                os.path.abspath(tex_source) if os.path.isabs(tex_source) else os.path.join(fbx_dir, tex_source),
+                                os.path.join(fbx_dir, os.path.basename(tex_source)),
+                                os.path.join(fbx_dir, "textures", os.path.basename(tex_source)),
+                                os.path.join(os.path.dirname(fbx_path), os.path.basename(tex_source))
+                            ]
+                            
+                            for path in search_paths:
+                                if os.path.exists(path):
+                                    texture_file = path
+                                    break
+                            
+                            if texture_file:
+                                # Add new image
+                                img_idx = len(gltf.images) if gltf.images else 0
+                                new_img = Image(uri=os.path.basename(texture_file))
+                                if gltf.images is None: gltf.images = []
+                                gltf.images.append(new_img)
+                                
+                                # Add new texture
+                                tex_idx = len(gltf.textures) if gltf.textures else 0
+                                new_tex = Texture(source=img_idx)
+                                if gltf.textures is None: gltf.textures = []
+                                gltf.textures.append(new_tex)
+                                
+                                # Assign to material
+                                if mat.pbrMetallicRoughness is None:
+                                    mat.pbrMetallicRoughness = PbrMetallicRoughness()
+                                mat.pbrMetallicRoughness.baseColorTexture = TextureInfo(index=tex_idx)
+                                self.log_operation(f"  ✅ Recovered texture for material '{mat_name}': {os.path.basename(texture_file)}")
             
+            # --- FOLIAGE / TRANSPARENCY FIX ---
+            # Tree leaves (DB2X2_L02) and similar materials often need BLEND mode
+            if gltf.materials:
+                for mat in gltf.materials:
+                    name_lower = mat.name.lower() if mat.name else ""
+                    is_foliage = any(key in name_lower for key in ["leaf", "leafs", "foliage", "branch", "tree", "plant"])
+                    is_special = mat.name == 'DB2X2_L02'
+                    
+                    if is_foliage or is_special:
+                        mat.alphaMode = "BLEND"
+                        mat.doubleSided = True
+                        self.log_operation(f"Enforced BLEND mode for foliage material '{mat.name}'")
+
             if not gltf.images:
                 self.log_operation("No images found in GLB to embed")
                 return

@@ -249,6 +249,61 @@
                 bottom: 90px;
                 left: 50%;
                 transform: translateX(-50%);
+                width: 90%;
+            }
+        }
+
+        /* Modal Base Classes */
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-container {
+            transform: scale(0.95);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .modal-container.active {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        /* QR Code Modal Styles */
+        #qrModal .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .dark #qrModal .modal-content {
+            background: #1f2937;
+        }
+
+        #qrcode {
+            background: white;
+            padding: 1rem;
+            border-radius: 1rem;
+            display: inline-block;
+            margin: 1rem 0;
+        }
+
+        /* Slicer Modal specific overrides */
+        #slicerModal .axis-btn.active-axis {
+            border-color: #4CAF50 !important;
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+        }
+
+        #slicerModal .side-btn.active-side {
+            border-color: #4CAF50 !important;
+            background: rgba(76, 175, 80, 0.1);
+        }
+                transform: translateX(-50%);
                 padding: 8px;
                 display: flex;
                 align-items: center;
@@ -726,6 +781,25 @@
 
             darkModeToggle?.addEventListener('click', toggleDarkMode);
 
+            // Panel Toggling logic
+            window.togglePanel = function(panelId) {
+                const panel = document.getElementById(panelId);
+                const icon = document.getElementById(panelId + 'Icon');
+                
+                if (!panel) return;
+                
+                const isHidden = panel.classList.contains('hidden');
+                
+                // Close other panels if needed (optional, keeping it simple for now)
+                if (isHidden) {
+                    panel.classList.remove('hidden');
+                    if (icon) icon.style.transform = 'rotate(180deg)';
+                } else {
+                    panel.classList.add('hidden');
+                    if (icon) icon.style.transform = 'rotate(0deg)';
+                }
+            };
+
             // Initialize dark mode from localStorage
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
@@ -854,14 +928,175 @@
             const closeSlicerModal = document.getElementById('closeSlicerModal');
             const applySliceBtn = document.getElementById('applySlice');
             const sliceSpinner = document.getElementById('sliceSpinner');
+            const sliceSlider = document.getElementById('sliceSlider');
+            const sliceValueDisplay = document.getElementById('sliceValueDisplay');
+            const sliceMinDisplay = document.getElementById('sliceMinDisplay');
+            const sliceMaxDisplay = document.getElementById('sliceMaxDisplay');
             
             let selectedAxis = 'y';
             let selectedSide = 'positive';
+            let meshBounds = null;
+            let isClippingEnabled = false;
+
+            // Initialize global clipping plane for Preview if not exists
+            if (!window.clippingPlaneWorld) {
+                window.clippingPlaneWorld = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            }
+
+            function getModelViewerScene() {
+                const mv = document.querySelector('model-viewer');
+                const symbols = Object.getOwnPropertySymbols(mv);
+                const sceneSymbol = symbols.find(s => s.description === 'scene');
+                if (!sceneSymbol) return null;
+                return mv[sceneSymbol];
+            }
+
+            function enableClippingPreview() {
+                if (isClippingEnabled) return;
+                const mv = document.querySelector('model-viewer');
+                const symbols = Object.getOwnPropertySymbols(mv);
+                const scene = getModelViewerScene();
+                
+                // Enable local clipping on the renderer
+                const rendererSymbol = symbols.find(s => s.description === 'renderer');
+                const renderer = mv[rendererSymbol]?.renderer || mv[rendererSymbol]?.threeRenderer;
+                if (renderer && !renderer.localClippingEnabled) {
+                    renderer.localClippingEnabled = true;
+                }
+                
+                if (scene) {
+                    scene.traverse(child => {
+                        if (child.isMesh && child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => {
+                                    mat.clippingPlanes = [window.clippingPlaneWorld];
+                                    mat.clipShadows = true;
+                                    mat.needsUpdate = true;
+                                });
+                            } else {
+                                child.material.clippingPlanes = [window.clippingPlaneWorld];
+                                child.material.clipShadows = true;
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                }
+                isClippingEnabled = true;
+            }
+
+            function disableClippingPreview() {
+                if (!isClippingEnabled) return;
+                const scene = getModelViewerScene();
+                if (scene) {
+                    scene.traverse(child => {
+                        if (child.isMesh && child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => {
+                                    mat.clippingPlanes = [];
+                                    mat.needsUpdate = true;
+                                });
+                            } else {
+                                child.material.clippingPlanes = [];
+                                child.material.needsUpdate = true;
+                            }
+                        }
+                    });
+                }
+                isClippingEnabled = false;
+            }
+
+            function updateClippingPlane() {
+                if (!window.clippingPlaneWorld || !meshBounds) return;
+                
+                const val = parseFloat(sliceSlider.value);
+                
+                // Create local plane
+                const normal = new THREE.Vector3(0, 0, 0);
+                if (selectedAxis === 'x') normal.x = 1;
+                else if (selectedAxis === 'y') normal.y = 1;
+                else if (selectedAxis === 'z') normal.z = 1;
+                
+                let planeDistance = -val;
+                
+                // If negative side is kept, we flip the normal and distance
+                if (selectedSide === 'negative') {
+                    normal.negate();
+                    planeDistance = -planeDistance;
+                }
+                
+                const localPlane = new THREE.Plane(normal, planeDistance);
+                
+                // Get transforming matrix of the root node
+                const scene = getModelViewerScene();
+                let modelRoot = null;
+                if (scene) {
+                    scene.traverse(node => {
+                        // The imported GLTF typically sits under a Node that has the gltf root
+                        if (node.userData && node.userData.gltfExtensions || node.name === "Scene") {
+                            modelRoot = node;
+                        }
+                    });
+                    
+                    if (!modelRoot) {
+                        // Fallback
+                        scene.traverse(node => {
+                            if (node.isMesh && !modelRoot) {
+                                let p = node;
+                                while(p.parent && p.parent.type !== "Scene") p = p.parent;
+                                modelRoot = p;
+                            }
+                        });
+                    }
+                }
+                
+                if (modelRoot) {
+                    window.clippingPlaneWorld.copy(localPlane).applyMatrix4(modelRoot.matrixWorld);
+                } else {
+                    window.clippingPlaneWorld.copy(localPlane);
+                }
+            }
+
+            function updateSliderBounds() {
+                if (!meshBounds) return;
+                const axIdx = selectedAxis === 'x' ? 0 : (selectedAxis === 'y' ? 1 : 2);
+                
+                const minVal = meshBounds.min[axIdx];
+                const maxVal = meshBounds.max[axIdx];
+                
+                sliceSlider.min = minVal;
+                sliceSlider.max = maxVal;
+                sliceSlider.step = (maxVal - minVal) / 200;
+                
+                // Set default to center if it was bounds update
+                sliceSlider.value = meshBounds.center[axIdx];
+                
+                sliceMinDisplay.textContent = (minVal * 100).toFixed(1) + ' cm';
+                sliceMaxDisplay.textContent = (maxVal * 100).toFixed(1) + ' cm';
+                sliceValueDisplay.textContent = (sliceSlider.value * 100).toFixed(2) + ' cm';
+            }
 
             if (sliceButton) {
-                sliceButton.addEventListener('click', () => {
+                sliceButton.addEventListener('click', async () => {
                     slicerModal.classList.remove('hidden');
                     slicerModal.classList.add('flex');
+                    
+                    if (!meshBounds) {
+                        try {
+                            const res = await fetch(`/get_mesh_bounds/{{ model.unique_id }}`);
+                            const data = await res.json();
+                            if (data.success) {
+                                meshBounds = data.bounds;
+                                updateSliderBounds();
+                                enableClippingPreview();
+                                updateClippingPlane();
+                            }
+                        } catch (e) {
+                            console.error("Failed to load mesh bounds", e);
+                        }
+                    } else {
+                        enableClippingPreview();
+                        updateClippingPlane();
+                    }
                 });
             }
 
@@ -869,6 +1104,15 @@
                 closeSlicerModal.addEventListener('click', () => {
                     slicerModal.classList.add('hidden');
                     slicerModal.classList.remove('flex');
+                    disableClippingPreview();
+                });
+            }
+
+            // Slider input
+            if (sliceSlider) {
+                sliceSlider.addEventListener('input', (e) => {
+                    sliceValueDisplay.textContent = (parseFloat(e.target.value) * 100).toFixed(2) + ' cm';
+                    updateClippingPlane();
                 });
             }
 
@@ -878,6 +1122,10 @@
                     document.querySelectorAll('.axis-btn').forEach(b => b.classList.remove('active-axis', 'border-primary'));
                     btn.classList.add('active-axis', 'border-primary');
                     selectedAxis = btn.dataset.axis;
+                    if (meshBounds) {
+                        updateSliderBounds();
+                        updateClippingPlane();
+                    }
                 });
             });
 
@@ -887,6 +1135,9 @@
                     document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active-side', 'border-primary'));
                     btn.classList.add('active-side', 'border-primary');
                     selectedSide = btn.dataset.side;
+                    if (meshBounds) {
+                        updateClippingPlane();
+                    }
                 });
             });
 
@@ -900,6 +1151,12 @@
                     if (selectedAxis === 'x') planeNormal[0] = 1;
                     else if (selectedAxis === 'y') planeNormal[1] = 1;
                     else if (selectedAxis === 'z') planeNormal[2] = 1;
+                    
+                    const planeOrigin = [0, 0, 0];
+                    const val = parseFloat(sliceSlider.value);
+                    if (selectedAxis === 'x') planeOrigin[0] = val;
+                    else if (selectedAxis === 'y') planeOrigin[1] = val;
+                    else if (selectedAxis === 'z') planeOrigin[2] = val;
 
                     try {
                         const response = await fetch('/slice_model', {
@@ -909,17 +1166,17 @@
                             },
                             body: JSON.stringify({
                                 model_id: '{{ model.unique_id }}',
-                                plane_origin: [0, 0, 0],
+                                plane_origin: planeOrigin,
                                 plane_normal: planeNormal,
                                 keep_side: selectedSide
                             })
                         });
 
                         const result = await response.json();
-                        if (result.status === 'success') {
+                        if (result.success || result.status === 'success') {
                             window.location.reload();
                         } else {
-                            alert('Slice failed: ' + result.message);
+                            alert('Slice failed: ' + (result.error || result.message));
                         }
                     } catch (error) {
                         console.error('Error slicing model:', error);
@@ -931,6 +1188,71 @@
                     }
                 });
             }
+
+            // Also attach the same logic to panelApplySlice if it exists
+            const panelApplySlice = document.getElementById('panelApplySlice');
+            if (panelApplySlice) {
+                panelApplySlice.addEventListener('click', () => {
+                   if(applySliceBtn) applySliceBtn.click();
+                });
+            }
+
+            // Modal Open/Close logic
+            const openModal = (modal) => {
+                if (!modal) return;
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
+                if (container) setTimeout(() => container.classList.add('active'), 10);
+            };
+
+            const closeModal = (modal) => {
+                if (!modal) return;
+                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
+                if (container) container.classList.remove('active');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.style.display = 'none';
+                }, 300);
+            };
+
+            document.getElementById('sliceButton')?.addEventListener('click', () => {
+                openModal(document.getElementById('slicerModal'));
+            });
+
+            document.getElementById('closeSlicerModal')?.addEventListener('click', () => {
+                closeModal(document.getElementById('slicerModal'));
+            });
+
+            document.getElementById('qrButton')?.addEventListener('click', () => {
+                const qrModal = document.getElementById('qrModal');
+                openModal(qrModal);
+                const qrContainer = document.getElementById('qrcode');
+                if (qrContainer) {
+                    qrContainer.innerHTML = '';
+                    new QRCode(qrContainer, {
+                        text: window.location.href,
+                        width: 256,
+                        height: 256
+                    });
+                }
+            });
+
+            document.getElementById('closeQrModal')?.addEventListener('click', () => {
+                closeModal(document.getElementById('qrModal'));
+            });
+            
+            document.getElementById('modelInfoButton')?.addEventListener('click', () => {
+                openModal(document.getElementById('modelInfoModal'));
+            });
+
+            document.getElementById('closeModalButton')?.addEventListener('click', () => {
+                closeModal(document.getElementById('modelInfoModal'));
+            });
+
+            document.getElementById('closeModalFooterButton')?.addEventListener('click', () => {
+                closeModal(document.getElementById('modelInfoModal'));
+            });
         });
     </script>
 
@@ -1023,6 +1345,418 @@
                 </div>
             </div>
         </div>
+
+
+        <!-- Right Side Panels -->
+        <div class="absolute right-6 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4" style="max-width: 320px;">
+            
+            <!-- Reset Camera Button -->
+            <button id="resetCamera" class="w-full px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2 font-medium text-sm border border-gray-200 dark:border-gray-700">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Reset Camera
+            </button>
+            
+            <!-- Animation Panel (shown only if model has animations) -->
+            <div id="animationPanel" class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('animationContent')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">
+                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        Animations
+                    </span>
+                    <svg class="w-4 h-4 transform transition-transform" id="animationContentIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="animationContent" class="panel-content p-4 hidden">
+                    <!-- Animation Select -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Select Animation</label>
+                        <select id="animationSelect" class="w-full px-3 py-2 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <option value="">-- No Animation --</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Play/Pause Controls -->
+                    <div class="mb-4 flex gap-2">
+                        <button id="playAnimation" class="flex-1 px-3 py-2 text-xs bg-green-500 hover:bg-green-600 text-white rounded flex items-center justify-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"></path>
+                            </svg>
+                            Play
+                        </button>
+                        <button id="pauseAnimation" class="flex-1 px-3 py-2 text-xs bg-yellow-500 hover:bg-yellow-600 text-white rounded flex items-center justify-center gap-1 hidden">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path>
+                            </svg>
+                            Pause
+                        </button>
+                        <button id="stopAnimationBtn" class="flex-1 px-3 py-2 text-xs bg-red-500 hover:bg-red-600 text-white rounded flex items-center justify-center gap-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 6h12v12H6z"></path>
+                            </svg>
+                            Stop
+                        </button>
+                    </div>
+                    
+                    <!-- Animation Info -->
+                    <div class="text-xs text-gray-500 dark:text-gray-400">
+                        <p id="animationInfo">No animations detected</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Material Editor Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Material Editor</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="materialPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="materialPanel" class="panel-content p-4 hidden">
+                    <!-- Base Color -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Base Color</label>
+                        <div class="flex gap-2 items-center">
+                            <input type="color" id="materialColor" class="w-10 h-10 rounded cursor-pointer border-2 border-gray-300 dark:border-gray-600" value="#ffffff">
+                            <input type="text" id="materialColorHex" class="flex-1 px-2 py-1.5 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="#FFFFFF">
+                        </div>
+                    </div>
+
+                    <!-- Metalness -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Metalness</label>
+                            <span id="metalnessValue" class="text-xs text-gray-500 dark:text-gray-400">0.0</span>
+                        </div>
+                        <input type="range" id="metalnessSlider" min="0" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Roughness -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Roughness</label>
+                            <span id="roughnessValue" class="text-xs text-gray-500 dark:text-gray-400">1.0</span>
+                        </div>
+                        <input type="range" id="roughnessSlider" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Opacity -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Opacity</label>
+                            <span id="opacityValue" class="text-xs text-gray-500 dark:text-gray-400">1.0</span>
+                        </div>
+                        <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Texture Upload -->
+                    <div class="mb-4">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Texture</label>
+                        <input type="file" id="textureUpload" accept="image/*" class="hidden">
+                        <button onclick="document.getElementById('textureUpload').click()" class="btn-secondary w-full px-3 py-2 text-xs rounded">
+                            Upload Texture
+                        </button>
+                        <div id="texturePreview" class="mt-2 hidden">
+                            <img id="texturePreviewImg" class="w-full h-20 object-cover rounded border-2 border-gray-300 dark:border-gray-600">
+                            <button onclick="removeTexture()" class="btn-danger mt-1 w-full px-2 py-1 text-xs rounded">Remove</button>
+                        </div>
+                    </div>
+
+                    <!-- Reset Button -->
+                    <button id="resetMaterial" class="btn-secondary w-full px-3 py-2 text-xs rounded">
+                        Reset Material
+                    </button>
+                    
+                    <!-- Export Modified Model Button -->
+                    <button id="exportModified" class="btn-primary w-full px-3 py-2 mt-3 text-xs rounded font-semibold flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Export Modified Model
+                    </button>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                        Saves material & transform changes to GLB
+                    </p>
+                </div>
+            </div>
+
+            <!-- Model Transform Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('transformPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Transform</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="transformPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="transformPanel" class="panel-content p-4 hidden">
+                    <!-- Model Dimensions -->
+                    <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Model Dimensions</label>
+                        <div id="dimensionsDisplay" class="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                            <div class="flex justify-between">
+                                <span>Width:</span>
+                                <span id="dimWidth">-- cm</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Height:</span>
+                                <span id="dimHeight">-- cm</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Depth:</span>
+                                <span id="dimDepth">-- cm</span>
+                            </div>
+                            <div class="flex justify-between pt-2 mt-2 border-t border-gray-200 dark:border-gray-600 font-medium text-cyan-600 dark:text-cyan-400">
+                                <span>Total Scale:</span>
+                                <span id="cumulativeScale">1.0x</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Scale -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Scale</label>
+                            <input type="number" id="scaleInput" min="0.1" max="10" step="0.1" value="1.0" 
+                                   class="w-16 px-2 py-1 text-xs border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300">
+                        </div>
+                        <input type="range" id="scaleSlider" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation X -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate X</label>
+                            <span id="rotateXValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                        </div>
+                        <input type="range" id="rotateXSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation Y -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Y</label>
+                            <span id="rotateYValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                        </div>
+                        <input type="range" id="rotateYSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Rotation Z -->
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Z</label>
+                            <span id="rotateZValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                        </div>
+                        <input type="range" id="rotateZSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Info Note -->
+                    <div class="mb-3 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs text-green-700 dark:text-green-300">
+                        <div class="flex items-start gap-2">
+                            <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                            <div>
+                                <strong>Center Pivot:</strong> Model is centered at origin. All transforms use model center as pivot point for consistent behavior.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reset Button -->
+                    <button id="resetTransform" class="btn-secondary w-full px-3 py-2 text-xs rounded">
+                        Reset Transform
+                    </button>
+                </div>
+            </div>
+
+            <!-- Annotations Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('annotationsPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Annotations</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="annotationsPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="annotationsPanel" class="panel-content p-4 hidden">
+                    <!-- Camera Views Section -->
+                    <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Camera Views</label>
+                        <button id="saveCameraView" class="w-full btn-secondary px-3 py-2 mb-2 text-xs rounded">
+                            Save Current View
+                        </button>
+                        <div id="cameraViewsList" class="space-y-1 max-h-32 overflow-y-auto">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>
+                        </div>
+                    </div>
+
+                    <!-- Hotspots Section -->
+                    <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
+                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Hotspots</label>
+                        <button id="toggleHotspotMode" class="btn-secondary w-full px-3 py-2 mb-2 text-xs rounded">
+                            Click Model to Add Hotspot
+                        </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
+                            Enable mode, then click anywhere on the model to place a hotspot
+                        </p>
+                        <div id="hotspotsList" class="space-y-2 max-h-64 overflow-y-auto">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <button id="clearAnnotations" class="btn-danger w-full px-3 py-2 text-xs rounded">
+                        Clear All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Version History Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('versionPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Version History</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="versionPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="versionPanel" class="panel-content p-4 hidden">
+                    <!-- Version List -->
+                    <div id="versionList" class="space-y-2 max-h-96 overflow-y-auto">
+                        <div class="text-center py-4">
+                            <svg class="animate-spin h-6 w-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Loading versions...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Refresh Button -->
+                    <button id="refreshVersions" class="btn-secondary w-full px-3 py-2 mt-3 text-xs rounded">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Model Slicer Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
+                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Model Slicer</span>
+                    <svg class="w-4 h-4 transform transition-transform" id="slicerPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div id="slicerPanel" class="panel-content p-4 hidden">
+                    <!-- Slicer Toggle -->
+                    <div class="mb-4">
+                        <button id="toggleSlicer" class="nav-button w-full justify-center">
+                            Enable Slicer
+                        </button>
+                    </div>
+
+                    <!-- Slicer Controls (hidden by default) -->
+                    <div id="slicerControls" class="hidden">
+                        <!-- Multi-Plane Selection -->
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Planes</label>
+                            <div class="flex gap-2">
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold transition-colors" data-plane="x">X</button>
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="y">Y</button>
+                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="z">Z</button>
+                            </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Toggle planes (multiple allowed)</p>
+                        </div>
+
+                        <!-- Individual Plane Controls -->
+                        <div id="planeControlsContainer"></div>
+
+                        <!-- Slice Stats -->
+                        <div id="sliceStats" class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded hidden">
+                            <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                                <div class="flex justify-between">
+                                    <span>Vertices:</span>
+                                    <span id="statsVertices">--</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>Faces:</span>
+                                    <span id="statsFaces">--</span>
+                                </div>
+                                <div class="flex justify-between font-semibold text-blue-600 dark:text-blue-400">
+                                    <span>Reduction:</span>
+                                    <span id="statsReduction">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Animation Controls -->
+                        <div class="mb-4 flex gap-2">
+                            <button id="animateSlice" class="flex-1 nav-button text-xs justify-center">
+                                Animate
+                            </button>
+                            <button id="stopAnimation" class="flex-1 nav-button text-xs justify-center hidden">
+                                Stop
+                            </button>
+                        </div>
+
+                        <!-- Show Original Toggle Button -->
+                        <button id="showOriginalToggle" class="w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                            <span id="showOriginalText">Show Original</span>
+                        </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2 text-center italic">
+                            Toggle preview on/off
+                        </p>
+
+                        <!-- Apply Slice Button -->
+                        <button id="panelApplySlice" class="btn-primary w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            Apply Slice
+                        </button>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center italic">
+                            Permanently cuts the model
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Changes Panel -->
+            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border-2 border-green-500">
+                <div class="p-4">
+                    <h3 class="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Save Changes
+                    </h3>
+                    
+                    <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                        Save all material & transform changes to the model. Changes will be visible in AR mode.
+                    </p>
+                    
+                    <button id="saveChanges" class="btn-primary w-full px-4 py-3 text-sm rounded-lg font-semibold flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                        </svg>
+                        Save & Apply to AR
+                    </button>
+                    
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center italic">
+                        Original model will be updated
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
 
         <!-- Bottom Right Controls -->
         <div class="fixed bottom-4 right-4 flex gap-2 bottom-right-controls">
@@ -1299,6 +2033,7 @@
                 </div>
             </div>
         </div>
+    </div>
     <!-- Slicer Modal -->
     <div id="slicerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-gray-700">
@@ -1348,15 +2083,27 @@
                             <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all active-side group" data-side="positive">
                                 <div class="flex flex-col items-center gap-1">
                                     <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Positive</span>
-                                    <span class="text-[10px] opacity-60">Upper / Front</span>
+                                    <span class="text-[10px] opacity-60">Upper / Front / Right</span>
                                 </div>
                             </button>
                             <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all group" data-side="negative">
                                 <div class="flex flex-col items-center gap-1">
                                     <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Negative</span>
-                                    <span class="text-[10px] opacity-60">Lower / Back</span>
+                                    <span class="text-[10px] opacity-60">Lower / Back / Left</span>
                                 </div>
                             </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Slice Position Slider -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">
+                            Slice Position <span id="sliceValueDisplay" class="float-right text-primary font-mono bg-primary/10 px-2 py-0.5 rounded">0.00 cm</span>
+                        </label>
+                        <input type="range" id="sliceSlider" min="-1" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-primary">
+                        <div class="flex justify-between text-[10px] text-gray-400 mt-2 font-mono">
+                            <span id="sliceMinDisplay">Min</span>
+                            <span id="sliceMaxDisplay">Max</span>
                         </div>
                     </div>
                 </div>

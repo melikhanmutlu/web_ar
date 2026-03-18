@@ -654,18 +654,18 @@
             let initialCameraTarget = null;
             let isColorApplied = false;
 
-            // Store initial camera settings and init slicer internals when model loads
+            // Store initial camera settings when model loads
             modelViewer?.addEventListener('load', () => {
                 initialCameraOrbit = modelViewer.cameraOrbit;
                 initialFieldOfView = modelViewer.fieldOfView;
                 initialCameraTarget = modelViewer.cameraTarget;
                 // Pre-initialize slicer internals (delay to let model-viewer finish setup)
+                // Uses window. prefix because discoverInternals is defined in a separate scope
                 setTimeout(() => {
-                    discoverInternals();
-                    if (!_mvScene) {
-                        // Retry a few times with increasing delays
-                        setTimeout(() => discoverInternals(), 1000);
-                        setTimeout(() => discoverInternals(), 3000);
+                    if (typeof window._slicerDiscoverInternals === 'function') {
+                        window._slicerDiscoverInternals();
+                        setTimeout(() => window._slicerDiscoverInternals?.(), 1000);
+                        setTimeout(() => window._slicerDiscoverInternals?.(), 3000);
                     }
                 }, 500);
             });
@@ -1106,6 +1106,9 @@
 
                 return _internalsReady;
             }
+
+            // Expose on window so first DOMContentLoaded scope can call it
+            window._slicerDiscoverInternals = discoverInternals;
 
             // ---- Shader-based clipping (bypasses renderer.localClippingEnabled) ----
             // We inject custom clipping code directly into material shaders via onBeforeCompile.
@@ -1657,7 +1660,7 @@ void main() {
 
 
         <!-- Right Side Panels -->
-        <div class="absolute right-6 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4" style="max-width: 320px;">
+        <div class="absolute right-6 top-20 bottom-20 z-20 flex flex-col gap-4 overflow-y-auto" style="max-width: 320px; scrollbar-width: thin;">
             
             <!-- Reset Camera Button -->
             <button id="resetCamera" class="w-full px-4 py-3 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg shadow-lg transition-colors flex items-center justify-center gap-2 font-medium text-sm border border-gray-200 dark:border-gray-700">

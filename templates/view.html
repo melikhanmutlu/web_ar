@@ -1078,8 +1078,10 @@
             if (sliceButton) {
                 sliceButton.addEventListener('click', async () => {
                     slicerModal.classList.remove('hidden');
-                    slicerModal.classList.add('flex');
-                    
+                    slicerModal.style.display = 'flex';
+                    const slicerContainer = slicerModal.querySelector('.bg-white, .dark\\:bg-gray-800');
+                    if (slicerContainer) setTimeout(() => slicerContainer.classList.add('active'), 10);
+
                     if (!meshBounds) {
                         try {
                             const res = await fetch(`/get_mesh_bounds/{{ model.unique_id }}`);
@@ -1102,9 +1104,13 @@
 
             if (closeSlicerModal) {
                 closeSlicerModal.addEventListener('click', () => {
-                    slicerModal.classList.add('hidden');
-                    slicerModal.classList.remove('flex');
                     disableClippingPreview();
+                    const slicerContainer = slicerModal.querySelector('.bg-white, .dark\\:bg-gray-800');
+                    if (slicerContainer) slicerContainer.classList.remove('active');
+                    setTimeout(() => {
+                        slicerModal.classList.add('hidden');
+                        slicerModal.style.display = 'none';
+                    }, 300);
                 });
             }
 
@@ -1189,14 +1195,6 @@
                 });
             }
 
-            // Also attach the same logic to panelApplySlice if it exists
-            const panelApplySlice = document.getElementById('panelApplySlice');
-            if (panelApplySlice) {
-                panelApplySlice.addEventListener('click', () => {
-                   if(applySliceBtn) applySliceBtn.click();
-                });
-            }
-
             // Modal Open/Close logic
             const openModal = (modal) => {
                 if (!modal) return;
@@ -1215,14 +1213,6 @@
                     modal.style.display = 'none';
                 }, 300);
             };
-
-            document.getElementById('sliceButton')?.addEventListener('click', () => {
-                openModal(document.getElementById('slicerModal'));
-            });
-
-            document.getElementById('closeSlicerModal')?.addEventListener('click', () => {
-                closeModal(document.getElementById('slicerModal'));
-            });
 
             document.getElementById('qrButton')?.addEventListener('click', () => {
                 const qrModal = document.getElementById('qrModal');
@@ -1642,91 +1632,6 @@
                 </div>
             </div>
 
-            <!-- Model Slicer Panel -->
-            <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Model Slicer</span>
-                    <svg class="w-4 h-4 transform transition-transform" id="slicerPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </button>
-                <div id="slicerPanel" class="panel-content p-4 hidden">
-                    <!-- Slicer Toggle -->
-                    <div class="mb-4">
-                        <button id="toggleSlicer" class="nav-button w-full justify-center">
-                            Enable Slicer
-                        </button>
-                    </div>
-
-                    <!-- Slicer Controls (hidden by default) -->
-                    <div id="slicerControls" class="hidden">
-                        <!-- Multi-Plane Selection -->
-                        <div class="mb-4">
-                            <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Planes</label>
-                            <div class="flex gap-2">
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold transition-colors" data-plane="x">X</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="y">Y</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="z">Z</button>
-                            </div>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Toggle planes (multiple allowed)</p>
-                        </div>
-
-                        <!-- Individual Plane Controls -->
-                        <div id="planeControlsContainer"></div>
-
-                        <!-- Slice Stats -->
-                        <div id="sliceStats" class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded hidden">
-                            <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                                <div class="flex justify-between">
-                                    <span>Vertices:</span>
-                                    <span id="statsVertices">--</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span>Faces:</span>
-                                    <span id="statsFaces">--</span>
-                                </div>
-                                <div class="flex justify-between font-semibold text-blue-600 dark:text-blue-400">
-                                    <span>Reduction:</span>
-                                    <span id="statsReduction">--</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Animation Controls -->
-                        <div class="mb-4 flex gap-2">
-                            <button id="animateSlice" class="flex-1 nav-button text-xs justify-center">
-                                Animate
-                            </button>
-                            <button id="stopAnimation" class="flex-1 nav-button text-xs justify-center hidden">
-                                Stop
-                            </button>
-                        </div>
-
-                        <!-- Show Original Toggle Button -->
-                        <button id="showOriginalToggle" class="w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                            <span id="showOriginalText">Show Original</span>
-                        </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2 text-center italic">
-                            Toggle preview on/off
-                        </p>
-
-                        <!-- Apply Slice Button -->
-                        <button id="panelApplySlice" class="btn-primary w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                            Apply Slice
-                        </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center italic">
-                            Permanently cuts the model
-                        </p>
-                    </div>
-                </div>
-            </div>
 
             <!-- Save Changes Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border-2 border-green-500">

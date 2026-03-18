@@ -6,10 +6,14 @@ PBR materials are extracted before slicing and re-injected after,
 so color, metallic, roughness, and textures survive every cut.
 """
 import os
+import struct
 import logging
 import trimesh
 import numpy as np
-from pygltflib import GLTF2, BufferView, Image as GLTFImage
+from pygltflib import (
+    GLTF2, BufferView, Image as GLTFImage,
+    Material, PbrMetallicRoughness,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +22,84 @@ logger = logging.getLogger(__name__)
 #  PBR Material Preservation (pygltflib layer)
 # ================================================================== #
 
+def _sample_vertex_color(gltf):
+    """
+    Read the first vertex color from COLOR_0 accessor.
+    Returns [r, g, b, a] in 0-1 range, or None if no vertex colors.
+    Used to promote upload-time face_colors to PBR baseColorFactor.
+    """
+    blob = gltf.binary_blob()
+    if not blob:
+        return None
+
+    for mesh in (gltf.meshes or []):
+        for prim in (mesh.primitives or []):
+            color_idx = getattr(prim.attributes, 'COLOR_0', None)
+            if color_idx is None:
+                continue
+
+            acc = gltf.accessors[color_idx]
+            if acc.bufferView is None:
+                continue
+
+            bv = gltf.bufferViews[acc.bufferView]
+            offset = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+            n_comps = 4 if acc.type == 'VEC4' else 3
+
+            try:
+                # FLOAT
+                if acc.componentType == 5126:
+                    vals = struct.unpack_from(f'<{n_comps}f', blob, offset)
+                    rgba = list(vals) + ([1.0] if n_comps == 3 else [])
+                # UNSIGNED_BYTE (normalized)
+                elif acc.componentType == 5121:
+                    vals = [blob[offset + i] / 255.0 for i in range(n_comps)]
+                    rgba = vals + ([1.0] if n_comps == 3 else [])
+                # UNSIGNED_SHORT (normalized)
+                elif acc.componentType == 5123:
+                    vals = struct.unpack_from(f'<{n_comps}H', blob, offset)
+                    rgba = [v / 65535.0 for v in vals] + ([1.0] if n_comps == 3 else [])
+                else:
+                    continue
+
+                logger.info(f"Sampled vertex color: [{rgba[0]:.3f}, {rgba[1]:.3f}, {rgba[2]:.3f}, {rgba[3]:.3f}]")
+                return [round(c, 6) for c in rgba]
+            except Exception as e:
+                logger.warning(f"Could not read COLOR_0: {e}")
+                continue
+    return None
+
+
 def _extract_material_data(glb_path):
     """
     Read PBR material definitions, textures, samplers, and embedded
     image binary blobs from a GLB *before* trimesh touches it.
+
+    If the GLB has no materials but has vertex colors (COLOR_0),
+    a synthetic PBR material is created from the sampled vertex color
+    so that upload-time colors survive slicing.
+
     Returns a dict with everything needed to restore later, or None.
     """
     try:
         gltf = GLTF2().load(glb_path)
 
+        # ── Promote vertex colors to PBR if no materials exist ──
         if not gltf.materials:
-            logger.info("No materials in original GLB – nothing to preserve")
-            return None
+            vertex_color = _sample_vertex_color(gltf)
+            if vertex_color:
+                logger.info(f"No materials found – promoting vertex color to PBR: {vertex_color}")
+                gltf.materials = [Material(
+                    pbrMetallicRoughness=PbrMetallicRoughness(
+                        baseColorFactor=vertex_color,
+                        metallicFactor=0.0,
+                        roughnessFactor=1.0,
+                    ),
+                    doubleSided=True,
+                )]
+            else:
+                logger.info("No materials and no vertex colors – nothing to preserve")
+                return None
 
         blob = gltf.binary_blob() or b''
 

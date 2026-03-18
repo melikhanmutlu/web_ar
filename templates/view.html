@@ -11,7 +11,8 @@
 
     <!-- Google Model Viewer -->
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-    
+
+
     <!-- QR Code library -->
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
@@ -292,17 +293,7 @@
             margin: 1rem 0;
         }
 
-        /* Slicer Modal specific overrides */
-        #slicerModal .axis-btn.active-axis {
-            border-color: #4CAF50 !important;
-            background: rgba(76, 175, 80, 0.1);
-            color: #4CAF50;
-        }
 
-        #slicerModal .side-btn.active-side {
-            border-color: #4CAF50 !important;
-            background: rgba(76, 175, 80, 0.1);
-        }
                 transform: translateX(-50%);
                 padding: 8px;
                 display: flex;
@@ -663,11 +654,20 @@
             let initialCameraTarget = null;
             let isColorApplied = false;
 
-            // Store initial camera settings when the model is loaded
+            // Store initial camera settings and init slicer internals when model loads
             modelViewer?.addEventListener('load', () => {
                 initialCameraOrbit = modelViewer.cameraOrbit;
                 initialFieldOfView = modelViewer.fieldOfView;
                 initialCameraTarget = modelViewer.cameraTarget;
+                // Pre-initialize slicer internals (delay to let model-viewer finish setup)
+                setTimeout(() => {
+                    discoverInternals();
+                    if (!_mvScene) {
+                        // Retry a few times with increasing delays
+                        setTimeout(() => discoverInternals(), 1000);
+                        setTimeout(() => discoverInternals(), 3000);
+                    }
+                }, 500);
             });
 
             // Fullscreen button handler
@@ -922,280 +922,597 @@
                 showQRModal();
             });
 
-            // Slicer Modal Logic
-            const sliceButton = document.getElementById('sliceButton');
-            const slicerModal = document.getElementById('slicerModal');
-            const closeSlicerModal = document.getElementById('closeSlicerModal');
-            const applySliceBtn = document.getElementById('applySlice');
-            const sliceSpinner = document.getElementById('sliceSpinner');
-            const sliceSlider = document.getElementById('sliceSlider');
-            const sliceValueDisplay = document.getElementById('sliceValueDisplay');
-            const sliceMinDisplay = document.getElementById('sliceMinDisplay');
-            const sliceMaxDisplay = document.getElementById('sliceMaxDisplay');
-            
-            let selectedAxis = 'y';
-            let selectedSide = 'positive';
+            // ===== MULTI-AXIS SLICER (Panel-based, 3 independent axes) =====
             let meshBounds = null;
             let isClippingEnabled = false;
 
-            // Initialize global clipping plane for Preview if not exists
-            if (!window.clippingPlaneWorld) {
-                window.clippingPlaneWorld = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-            }
+            // Per-axis state: { enabled, side, value, plane }
+            const slicerAxes = {
+                x: { enabled: false, side: 'positive', value: 0, plane: null },
+                y: { enabled: false, side: 'positive', value: 0, plane: null },
+                z: { enabled: false, side: 'positive', value: 0, plane: null }
+            };
 
-            function getModelViewerScene() {
-                const mv = document.querySelector('model-viewer');
-                const symbols = Object.getOwnPropertySymbols(mv);
-                const sceneSymbol = symbols.find(s => s.description === 'scene');
-                if (!sceneSymbol) return null;
-                return mv[sceneSymbol];
-            }
+            // --- Model-viewer THREE.js internals ---
+            let _mvRenderer = null;     // THREE.WebGLRenderer
+            let _mvScene = null;        // THREE.Scene
+            let _mvCamera = null;       // THREE.Camera
+            let _InternalVector3 = null;
+            let _InternalMatrix4 = null;
+            let _internalsReady = false;
 
-            function enableClippingPreview() {
-                if (isClippingEnabled) return;
+            let _discoveryAttempts = 0;
+            const MAX_DISCOVERY_ATTEMPTS = 30;
+
+            function discoverInternals() {
+                if (_internalsReady) return true;
+                _discoveryAttempts++;
+                if (_discoveryAttempts > MAX_DISCOVERY_ATTEMPTS) return false;
+
                 const mv = document.querySelector('model-viewer');
+                if (!mv) return false;
+
                 const symbols = Object.getOwnPropertySymbols(mv);
-                const scene = getModelViewerScene();
-                
-                // Enable local clipping on the renderer
-                const rendererSymbol = symbols.find(s => s.description === 'renderer');
-                const renderer = mv[rendererSymbol]?.renderer || mv[rendererSymbol]?.threeRenderer;
-                if (renderer && !renderer.localClippingEnabled) {
-                    renderer.localClippingEnabled = true;
+
+                // Helper: check if obj is a THREE.WebGLRenderer
+                function isWebGLRenderer(obj) {
+                    return obj && obj.domElement instanceof HTMLCanvasElement &&
+                           typeof obj.render === 'function' && typeof obj.setSize === 'function';
                 }
-                
-                if (scene) {
-                    scene.traverse(child => {
-                        if (child.isMesh && child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(mat => {
-                                    mat.clippingPlanes = [window.clippingPlaneWorld];
-                                    mat.clipShadows = true;
-                                    mat.needsUpdate = true;
-                                });
-                            } else {
-                                child.material.clippingPlanes = [window.clippingPlaneWorld];
-                                child.material.clipShadows = true;
-                                child.material.needsUpdate = true;
+
+                // Helper: deep search for renderer in an object (max 3 levels)
+                function findRendererDeep(obj, depth, visited) {
+                    if (!obj || typeof obj !== 'object' || depth > 3) return null;
+                    if (visited.has(obj)) return null;
+                    visited.add(obj);
+
+                    if (isWebGLRenderer(obj)) return obj;
+                    if (obj.threeRenderer && isWebGLRenderer(obj.threeRenderer)) return obj.threeRenderer;
+
+                    // Search own properties (named + symbols)
+                    const keys = [];
+                    try { keys.push(...Object.getOwnPropertyNames(obj)); } catch(e) {}
+                    try { keys.push(...Object.getOwnPropertySymbols(obj)); } catch(e) {}
+
+                    for (const key of keys) {
+                        try {
+                            const nested = obj[key];
+                            if (nested && typeof nested === 'object') {
+                                const found = findRendererDeep(nested, depth + 1, visited);
+                                if (found) return found;
                             }
+                        } catch(e) {}
+                    }
+                    return null;
+                }
+
+                // --- Pass 1: Search symbol values on model-viewer element ---
+                for (const s of symbols) {
+                    let val;
+                    try { val = mv[s]; } catch(e) { continue; }
+                    if (!val || typeof val !== 'object') continue;
+
+                    // Scene
+                    if (!_mvScene) {
+                        if (val.isScene || (val.traverse && val.children && val.background !== undefined)) {
+                            _mvScene = val;
+                        } else if (val.scene && val.scene.traverse) {
+                            _mvScene = val.scene;
+                        }
+                    }
+
+                    // Renderer (shallow check first)
+                    if (!_mvRenderer) {
+                        if (isWebGLRenderer(val)) {
+                            _mvRenderer = val;
+                        } else if (val.threeRenderer && isWebGLRenderer(val.threeRenderer)) {
+                            _mvRenderer = val.threeRenderer;
+                        } else if (val.renderer && isWebGLRenderer(val.renderer)) {
+                            _mvRenderer = val.renderer;
+                        }
+                    }
+                }
+
+                // --- Pass 2: Deep search for renderer through symbol values ---
+                if (!_mvRenderer) {
+                    const visited = new Set();
+                    for (const s of symbols) {
+                        let val;
+                        try { val = mv[s]; } catch(e) { continue; }
+                        if (!val || typeof val !== 'object') continue;
+                        const found = findRendererDeep(val, 0, visited);
+                        if (found) {
+                            _mvRenderer = found;
+                            console.log('[Slicer] Found renderer via deep search in symbol:', s.description);
+                            break;
+                        }
+                    }
+                }
+
+                // --- Pass 3: Find renderer via shadow DOM canvas ---
+                if (!_mvRenderer) {
+                    const canvas = mv.shadowRoot?.querySelector('canvas');
+                    if (canvas) {
+                        const visited = new Set();
+                        for (const s of symbols) {
+                            let val;
+                            try { val = mv[s]; } catch(e) { continue; }
+                            if (!val || typeof val !== 'object') continue;
+                            // Deep search specifically matching domElement === canvas
+                            const found = findRendererDeep(val, 0, visited);
+                            if (found && found.domElement === canvas) {
+                                _mvRenderer = found;
+                                console.log('[Slicer] Found renderer via canvas match');
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // --- Pass 4: Search scene for renderer reference ---
+                if (!_mvRenderer && _mvScene) {
+                    const visited = new Set();
+                    const found = findRendererDeep(_mvScene, 0, visited);
+                    if (found) {
+                        _mvRenderer = found;
+                        console.log('[Slicer] Found renderer via scene properties');
+                    }
+                }
+
+                // --- Find camera ---
+                if (_mvScene && !_mvCamera) {
+                    _mvScene.traverse(node => {
+                        if (_mvCamera) return;
+                        if (node.isPerspectiveCamera || node.isOrthographicCamera || node.isCamera) {
+                            _mvCamera = node;
                         }
                     });
                 }
-                isClippingEnabled = true;
-            }
+                if (!_mvCamera) {
+                    for (const s of symbols) {
+                        let val;
+                        try { val = mv[s]; } catch(e) { continue; }
+                        if (val && (val.isPerspectiveCamera || val.isCamera)) {
+                            _mvCamera = val; break;
+                        }
+                        if (val && val.camera && val.camera.isCamera) {
+                            _mvCamera = val.camera; break;
+                        }
+                    }
+                }
 
-            function disableClippingPreview() {
-                if (!isClippingEnabled) return;
-                const scene = getModelViewerScene();
-                if (scene) {
-                    scene.traverse(child => {
-                        if (child.isMesh && child.material) {
-                            if (Array.isArray(child.material)) {
-                                child.material.forEach(mat => {
-                                    mat.clippingPlanes = [];
-                                    mat.needsUpdate = true;
-                                });
-                            } else {
-                                child.material.clippingPlanes = [];
-                                child.material.needsUpdate = true;
-                            }
+                // --- Extract THREE constructors ---
+                if (_mvScene && !_InternalVector3) {
+                    _mvScene.traverse(node => {
+                        if (_InternalVector3) return;
+                        if (node.position && node.position.constructor) {
+                            _InternalVector3 = node.position.constructor;
+                            _InternalMatrix4 = node.matrixWorld.constructor;
                         }
                     });
+                }
+
+                // Scene is required; renderer is optional (shader clipping works without it)
+                _internalsReady = !!_mvScene;
+
+                if (_discoveryAttempts <= 3 || _internalsReady) {
+                    console.log('[Slicer] Discovery (attempt ' + _discoveryAttempts + '):', {
+                        renderer: !!_mvRenderer,
+                        scene: !!_mvScene,
+                        camera: !!_mvCamera,
+                        ready: _internalsReady
+                    });
+                }
+
+                return _internalsReady;
+            }
+
+            // ---- Shader-based clipping (bypasses renderer.localClippingEnabled) ----
+            // We inject custom clipping code directly into material shaders via onBeforeCompile.
+            // This works even when we can't access the renderer object.
+
+            const _patchedMaterials = new Set();
+            const _shaderRefs = [];
+
+            // Global clip plane uniforms (shared across all materials)
+            const _clipUniforms = {
+                slicerPlaneNX: { value: [0, 0, 0] },  // plane normals (x components)
+                slicerPlaneNY: { value: [0, 0, 0] },  // plane normals (y components)
+                slicerPlaneNZ: { value: [0, 0, 0] },  // plane normals (z components)
+                slicerPlaneD:  { value: [0, 0, 0] },   // plane constants
+                slicerNumPlanes: { value: 0 }
+            };
+
+            function patchMaterialForClipping(mat) {
+                if (_patchedMaterials.has(mat.uuid)) return;
+                _patchedMaterials.add(mat.uuid);
+
+                const origOBC = mat.onBeforeCompile;
+                mat.onBeforeCompile = function(shader, renderer) {
+                    if (origOBC) origOBC.call(mat, shader, renderer);
+
+                    // Add our uniforms
+                    shader.uniforms.slicerPlaneNX = _clipUniforms.slicerPlaneNX;
+                    shader.uniforms.slicerPlaneNY = _clipUniforms.slicerPlaneNY;
+                    shader.uniforms.slicerPlaneNZ = _clipUniforms.slicerPlaneNZ;
+                    shader.uniforms.slicerPlaneD = _clipUniforms.slicerPlaneD;
+                    shader.uniforms.slicerNumPlanes = _clipUniforms.slicerNumPlanes;
+
+                    // Store reference for uniform updates
+                    _shaderRefs.push(shader);
+
+                    // Vertex shader: pass world position to fragment
+                    shader.vertexShader = shader.vertexShader.replace(
+                        'void main() {',
+                        'varying vec3 vSlicerWorldPos;\nvoid main() {'
+                    );
+                    // Inject after model/world transform is applied
+                    if (shader.vertexShader.includes('#include <worldpos_vertex>')) {
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <worldpos_vertex>',
+                            '#include <worldpos_vertex>\nvSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+                        );
+                    } else if (shader.vertexShader.includes('#include <fog_vertex>')) {
+                        shader.vertexShader = shader.vertexShader.replace(
+                            '#include <fog_vertex>',
+                            'vSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#include <fog_vertex>'
+                        );
+                    } else {
+                        // Last resort: inject before final closing brace
+                        shader.vertexShader = shader.vertexShader.replace(
+                            /}\s*$/,
+                            'vSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n}'
+                        );
+                    }
+
+                    // Fragment shader: discard fragments outside clip planes
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        'void main() {',
+                        `varying vec3 vSlicerWorldPos;
+uniform float slicerPlaneNX[3];
+uniform float slicerPlaneNY[3];
+uniform float slicerPlaneNZ[3];
+uniform float slicerPlaneD[3];
+uniform int slicerNumPlanes;
+void main() {
+  for (int i = 0; i < 3; i++) {
+    if (i >= slicerNumPlanes) break;
+    float d = vSlicerWorldPos.x * slicerPlaneNX[i] + vSlicerWorldPos.y * slicerPlaneNY[i] + vSlicerWorldPos.z * slicerPlaneNZ[i] + slicerPlaneD[i];
+    if (d < 0.0) discard;
+  }
+`
+                    );
+                };
+
+                // Force shader recompilation
+                mat.customProgramCacheKey = function() {
+                    return 'slicer-v1';
+                };
+                mat.needsUpdate = true;
+            }
+
+            // Build clip plane data from current slicer state
+            function buildClipPlaneData() {
+                const nx = [0, 0, 0], ny = [0, 0, 0], nz = [0, 0, 0], d = [0, 0, 0];
+                let count = 0;
+                for (const axis of ['x', 'y', 'z']) {
+                    const state = slicerAxes[axis];
+                    if (!state.enabled) continue;
+                    const sign = state.side === 'negative' ? -1 : 1;
+                    nx[count] = axis === 'x' ? sign : 0;
+                    ny[count] = axis === 'y' ? sign : 0;
+                    nz[count] = axis === 'z' ? sign : 0;
+                    d[count] = -state.value * sign;
+                    count++;
+                }
+                return { nx, ny, nz, d, count };
+            }
+
+            // Apply clipping via shader injection
+            function applyClippingPlanes() {
+                discoverInternals();
+                if (!_mvScene) {
+                    console.error('[Slicer] Scene not ready yet');
+                    return;
+                }
+
+                // Patch all mesh materials with our custom shader clipping
+                let meshCount = 0;
+                _mvScene.traverse(child => {
+                    if (child.isMesh && child.material) {
+                        const mats = Array.isArray(child.material) ? child.material : [child.material];
+                        mats.forEach(mat => patchMaterialForClipping(mat));
+                        meshCount++;
+                    }
+                });
+
+                // Update uniform values
+                const clip = buildClipPlaneData();
+                _clipUniforms.slicerPlaneNX.value = clip.nx;
+                _clipUniforms.slicerPlaneNY.value = clip.ny;
+                _clipUniforms.slicerPlaneNZ.value = clip.nz;
+                _clipUniforms.slicerPlaneD.value = clip.d;
+                _clipUniforms.slicerNumPlanes.value = clip.count;
+
+                isClippingEnabled = clip.count > 0;
+                console.log('[Slicer] Applied', clip.count, 'shader clip planes to', meshCount, 'meshes');
+
+                // Also try native clipping if renderer is available
+                if (_mvRenderer) {
+                    _mvRenderer.localClippingEnabled = true;
+                }
+
+                // Force model-viewer to re-render
+                forceModelViewerRender();
+                if (isClippingEnabled) startRenderPump();
+            }
+
+            // Update a single axis (called on slider input)
+            function updateAxisPlane(axis) {
+                // State is already updated in slicerAxes by caller
+                // Just update the shared uniforms
+                const clip = buildClipPlaneData();
+                _clipUniforms.slicerPlaneNX.value = clip.nx;
+                _clipUniforms.slicerPlaneNY.value = clip.ny;
+                _clipUniforms.slicerPlaneNZ.value = clip.nz;
+                _clipUniforms.slicerPlaneD.value = clip.d;
+                _clipUniforms.slicerNumPlanes.value = clip.count;
+            }
+
+            // Force model-viewer to re-render (works with or without renderer access)
+            let _nudgeDirection = 1;
+            function forceModelViewerRender() {
+                // Method 1: Direct render if we have full access
+                if (_mvRenderer && _mvScene && _mvCamera) {
+                    _mvScene.updateMatrixWorld(true);
+                    _mvRenderer.render(_mvScene, _mvCamera);
+                    return;
+                }
+
+                // Method 2: Nudge camera to trigger model-viewer's internal render
+                // Alternates direction to prevent drift
+                const mv = document.querySelector('model-viewer');
+                if (mv) {
+                    try {
+                        const orbit = mv.getCameraOrbit();
+                        if (orbit) {
+                            _nudgeDirection *= -1;
+                            const nudge = _nudgeDirection * 0.0001;
+                            mv.cameraOrbit = (orbit.theta + nudge) + 'rad ' + orbit.phi + 'rad ' + orbit.radius + 'm';
+                            mv.jumpCameraToGoal();
+                        }
+                    } catch(e) {}
+                }
+            }
+
+            // Render pump - continuously re-renders while clipping is active
+            let _renderPumpId = null;
+            function startRenderPump() {
+                if (_renderPumpId) return;
+                let frameCount = 0;
+                function pump() {
+                    if (!isClippingEnabled) { _renderPumpId = null; return; }
+
+                    // Keep trying to discover renderer on first few frames
+                    if (!_mvRenderer && frameCount < 10) {
+                        discoverInternals();
+                    }
+
+                    forceModelViewerRender();
+                    frameCount++;
+                    _renderPumpId = requestAnimationFrame(pump);
+                }
+                _renderPumpId = requestAnimationFrame(pump);
+            }
+
+            function disableAllClipping() {
+                for (const axis of ['x', 'y', 'z']) {
+                    slicerAxes[axis].enabled = false;
                 }
                 isClippingEnabled = false;
+                if (_renderPumpId) { cancelAnimationFrame(_renderPumpId); _renderPumpId = null; }
+
+                // Reset shader uniforms to disable clipping
+                _clipUniforms.slicerNumPlanes.value = 0;
+                _clipUniforms.slicerPlaneNX.value = [0, 0, 0];
+                _clipUniforms.slicerPlaneNY.value = [0, 0, 0];
+                _clipUniforms.slicerPlaneNZ.value = [0, 0, 0];
+                _clipUniforms.slicerPlaneD.value = [0, 0, 0];
+
+                if (_mvRenderer) _mvRenderer.localClippingEnabled = false;
+                forceModelViewerRender();
             }
 
-            function updateClippingPlane() {
-                if (!window.clippingPlaneWorld || !meshBounds) return;
-                
-                const val = parseFloat(sliceSlider.value);
-                
-                // Create local plane
-                const normal = new THREE.Vector3(0, 0, 0);
-                if (selectedAxis === 'x') normal.x = 1;
-                else if (selectedAxis === 'y') normal.y = 1;
-                else if (selectedAxis === 'z') normal.z = 1;
-                
-                let planeDistance = -val;
-                
-                // If negative side is kept, we flip the normal and distance
-                if (selectedSide === 'negative') {
-                    normal.negate();
-                    planeDistance = -planeDistance;
-                }
-                
-                const localPlane = new THREE.Plane(normal, planeDistance);
-                
-                // Get transforming matrix of the root node
-                const scene = getModelViewerScene();
-                let modelRoot = null;
-                if (scene) {
-                    scene.traverse(node => {
-                        // The imported GLTF typically sits under a Node that has the gltf root
-                        if (node.userData && node.userData.gltfExtensions || node.name === "Scene") {
-                            modelRoot = node;
-                        }
-                    });
-                    
-                    if (!modelRoot) {
-                        // Fallback
-                        scene.traverse(node => {
-                            if (node.isMesh && !modelRoot) {
-                                let p = node;
-                                while(p.parent && p.parent.type !== "Scene") p = p.parent;
-                                modelRoot = p;
-                            }
-                        });
+            // Load mesh bounds and initialize slider UI for all axes
+            async function loadMeshBounds() {
+                if (meshBounds) return true;
+                try {
+                    const res = await fetch('/get_mesh_bounds/{{ model_unique_id }}');
+                    const data = await res.json();
+                    if (data.success) {
+                        meshBounds = data.bounds;
+                        return true;
                     }
+                } catch (e) {
+                    console.error('[Slicer] Failed to load mesh bounds:', e);
                 }
-                
-                if (modelRoot) {
-                    window.clippingPlaneWorld.copy(localPlane).applyMatrix4(modelRoot.matrixWorld);
-                } else {
-                    window.clippingPlaneWorld.copy(localPlane);
-                }
+                return false;
             }
 
-            function updateSliderBounds() {
+            function initSliderForAxis(axis) {
                 if (!meshBounds) return;
-                const axIdx = selectedAxis === 'x' ? 0 : (selectedAxis === 'y' ? 1 : 2);
-                
+                const axIdx = axis === 'x' ? 0 : (axis === 'y' ? 1 : 2);
                 const minVal = meshBounds.min[axIdx];
                 const maxVal = meshBounds.max[axIdx];
-                
-                sliceSlider.min = minVal;
-                sliceSlider.max = maxVal;
-                sliceSlider.step = (maxVal - minVal) / 200;
-                
-                // Set default to center if it was bounds update
-                sliceSlider.value = meshBounds.center[axIdx];
-                
-                sliceMinDisplay.textContent = (minVal * 100).toFixed(1) + ' cm';
-                sliceMaxDisplay.textContent = (maxVal * 100).toFixed(1) + ' cm';
-                sliceValueDisplay.textContent = (sliceSlider.value * 100).toFixed(2) + ' cm';
+                const centerVal = meshBounds.center[axIdx];
+
+                const slider = document.querySelector('.slicer-slider[data-axis="' + axis + '"]');
+                const minDisp = document.querySelector('.slicer-min[data-axis="' + axis + '"]');
+                const maxDisp = document.querySelector('.slicer-max[data-axis="' + axis + '"]');
+                const valDisp = document.querySelector('.slicer-val[data-axis="' + axis + '"]');
+
+                if (slider) {
+                    slider.min = minVal;
+                    slider.max = maxVal;
+                    slider.step = (maxVal - minVal) / 200;
+                    slider.value = centerVal;
+                }
+                if (minDisp) minDisp.textContent = (minVal * 100).toFixed(1) + ' cm';
+                if (maxDisp) maxDisp.textContent = (maxVal * 100).toFixed(1) + ' cm';
+                if (valDisp) valDisp.textContent = (centerVal * 100).toFixed(1) + ' cm';
+
+                slicerAxes[axis].value = centerVal;
             }
 
-            if (sliceButton) {
-                sliceButton.addEventListener('click', async () => {
-                    slicerModal.classList.remove('hidden');
-                    slicerModal.classList.add('flex');
-                    
-                    if (!meshBounds) {
-                        try {
-                            const res = await fetch(`/get_mesh_bounds/{{ model.unique_id }}`);
-                            const data = await res.json();
-                            if (data.success) {
-                                meshBounds = data.bounds;
-                                updateSliderBounds();
-                                enableClippingPreview();
-                                updateClippingPlane();
-                            }
-                        } catch (e) {
-                            console.error("Failed to load mesh bounds", e);
+            // --- Panel Event Handlers ---
+
+            // Axis toggle checkboxes
+            document.querySelectorAll('.slicer-axis-toggle').forEach(cb => {
+                cb.addEventListener('change', async (e) => {
+                    const axis = e.target.dataset.axis;
+                    const enabled = e.target.checked;
+
+                    if (enabled && !meshBounds) {
+                        const loaded = await loadMeshBounds();
+                        if (!loaded) { e.target.checked = false; return; }
+                        // Init all sliders on first load
+                        for (const a of ['x', 'y', 'z']) initSliderForAxis(a);
+                    }
+
+                    slicerAxes[axis].enabled = enabled;
+
+                    // Enable/disable slider
+                    const slider = document.querySelector('.slicer-slider[data-axis="' + axis + '"]');
+                    if (slider) slider.disabled = !enabled;
+
+                    // Highlight border
+                    const container = document.getElementById('slicerAxis' + axis.toUpperCase());
+                    const colors = { x: 'border-red-500', y: 'border-green-500', z: 'border-blue-500' };
+                    if (container) {
+                        container.classList.toggle(colors[axis], enabled);
+                        container.classList.toggle('border-gray-200', !enabled);
+                        container.classList.toggle('dark:border-gray-600', !enabled);
+                    }
+
+                    // Set default side button highlight
+                    if (enabled) {
+                        const posBtn = document.querySelector('.slicer-side-btn[data-axis="' + axis + '"][data-side="positive"]');
+                        if (posBtn) {
+                            posBtn.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+                            posBtn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
                         }
-                    } else {
-                        enableClippingPreview();
-                        updateClippingPlane();
                     }
-                });
-            }
 
-            if (closeSlicerModal) {
-                closeSlicerModal.addEventListener('click', () => {
-                    slicerModal.classList.add('hidden');
-                    slicerModal.classList.remove('flex');
-                    disableClippingPreview();
+                    updateAxisPlane(axis);
+                    applyClippingPlanes();
                 });
-            }
+            });
 
-            // Slider input
-            if (sliceSlider) {
-                sliceSlider.addEventListener('input', (e) => {
-                    sliceValueDisplay.textContent = (parseFloat(e.target.value) * 100).toFixed(2) + ' cm';
-                    updateClippingPlane();
+            // Slider input - update clip plane uniforms and force re-render
+            document.querySelectorAll('.slicer-slider').forEach(slider => {
+                slider.addEventListener('input', (e) => {
+                    const axis = e.target.dataset.axis;
+                    const val = parseFloat(e.target.value);
+                    slicerAxes[axis].value = val;
+
+                    const valDisp = document.querySelector('.slicer-val[data-axis="' + axis + '"]');
+                    if (valDisp) valDisp.textContent = (val * 100).toFixed(1) + ' cm';
+
+                    // Apply clipping with updated value (ensures uniforms synced and pump running)
+                    applyClippingPlanes();
                 });
-            }
+            });
 
-            // Axis selection
-            document.querySelectorAll('.axis-btn').forEach(btn => {
+            // Side buttons
+            document.querySelectorAll('.slicer-side-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    document.querySelectorAll('.axis-btn').forEach(b => b.classList.remove('active-axis', 'border-primary'));
-                    btn.classList.add('active-axis', 'border-primary');
-                    selectedAxis = btn.dataset.axis;
-                    if (meshBounds) {
-                        updateSliderBounds();
-                        updateClippingPlane();
+                    const axis = btn.dataset.axis;
+                    const side = btn.dataset.side;
+                    slicerAxes[axis].side = side;
+
+                    // Update button highlights
+                    document.querySelectorAll('.slicer-side-btn[data-axis="' + axis + '"]').forEach(b => {
+                        b.classList.remove('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+                        b.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
+                    });
+                    btn.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+                    btn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
+
+                    if (slicerAxes[axis].enabled) {
+                        updateAxisPlane(axis);
+                        applyClippingPlanes();
                     }
                 });
             });
 
-            // Side selection
-            document.querySelectorAll('.side-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('active-side', 'border-primary'));
-                    btn.classList.add('active-side', 'border-primary');
-                    selectedSide = btn.dataset.side;
-                    if (meshBounds) {
-                        updateClippingPlane();
+            // Reset button
+            document.getElementById('slicerReset')?.addEventListener('click', () => {
+                disableAllClipping();
+                document.querySelectorAll('.slicer-axis-toggle').forEach(cb => { cb.checked = false; });
+                document.querySelectorAll('.slicer-slider').forEach(sl => { sl.disabled = true; });
+                for (const axis of ['x', 'y', 'z']) {
+                    slicerAxes[axis].side = 'positive';
+                    if (meshBounds) initSliderForAxis(axis);
+                    const container = document.getElementById('slicerAxis' + axis.toUpperCase());
+                    if (container) {
+                        container.classList.remove('border-red-500', 'border-green-500', 'border-blue-500');
+                        container.classList.add('border-gray-200', 'dark:border-gray-600');
                     }
-                });
+                    // Reset side button highlights
+                    document.querySelectorAll('.slicer-side-btn[data-axis="' + axis + '"]').forEach(b => {
+                        b.classList.remove('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+                        b.classList.add('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
+                    });
+                }
             });
 
-            if (applySliceBtn) {
-                applySliceBtn.addEventListener('click', async () => {
-                    applySliceBtn.disabled = true;
-                    applySliceBtn.classList.add('opacity-50');
-                    sliceSpinner.classList.remove('hidden');
+            // Apply slice - sends each enabled axis as a separate slice operation
+            document.getElementById('slicerApply')?.addEventListener('click', async () => {
+                const enabledAxes = ['x', 'y', 'z'].filter(a => slicerAxes[a].enabled);
+                if (enabledAxes.length === 0) { alert('Enable at least one axis to slice.'); return; }
 
-                    const planeNormal = [0, 0, 0];
-                    if (selectedAxis === 'x') planeNormal[0] = 1;
-                    else if (selectedAxis === 'y') planeNormal[1] = 1;
-                    else if (selectedAxis === 'z') planeNormal[2] = 1;
-                    
-                    const planeOrigin = [0, 0, 0];
-                    const val = parseFloat(sliceSlider.value);
-                    if (selectedAxis === 'x') planeOrigin[0] = val;
-                    else if (selectedAxis === 'y') planeOrigin[1] = val;
-                    else if (selectedAxis === 'z') planeOrigin[2] = val;
+                const applyBtn = document.getElementById('slicerApply');
+                const spinner = document.getElementById('slicerSpinner');
+                applyBtn.disabled = true;
+                applyBtn.classList.add('opacity-50');
+                spinner?.classList.remove('hidden');
 
-                    try {
+                try {
+                    // Apply slices sequentially (each one modifies the model)
+                    for (const axis of enabledAxes) {
+                        const state = slicerAxes[axis];
+                        const planeNormal = [0, 0, 0];
+                        const planeOrigin = [0, 0, 0];
+                        if (axis === 'x') { planeNormal[0] = 1; planeOrigin[0] = state.value; }
+                        if (axis === 'y') { planeNormal[1] = 1; planeOrigin[1] = state.value; }
+                        if (axis === 'z') { planeNormal[2] = 1; planeOrigin[2] = state.value; }
+
                         const response = await fetch('/slice_model', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                model_id: '{{ model.unique_id }}',
+                                model_id: '{{ model_unique_id }}',
                                 plane_origin: planeOrigin,
                                 plane_normal: planeNormal,
-                                keep_side: selectedSide
+                                keep_side: state.side
                             })
                         });
-
                         const result = await response.json();
-                        if (result.success || result.status === 'success') {
-                            window.location.reload();
-                        } else {
-                            alert('Slice failed: ' + (result.error || result.message));
+                        if (!result.success && result.status !== 'success') {
+                            alert('Slice failed on ' + axis.toUpperCase() + ' axis: ' + (result.error || result.message));
+                            return;
                         }
-                    } catch (error) {
-                        console.error('Error slicing model:', error);
-                        alert('An error occurred while slicing the model.');
-                    } finally {
-                        applySliceBtn.disabled = false;
-                        applySliceBtn.classList.remove('opacity-50');
-                        sliceSpinner.classList.add('hidden');
                     }
-                });
-            }
-
-            // Also attach the same logic to panelApplySlice if it exists
-            const panelApplySlice = document.getElementById('panelApplySlice');
-            if (panelApplySlice) {
-                panelApplySlice.addEventListener('click', () => {
-                   if(applySliceBtn) applySliceBtn.click();
-                });
-            }
+                    window.location.reload();
+                } catch (error) {
+                    console.error('[Slicer] Error:', error);
+                    alert('An error occurred while slicing.');
+                } finally {
+                    applyBtn.disabled = false;
+                    applyBtn.classList.remove('opacity-50');
+                    spinner?.classList.add('hidden');
+                }
+            });
 
             // Modal Open/Close logic
             const openModal = (modal) => {
@@ -1215,14 +1532,6 @@
                     modal.style.display = 'none';
                 }, 300);
             };
-
-            document.getElementById('sliceButton')?.addEventListener('click', () => {
-                openModal(document.getElementById('slicerModal'));
-            });
-
-            document.getElementById('closeSlicerModal')?.addEventListener('click', () => {
-                closeModal(document.getElementById('slicerModal'));
-            });
 
             document.getElementById('qrButton')?.addEventListener('click', () => {
                 const qrModal = document.getElementById('qrModal');
@@ -1645,86 +1954,96 @@
             <!-- Model Slicer Panel -->
             <div class="panel-container bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
-                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Model Slicer</span>
+                    <span class="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
+                        </svg>
+                        Model Slicer
+                    </span>
                     <svg class="w-4 h-4 transform transition-transform" id="slicerPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
                 <div id="slicerPanel" class="panel-content p-4 hidden">
-                    <!-- Slicer Toggle -->
-                    <div class="mb-4">
-                        <button id="toggleSlicer" class="nav-button w-full justify-center">
-                            Enable Slicer
-                        </button>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Enable axes to slice. Adjust sliders for live preview, then apply.</p>
+
+                    <!-- X Axis -->
+                    <div class="mb-3 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 transition-colors" id="slicerAxisX">
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" class="slicer-axis-toggle w-4 h-4 rounded accent-red-500" data-axis="x">
+                                <span class="text-xs font-bold text-red-500">X Axis</span>
+                                <span class="text-[10px] text-gray-400">(Width)</span>
+                            </label>
+                            <div class="flex gap-1">
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="x" data-side="positive">+ Keep</button>
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="x" data-side="negative">- Keep</button>
+                            </div>
+                        </div>
+                        <input type="range" class="slicer-slider w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-red-500 disabled:opacity-30" data-axis="x" disabled min="-1" max="1" step="0.01" value="0">
+                        <div class="flex justify-between text-[9px] text-gray-400 mt-1 font-mono">
+                            <span class="slicer-min" data-axis="x">--</span>
+                            <span class="slicer-val text-red-500 font-semibold" data-axis="x">--</span>
+                            <span class="slicer-max" data-axis="x">--</span>
+                        </div>
                     </div>
 
-                    <!-- Slicer Controls (hidden by default) -->
-                    <div id="slicerControls" class="hidden">
-                        <!-- Multi-Plane Selection -->
-                        <div class="mb-4">
-                            <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Active Planes</label>
-                            <div class="flex gap-2">
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold transition-colors" data-plane="x">X</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="y">Y</button>
-                                <button class="plane-toggle-btn flex-1 px-3 py-2 text-xs rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium transition-colors" data-plane="z">Z</button>
-                            </div>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Toggle planes (multiple allowed)</p>
-                        </div>
-
-                        <!-- Individual Plane Controls -->
-                        <div id="planeControlsContainer"></div>
-
-                        <!-- Slice Stats -->
-                        <div id="sliceStats" class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded hidden">
-                            <div class="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                                <div class="flex justify-between">
-                                    <span>Vertices:</span>
-                                    <span id="statsVertices">--</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span>Faces:</span>
-                                    <span id="statsFaces">--</span>
-                                </div>
-                                <div class="flex justify-between font-semibold text-blue-600 dark:text-blue-400">
-                                    <span>Reduction:</span>
-                                    <span id="statsReduction">--</span>
-                                </div>
+                    <!-- Y Axis -->
+                    <div class="mb-3 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 transition-colors" id="slicerAxisY">
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" class="slicer-axis-toggle w-4 h-4 rounded accent-green-500" data-axis="y">
+                                <span class="text-xs font-bold text-green-500">Y Axis</span>
+                                <span class="text-[10px] text-gray-400">(Height)</span>
+                            </label>
+                            <div class="flex gap-1">
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="y" data-side="positive">+ Keep</button>
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="y" data-side="negative">- Keep</button>
                             </div>
                         </div>
-
-                        <!-- Animation Controls -->
-                        <div class="mb-4 flex gap-2">
-                            <button id="animateSlice" class="flex-1 nav-button text-xs justify-center">
-                                Animate
-                            </button>
-                            <button id="stopAnimation" class="flex-1 nav-button text-xs justify-center hidden">
-                                Stop
-                            </button>
+                        <input type="range" class="slicer-slider w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-green-500 disabled:opacity-30" data-axis="y" disabled min="-1" max="1" step="0.01" value="0">
+                        <div class="flex justify-between text-[9px] text-gray-400 mt-1 font-mono">
+                            <span class="slicer-min" data-axis="y">--</span>
+                            <span class="slicer-val text-green-500 font-semibold" data-axis="y">--</span>
+                            <span class="slicer-max" data-axis="y">--</span>
                         </div>
+                    </div>
 
-                        <!-- Show Original Toggle Button -->
-                        <button id="showOriginalToggle" class="w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                            </svg>
-                            <span id="showOriginalText">Show Original</span>
+                    <!-- Z Axis -->
+                    <div class="mb-3 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 transition-colors" id="slicerAxisZ">
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" class="slicer-axis-toggle w-4 h-4 rounded accent-blue-500" data-axis="z">
+                                <span class="text-xs font-bold text-blue-500">Z Axis</span>
+                                <span class="text-[10px] text-gray-400">(Depth)</span>
+                            </label>
+                            <div class="flex gap-1">
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="z" data-side="positive">+ Keep</button>
+                                <button class="slicer-side-btn text-[10px] px-2 py-0.5 rounded font-semibold transition-colors bg-gray-100 dark:bg-gray-700 text-gray-500" data-axis="z" data-side="negative">- Keep</button>
+                            </div>
+                        </div>
+                        <input type="range" class="slicer-slider w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-500 disabled:opacity-30" data-axis="z" disabled min="-1" max="1" step="0.01" value="0">
+                        <div class="flex justify-between text-[9px] text-gray-400 mt-1 font-mono">
+                            <span class="slicer-min" data-axis="z">--</span>
+                            <span class="slicer-val text-blue-500 font-semibold" data-axis="z">--</span>
+                            <span class="slicer-max" data-axis="z">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Reset & Apply -->
+                    <div class="flex gap-2 mt-4">
+                        <button id="slicerReset" class="btn-secondary flex-1 px-3 py-2.5 text-xs rounded-lg font-semibold">
+                            Reset
                         </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 mb-2 text-center italic">
-                            Toggle preview on/off
-                        </p>
-
-                        <!-- Apply Slice Button -->
-                        <button id="panelApplySlice" class="btn-primary w-full px-3 py-2 text-xs rounded font-semibold flex items-center justify-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        <button id="slicerApply" class="btn-primary flex-1 px-3 py-2.5 text-xs rounded-lg font-semibold flex items-center justify-center gap-1">
+                            <svg id="slicerSpinner" class="hidden animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
                             Apply Slice
                         </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center italic">
-                            Permanently cuts the model
-                        </p>
                     </div>
+                    <p class="text-[10px] text-gray-400 mt-2 text-center italic">Permanently cuts the model and saves as new version</p>
                 </div>
             </div>
 
@@ -1798,13 +2117,6 @@
             <button id="fullscreenButton" class="rounded-full bg-white bg-opacity-50 backdrop-blur-sm p-1.5 flex items-center justify-center hover:bg-opacity-75 transition-all hover:scale-110 hover:shadow-lg dark:bg-gray-800 dark:hover:bg-gray-700" title="Toggle Fullscreen">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                </svg>
-            </button>
-
-            <!-- Slicer Button -->
-            <button id="sliceButton" class="rounded-full bg-white bg-opacity-50 backdrop-blur-sm p-1.5 flex items-center justify-center hover:bg-opacity-75 transition-all hover:scale-110 hover:shadow-lg dark:bg-gray-800 dark:hover:bg-gray-700" title="Slice Model">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
                 </svg>
             </button>
 
@@ -2034,92 +2346,661 @@
             </div>
         </div>
     </div>
-    <!-- Slicer Modal -->
-    <div id="slicerModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-gray-100 dark:border-gray-700">
-            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center uppercase tracking-wider">
-                    <svg class="w-5 h-5 mr-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
-                    </svg>
-                    Slice Model
-                </h3>
-                <button id="closeSlicerModal" class="text-gray-400 hover:text-gray-500 transition-colors p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            
-            <div class="p-6">
-                <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                    Select an axis and direction to cut the model. This will create a new version of the 3D asset.
-                </p>
 
-                <div class="space-y-6">
-                    <!-- Axis Selection -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">Slice Axis</label>
-                        <div class="grid grid-cols-3 gap-3">
-                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1 active-axis" data-axis="y">
-                                <span class="text-xl font-black">Y</span>
-                                <span class="text-[10px] uppercase font-bold opacity-60">Height</span>
-                            </button>
-                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1" data-axis="x">
-                                <span class="text-xl font-black">X</span>
-                                <span class="text-[10px] uppercase font-bold opacity-60">Width</span>
-                            </button>
-                            <button class="axis-btn p-3 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all flex flex-col items-center gap-1" data-axis="z">
-                                <span class="text-xl font-black">Z</span>
-                                <span class="text-[10px] uppercase font-bold opacity-60">Depth</span>
-                            </button>
-                        </div>
-                    </div>
+    <!-- ============================================================ -->
+    <!-- ALL PANEL HANDLERS: Reset Camera, Animation, Material,       -->
+    <!-- Transform, Annotations, Version History, Slicer Panel,       -->
+    <!-- Save Changes                                                 -->
+    <!-- ============================================================ -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const modelViewer = document.querySelector('model-viewer');
+        const modelId = '{{ model_unique_id }}';
 
-                    <!-- Direction Selection -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">Side to Keep</label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all active-side group" data-side="positive">
-                                <div class="flex flex-col items-center gap-1">
-                                    <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Positive</span>
-                                    <span class="text-[10px] opacity-60">Upper / Front / Right</span>
-                                </div>
-                            </button>
-                            <button class="side-btn p-4 rounded-xl border-2 border-gray-100 dark:border-gray-700 hover:border-primary text-gray-700 dark:text-gray-300 transition-all group" data-side="negative">
-                                <div class="flex flex-col items-center gap-1">
-                                    <span class="text-sm font-bold uppercase group-hover:text-primary transition-colors">Negative</span>
-                                    <span class="text-[10px] opacity-60">Lower / Back / Left</span>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Slice Position Slider -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-400 dark:text-gray-500 uppercase mb-3 tracking-widest">
-                            Slice Position <span id="sliceValueDisplay" class="float-right text-primary font-mono bg-primary/10 px-2 py-0.5 rounded">0.00 cm</span>
-                        </label>
-                        <input type="range" id="sliceSlider" min="-1" max="1" step="0.01" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-primary">
-                        <div class="flex justify-between text-[10px] text-gray-400 mt-2 font-mono">
-                            <span id="sliceMinDisplay">Min</span>
-                            <span id="sliceMaxDisplay">Max</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        // ===================================================================
+        // RESET CAMERA
+        // ===================================================================
+        document.getElementById('resetCamera')?.addEventListener('click', () => {
+            if (!modelViewer) return;
+            modelViewer.cameraOrbit = 'auto auto 105%';
+            modelViewer.fieldOfView = 'auto';
+            modelViewer.cameraTarget = 'auto auto auto';
+            modelViewer.autoRotate = true;
+        });
 
-            <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                <button id="applySlice" class="w-full py-4 bg-primary hover:bg-opacity-90 text-white font-bold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
-                    <svg id="sliceSpinner" class="hidden animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span class="group-hover:translate-x-1 transition-transform">APPLY SLICE OPERATION</span>
-                </button>
-            </div>
-        </div>
-    </div>
+        // ===================================================================
+        // ANIMATION PANEL
+        // ===================================================================
+        const animSelect = document.getElementById('animationSelect');
+        const playBtn = document.getElementById('playAnimation');
+        const pauseBtn = document.getElementById('pauseAnimation');
+        const stopBtn = document.getElementById('stopAnimationBtn');
+        const animInfo = document.getElementById('animationInfo');
+        const animPanel = document.getElementById('animationPanel');
+
+        modelViewer?.addEventListener('load', () => {
+            const anims = modelViewer.availableAnimations || [];
+            if (anims.length === 0) {
+                if (animPanel) animPanel.classList.add('hidden');
+                return;
+            }
+            // Show animation panel
+            if (animPanel) animPanel.classList.remove('hidden');
+            if (animInfo) animInfo.textContent = anims.length + ' animation(s) available';
+
+            // Populate dropdown
+            if (animSelect) {
+                animSelect.innerHTML = '<option value="">-- No Animation --</option>';
+                anims.forEach(name => {
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = name;
+                    animSelect.appendChild(opt);
+                });
+            }
+        });
+
+        animSelect?.addEventListener('change', (e) => {
+            if (e.target.value) {
+                modelViewer.animationName = e.target.value;
+                modelViewer.pause();
+                if (playBtn) playBtn.classList.remove('hidden');
+                if (pauseBtn) pauseBtn.classList.add('hidden');
+            } else {
+                modelViewer.animationName = undefined;
+                modelViewer.pause();
+            }
+        });
+
+        playBtn?.addEventListener('click', () => {
+            if (animSelect && !animSelect.value) {
+                const anims = modelViewer.availableAnimations || [];
+                if (anims.length > 0) {
+                    modelViewer.animationName = anims[0];
+                    animSelect.value = anims[0];
+                }
+            }
+            modelViewer.play({ repetitions: Infinity });
+            playBtn.classList.add('hidden');
+            if (pauseBtn) pauseBtn.classList.remove('hidden');
+        });
+
+        pauseBtn?.addEventListener('click', () => {
+            modelViewer.pause();
+            pauseBtn.classList.add('hidden');
+            if (playBtn) playBtn.classList.remove('hidden');
+        });
+
+        stopBtn?.addEventListener('click', () => {
+            modelViewer.pause();
+            modelViewer.currentTime = 0;
+            if (pauseBtn) pauseBtn.classList.add('hidden');
+            if (playBtn) playBtn.classList.remove('hidden');
+        });
+
+        // ===================================================================
+        // MATERIAL EDITOR
+        // ===================================================================
+        const matColor = document.getElementById('materialColor');
+        const matColorHex = document.getElementById('materialColorHex');
+        const metalnessSlider = document.getElementById('metalnessSlider');
+        const roughnessSlider = document.getElementById('roughnessSlider');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const metalnessValue = document.getElementById('metalnessValue');
+        const roughnessValue = document.getElementById('roughnessValue');
+        const opacityValue = document.getElementById('opacityValue');
+        const textureUpload = document.getElementById('textureUpload');
+        const texturePreview = document.getElementById('texturePreview');
+        const texturePreviewImg = document.getElementById('texturePreviewImg');
+        const resetMaterial = document.getElementById('resetMaterial');
+        const exportModified = document.getElementById('exportModified');
+
+        // Store original material state for reset
+        let originalMaterials = [];
+
+        function getMaterials() {
+            try {
+                return modelViewer?.model?.materials || [];
+            } catch { return []; }
+        }
+
+        function captureOriginalMaterials() {
+            try {
+                const mats = getMaterials();
+                originalMaterials = mats.map(mat => ({
+                    baseColor: mat.pbrMetallicRoughness?.baseColorFactor ? [...mat.pbrMetallicRoughness.baseColorFactor] : [1, 1, 1, 1],
+                    metallic: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
+                    roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1
+                }));
+            } catch (e) { console.warn('Could not capture original materials:', e); }
+        }
+
+        modelViewer?.addEventListener('load', captureOriginalMaterials);
+
+        function hexToRgb(hex) {
+            hex = hex.replace('#', '');
+            return {
+                r: parseInt(hex.substring(0, 2), 16) / 255,
+                g: parseInt(hex.substring(2, 4), 16) / 255,
+                b: parseInt(hex.substring(4, 6), 16) / 255
+            };
+        }
+
+        function applyMaterialColor(hex) {
+            const rgb = hexToRgb(hex);
+            const mats = getMaterials();
+            mats.forEach(mat => {
+                const currentAlpha = mat.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
+                mat.pbrMetallicRoughness.setBaseColorFactor([rgb.r, rgb.g, rgb.b, currentAlpha]);
+            });
+        }
+
+        matColor?.addEventListener('input', (e) => {
+            const hex = e.target.value;
+            if (matColorHex) matColorHex.value = hex.toUpperCase();
+            applyMaterialColor(hex);
+        });
+
+        matColorHex?.addEventListener('input', (e) => {
+            let hex = e.target.value;
+            if (!hex.startsWith('#')) hex = '#' + hex;
+            if (/^#[0-9A-F]{6}$/i.test(hex)) {
+                if (matColor) matColor.value = hex;
+                applyMaterialColor(hex);
+            }
+        });
+
+        metalnessSlider?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (metalnessValue) metalnessValue.textContent = val.toFixed(2);
+            getMaterials().forEach(mat => {
+                mat.pbrMetallicRoughness.setMetallicFactor(val);
+            });
+        });
+
+        roughnessSlider?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (roughnessValue) roughnessValue.textContent = val.toFixed(2);
+            getMaterials().forEach(mat => {
+                mat.pbrMetallicRoughness.setRoughnessFactor(val);
+            });
+        });
+
+        opacitySlider?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (opacityValue) opacityValue.textContent = val.toFixed(2);
+            getMaterials().forEach(mat => {
+                const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], val]);
+                if (val < 1) {
+                    mat.setAlphaMode('BLEND');
+                } else {
+                    mat.setAlphaMode('OPAQUE');
+                }
+            });
+        });
+
+        // Texture upload
+        textureUpload?.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const url = URL.createObjectURL(file);
+                if (texturePreviewImg) texturePreviewImg.src = url;
+                if (texturePreview) texturePreview.classList.remove('hidden');
+
+                const texture = await modelViewer.createTexture(url);
+                getMaterials().forEach(mat => {
+                    mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
+                });
+            } catch (err) {
+                console.error('Texture upload error:', err);
+                alert('Failed to apply texture.');
+            }
+        });
+
+        // Remove texture (global function for onclick)
+        window.removeTexture = function() {
+            getMaterials().forEach(mat => {
+                mat.pbrMetallicRoughness.baseColorTexture.setTexture(null);
+            });
+            if (texturePreview) texturePreview.classList.add('hidden');
+            if (textureUpload) textureUpload.value = '';
+        };
+
+        // Reset material
+        resetMaterial?.addEventListener('click', () => {
+            const mats = getMaterials();
+            mats.forEach((mat, i) => {
+                const orig = originalMaterials[i] || { baseColor: [1, 1, 1, 1], metallic: 0, roughness: 1 };
+                mat.pbrMetallicRoughness.setBaseColorFactor(orig.baseColor);
+                mat.pbrMetallicRoughness.setMetallicFactor(orig.metallic);
+                mat.pbrMetallicRoughness.setRoughnessFactor(orig.roughness);
+                mat.setAlphaMode('OPAQUE');
+                mat.pbrMetallicRoughness.baseColorTexture.setTexture(null);
+            });
+            if (matColor) matColor.value = '#ffffff';
+            if (matColorHex) matColorHex.value = '#FFFFFF';
+            if (metalnessSlider) { metalnessSlider.value = 0; if (metalnessValue) metalnessValue.textContent = '0.0'; }
+            if (roughnessSlider) { roughnessSlider.value = 1; if (roughnessValue) roughnessValue.textContent = '1.0'; }
+            if (opacitySlider) { opacitySlider.value = 1; if (opacityValue) opacityValue.textContent = '1.0'; }
+            if (texturePreview) texturePreview.classList.add('hidden');
+            if (textureUpload) textureUpload.value = '';
+        });
+
+        // Export modified model
+        exportModified?.addEventListener('click', async () => {
+            exportModified.disabled = true;
+            exportModified.textContent = 'Exporting...';
+            try {
+                const modifications = gatherModifications();
+                const response = await fetch('/apply_modifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId, modifications })
+                });
+                const result = await response.json();
+                if (result.success && result.download_url) {
+                    const a = document.createElement('a');
+                    a.href = result.download_url;
+                    a.download = result.filename || 'modified_model.glb';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } else {
+                    alert('Export failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Export error:', err);
+                alert('Export failed.');
+            } finally {
+                exportModified.disabled = false;
+                exportModified.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Export Modified Model';
+            }
+        });
+
+        // ===================================================================
+        // TRANSFORM PANEL
+        // ===================================================================
+        const scaleInput = document.getElementById('scaleInput');
+        const scaleSlider = document.getElementById('scaleSlider');
+        const rotateXSlider = document.getElementById('rotateXSlider');
+        const rotateYSlider = document.getElementById('rotateYSlider');
+        const rotateZSlider = document.getElementById('rotateZSlider');
+        const rotateXValue = document.getElementById('rotateXValue');
+        const rotateYValue = document.getElementById('rotateYValue');
+        const rotateZValue = document.getElementById('rotateZValue');
+        const resetTransform = document.getElementById('resetTransform');
+        const dimWidth = document.getElementById('dimWidth');
+        const dimHeight = document.getElementById('dimHeight');
+        const dimDepth = document.getElementById('dimDepth');
+        const cumulativeScale = document.getElementById('cumulativeScale');
+
+        // Load initial dimensions
+        function loadDimensions() {
+            fetch('/get_model_dimensions/' + modelId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.dimensions) {
+                        const d = data.dimensions;
+                        if (dimWidth) dimWidth.textContent = parseFloat(d.width).toFixed(2) + ' cm';
+                        if (dimHeight) dimHeight.textContent = parseFloat(d.height).toFixed(2) + ' cm';
+                        if (dimDepth) dimDepth.textContent = parseFloat(d.depth).toFixed(2) + ' cm';
+                    }
+                })
+                .catch(() => {});
+        }
+        loadDimensions();
+
+        // Load cumulative scale from model data
+        {% if model.cumulative_scale %}
+        if (cumulativeScale) cumulativeScale.textContent = '{{ model.cumulative_scale }}x';
+        {% endif %}
+
+        function applyTransform() {
+            if (!modelViewer) return;
+            const s = parseFloat(scaleSlider?.value || 1);
+            const rx = parseFloat(rotateXSlider?.value || 0);
+            const ry = parseFloat(rotateYSlider?.value || 0);
+            const rz = parseFloat(rotateZSlider?.value || 0);
+
+            modelViewer.scale = s + ' ' + s + ' ' + s;
+            modelViewer.orientation = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
+        }
+
+        scaleSlider?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (scaleInput) scaleInput.value = val.toFixed(1);
+            applyTransform();
+        });
+
+        scaleInput?.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value);
+            if (isNaN(val) || val < 0.1) val = 0.1;
+            if (val > 10) val = 10;
+            if (scaleSlider) scaleSlider.value = val;
+            applyTransform();
+        });
+
+        rotateXSlider?.addEventListener('input', (e) => {
+            if (rotateXValue) rotateXValue.textContent = e.target.value + '\u00B0';
+            applyTransform();
+        });
+
+        rotateYSlider?.addEventListener('input', (e) => {
+            if (rotateYValue) rotateYValue.textContent = e.target.value + '\u00B0';
+            applyTransform();
+        });
+
+        rotateZSlider?.addEventListener('input', (e) => {
+            if (rotateZValue) rotateZValue.textContent = e.target.value + '\u00B0';
+            applyTransform();
+        });
+
+        resetTransform?.addEventListener('click', () => {
+            if (scaleSlider) scaleSlider.value = 1;
+            if (scaleInput) scaleInput.value = '1.0';
+            if (rotateXSlider) rotateXSlider.value = 0;
+            if (rotateYSlider) rotateYSlider.value = 0;
+            if (rotateZSlider) rotateZSlider.value = 0;
+            if (rotateXValue) rotateXValue.textContent = '0\u00B0';
+            if (rotateYValue) rotateYValue.textContent = '0\u00B0';
+            if (rotateZValue) rotateZValue.textContent = '0\u00B0';
+            if (modelViewer) {
+                modelViewer.scale = '1 1 1';
+                modelViewer.orientation = '0deg 0deg 0deg';
+            }
+        });
+
+        // Apply initial rotation if stored
+        {% if applied_rotation %}
+        (function() {
+            const rot = {{ applied_rotation | tojson }};
+            if (rot) {
+                const rx = rot.x || 0;
+                const ry = rot.y || 0;
+                const rz = rot.z || 0;
+                if (rotateXSlider) { rotateXSlider.value = rx; if (rotateXValue) rotateXValue.textContent = rx + '\u00B0'; }
+                if (rotateYSlider) { rotateYSlider.value = ry; if (rotateYValue) rotateYValue.textContent = ry + '\u00B0'; }
+                if (rotateZSlider) { rotateZSlider.value = rz; if (rotateZValue) rotateZValue.textContent = rz + '\u00B0'; }
+                if (modelViewer) modelViewer.orientation = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
+            }
+        })();
+        {% endif %}
+
+        // ===================================================================
+        // ANNOTATIONS PANEL
+        // ===================================================================
+        let savedViews = [];
+        let hotspotMode = false;
+        let hotspotCount = 0;
+
+        const saveCameraView = document.getElementById('saveCameraView');
+        const cameraViewsList = document.getElementById('cameraViewsList');
+        const toggleHotspotMode = document.getElementById('toggleHotspotMode');
+        const hotspotsList = document.getElementById('hotspotsList');
+        const clearAnnotations = document.getElementById('clearAnnotations');
+
+        saveCameraView?.addEventListener('click', () => {
+            if (!modelViewer) return;
+            const view = {
+                name: 'View ' + (savedViews.length + 1),
+                orbit: modelViewer.getCameraOrbit(),
+                target: modelViewer.getCameraTarget(),
+                fov: modelViewer.getFieldOfView()
+            };
+            savedViews.push(view);
+            renderCameraViews();
+        });
+
+        function renderCameraViews() {
+            if (!cameraViewsList) return;
+            if (savedViews.length === 0) {
+                cameraViewsList.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No saved views</p>';
+                return;
+            }
+            cameraViewsList.innerHTML = '';
+            savedViews.forEach((v, i) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs';
+                div.innerHTML = '<button class="text-blue-600 dark:text-blue-400 hover:underline font-medium load-view-btn">' + v.name + '</button>' +
+                    '<button class="text-red-500 hover:text-red-700 delete-view-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+                div.querySelector('.load-view-btn').addEventListener('click', () => {
+                    modelViewer.cameraOrbit = v.orbit.toString();
+                    modelViewer.cameraTarget = v.target.toString();
+                    modelViewer.fieldOfView = v.fov + 'deg';
+                });
+                div.querySelector('.delete-view-btn').addEventListener('click', () => {
+                    savedViews.splice(i, 1);
+                    renderCameraViews();
+                });
+                cameraViewsList.appendChild(div);
+            });
+        }
+
+        // Hotspot mode
+        toggleHotspotMode?.addEventListener('click', () => {
+            hotspotMode = !hotspotMode;
+            toggleHotspotMode.textContent = hotspotMode ? 'Hotspot Mode: ON (click model)' : 'Click Model to Add Hotspot';
+            toggleHotspotMode.classList.toggle('bg-green-500', hotspotMode);
+            toggleHotspotMode.classList.toggle('text-white', hotspotMode);
+        });
+
+        modelViewer?.addEventListener('click', (e) => {
+            if (!hotspotMode) return;
+            const rect = modelViewer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const hit = modelViewer.positionAndNormalFromPoint(x, y);
+            if (!hit) return;
+
+            hotspotCount++;
+            const name = 'hotspot-' + hotspotCount;
+            const label = prompt('Hotspot label:', 'Point ' + hotspotCount);
+            if (!label) return;
+
+            const pos = hit.position;
+            const norm = hit.normal;
+            const hotspot = document.createElement('button');
+            hotspot.slot = 'hotspot-' + name;
+            hotspot.className = 'hotspot-dot';
+            hotspot.dataset.position = pos.x + 'm ' + pos.y + 'm ' + pos.z + 'm';
+            hotspot.dataset.normal = norm.x + 'm ' + norm.y + 'm ' + norm.z + 'm';
+            hotspot.dataset.visibility = 'visible';
+            hotspot.style.cssText = 'background:rgba(76,175,80,0.9);color:white;border:2px solid white;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
+            hotspot.textContent = hotspotCount;
+
+            const annotation = document.createElement('div');
+            annotation.slot = 'hotspot-' + name;
+            annotation.className = 'hotspot-annotation';
+            annotation.style.cssText = 'background:rgba(0,0,0,0.75);color:white;padding:4px 10px;border-radius:6px;font-size:11px;white-space:nowrap;pointer-events:none;margin-top:-40px;';
+            annotation.textContent = label;
+
+            modelViewer.appendChild(hotspot);
+            modelViewer.appendChild(annotation);
+
+            addHotspotToList(name, label, hotspot, annotation);
+        });
+
+        function addHotspotToList(name, label, hotspotEl, annotationEl) {
+            if (!hotspotsList) return;
+            if (hotspotsList.querySelector('.italic')) hotspotsList.innerHTML = '';
+
+            const div = document.createElement('div');
+            div.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs';
+            div.innerHTML = '<span class="text-gray-700 dark:text-gray-300">' + label + '</span>' +
+                '<button class="text-red-500 hover:text-red-700 delete-hotspot-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+            div.querySelector('.delete-hotspot-btn').addEventListener('click', () => {
+                hotspotEl.remove();
+                annotationEl.remove();
+                div.remove();
+                if (hotspotsList.children.length === 0) {
+                    hotspotsList.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>';
+                }
+            });
+            hotspotsList.appendChild(div);
+        }
+
+        clearAnnotations?.addEventListener('click', () => {
+            savedViews = [];
+            renderCameraViews();
+            hotspotCount = 0;
+            // Remove all hotspot elements from model-viewer
+            modelViewer?.querySelectorAll('[slot^="hotspot-"]').forEach(el => el.remove());
+            if (hotspotsList) hotspotsList.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 italic">No hotspots yet</p>';
+        });
+
+        // ===================================================================
+        // VERSION HISTORY
+        // ===================================================================
+        const versionList = document.getElementById('versionList');
+        const refreshVersions = document.getElementById('refreshVersions');
+
+        function loadVersions() {
+            if (!versionList) return;
+            versionList.innerHTML = '<div class="text-center py-4"><svg class="animate-spin h-6 w-6 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>';
+
+            fetch('/api/versions/' + modelId)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success || !data.versions || data.versions.length === 0) {
+                        versionList.innerHTML = '<p class="text-xs text-gray-500 dark:text-gray-400 text-center py-4 italic">No version history</p>';
+                        return;
+                    }
+                    versionList.innerHTML = '';
+                    data.versions.forEach(v => {
+                        const div = document.createElement('div');
+                        div.className = 'p-3 bg-gray-50 dark:bg-gray-700 rounded-lg';
+
+                        const typeColors = {
+                            'upload': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+                            'slice': 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300',
+                            'transform': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+                            'material': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
+                            'transform+material': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300'
+                        };
+                        const badgeClass = typeColors[v.operation_type] || 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-300';
+
+                        div.innerHTML = '<div class="flex items-center justify-between mb-2">' +
+                            '<div class="flex items-center gap-2">' +
+                            '<span class="font-bold text-xs text-gray-700 dark:text-gray-300">v' + v.version_number + '</span>' +
+                            '<span class="text-[10px] px-2 py-0.5 rounded-full font-medium ' + badgeClass + '">' + v.operation_type + '</span>' +
+                            '</div>' +
+                            '<span class="text-[10px] text-gray-400">' + (v.created_at || '') + '</span>' +
+                            '</div>' +
+                            (v.comment ? '<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">' + v.comment + '</p>' : '') +
+                            (v.file_size_formatted ? '<p class="text-[10px] text-gray-400 mb-2">Size: ' + v.file_size_formatted + '</p>' : '') +
+                            '<div class="flex gap-1">' +
+                            '<button class="restore-btn flex-1 px-2 py-1 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded font-medium">Restore</button>' +
+                            '<button class="download-btn flex-1 px-2 py-1 text-[10px] bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded font-medium">Download</button>' +
+                            '<button class="delete-btn px-2 py-1 text-[10px] bg-red-500 hover:bg-red-600 text-white rounded font-medium">Del</button>' +
+                            '</div>';
+
+                        div.querySelector('.restore-btn').addEventListener('click', async () => {
+                            if (!confirm('Restore to version ' + v.version_number + '? Current model will be replaced.')) return;
+                            try {
+                                const res = await fetch('/api/versions/' + modelId + '/restore/' + v.version_number, { method: 'POST' });
+                                const result = await res.json();
+                                if (result.success) window.location.reload();
+                                else alert('Restore failed: ' + (result.error || ''));
+                            } catch (e) { alert('Restore failed.'); }
+                        });
+
+                        div.querySelector('.download-btn').addEventListener('click', () => {
+                            window.open('/api/versions/' + modelId + '/download/' + v.version_number, '_blank');
+                        });
+
+                        div.querySelector('.delete-btn').addEventListener('click', async () => {
+                            if (!confirm('Delete version ' + v.version_number + '?')) return;
+                            try {
+                                const res = await fetch('/api/versions/' + modelId + '/delete/' + v.version_number, { method: 'DELETE' });
+                                const result = await res.json();
+                                if (result.success) loadVersions();
+                                else alert('Delete failed: ' + (result.error || ''));
+                            } catch (e) { alert('Delete failed.'); }
+                        });
+
+                        versionList.appendChild(div);
+                    });
+                })
+                .catch(err => {
+                    console.error('Failed to load versions:', err);
+                    versionList.innerHTML = '<p class="text-xs text-red-500 text-center py-4">Failed to load versions</p>';
+                });
+        }
+
+        loadVersions();
+        refreshVersions?.addEventListener('click', loadVersions);
+
+        // ===================================================================
+        // SAVE CHANGES
+        // ===================================================================
+        const saveChangesBtn = document.getElementById('saveChanges');
+
+        function gatherModifications() {
+            const mods = {};
+
+            // Material modifications
+            const mats = getMaterials();
+            if (mats.length > 0) {
+                const mat = mats[0];
+                const cf = mat.pbrMetallicRoughness?.baseColorFactor;
+                mods.material = {
+                    color: cf ? [cf[0], cf[1], cf[2]] : null,
+                    metalness: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
+                    roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1,
+                    opacity: cf ? cf[3] : 1
+                };
+            }
+
+            // Transform modifications
+            const scale = parseFloat(scaleSlider?.value || 1);
+            const rx = parseFloat(rotateXSlider?.value || 0);
+            const ry = parseFloat(rotateYSlider?.value || 0);
+            const rz = parseFloat(rotateZSlider?.value || 0);
+
+            if (scale !== 1 || rx !== 0 || ry !== 0 || rz !== 0) {
+                mods.transform = {
+                    scale: scale,
+                    rotation: { x: rx, y: ry, z: rz }
+                };
+            }
+
+            return mods;
+        }
+
+        saveChangesBtn?.addEventListener('click', async () => {
+            const modifications = gatherModifications();
+            if (Object.keys(modifications).length === 0) {
+                alert('No changes to save.');
+                return;
+            }
+
+            saveChangesBtn.disabled = true;
+            saveChangesBtn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Saving...';
+
+            try {
+                const response = await fetch('/save_modifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId, modifications })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Save failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Save error:', err);
+                alert('Failed to save changes.');
+            } finally {
+                saveChangesBtn.disabled = false;
+                saveChangesBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> Save & Apply to AR';
+            }
+        });
+    });
+    </script>
 </body>
 </html>
 

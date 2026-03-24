@@ -1785,16 +1785,6 @@ void main() {
                         Reset Material
                     </button>
                     
-                    <!-- Export Modified Model Button -->
-                    <button id="exportModified" class="btn-primary w-full px-3 py-2 mt-3 text-xs rounded font-semibold flex items-center justify-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
-                        Export Modified Model
-                    </button>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                        Saves material & transform changes to GLB
-                    </p>
                 </div>
             </div>
 
@@ -2456,7 +2446,6 @@ void main() {
         const texturePreview = document.getElementById('texturePreview');
         const texturePreviewImg = document.getElementById('texturePreviewImg');
         const resetMaterial = document.getElementById('resetMaterial');
-        const exportModified = document.getElementById('exportModified');
 
         // Store original material state for reset
         let originalMaterials = [];
@@ -2615,49 +2604,6 @@ void main() {
             if (opacitySlider) { opacitySlider.value = 1; if (opacityValue) opacityValue.textContent = '1.0'; }
             if (texturePreview) texturePreview.classList.add('hidden');
             if (textureUpload) textureUpload.value = '';
-        });
-
-        // Export modified model
-        exportModified?.addEventListener('click', async () => {
-            exportModified.disabled = true;
-            exportModified.textContent = 'Exporting...';
-            try {
-                const modifications = gatherModifications();
-                // Convert pending texture file to base64 if present
-                if (modifications.material?._pendingTextureFile) {
-                    const file = modifications.material._pendingTextureFile;
-                    const base64 = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-                    modifications.material.texture = base64;
-                    delete modifications.material._pendingTextureFile;
-                }
-                const response = await fetch('/apply_modifications', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model_id: modelId, modifications })
-                });
-                const result = await response.json();
-                if (result.success && result.download_url) {
-                    const a = document.createElement('a');
-                    a.href = result.download_url;
-                    a.download = result.filename || 'modified_model.glb';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                } else {
-                    alert('Export failed: ' + (result.error || 'Unknown error'));
-                }
-            } catch (err) {
-                console.error('Export error:', err);
-                alert('Export failed.');
-            } finally {
-                exportModified.disabled = false;
-                exportModified.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Export Modified Model';
-            }
         });
 
         // ===================================================================

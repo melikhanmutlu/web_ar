@@ -2623,6 +2623,18 @@ void main() {
             exportModified.textContent = 'Exporting...';
             try {
                 const modifications = gatherModifications();
+                // Convert pending texture file to base64 if present
+                if (modifications.material?._pendingTextureFile) {
+                    const file = modifications.material._pendingTextureFile;
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    modifications.material.texture = base64;
+                    delete modifications.material._pendingTextureFile;
+                }
                 const response = await fetch('/apply_modifications', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2980,6 +2992,11 @@ void main() {
                     roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1,
                     opacity: cf ? cf[3] : 1
                 };
+
+                // Include texture if one was uploaded
+                if (textureUpload?.files?.length > 0) {
+                    mods.material._pendingTextureFile = textureUpload.files[0];
+                }
             }
 
             // Transform modifications
@@ -3009,6 +3026,19 @@ void main() {
             saveChangesBtn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Saving...';
 
             try {
+                // Convert pending texture file to base64 if present
+                if (modifications.material?._pendingTextureFile) {
+                    const file = modifications.material._pendingTextureFile;
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    modifications.material.texture = base64;
+                    delete modifications.material._pendingTextureFile;
+                }
+
                 const response = await fetch('/save_modifications', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

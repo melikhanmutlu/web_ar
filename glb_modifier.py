@@ -174,10 +174,12 @@ def apply_material_modifications(gltf, material_mods):
 def _ensure_texcoord0(gltf):
     """
     Generate TEXCOORD_0 for mesh primitives that lack it.
-    Uses normalised bounding-box projection (X→U, Y→V) so that
-    any texture applied later has valid UV coordinates.
+    Uses triplanar box projection: each vertex is UV-mapped based on
+    the dominant axis of its face normal, giving a natural-looking
+    texture wrap on most model shapes.
     """
     from pygltflib import Accessor, BufferView as BV
+    import math
 
     blob = gltf.binary_blob()
     if not blob:
@@ -207,19 +209,53 @@ def _ensure_texcoord0(gltf):
                 x, y, z = struct.unpack_from('<3f', blob, o)
                 positions.append((x, y, z))
 
-            # Compute bounding box
+            # Read face normals if available, else compute from indices
+            norm_idx = getattr(prim.attributes, 'NORMAL', None)
+            normals = None
+            if norm_idx is not None:
+                nacc = gltf.accessors[norm_idx]
+                nbv = gltf.bufferViews[nacc.bufferView]
+                noff = (nbv.byteOffset or 0) + (nacc.byteOffset or 0)
+                nstride = nbv.byteStride or 12
+                normals = []
+                for v in range(nacc.count):
+                    o = noff + v * nstride
+                    nx, ny, nz = struct.unpack_from('<3f', blob, o)
+                    normals.append((nx, ny, nz))
+
+            # Compute bounding box for normalisation
             xs = [p[0] for p in positions]
             ys = [p[1] for p in positions]
-            min_x, max_x = min(xs), max(xs)
-            min_y, max_y = min(ys), max(ys)
-            range_x = max_x - min_x if max_x != min_x else 1.0
-            range_y = max_y - min_y if max_y != min_y else 1.0
+            zs = [p[2] for p in positions]
+            min_v = [min(xs), min(ys), min(zs)]
+            max_v = [max(xs), max(ys), max(zs)]
+            rng = [max_v[i] - min_v[i] if max_v[i] != min_v[i] else 1.0 for i in range(3)]
 
-            # Generate UVs: normalised box projection
+            # Generate UVs: triplanar box projection based on vertex normal
             uv_data = bytearray()
-            for x, y, z in positions:
-                u = (x - min_x) / range_x
-                v = (y - min_y) / range_y
+            for i, (x, y, z) in enumerate(positions):
+                # Normalised coords in [0,1]
+                nx = (x - min_v[0]) / rng[0]
+                ny = (y - min_v[1]) / rng[1]
+                nz = (z - min_v[2]) / rng[2]
+
+                if normals and i < len(normals):
+                    anx, any_, anz = abs(normals[i][0]), abs(normals[i][1]), abs(normals[i][2])
+                else:
+                    # Fallback: use spherical projection
+                    anx, any_, anz = 0, 0, 1
+
+                # Pick projection plane based on dominant normal axis
+                if anx >= any_ and anx >= anz:
+                    # X-dominant: project on YZ plane
+                    u, v = nz, ny
+                elif any_ >= anx and any_ >= anz:
+                    # Y-dominant: project on XZ plane
+                    u, v = nx, nz
+                else:
+                    # Z-dominant: project on XY plane
+                    u, v = nx, ny
+
                 uv_data += struct.pack('<2f', u, v)
 
             # Add BufferView for UV data
@@ -353,12 +389,15 @@ def apply_texture_modifications(gltf, texture_data_base64):
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
-                    material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                    # Keep existing baseColorFactor (user's chosen color tint)
+                    # Only set to white if it was never explicitly set
+                    if material.pbrMetallicRoughness.baseColorFactor is None:
+                        material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
                     texture_info = TextureInfo()
                     texture_info.index = texture_index
                     texture_info.texCoord = 0
                     material.pbrMetallicRoughness.baseColorTexture = texture_info
-                    logger.info(f"Applied texture to material {i}")
+                    logger.info(f"Applied texture to material {i} (tint={material.pbrMetallicRoughness.baseColorFactor})")
 
         logger.info("Texture embedding completed successfully")
         return gltf

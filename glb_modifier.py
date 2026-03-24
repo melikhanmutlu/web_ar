@@ -7,7 +7,10 @@ Preserves animations, skins, and all other GLB features
 import numpy as np
 import logging
 from pathlib import Path
-from pygltflib import GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo
+from pygltflib import (
+    GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo,
+    Material, PbrMetallicRoughness,
+)
 import struct
 import base64
 from PIL import Image
@@ -66,10 +69,22 @@ def apply_material_modifications(gltf, material_mods):
         material_mods: dict with 'color', 'metalness', 'roughness'
     """
     logger.info(f"Applying material modifications: {material_mods}")
-    
+
     if not gltf.materials:
-        logger.warning("No materials found in GLB")
-        return gltf
+        logger.info("No materials in GLB – creating a default PBR material")
+        gltf.materials = [Material(
+            pbrMetallicRoughness=PbrMetallicRoughness(
+                baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+                metallicFactor=0.0,
+                roughnessFactor=1.0,
+            ),
+            doubleSided=True,
+        )]
+        # Assign the new material to all mesh primitives that lack one
+        for mesh in (gltf.meshes or []):
+            for prim in (mesh.primitives or []):
+                if prim.material is None:
+                    prim.material = 0
     
     for i, material in enumerate(gltf.materials):
         # Ensure material has PBR metallic roughness
@@ -105,13 +120,17 @@ def apply_material_modifications(gltf, material_mods):
         # Apply base color with opacity
         if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
-                color_hex = material_mods['color']
-                color_rgb = hex_to_rgb(color_hex)
+                raw_color = material_mods['color']
+                # Accept both hex string ("#FF0000") and RGB float array ([0.78, 0.2, 0.2])
+                if isinstance(raw_color, (list, tuple)):
+                    color_rgb = tuple(float(c) for c in raw_color[:3])
+                else:
+                    color_rgb = hex_to_rgb(raw_color)
                 # Get opacity value (default 1.0)
                 opacity = float(material_mods.get('opacity', 1.0))
                 # Set baseColorFactor (RGBA)
                 pbr.baseColorFactor = list(color_rgb) + [opacity]
-                logger.info(f"Applied color {color_hex} with opacity {opacity} to material {i}")
+                logger.info(f"Applied color {raw_color} with opacity {opacity} to material {i}")
                 
                 # Set alpha mode based on opacity
                 if opacity < 1.0:
@@ -152,40 +171,151 @@ def apply_material_modifications(gltf, material_mods):
     return gltf
 
 
+def _ensure_texcoord0(gltf):
+    """
+    Generate TEXCOORD_0 for mesh primitives that lack it.
+    Uses triplanar box projection: each vertex is UV-mapped based on
+    the dominant axis of its face normal, giving a natural-looking
+    texture wrap on most model shapes.
+    """
+    from pygltflib import Accessor, BufferView as BV
+    import math
+
+    blob = gltf.binary_blob()
+    if not blob:
+        blob = b""
+
+    extra_bytes = bytearray()
+
+    for mesh in (gltf.meshes or []):
+        for prim in (mesh.primitives or []):
+            if getattr(prim.attributes, 'TEXCOORD_0', None) is not None:
+                continue  # already has UVs
+
+            pos_idx = getattr(prim.attributes, 'POSITION', None)
+            if pos_idx is None:
+                continue
+
+            # Read vertex positions
+            acc = gltf.accessors[pos_idx]
+            bv = gltf.bufferViews[acc.bufferView]
+            offset = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+            stride = bv.byteStride or 12  # 3 floats * 4 bytes
+            count = acc.count
+
+            positions = []
+            for v in range(count):
+                o = offset + v * stride
+                x, y, z = struct.unpack_from('<3f', blob, o)
+                positions.append((x, y, z))
+
+            # Read face normals if available, else compute from indices
+            norm_idx = getattr(prim.attributes, 'NORMAL', None)
+            normals = None
+            if norm_idx is not None:
+                nacc = gltf.accessors[norm_idx]
+                nbv = gltf.bufferViews[nacc.bufferView]
+                noff = (nbv.byteOffset or 0) + (nacc.byteOffset or 0)
+                nstride = nbv.byteStride or 12
+                normals = []
+                for v in range(nacc.count):
+                    o = noff + v * nstride
+                    nx, ny, nz = struct.unpack_from('<3f', blob, o)
+                    normals.append((nx, ny, nz))
+
+            # Compute bounding box for normalisation
+            xs = [p[0] for p in positions]
+            ys = [p[1] for p in positions]
+            zs = [p[2] for p in positions]
+            min_v = [min(xs), min(ys), min(zs)]
+            max_v = [max(xs), max(ys), max(zs)]
+            rng = [max_v[i] - min_v[i] if max_v[i] != min_v[i] else 1.0 for i in range(3)]
+
+            # Generate UVs: triplanar box projection based on vertex normal
+            uv_data = bytearray()
+            for i, (x, y, z) in enumerate(positions):
+                # Normalised coords in [0,1]
+                nx = (x - min_v[0]) / rng[0]
+                ny = (y - min_v[1]) / rng[1]
+                nz = (z - min_v[2]) / rng[2]
+
+                if normals and i < len(normals):
+                    anx, any_, anz = abs(normals[i][0]), abs(normals[i][1]), abs(normals[i][2])
+                else:
+                    # Fallback: use spherical projection
+                    anx, any_, anz = 0, 0, 1
+
+                # Pick projection plane based on dominant normal axis
+                if anx >= any_ and anx >= anz:
+                    # X-dominant: project on YZ plane
+                    u, v = nz, ny
+                elif any_ >= anx and any_ >= anz:
+                    # Y-dominant: project on XZ plane
+                    u, v = nx, nz
+                else:
+                    # Z-dominant: project on XY plane
+                    u, v = nx, ny
+
+                uv_data += struct.pack('<2f', u, v)
+
+            # Add BufferView for UV data
+            bv_offset = len(blob) + len(extra_bytes)
+            new_bv = BV(buffer=0, byteOffset=bv_offset, byteLength=len(uv_data))
+            bv_index = len(gltf.bufferViews)
+            gltf.bufferViews.append(new_bv)
+
+            # Add Accessor
+            new_acc = Accessor(
+                bufferView=bv_index,
+                byteOffset=0,
+                componentType=5126,  # FLOAT
+                count=count,
+                type='VEC2',
+                max=[1.0, 1.0],
+                min=[0.0, 0.0],
+            )
+            acc_index = len(gltf.accessors)
+            gltf.accessors.append(new_acc)
+
+            prim.attributes.TEXCOORD_0 = acc_index
+            extra_bytes += uv_data
+            logger.info(f"Generated TEXCOORD_0 for primitive ({count} vertices)")
+
+    # Append extra bytes to binary buffer
+    if extra_bytes:
+        new_blob = blob + bytes(extra_bytes)
+        gltf.set_binary_blob(new_blob)
+        if gltf.buffers:
+            gltf.buffers[0].byteLength = len(new_blob)
+
+    return gltf
+
+
 def apply_texture_modifications(gltf, texture_data_base64):
     """
-    Apply texture to all materials in the GLTF
-    Embeds texture as base64 data URI in GLB
-    
-    Args:
-        gltf: GLTF2 object
-        texture_data_base64: Base64 encoded image data (data:image/png;base64,...)
-    
-    Returns:
-        gltf: Modified GLTF2 object
+    Apply texture to all materials in the GLTF.
+    Embeds the image into the GLB binary buffer (not as data URI)
+    and generates TEXCOORD_0 if the mesh lacks UV coordinates.
     """
     if not texture_data_base64:
         logger.info("No texture data provided, skipping texture modification")
         return gltf
-    
+
     try:
         logger.info("Applying texture modifications")
-        
+
         # Decode base64 image
         if ',' in texture_data_base64:
-            # Remove data URI prefix (data:image/png;base64,)
             texture_data_base64 = texture_data_base64.split(',')[1]
-        
+
         image_bytes = base64.b64decode(texture_data_base64)
         logger.info(f"Decoded texture image: {len(image_bytes)} bytes")
-        
-        # Open image with PIL to get format and optimize
+
+        # Open image with PIL to optimise
         img = Image.open(io.BytesIO(image_bytes))
         logger.info(f"Image format: {img.format}, size: {img.size}, mode: {img.mode}")
-        
-        # Convert to RGB if needed (remove alpha for JPG compatibility)
+
         if img.mode in ('RGBA', 'LA', 'P'):
-            # Create white background
             background = Image.new('RGB', img.size, (255, 255, 255))
             if img.mode == 'P':
                 img = img.convert('RGBA')
@@ -193,73 +323,85 @@ def apply_texture_modifications(gltf, texture_data_base64):
             img = background
         elif img.mode != 'RGB':
             img = img.convert('RGB')
-        
-        # Optimize image size (max 2048x2048 for performance)
+
         max_size = 2048
         if img.width > max_size or img.height > max_size:
             img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             logger.info(f"Resized image to: {img.size}")
-        
-        # Save as PNG to buffer
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG', optimize=True)
-        image_bytes = buffer.getvalue()
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG', optimize=True)
+        image_bytes = buf.getvalue()
         logger.info(f"Optimized texture: {len(image_bytes)} bytes")
-        
-        # Create data URI for embedding
-        image_data_uri = f"data:image/png;base64,{base64.b64encode(image_bytes).decode('utf-8')}"
-        
-        # Initialize arrays if not present
+
+        # ── Embed image in binary buffer (not data URI) ──
+        blob = gltf.binary_blob() or b""
+        img_offset = len(blob)
+        new_blob = blob + image_bytes
+        gltf.set_binary_blob(new_blob)
+        if gltf.buffers:
+            gltf.buffers[0].byteLength = len(new_blob)
+
+        # Initialize arrays
         if gltf.images is None:
             gltf.images = []
         if gltf.textures is None:
             gltf.textures = []
         if gltf.samplers is None:
             gltf.samplers = []
-        
-        # Add sampler (texture filtering settings)
-        sampler = Sampler()
-        sampler.magFilter = 9729  # LINEAR
-        sampler.minFilter = 9987  # LINEAR_MIPMAP_LINEAR
-        sampler.wrapS = 10497     # REPEAT
-        sampler.wrapT = 10497     # REPEAT
-        sampler_index = len(gltf.samplers)
-        gltf.samplers.append(sampler)
-        
-        # Add image with data URI
+        if gltf.bufferViews is None:
+            gltf.bufferViews = []
+
+        # BufferView for the image
+        from pygltflib import BufferView as BV
+        img_bv = BV(buffer=0, byteOffset=img_offset, byteLength=len(image_bytes))
+        img_bv_index = len(gltf.bufferViews)
+        gltf.bufferViews.append(img_bv)
+
+        # Image referencing the bufferView (no uri)
         gltf_image = GLTFImage()
-        gltf_image.uri = image_data_uri
+        gltf_image.bufferView = img_bv_index
+        gltf_image.mimeType = "image/png"
         image_index = len(gltf.images)
         gltf.images.append(gltf_image)
-        logger.info(f"Added image at index {image_index}")
-        
-        # Add texture referencing the image
+        logger.info(f"Embedded image in buffer: {len(image_bytes)} bytes at bv[{img_bv_index}]")
+
+        # Sampler
+        sampler = Sampler()
+        sampler.magFilter = 9729   # LINEAR
+        sampler.minFilter = 9987   # LINEAR_MIPMAP_LINEAR
+        sampler.wrapS = 10497      # REPEAT
+        sampler.wrapT = 10497      # REPEAT
+        sampler_index = len(gltf.samplers)
+        gltf.samplers.append(sampler)
+
+        # Texture
         texture = Texture()
         texture.source = image_index
         texture.sampler = sampler_index
         texture_index = len(gltf.textures)
         gltf.textures.append(texture)
-        logger.info(f"Added texture at index {texture_index}")
-        
+
+        # ── Ensure mesh has TEXCOORD_0 ──
+        gltf = _ensure_texcoord0(gltf)
+
         # Apply texture to all materials
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
-                    # Set baseColorFactor to white so texture is visible (not tinted)
-                    # This is crucial - if baseColorFactor is dark, texture will appear dark
-                    material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
-                    logger.info(f"Set baseColorFactor to white for material {i}")
-                    
-                    # Apply texture using proper TextureInfo object
+                    # Keep existing baseColorFactor (user's chosen color tint)
+                    # Only set to white if it was never explicitly set
+                    if material.pbrMetallicRoughness.baseColorFactor is None:
+                        material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
                     texture_info = TextureInfo()
                     texture_info.index = texture_index
                     texture_info.texCoord = 0
                     material.pbrMetallicRoughness.baseColorTexture = texture_info
-                    logger.info(f"Applied texture to material {i}")
-        
-        logger.info("✅ Texture embedding completed successfully")
+                    logger.info(f"Applied texture to material {i} (tint={material.pbrMetallicRoughness.baseColorFactor})")
+
+        logger.info("Texture embedding completed successfully")
         return gltf
-        
+
     except Exception as e:
         logger.error(f"Failed to apply texture: {e}", exc_info=True)
         return gltf

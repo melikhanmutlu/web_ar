@@ -7,7 +7,10 @@ Preserves animations, skins, and all other GLB features
 import numpy as np
 import logging
 from pathlib import Path
-from pygltflib import GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo
+from pygltflib import (
+    GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo,
+    Material, PbrMetallicRoughness,
+)
 import struct
 import base64
 from PIL import Image
@@ -66,10 +69,22 @@ def apply_material_modifications(gltf, material_mods):
         material_mods: dict with 'color', 'metalness', 'roughness'
     """
     logger.info(f"Applying material modifications: {material_mods}")
-    
+
     if not gltf.materials:
-        logger.warning("No materials found in GLB")
-        return gltf
+        logger.info("No materials in GLB – creating a default PBR material")
+        gltf.materials = [Material(
+            pbrMetallicRoughness=PbrMetallicRoughness(
+                baseColorFactor=[1.0, 1.0, 1.0, 1.0],
+                metallicFactor=0.0,
+                roughnessFactor=1.0,
+            ),
+            doubleSided=True,
+        )]
+        # Assign the new material to all mesh primitives that lack one
+        for mesh in (gltf.meshes or []):
+            for prim in (mesh.primitives or []):
+                if prim.material is None:
+                    prim.material = 0
     
     for i, material in enumerate(gltf.materials):
         # Ensure material has PBR metallic roughness
@@ -105,13 +120,17 @@ def apply_material_modifications(gltf, material_mods):
         # Apply base color with opacity
         if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
-                color_hex = material_mods['color']
-                color_rgb = hex_to_rgb(color_hex)
+                raw_color = material_mods['color']
+                # Accept both hex string ("#FF0000") and RGB float array ([0.78, 0.2, 0.2])
+                if isinstance(raw_color, (list, tuple)):
+                    color_rgb = tuple(float(c) for c in raw_color[:3])
+                else:
+                    color_rgb = hex_to_rgb(raw_color)
                 # Get opacity value (default 1.0)
                 opacity = float(material_mods.get('opacity', 1.0))
                 # Set baseColorFactor (RGBA)
                 pbr.baseColorFactor = list(color_rgb) + [opacity]
-                logger.info(f"Applied color {color_hex} with opacity {opacity} to material {i}")
+                logger.info(f"Applied color {raw_color} with opacity {opacity} to material {i}")
                 
                 # Set alpha mode based on opacity
                 if opacity < 1.0:

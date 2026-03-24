@@ -2475,6 +2475,32 @@ void main() {
                     metallic: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
                     roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1
                 }));
+
+                // Sync UI sliders/inputs with the model's actual material values
+                if (originalMaterials.length > 0) {
+                    const om = originalMaterials[0];
+
+                    // Base Color → color picker + hex input
+                    const r = Math.round(om.baseColor[0] * 255);
+                    const g = Math.round(om.baseColor[1] * 255);
+                    const b = Math.round(om.baseColor[2] * 255);
+                    const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+                    if (matColor) matColor.value = hex;
+                    if (matColorHex) matColorHex.value = hex.toUpperCase();
+
+                    // Metalness
+                    if (metalnessSlider) metalnessSlider.value = om.metallic;
+                    if (metalnessValue) metalnessValue.textContent = om.metallic.toFixed(2);
+
+                    // Roughness
+                    if (roughnessSlider) roughnessSlider.value = om.roughness;
+                    if (roughnessValue) roughnessValue.textContent = om.roughness.toFixed(2);
+
+                    // Opacity
+                    const alpha = om.baseColor[3] ?? 1;
+                    if (opacitySlider) opacitySlider.value = alpha;
+                    if (opacityValue) opacityValue.textContent = alpha.toFixed(2);
+                }
             } catch (e) { console.warn('Could not capture original materials:', e); }
         }
 

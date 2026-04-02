@@ -42,12 +42,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
 # Default port
+ENV PORT=8080
 EXPOSE 8080
 
 # Start command
-# We use the find command for assimp just in case, but usually static path works. 
-# Re-using the logic from nixpacks for reliability
-CMD chmod +x /app/tools/FBX2glTF && \
-    export ASSIMP_PATH=$(find /usr/lib -name libassimp.so* | head -n 1 | xargs dirname) && \
-    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$ASSIMP_PATH" && \
-    gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --log-level info
+CMD ["/bin/sh", "-c", "chmod +x /app/tools/FBX2glTF && ASSIMP_PATH=$(find /usr/lib -name 'libassimp.so*' | head -n 1 | xargs dirname) && export LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH:$ASSIMP_PATH\" && exec gunicorn app:app --bind 0.0.0.0:${PORT} --workers 2 --threads 4 --timeout 300 --log-level info"]

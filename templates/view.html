@@ -1247,10 +1247,9 @@ void main() {
 
             function initSliderForAxis(axis) {
                 if (!meshBounds) return;
-                const axIdx = axis === 'x' ? 0 : (axis === 'y' ? 1 : 2);
-                const minVal = meshBounds.min[axIdx];
-                const maxVal = meshBounds.max[axIdx];
-                const centerVal = meshBounds.center[axIdx];
+                const minVal = meshBounds.min[axis];
+                const maxVal = meshBounds.max[axis];
+                const centerVal = meshBounds.center[axis];
 
                 const slider = document.querySelector('.slicer-slider[data-axis="' + axis + '"]');
                 const minDisp = document.querySelector('.slicer-min[data-axis="' + axis + '"]');
@@ -2736,62 +2735,7 @@ void main() {
         });
 
         // Apply Slice
-        slicerApplyBtn?.addEventListener('click', async () => {
-            // Find the first enabled axis
-            const enabledAxes = Object.entries(slicerState).filter(([, s]) => s.enabled);
-            if (enabledAxes.length === 0) {
-                alert('Please enable at least one axis to slice.');
-                return;
-            }
-
-            if (!confirm('This will permanently cut the model. Continue?')) return;
-
-            slicerApplyBtn.disabled = true;
-            if (slicerSpinner) slicerSpinner.classList.remove('hidden');
-
-            try {
-                // Process each enabled axis sequentially
-                for (const [axis, state] of enabledAxes) {
-                    const normalMap = {
-                        x: [1, 0, 0],
-                        y: [0, 1, 0],
-                        z: [0, 0, 1]
-                    };
-                    const originMap = {
-                        x: [state.value, 0, 0],
-                        y: [0, state.value, 0],
-                        z: [0, 0, state.value]
-                    };
-
-                    const response = await fetch('/slice_model', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model_id: modelId,
-                            plane_origin: originMap[axis],
-                            plane_normal: normalMap[axis],
-                            keep_side: state.side
-                        })
-                    });
-
-                    const result = await response.json();
-                    if (!result.success) {
-                        alert('Slice failed on ' + axis.toUpperCase() + ' axis: ' + (result.error || 'Unknown error'));
-                        return;
-                    }
-                }
-
-                // Success — reload to show sliced model
-                alert('Model sliced successfully! Reloading...');
-                window.location.reload();
-            } catch (err) {
-                console.error('[Slicer] Error:', err);
-                alert('Slice failed: ' + err.message);
-            } finally {
-                slicerApplyBtn.disabled = false;
-                if (slicerSpinner) slicerSpinner.classList.add('hidden');
-            }
-        });
+        // Apply slice is handled by the primary slicer handler above (slicerAxes scope)
 
         // Reset Slicer
         slicerResetBtn?.addEventListener('click', () => {

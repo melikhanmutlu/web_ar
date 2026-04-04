@@ -173,6 +173,64 @@
             background: rgba(156, 163, 175, 0.5);
         }
 
+        /* Sidebar collapse / expand */
+        #rightSidebar {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #rightSidebar.sidebar-collapsed {
+            transform: translateX(calc(100% + 1.5rem));
+        }
+
+        /* Sidebar toggle tab */
+        #sidebarToggle {
+            position: absolute;
+            left: -2rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2rem;
+            height: 3.5rem;
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-right: none;
+            border-radius: 0.5rem 0 0 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 30;
+            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.08);
+            transition: background 0.2s;
+        }
+        .dark #sidebarToggle {
+            background: rgba(31, 41, 55, 0.88);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+        #sidebarToggle:hover {
+            background: rgba(255, 255, 255, 0.98);
+        }
+        .dark #sidebarToggle:hover {
+            background: rgba(55, 65, 81, 0.98);
+        }
+
+        /* Save panel always visible at bottom */
+        #saveChangesWrapper {
+            position: sticky;
+            bottom: 0;
+            flex-shrink: 0;
+            z-index: 5;
+            padding-top: 2px;
+        }
+
+        /* Bottom controls shift when sidebar is open */
+        .bottom-right-controls {
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        body.sidebar-visible .bottom-right-controls {
+            right: calc(320px + 2.5rem) !important;
+        }
+
         @media (max-width: 1024px) {
             .sidebar-container {
                 width: 280px;
@@ -1535,13 +1593,13 @@ void main() {
     <div class="relative h-screen">
         <!-- Container div with w-full h-full classes -->
         <div class="absolute inset-0" style="z-index: 1;">
-            <model-viewer 
+            <model-viewer
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
                 shadow-intensity="1"
                 ar-scale="auto"
                 camera-controls
-                auto-rotate
+                interaction-prompt="none"
                 ar
                 ar-placement="floor"
             >
@@ -1562,8 +1620,15 @@ void main() {
 
 
         <!-- Right Side Panels -->
-        <div class="absolute right-6 top-20 bottom-20 z-20 flex flex-col gap-2 overflow-y-auto pr-1" style="max-width: 320px; width: 320px; scrollbar-width: thin; padding-bottom: 0.5rem;">
-            
+        <div id="rightSidebar" class="absolute right-6 top-20 bottom-4 z-20 flex flex-col gap-2 overflow-y-auto pr-1" style="max-width: 320px; width: 320px; scrollbar-width: thin; padding-bottom: 0.5rem;">
+
+            <!-- Sidebar Toggle Tab -->
+            <button id="sidebarToggle" title="Toggle panel">
+                <svg id="sidebarToggleIcon" class="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 18l6-6-6-6"/>
+                </svg>
+            </button>
+
             <!-- Reset Camera Button -->
             <button id="resetCamera" class="w-full px-4 py-3 glass-panel hover:bg-white/20 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 font-medium text-sm flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1574,7 +1639,7 @@ void main() {
             
             <!-- Animation Panel (shown only if model has animations) -->
             <div id="animationPanel" class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('animationContent')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('animationContent')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">
                         <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
@@ -1626,7 +1691,7 @@ void main() {
             
             <!-- Material Editor Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('materialPanel')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Material Editor</span>
                     <svg class="w-4 h-4 transform transition-transform" id="materialPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1692,7 +1757,7 @@ void main() {
 
             <!-- Model Transform Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('transformPanel')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('transformPanel')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Transform</span>
                     <svg class="w-4 h-4 transform transition-transform" id="transformPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1780,7 +1845,7 @@ void main() {
 
             <!-- Annotations Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('annotationsPanel')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('annotationsPanel')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Annotations</span>
                     <svg class="w-4 h-4 transform transition-transform" id="annotationsPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1821,7 +1886,7 @@ void main() {
 
             <!-- Version History Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('versionPanel')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('versionPanel')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Version History</span>
                     <svg class="w-4 h-4 transform transition-transform" id="versionPanelIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1848,7 +1913,7 @@ void main() {
 
             <!-- Model Slicer Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
-                <button class="panel-header w-full px-4 py-3 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
+                <button class="panel-header w-full px-4 py-2 flex items-center justify-between bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors" onclick="togglePanel('slicerPanel')">
                     <span class="font-semibold text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758L5 19m0-14l4.121 4.121"></path>
@@ -1942,7 +2007,8 @@ void main() {
                 </div>
             </div>
 
-            <!-- Save Changes Panel -->
+            <!-- Save Changes Panel (sticky bottom) -->
+            <div id="saveChangesWrapper">
             <div class="panel-container glass-panel rounded-xl shadow-xl overflow-hidden border-2 border-green-500/50">
                 <div class="p-4">
                     <h3 class="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
@@ -1968,8 +2034,9 @@ void main() {
                     </p>
                 </div>
             </div>
+            </div><!-- /saveChangesWrapper -->
 
-        </div>
+        </div><!-- /rightSidebar -->
 
 
         <!-- Bottom Right Controls -->
@@ -2260,8 +2327,40 @@ void main() {
             modelViewer.cameraOrbit = 'auto auto 105%';
             modelViewer.fieldOfView = 'auto';
             modelViewer.cameraTarget = 'auto auto auto';
-            modelViewer.autoRotate = true;
         });
+
+        // ===================================================================
+        // SIDEBAR TOGGLE
+        // ===================================================================
+        (function() {
+            const sidebar = document.getElementById('rightSidebar');
+            const toggleBtn = document.getElementById('sidebarToggle');
+            const toggleIcon = document.getElementById('sidebarToggleIcon');
+
+            const chevronRight = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 18l6-6-6-6"/>';
+            const chevronLeft  = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 18l-6-6 6-6"/>';
+
+            function setSidebar(open) {
+                if (open) {
+                    sidebar.classList.remove('sidebar-collapsed');
+                    document.body.classList.add('sidebar-visible');
+                    toggleIcon.innerHTML = chevronRight;
+                    toggleBtn.title = 'Close panel';
+                } else {
+                    sidebar.classList.add('sidebar-collapsed');
+                    document.body.classList.remove('sidebar-visible');
+                    toggleIcon.innerHTML = chevronLeft;
+                    toggleBtn.title = 'Open panel';
+                }
+            }
+
+            // Start open
+            setSidebar(true);
+
+            toggleBtn?.addEventListener('click', () => {
+                setSidebar(sidebar.classList.contains('sidebar-collapsed'));
+            });
+        })();
 
         // ===================================================================
         // ANIMATION PANEL

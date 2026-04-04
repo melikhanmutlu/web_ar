@@ -186,6 +186,10 @@ def _inject_materials(sliced_path, mat_data):
                 if prim.material is None or prim.material >= num_mats:
                     prim.material = 0      # fall back to first material
 
+        # ---- force double-sided so cut faces are visible from both sides ----
+        for mat in (gltf.materials or []):
+            mat.doubleSided = True
+
         gltf.save(sliced_path)
         logger.info(
             f"Restored {num_mats} materials, "
@@ -313,33 +317,21 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
         # ── Step 2: Slice geometry with trimesh ──
         loaded = trimesh.load(input_path, force=None)
 
-        if isinstance(loaded, trimesh.Scene):
-            logger.info(f"Scene with {len(loaded.geometry)} geometries")
+        if isinstance(loaded, (trimesh.Scene, trimesh.Trimesh)):
+            # dump(concatenate=True) applies all node transforms → world-space coords
+            # This fixes FBX-derived GLBs where root node has a rotation transform
+            if isinstance(loaded, trimesh.Scene):
+                logger.info(f"Scene with {len(loaded.geometry)} geometries — dumping to world space")
+                combined = loaded.dump(concatenate=True)
+            else:
+                logger.info(f"Single mesh: {len(loaded.vertices)} verts")
+                combined = loaded
 
-            kept = {}
-            for name, geom in loaded.geometry.items():
-                if not isinstance(geom, trimesh.Trimesh):
-                    kept[name] = geom
-                    continue
-
-                sliced = _slice_single_mesh(geom, plane_origin, plane_normal)
-                if sliced is not None:
-                    kept[name] = sliced
-                    logger.info(f"  {name}: {len(sliced.vertices)} verts after slice")
-                else:
-                    logger.info(f"  {name}: fully removed by slice plane")
-
-            if not any(isinstance(g, trimesh.Trimesh) for g in kept.values()):
-                logger.error("All geometries removed – nothing to export")
+            if combined is None or len(getattr(combined, 'vertices', [])) == 0:
+                logger.error("Mesh is empty after loading")
                 return False
 
-            loaded.geometry.clear()
-            loaded.geometry.update(kept)
-            loaded.export(output_path)
-
-        elif isinstance(loaded, trimesh.Trimesh):
-            logger.info(f"Single mesh: {len(loaded.vertices)} verts")
-            sliced = _slice_single_mesh(loaded, plane_origin, plane_normal)
+            sliced = _slice_single_mesh(combined, plane_origin, plane_normal)
             if sliced is None or len(sliced.vertices) == 0:
                 logger.error("Slicing resulted in empty mesh")
                 return False
@@ -377,11 +369,10 @@ def get_mesh_bounds(glb_path):
         loaded = trimesh.load(glb_path, force=None)
 
         if isinstance(loaded, trimesh.Scene):
-            meshes = [g for g in loaded.geometry.values()
-                      if isinstance(g, trimesh.Trimesh)]
-            if not meshes:
+            # dump(concatenate=True) applies all node transforms → world-space coordinates
+            combined = loaded.dump(concatenate=True)
+            if combined is None or len(getattr(combined, 'vertices', [])) == 0:
                 return None
-            combined = trimesh.util.concatenate(meshes)
         elif isinstance(loaded, trimesh.Trimesh):
             combined = loaded
         else:

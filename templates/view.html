@@ -388,7 +388,7 @@
 
         html, body {
             position: static;
-            background: var(--viewer-shell-bg);
+            background: #ffffff;
         }
 
         body.mobile-sidebar-open {
@@ -405,23 +405,11 @@
             position: absolute;
             inset: 0;
             z-index: 1;
-            background:
-                radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 36%),
-                radial-gradient(circle at top, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0) 24%),
-                var(--viewer-shell-bg);
+            background: #ffffff;
         }
 
         .viewer-stage::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-            background-size: 34px 34px;
-            opacity: 0.3;
-            mask-image: linear-gradient(180deg, transparent 0%, black 16%, black 80%, transparent 100%);
-            pointer-events: none;
+            display: none;
         }
 
         .dark .viewer-stage {
@@ -456,24 +444,24 @@
             pointer-events: auto;
             display: flex;
             align-items: center;
-            border: 1px solid var(--viewer-border);
-            background: rgba(255, 255, 255, 0.86);
-            box-shadow: var(--viewer-shadow);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
         }
 
         .dark .brand-shell,
         .dark .top-actions {
-            border-color: var(--viewer-border-dark);
-            background: rgba(15, 23, 42, 0.82);
-            box-shadow: var(--viewer-shadow-dark);
+            border: none;
+            background: transparent;
+            box-shadow: none;
         }
 
         .brand-shell {
             gap: 0.8rem;
-            padding: 1rem 1.25rem;
-            border-radius: 1.25rem;
+            padding: 0;
+            border-radius: 0;
             min-width: 14rem;
         }
 
@@ -519,8 +507,8 @@
 
         .top-actions {
             gap: 0.45rem;
-            padding: 0.45rem;
-            border-radius: 1.1rem;
+            padding: 0;
+            border-radius: 0;
         }
 
         .nav-button {
@@ -529,7 +517,9 @@
             padding: 0.65rem 0.95rem;
             border-radius: 999px;
             font-weight: 600;
-            box-shadow: none;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: rgba(255, 255, 255, 0.96);
         }
 
         .action-button {
@@ -537,6 +527,8 @@
             height: 2.75rem;
             flex: 0 0 2.75rem;
             margin: 0;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
         }
 
         #mobileSidebarBackdrop {
@@ -575,10 +567,11 @@
 
         .sidebar-section-label {
             padding: 0 0.25rem;
-            font-size: 0.68rem;
+            font-size: 0.62rem;
             font-weight: 800;
             letter-spacing: 0.14em;
             text-transform: uppercase;
+            opacity: 0.75;
         }
 
         .panel-container {
@@ -621,10 +614,15 @@
         }
 
         .bottom-right-controls {
+            position: fixed;
+            left: 50%;
+            right: auto;
+            bottom: 1rem;
+            transform: translateX(-50%);
             padding: 0.42rem 0.5rem;
             border-radius: 999px;
             border: 1px solid var(--viewer-border);
-            background: rgba(255, 255, 255, 0.84);
+            background: rgba(255, 255, 255, 0.96);
             box-shadow: var(--viewer-shadow);
         }
 
@@ -641,15 +639,24 @@
         }
 
         .color-picker-container {
-            min-width: 13rem;
-            background: rgba(255, 255, 255, 0.9);
+            min-width: 12rem;
+            background: rgba(255, 255, 255, 0.96);
             box-shadow: var(--viewer-shadow);
             border: 1px solid var(--viewer-border);
         }
 
         #saveChangesWrapper {
             margin-top: auto;
-            padding-top: 0.4rem;
+            padding-top: 0.8rem;
+        }
+
+        #saveChangesWrapper .panel-container {
+            background: rgba(255, 255, 255, 0.98);
+        }
+
+        .save-summary {
+            font-size: 0.72rem;
+            line-height: 1.4;
         }
 
         #mobileEditFab {
@@ -682,7 +689,7 @@
             .brand-shell {
                 min-width: 0;
                 flex: 1 1 auto;
-                padding: 0.8rem 0.95rem;
+                padding: 0;
             }
 
             .brand-mark {
@@ -720,6 +727,7 @@
                 left: 0.75rem;
                 right: 0.75rem;
                 bottom: 0.75rem;
+                transform: none;
                 justify-content: space-between;
                 border-radius: 1rem;
             }
@@ -1778,13 +1786,13 @@ void main() {
             <model-viewer
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
-                shadow-intensity="1.15"
-                shadow-softness="0.9"
-                exposure="1.05"
+                shadow-intensity="1.45"
+                shadow-softness="0.72"
+                exposure="0.96"
                 ar-scale="auto"
                 camera-controls
-                camera-orbit="32deg 74deg auto"
-                field-of-view="28deg"
+                camera-orbit="36deg 70deg auto"
+                field-of-view="24deg"
                 interaction-prompt="none"
                 ar
                 ar-placement="floor"
@@ -1797,7 +1805,7 @@ void main() {
             <div class="color-picker-container glass-panel rounded-lg p-2.5">
                 <div class="mb-2">
                     <p class="scene-dock-title font-semibold">Scene</p>
-                    <p class="scene-dock-subtitle">Tune canvas contrast for light or dark models.</p>
+                    <p class="scene-dock-subtitle">Canvas starts at pure white. Use this only when you need contrast.</p>
                 </div>
                 <div class="flex gap-1.5 items-center">
                     <input type="color" id="colorPicker" class="w-5 h-5 rounded cursor-pointer">
@@ -2231,7 +2239,7 @@ void main() {
 
 
         <!-- Bottom Right Controls -->
-        <div class="fixed bottom-3 right-3 flex gap-1.5 bottom-right-controls">
+        <div class="flex gap-1.5 bottom-right-controls">
             <!-- AR Button -->
             <button id="arButton" class="rounded-full bg-white bg-opacity-50 backdrop-blur-sm p-1.5 flex items-center justify-center hover:bg-opacity-75 transition-all hover:scale-110 hover:shadow-lg dark:bg-gray-800 dark:hover:bg-gray-700" title="View in AR">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2515,8 +2523,8 @@ void main() {
         // ===================================================================
         document.getElementById('resetCamera')?.addEventListener('click', () => {
             if (!modelViewer) return;
-            modelViewer.cameraOrbit = '32deg 74deg auto';
-            modelViewer.fieldOfView = '28deg';
+            modelViewer.cameraOrbit = '36deg 70deg auto';
+            modelViewer.fieldOfView = '24deg';
             modelViewer.cameraTarget = 'auto auto auto';
         });
 

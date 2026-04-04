@@ -107,37 +107,37 @@
         }
 
         .glass-panel {
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(226, 232, 240, 0.92);
             border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+            transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
         }
 
         .dark .glass-panel {
-            background: var(--glass-bg-dark);
-            border-color: var(--glass-border-dark);
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+            background: rgba(15, 23, 42, 0.9);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
         }
 
         .panel-container {
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            -webkit-backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--glass-border);
-            border-radius: 10px;
-            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.05);
-            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.97);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+            transition: border-color 0.18s ease, background 0.18s ease;
             overflow: hidden;
             flex-shrink: 0;
         }
 
         .dark .panel-container {
-            background: var(--glass-bg-dark);
-            border-color: var(--glass-border-dark);
-            box-shadow: 0 1px 8px rgba(0, 0, 0, 0.2);
+            background: rgba(15, 23, 42, 0.92);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18) !important;
         }
 
         .panel-content {
@@ -380,10 +380,10 @@
             --viewer-accent: #16a34a;
             --viewer-text: #0f172a;
             --viewer-muted: #64748b;
-            --viewer-border: rgba(148, 163, 184, 0.22);
+            --viewer-border: rgba(203, 213, 225, 0.95);
             --viewer-border-dark: rgba(255, 255, 255, 0.08);
-            --viewer-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
-            --viewer-shadow-dark: 0 18px 42px rgba(0, 0, 0, 0.32);
+            --viewer-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+            --viewer-shadow-dark: 0 1px 3px rgba(0, 0, 0, 0.18);
         }
 
         html, body {
@@ -473,27 +473,11 @@
             color: var(--viewer-text);
         }
 
-        .brand-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 0.15rem;
-        }
-
-        .brand-kicker {
-            font-size: 0.68rem;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            font-weight: 800;
-            color: #0f766e;
-        }
-
-        .brand-subtitle,
         .save-summary,
         .sidebar-section-label {
             color: var(--viewer-muted);
         }
 
-        .dark .brand-subtitle,
         .dark .save-summary,
         .dark .sidebar-section-label {
             color: #94a3b8;
@@ -549,13 +533,13 @@
 
         #rightSidebar {
             position: fixed !important;
-            top: 5.35rem !important;
+            top: 5rem !important;
             right: 1rem !important;
             bottom: 1rem !important;
-            width: 21rem !important;
-            max-width: 21rem !important;
+            width: 19.5rem !important;
+            max-width: 19.5rem !important;
             z-index: 35;
-            gap: 0.75rem !important;
+            gap: 0.5rem !important;
         }
 
         #sidebarToggle {
@@ -566,25 +550,48 @@
         }
 
         .sidebar-section-label {
-            padding: 0 0.25rem;
-            font-size: 0.62rem;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.15rem 0.1rem 0.1rem;
+            font-size: 0.58rem;
             font-weight: 800;
-            letter-spacing: 0.14em;
+            letter-spacing: 0.18em;
             text-transform: uppercase;
-            opacity: 0.75;
+            opacity: 0.9;
+        }
+
+        .sidebar-section-label::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: rgba(226, 232, 240, 0.95);
+        }
+
+        .sidebar-utility {
+            border-radius: 0.9rem;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255, 255, 255, 0.97);
+            box-shadow: none;
         }
 
         .panel-container {
             border-radius: 1rem;
-            box-shadow: var(--viewer-shadow);
+            box-shadow: var(--viewer-shadow) !important;
         }
 
         .dark .panel-container {
-            box-shadow: var(--viewer-shadow-dark);
+            box-shadow: var(--viewer-shadow-dark) !important;
         }
 
         .panel-header {
-            min-height: 3rem;
+            min-height: 2.8rem;
+            padding-top: 0.72rem !important;
+            padding-bottom: 0.72rem !important;
+        }
+
+        .panel-header:hover {
+            background: rgba(248, 250, 252, 0.95) !important;
         }
 
         .panel-content {
@@ -593,18 +600,29 @@
         }
 
         .panel-content.open {
-            padding: 1rem !important;
+            padding: 0.85rem !important;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-            box-shadow: 0 12px 24px rgba(22, 163, 74, 0.22);
+            background: #218838;
+            box-shadow: none;
+            border: 1px solid #1b6d2e;
+        }
+
+        .btn-primary:hover {
+            background: #1b6d2e;
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.62);
-            border: 1px solid rgba(148, 163, 184, 0.24);
+            background: rgba(255, 255, 255, 0.96);
+            border: 1px solid rgba(203, 213, 225, 0.95);
             color: #1e293b;
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(248, 250, 252, 0.98);
+            border-color: rgba(148, 163, 184, 0.45);
         }
 
         .dark .btn-secondary {
@@ -619,7 +637,7 @@
             right: auto;
             bottom: 1rem;
             transform: translateX(-50%);
-            padding: 0.42rem 0.5rem;
+            padding: 0.35rem 0.4rem;
             border-radius: 999px;
             border: 1px solid var(--viewer-border);
             background: rgba(255, 255, 255, 0.96);
@@ -627,8 +645,8 @@
         }
 
         .bottom-right-controls button {
-            width: 2.55rem;
-            height: 2.55rem;
+            width: 2.35rem;
+            height: 2.35rem;
             border-radius: 999px;
             transition: transform 0.18s ease, background 0.18s ease;
         }
@@ -639,7 +657,7 @@
         }
 
         .color-picker-container {
-            min-width: 12rem;
+            min-width: auto;
             background: rgba(255, 255, 255, 0.96);
             box-shadow: var(--viewer-shadow);
             border: 1px solid var(--viewer-border);
@@ -657,6 +675,66 @@
         .save-summary {
             font-size: 0.72rem;
             line-height: 1.4;
+        }
+
+        .compact-note {
+            display: none !important;
+        }
+
+        .info-modal-backdrop {
+            background: rgba(15, 23, 42, 0.28);
+            backdrop-filter: blur(4px);
+        }
+
+        .info-modal-card {
+            width: min(30rem, calc(100vw - 2rem));
+            border-radius: 1.15rem;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.1);
+        }
+
+        .info-modal-row {
+            display: grid;
+            grid-template-columns: 1.1rem 1fr;
+            gap: 0.75rem;
+            align-items: start;
+            padding: 0.1rem 0;
+        }
+
+        .info-modal-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.22rem 0.55rem;
+            border-radius: 999px;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(248, 250, 252, 0.9);
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .version-card {
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(248, 250, 252, 0.72);
+            border-radius: 0.95rem;
+        }
+
+        .version-card-actions button {
+            min-height: 1.8rem;
+        }
+
+        .history-item,
+        .annotation-item {
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            background: rgba(248, 250, 252, 0.72);
+            border-radius: 0.8rem;
+        }
+
+        .slicer-side-btn {
+            min-width: 3rem;
+            min-height: 1.55rem;
         }
 
         #mobileEditFab {
@@ -694,10 +772,6 @@
 
             .brand-mark {
                 font-size: 1.7rem;
-            }
-
-            .brand-subtitle {
-                display: none;
             }
 
             .top-actions .nav-button span,
@@ -738,6 +812,7 @@
         // Get all the necessary DOM elements
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.querySelector('model-viewer');
+            const viewerStage = document.querySelector('.viewer-stage');
             const fullscreenButton = document.querySelector('#fullscreenButton');
             const downloadButton = document.querySelector('#downloadButton');
             const colorPicker = document.querySelector('#colorPicker');
@@ -860,10 +935,15 @@
                 return `#${match.slice(1).map(n => parseInt(n, 10).toString(16).padStart(2, '0')).join('')}`;
             }
 
+            function setViewerBackgroundColor(color) {
+                if (!viewerStage) return;
+                viewerStage.style.background = color;
+            }
+
             colorPicker?.addEventListener('input', (event) => {
                 try {
                     const color = event.target.value;
-                    modelViewer.style.backgroundColor = color;
+                    setViewerBackgroundColor(color);
                     hexInput.value = color.toUpperCase();
                     isColorApplied = true;
                 } catch (error) {
@@ -878,8 +958,9 @@
                         color = '#' + color;
                     }
                     if (/^#[0-9A-F]{6}$/i.test(color)) {
-                        modelViewer.style.backgroundColor = color;
+                        setViewerBackgroundColor(color);
                         colorPicker.value = color.toUpperCase();
+                        hexInput.value = color.toUpperCase();
                         isColorApplied = true;
                     }
                 } catch (error) {
@@ -890,7 +971,7 @@
             // Reset color button handler
             resetColorButton?.addEventListener('click', () => {
                 try {
-                    modelViewer.style.backgroundColor = '';
+                    setViewerBackgroundColor('#FFFFFF');
                     colorPicker.value = '#FFFFFF';
                     hexInput.value = '#FFFFFF';
                     isColorApplied = false;
@@ -904,13 +985,13 @@
                 if (document.documentElement.classList.contains('dark')) {
                     document.documentElement.classList.remove('dark');
                     localStorage.theme = 'light';
-                    modelViewer.style.backgroundColor = '#FFFFFF';
+                    setViewerBackgroundColor('#FFFFFF');
                     colorPicker.value = '#FFFFFF';
                     hexInput.value = '#FFFFFF';
                 } else {
                     document.documentElement.classList.add('dark');
                     localStorage.theme = 'dark';
-                    modelViewer.style.backgroundColor = '#1F2937';
+                    setViewerBackgroundColor('#1F2937');
                     colorPicker.value = '#1F2937';
                     hexInput.value = '#1F2937';
                 }
@@ -949,11 +1030,11 @@
             // Initialize dark mode from localStorage
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
-                modelViewer.style.backgroundColor = '#1F2937';
+                setViewerBackgroundColor('#1F2937');
                 colorPicker.value = '#1F2937';
                 hexInput.value = '#1F2937';
             } else {
-                modelViewer.style.backgroundColor = '#FFFFFF';
+                setViewerBackgroundColor('#FFFFFF');
                 colorPicker.value = '#FFFFFF';
                 hexInput.value = '#FFFFFF';
             }
@@ -1721,10 +1802,6 @@ void main() {
     <div class="top-header">
         <div class="brand-shell">
             <a href="/" class="brand-mark hover:opacity-80 transition-opacity">arvision</a>
-            <div class="brand-meta">
-                <span class="brand-kicker">Viewer Studio</span>
-                <span class="brand-subtitle">Materials, transforms and slicing in one workspace</span>
-            </div>
         </div>
         <div class="top-actions">
             {% if current_user.is_authenticated %}
@@ -1803,10 +1880,6 @@ void main() {
         <!-- Bottom Left Controls -->
         <div class="absolute bottom-3 left-3 z-20">
             <div class="color-picker-container glass-panel rounded-lg p-2.5">
-                <div class="mb-2">
-                    <p class="scene-dock-title font-semibold">Scene</p>
-                    <p class="scene-dock-subtitle">Canvas starts at pure white. Use this only when you need contrast.</p>
-                </div>
                 <div class="flex gap-1.5 items-center">
                     <input type="color" id="colorPicker" class="w-5 h-5 rounded cursor-pointer">
                     <input type="text" id="hexInput" class="px-1.5 py-0.5 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs w-16" placeholder="#FFFFFF">
@@ -1835,7 +1908,7 @@ void main() {
             <div class="sidebar-section-label">View</div>
 
             <!-- Reset Camera Button -->
-            <button id="resetCamera" class="w-full px-3 py-2 glass-panel hover:bg-white/30 dark:hover:bg-white/8 text-gray-600 dark:text-gray-300 rounded-lg transition-all flex items-center justify-center gap-1.5 font-medium text-xs flex-shrink-0">
+            <button id="resetCamera" class="sidebar-utility w-full px-3 py-2 text-gray-600 dark:text-gray-300 rounded-lg transition-all flex items-center justify-center gap-1.5 font-medium text-xs flex-shrink-0">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
@@ -2032,7 +2105,7 @@ void main() {
                     </div>
 
                     <!-- Info Note -->
-                    <div class="mb-3 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs text-green-700 dark:text-green-300">
+                    <div class="compact-note mb-3 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-xs text-green-700 dark:text-green-300">
                         <div class="flex items-start gap-2">
                             <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
@@ -2078,7 +2151,7 @@ void main() {
                         <button id="toggleHotspotMode" class="btn-secondary w-full px-3 py-2 mb-2 text-xs rounded">
                             Click Model to Add Hotspot
                         </button>
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
+                        <p class="compact-note text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
                             Enable mode, then click anywhere on the model to place a hotspot
                         </p>
                         <div id="hotspotsList" class="space-y-2 max-h-64 overflow-y-auto">
@@ -2134,7 +2207,7 @@ void main() {
                     </svg>
                 </button>
                 <div id="slicerPanel" class="panel-content p-4">
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Enable axes to slice. Adjust sliders for live preview, then apply.</p>
+                    <p class="compact-note text-xs text-gray-500 dark:text-gray-400 mb-3">Enable axes to slice. Adjust sliders for live preview, then apply.</p>
 
                     <!-- X Axis -->
                     <div class="mb-3 p-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 transition-colors" id="slicerAxisX">
@@ -2212,7 +2285,7 @@ void main() {
                             Apply Slice
                         </button>
                     </div>
-                    <p class="text-[10px] text-gray-400 mt-2 text-center italic">Permanently cuts the model and saves as new version</p>
+                    <p class="compact-note text-[10px] text-gray-400 mt-2 text-center italic">Permanently cuts the model and saves as new version</p>
                 </div>
             </div>
 
@@ -2228,7 +2301,7 @@ void main() {
                         </svg>
                         Save & Apply to AR
                     </button>
-                    <p class="save-summary mt-1.5">
+                    <p class="save-summary compact-note mt-1.5">
                         Persist material, transform and texture edits without leaving the viewer.
                     </p>
                 </div>
@@ -2292,10 +2365,10 @@ void main() {
         </div>
 
         <!-- Model Info Modal -->
-        <div id="modelInfoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div class="glass-panel rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+        <div id="modelInfoModal" class="info-modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div class="info-modal-card max-h-[80vh] overflow-y-auto">
                 <!-- Modal Header -->
-                <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
@@ -2311,40 +2384,40 @@ void main() {
                 </div>
 
                 <!-- Modal Body -->
-                <div class="p-4 space-y-3">
+                <div class="px-5 py-4 space-y-3.5">
                     <!-- File Name -->
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
                             <polyline points="13 2 13 9 20 9"></polyline>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">File Name</p>
-                            <p class="text-sm text-gray-900 dark:text-white break-all">{{ model.filename.split('/')[-1] if model.filename else 'Unknown' }}</p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">File Name</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.filename.split('/')[-1] if model.filename else 'Unknown' }}</p>
                         </div>
                     </div>
 
                     <!-- File Type -->
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                             <circle cx="8.5" cy="8.5" r="1.5"></circle>
                             <polyline points="21 15 16 10 5 21"></polyline>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Original Format</p>
-                            <p class="text-sm text-gray-900 dark:text-white uppercase">{{ model.file_type if model.file_type else 'GLB' }}</p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Original Format</p>
+                            <p class="mt-1"><span class="info-modal-chip uppercase">{{ model.file_type if model.file_type else 'GLB' }}</span></p>
                         </div>
                     </div>
 
                     <!-- File Size -->
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">File Size</p>
-                            <p class="text-sm text-gray-900 dark:text-white">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">File Size</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white">
                                 {% if model.file_size %}
                                     {% if model.file_size < 1024 %}
                                         {{ model.file_size }} B
@@ -2362,7 +2435,7 @@ void main() {
 
                     <!-- Vertices -->
                     {% if model.vertices %}
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="3"></circle>
                             <circle cx="12" cy="5" r="1"></circle>
@@ -2371,36 +2444,36 @@ void main() {
                             <circle cx="5" cy="12" r="1"></circle>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Vertices</p>
-                            <p class="text-sm text-gray-900 dark:text-white">{{ "{:,}".format(model.vertices) }}</p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Vertices</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white">{{ "{:,}".format(model.vertices) }}</p>
                         </div>
                     </div>
                     {% endif %}
 
                     <!-- Faces -->
                     {% if model.faces %}
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                             <polyline points="2 17 12 22 22 17"></polyline>
                             <polyline points="2 12 12 17 22 12"></polyline>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Faces</p>
-                            <p class="text-sm text-gray-900 dark:text-white">{{ "{:,}".format(model.faces) }}</p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Faces</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white">{{ "{:,}".format(model.faces) }}</p>
                         </div>
                     </div>
                     {% endif %}
 
                     <!-- Color -->
                     {% if model.color %}
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="10"></circle>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Applied Color</p>
-                            <div class="flex items-center gap-2">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Applied Color</p>
+                            <div class="mt-1 flex items-center gap-2">
                                 <div class="w-6 h-6 rounded border border-gray-300 dark:border-gray-600" style="background-color: {{ model.color }}"></div>
                                 <p class="text-sm text-gray-900 dark:text-white">{{ model.color }}</p>
                             </div>
@@ -2410,15 +2483,15 @@ void main() {
 
                     <!-- Model Dimensions -->
                     {% if model_dimensions %}
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                             <path d="M3 9h18"></path>
                             <path d="M9 21V9"></path>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Model Dimensions</p>
-                            <div class="space-y-1">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Model Dimensions</p>
+                            <div class="mt-1 space-y-1">
                                 <div class="flex items-center justify-between text-sm">
                                     <span class="text-gray-600 dark:text-gray-400">Width (X):</span>
                                     <span class="text-gray-900 dark:text-white font-medium">{{ model_dimensions.x }} cm</span>
@@ -2441,7 +2514,7 @@ void main() {
                     {% endif %}
 
                     <!-- Upload Date -->
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                             <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -2449,8 +2522,8 @@ void main() {
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Upload Date</p>
-                            <p class="text-sm text-gray-900 dark:text-white">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Upload Date</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white">
                                 {% if model.upload_date %}
                                     {{ model.upload_date.strftime('%B %d, %Y at %H:%M') }}
                                 {% else %}
@@ -2461,21 +2534,21 @@ void main() {
                     </div>
 
                     <!-- Model ID -->
-                    <div class="flex items-start">
+                    <div class="info-modal-row">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 mt-0.5 text-gray-500 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                         </svg>
                         <div class="flex-1">
-                            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Model ID</p>
-                            <p class="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">{{ model.id }}</p>
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Model ID</p>
+                            <p class="mt-1 text-xs text-gray-600 dark:text-gray-400 font-mono break-all">{{ model.id }}</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- Modal Footer -->
-                <div class="p-4 border-t border-gray-200 dark:border-gray-700">
-                    <button id="closeModalFooterButton" class="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors">
+                <div class="px-5 py-4 border-t border-slate-200">
+                    <button id="closeModalFooterButton" class="btn-secondary w-full px-4 py-2 rounded-lg transition-colors">
                         Close
                     </button>
                 </div>
@@ -2869,6 +2942,35 @@ void main() {
         if (cumulativeScale) cumulativeScale.textContent = '{{ model.cumulative_scale }}x';
         {% endif %}
 
+        let transformRenderNudge = 1;
+
+        function forceModelViewerRefresh() {
+            if (!modelViewer) return;
+
+            const scene = modelViewer.model?.scene;
+            if (scene) {
+                scene.updateMatrixWorld?.(true);
+            }
+
+            const orbit = typeof modelViewer.getCameraOrbit === 'function' ? modelViewer.getCameraOrbit() : null;
+            if (typeof modelViewer.requestUpdate === 'function') {
+                modelViewer.requestUpdate();
+            }
+
+            if (orbit && typeof modelViewer.jumpCameraToGoal === 'function') {
+                transformRenderNudge *= -1;
+                const nudgedOrbit = (orbit.theta + (transformRenderNudge * 0.0001)) + 'rad ' + orbit.phi + 'rad ' + orbit.radius + 'm';
+                modelViewer.cameraOrbit = nudgedOrbit;
+                modelViewer.jumpCameraToGoal();
+                requestAnimationFrame(() => {
+                    modelViewer.cameraOrbit = orbit.toString();
+                    if (typeof modelViewer.requestUpdate === 'function') {
+                        modelViewer.requestUpdate();
+                    }
+                });
+            }
+        }
+
         function applyTransform() {
             if (!modelViewer) return;
             const s = parseFloat(scaleSlider?.value || 1);
@@ -2876,8 +2978,27 @@ void main() {
             const ry = parseFloat(rotateYSlider?.value || 0);
             const rz = parseFloat(rotateZSlider?.value || 0);
 
-            modelViewer.scale = s + ' ' + s + ' ' + s;
-            modelViewer.orientation = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
+            const scaleValue = s + ' ' + s + ' ' + s;
+            const orientationValue = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
+
+            modelViewer.scale = scaleValue;
+            modelViewer.orientation = orientationValue;
+            modelViewer.setAttribute('scale', scaleValue);
+            modelViewer.setAttribute('orientation', orientationValue);
+
+            const scene = modelViewer.model?.scene;
+            if (scene?.scale?.setScalar) {
+                scene.scale.setScalar(s);
+            }
+            if (scene?.rotation?.set) {
+                scene.rotation.set(
+                    rx * Math.PI / 180,
+                    ry * Math.PI / 180,
+                    rz * Math.PI / 180
+                );
+            }
+
+            forceModelViewerRefresh();
         }
 
         scaleSlider?.addEventListener('input', (e) => {
@@ -2922,6 +3043,7 @@ void main() {
                 modelViewer.scale = '1 1 1';
                 modelViewer.orientation = '0deg 0deg 0deg';
             }
+            forceModelViewerRefresh();
         });
 
         // Apply initial rotation if stored
@@ -3130,7 +3252,7 @@ void main() {
             cameraViewsList.innerHTML = '';
             savedViews.forEach((v, i) => {
                 const div = document.createElement('div');
-                div.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs';
+                div.className = 'history-item flex items-center justify-between px-2.5 py-2 text-xs';
                 div.innerHTML = '<button class="text-blue-600 dark:text-blue-400 hover:underline font-medium load-view-btn">' + v.name + '</button>' +
                     '<button class="text-red-500 hover:text-red-700 delete-view-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>';
                 div.querySelector('.load-view-btn').addEventListener('click', () => {
@@ -3195,7 +3317,7 @@ void main() {
             if (hotspotsList.querySelector('.italic')) hotspotsList.innerHTML = '';
 
             const div = document.createElement('div');
-            div.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded text-xs';
+            div.className = 'annotation-item flex items-center justify-between px-2.5 py-2 text-xs';
             div.innerHTML = '<span class="text-gray-700 dark:text-gray-300">' + label + '</span>' +
                 '<button class="text-red-500 hover:text-red-700 delete-hotspot-btn"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>';
             div.querySelector('.delete-hotspot-btn').addEventListener('click', () => {
@@ -3238,7 +3360,7 @@ void main() {
                     versionList.innerHTML = '';
                     data.versions.forEach(v => {
                         const div = document.createElement('div');
-                        div.className = 'p-3 bg-gray-50 dark:bg-gray-700 rounded-lg';
+                        div.className = 'version-card p-3';
 
                         const typeColors = {
                             'upload': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
@@ -3258,10 +3380,10 @@ void main() {
                             '</div>' +
                             (v.comment ? '<p class="text-xs text-gray-500 dark:text-gray-400 mb-2">' + v.comment + '</p>' : '') +
                             (v.file_size_formatted ? '<p class="text-[10px] text-gray-400 mb-2">Size: ' + v.file_size_formatted + '</p>' : '') +
-                            '<div class="flex gap-1">' +
-                            '<button class="restore-btn flex-1 px-2 py-1 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded font-medium">Restore</button>' +
-                            '<button class="download-btn flex-1 px-2 py-1 text-[10px] bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded font-medium">Download</button>' +
-                            '<button class="delete-btn px-2 py-1 text-[10px] bg-red-500 hover:bg-red-600 text-white rounded font-medium">Del</button>' +
+                            '<div class="version-card-actions flex gap-1.5">' +
+                            '<button class="restore-btn flex-1 px-2 py-1 text-[10px] bg-blue-500 hover:bg-blue-600 text-white rounded-md font-medium">Restore</button>' +
+                            '<button class="download-btn flex-1 px-2 py-1 text-[10px] bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-md font-medium">Download</button>' +
+                            '<button class="delete-btn px-2 py-1 text-[10px] bg-red-500 hover:bg-red-600 text-white rounded-md font-medium">Del</button>' +
                             '</div>';
 
                         div.querySelector('.restore-btn').addEventListener('click', async () => {

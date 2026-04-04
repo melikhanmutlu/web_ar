@@ -391,9 +391,9 @@ def get_mesh_bounds(glb_path):
         center = combined.centroid    # (3,)
 
         return {
-            'min':    bounds[0].tolist(),
-            'max':    bounds[1].tolist(),
-            'center': center.tolist(),
+            'min':    {'x': float(bounds[0][0]), 'y': float(bounds[0][1]), 'z': float(bounds[0][2])},
+            'max':    {'x': float(bounds[1][0]), 'y': float(bounds[1][1]), 'z': float(bounds[1][2])},
+            'center': {'x': float(center[0]),    'y': float(center[1]),    'z': float(center[2])},
         }
     except Exception as e:
         logger.error(f"get_mesh_bounds error: {e}")

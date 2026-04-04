@@ -130,12 +130,19 @@
             transition: all 0.3s ease;
             margin-bottom: 0.5rem;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .dark .panel-container {
             background: var(--glass-bg-dark);
             border-color: var(--glass-border-dark);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
         }
 
         .sidebar-container {
@@ -672,18 +679,27 @@
             window.togglePanel = function(panelId) {
                 const panel = document.getElementById(panelId);
                 const icon = document.getElementById(panelId + 'Icon');
-                
                 if (!panel) return;
-                
-                const isHidden = panel.classList.contains('hidden');
-                
-                // Close other panels if needed (optional, keeping it simple for now)
-                if (isHidden) {
-                    panel.classList.remove('hidden');
-                    if (icon) icon.style.transform = 'rotate(180deg)';
-                } else {
-                    panel.classList.add('hidden');
+
+                if (panel.classList.contains('open')) {
+                    // Closing: lock to current height first, then animate to 0
+                    panel.style.maxHeight = panel.scrollHeight + 'px';
+                    panel.classList.remove('open');
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
+                        panel.style.maxHeight = '0';
+                    }));
                     if (icon) icon.style.transform = 'rotate(0deg)';
+                } else {
+                    // Opening: animate to content height
+                    panel.classList.add('open');
+                    panel.style.maxHeight = panel.scrollHeight + 'px';
+                    if (icon) icon.style.transform = 'rotate(180deg)';
+                    // After animation, remove restriction so dynamic content (AJAX etc.) shows fully
+                    const onEnd = () => {
+                        if (panel.classList.contains('open')) panel.style.maxHeight = 'none';
+                        panel.removeEventListener('transitionend', onEnd);
+                    };
+                    panel.addEventListener('transitionend', onEnd);
                 }
             };
 
@@ -1547,10 +1563,10 @@ void main() {
 
 
         <!-- Right Side Panels -->
-        <div class="absolute right-6 top-20 bottom-20 z-20 flex flex-col gap-4 overflow-y-auto pr-2" style="max-width: 320px; scrollbar-width: thin;">
+        <div class="absolute right-6 top-20 bottom-20 z-20 flex flex-col gap-2 overflow-y-auto pr-1" style="max-width: 320px; width: 320px; scrollbar-width: thin; padding-bottom: 0.5rem;">
             
             <!-- Reset Camera Button -->
-            <button id="resetCamera" class="w-full px-4 py-3 glass-panel hover:bg-white/20 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 font-medium text-sm">
+            <button id="resetCamera" class="w-full px-4 py-3 glass-panel hover:bg-white/20 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 font-medium text-sm flex-shrink-0">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                 </svg>
@@ -1571,7 +1587,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="animationContent" class="panel-content p-4 hidden">
+                <div id="animationContent" class="panel-content p-4">
                     <!-- Animation Select -->
                     <div class="mb-4">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Select Animation</label>
@@ -1617,7 +1633,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="materialPanel" class="panel-content p-4 hidden">
+                <div id="materialPanel" class="panel-content p-4">
                     <!-- Base Color -->
                     <div class="mb-4">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Base Color</label>
@@ -1683,7 +1699,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="transformPanel" class="panel-content p-4 hidden">
+                <div id="transformPanel" class="panel-content p-4">
                     <!-- Model Dimensions -->
                     <div class="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Model Dimensions</label>
@@ -1771,7 +1787,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="annotationsPanel" class="panel-content p-4 hidden">
+                <div id="annotationsPanel" class="panel-content p-4">
                     <!-- Camera Views Section -->
                     <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
                         <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Camera Views</label>
@@ -1812,7 +1828,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="versionPanel" class="panel-content p-4 hidden">
+                <div id="versionPanel" class="panel-content p-4">
                     <!-- Version List -->
                     <div id="versionList" class="space-y-2 max-h-96 overflow-y-auto">
                         <div class="text-center py-4">
@@ -1844,7 +1860,7 @@ void main() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div id="slicerPanel" class="panel-content p-4 hidden">
+                <div id="slicerPanel" class="panel-content p-4">
                     <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Enable axes to slice. Adjust sliders for live preview, then apply.</p>
 
                     <!-- X Axis -->

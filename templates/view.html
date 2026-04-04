@@ -146,19 +146,6 @@
             transition: max-height 0.3s ease;
         }
 
-        .sidebar-container {
-            position: fixed;
-            right: 1.5rem;
-            top: 6rem;
-            bottom: 6rem;
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-            gap: 1rem;
-            width: 320px;
-            padding-right: 4px; /* Space for scrollbar */
-        }
-
         /* Custom scrollbar for active sidebar */
         #rightSidebar::-webkit-scrollbar {
             width: 4px;
@@ -233,22 +220,6 @@
             #rightSidebar {
                 width: 280px;
                 max-width: 280px;
-            }
-        }
-
-        @media (max-width: 640px) {
-            #rightSidebar {
-                display: none; /* Hide sidebar on mobile, maybe use a bottom sheet later */
-            }
-            
-            .mobile-controls {
-                position: fixed;
-                bottom: 1.5rem;
-                left: 1.5rem;
-                right: 1.5rem;
-                display: flex;
-                justify-content: space-around;
-                z-index: 100;
             }
         }
 
@@ -392,150 +363,6 @@
             display: none;
         }
 
-        @media (max-width: 640px) {
-            .color-picker-container {
-                display: none !important;
-            }
-
-            /* Adjust control buttons position for mobile */
-            .controls-container {
-                bottom: 5% !important;
-                z-index: 2000 !important;
-            }
-        }
-
-        html, body {
-            overflow: hidden;
-            height: 100%;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-            position: fixed;
-        }
-
-        @media (max-width: 640px) {
-            .color-picker-container {
-                display: none !important;
-            }
-
-            /* Adjust control buttons position for mobile */
-            .controls-container {
-                bottom: 5% !important;
-            }
-
-            .controls-container-right {
-                bottom: 5% !important;
-            }
-
-            /* Ensure model viewer and container take up full height */
-            .relative.h-screen {
-                height: 100vh !important;
-                overflow: hidden;
-            }
-
-            model-viewer {
-                height: 100% !important;
-                width: 100% !important;
-            }
-
-            /* Adjust bottom buttons container */
-            .fixed.bottom-4.right-4 {
-                bottom: 5% !important;
-            }
-        }
-        
-        /* Base styles for containers */
-        .controls-container,
-        .controls-container-right,
-        .fixed.bottom-4.right-4 {
-            z-index: 2000;
-            position: fixed;
-        }
-
-        model-viewer {
-            z-index: 1;
-        }
-
-        @media (max-width: 640px) {
-            .color-picker-container {
-                display: none !important;
-            }
-
-            /* Adjust control buttons position for mobile */
-            .controls-container {
-                bottom: 5% !important;
-                z-index: 2000 !important;
-            }
-
-            .controls-container-right {
-                bottom: 5% !important;
-                z-index: 2000 !important;
-            }
-
-            /* Ensure model viewer and container take up full height */
-            .relative.h-screen {
-                height: 100vh !important;
-                overflow: hidden;
-            }
-
-            model-viewer {
-                height: 100% !important;
-                width: 100% !important;
-                z-index: 1 !important;
-            }
-
-            /* Adjust bottom buttons container */
-            .fixed.bottom-4.right-4 {
-                bottom: 5% !important;
-                z-index: 2000 !important;
-            }
-        }
-
-        /* Right bottom buttons container - Desktop default */
-        .controls-container-right {
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            z-index: 2000;
-            display: flex;
-            flex-direction: row;
-            gap: 0.5rem;
-            backdrop-filter: blur(8px);
-            border-radius: 0.5rem;
-        }
-
-        @media (max-width: 640px) {
-            .color-picker-container {
-                display: none !important;
-            }
-
-            /* Adjust control buttons position for mobile */
-            .controls-container {
-                bottom: 5% !important;
-                z-index: 2000 !important;
-            }
-
-            .controls-container-right {
-                bottom: 5% !important;
-                right: 1rem !important;
-                z-index: 2000 !important;
-                flex-direction: column !important;
-                gap: 0.5rem !important;
-            }
-
-            /* Ensure model viewer stays behind controls */
-            model-viewer {
-                z-index: 1 !important;
-            }
-        }
-
-        @media (max-width: 640px) {
-            .bottom-right-controls {
-                bottom: 0.5rem;
-                right: 0.5rem;
-            }
-        }
-
         .dark .bottom-right-controls button svg {
             color: white;
         }
@@ -545,6 +372,357 @@
         
         .dark .action-button svg {
             stroke: white;
+        }
+
+        /* Viewer UI Refresh */
+        :root {
+            --viewer-shell-bg: linear-gradient(180deg, #edf3f8 0%, #dde7f0 48%, #d4dee8 100%);
+            --viewer-accent: #16a34a;
+            --viewer-text: #0f172a;
+            --viewer-muted: #64748b;
+            --viewer-border: rgba(148, 163, 184, 0.22);
+            --viewer-border-dark: rgba(255, 255, 255, 0.08);
+            --viewer-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
+            --viewer-shadow-dark: 0 18px 42px rgba(0, 0, 0, 0.32);
+        }
+
+        html, body {
+            position: static;
+            background: var(--viewer-shell-bg);
+        }
+
+        body.mobile-sidebar-open {
+            overflow: hidden;
+        }
+
+        .viewer-shell {
+            position: relative;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .viewer-stage {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            background:
+                radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 36%),
+                radial-gradient(circle at top, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0) 24%),
+                var(--viewer-shell-bg);
+        }
+
+        .viewer-stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+            background-size: 34px 34px;
+            opacity: 0.3;
+            mask-image: linear-gradient(180deg, transparent 0%, black 16%, black 80%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .dark .viewer-stage {
+            background:
+                radial-gradient(circle at 50% 70%, rgba(30, 41, 59, 0.55), rgba(15, 23, 42, 0) 34%),
+                linear-gradient(180deg, #0f172a 0%, #111827 52%, #020617 100%);
+        }
+
+        .dark .viewer-stage::before {
+            opacity: 0.14;
+        }
+
+        model-viewer {
+            background: transparent !important;
+        }
+
+        .top-header {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            z-index: 45;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            pointer-events: none;
+        }
+
+        .brand-shell,
+        .top-actions {
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            border: 1px solid var(--viewer-border);
+            background: rgba(255, 255, 255, 0.86);
+            box-shadow: var(--viewer-shadow);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .dark .brand-shell,
+        .dark .top-actions {
+            border-color: var(--viewer-border-dark);
+            background: rgba(15, 23, 42, 0.82);
+            box-shadow: var(--viewer-shadow-dark);
+        }
+
+        .brand-shell {
+            gap: 0.8rem;
+            padding: 1rem 1.25rem;
+            border-radius: 1.25rem;
+            min-width: 14rem;
+        }
+
+        .brand-mark {
+            font-size: 2.1rem;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            color: var(--viewer-text);
+        }
+
+        .brand-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+
+        .brand-kicker {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-weight: 800;
+            color: #0f766e;
+        }
+
+        .brand-subtitle,
+        .save-summary,
+        .sidebar-section-label {
+            color: var(--viewer-muted);
+        }
+
+        .dark .brand-subtitle,
+        .dark .save-summary,
+        .dark .sidebar-section-label {
+            color: #94a3b8;
+        }
+
+        .dark .brand-mark,
+        .dark .top-actions,
+        .dark #mobileEditFab {
+            color: #f8fafc;
+        }
+
+        .top-actions {
+            gap: 0.45rem;
+            padding: 0.45rem;
+            border-radius: 1.1rem;
+        }
+
+        .nav-button {
+            gap: 0.45rem;
+            min-height: 2.7rem;
+            padding: 0.65rem 0.95rem;
+            border-radius: 999px;
+            font-weight: 600;
+            box-shadow: none;
+        }
+
+        .action-button {
+            width: 2.75rem;
+            height: 2.75rem;
+            flex: 0 0 2.75rem;
+            margin: 0;
+        }
+
+        #mobileSidebarBackdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 34;
+            background: rgba(15, 23, 42, 0.28);
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.24s ease;
+        }
+
+        body.mobile-sidebar-open #mobileSidebarBackdrop {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #rightSidebar {
+            position: fixed !important;
+            top: 5.35rem !important;
+            right: 1rem !important;
+            bottom: 1rem !important;
+            width: 21rem !important;
+            max-width: 21rem !important;
+            z-index: 35;
+            gap: 0.75rem !important;
+        }
+
+        #sidebarToggle {
+            top: 1.4rem;
+            left: -2.1rem;
+            border-radius: 1rem 0 0 1rem;
+            box-shadow: var(--viewer-shadow);
+        }
+
+        .sidebar-section-label {
+            padding: 0 0.25rem;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+        }
+
+        .panel-container {
+            border-radius: 1rem;
+            box-shadow: var(--viewer-shadow);
+        }
+
+        .dark .panel-container {
+            box-shadow: var(--viewer-shadow-dark);
+        }
+
+        .panel-header {
+            min-height: 3rem;
+        }
+
+        .panel-content {
+            padding: 0 !important;
+            transition: max-height 0.28s ease, padding 0.28s ease !important;
+        }
+
+        .panel-content.open {
+            padding: 1rem !important;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            box-shadow: 0 12px 24px rgba(22, 163, 74, 0.22);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.62);
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            color: #1e293b;
+        }
+
+        .dark .btn-secondary {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+        }
+
+        .bottom-right-controls {
+            padding: 0.42rem 0.5rem;
+            border-radius: 999px;
+            border: 1px solid var(--viewer-border);
+            background: rgba(255, 255, 255, 0.84);
+            box-shadow: var(--viewer-shadow);
+        }
+
+        .bottom-right-controls button {
+            width: 2.55rem;
+            height: 2.55rem;
+            border-radius: 999px;
+            transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .bottom-right-controls button:hover {
+            transform: translateY(-1px);
+            background: rgba(255, 255, 255, 0.6);
+        }
+
+        .color-picker-container {
+            min-width: 13rem;
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: var(--viewer-shadow);
+            border: 1px solid var(--viewer-border);
+        }
+
+        #saveChangesWrapper {
+            margin-top: auto;
+            padding-top: 0.4rem;
+        }
+
+        #mobileEditFab {
+            position: fixed;
+            left: 50%;
+            bottom: 5.4rem;
+            transform: translateX(-50%);
+            z-index: 36;
+            display: none;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.9rem 1.15rem;
+            border-radius: 999px;
+            border: 1px solid var(--viewer-border);
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: var(--viewer-shadow);
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--viewer-text);
+        }
+
+        @media (max-width: 640px) {
+            .top-header {
+                top: 0.75rem;
+                left: 0.75rem;
+                right: 0.75rem;
+                gap: 0.5rem;
+            }
+
+            .brand-shell {
+                min-width: 0;
+                flex: 1 1 auto;
+                padding: 0.8rem 0.95rem;
+            }
+
+            .brand-mark {
+                font-size: 1.7rem;
+            }
+
+            .brand-subtitle {
+                display: none;
+            }
+
+            .top-actions .nav-button span,
+            #sidebarToggle,
+            .color-picker-container {
+                display: none !important;
+            }
+
+            #mobileEditFab {
+                display: inline-flex;
+            }
+
+            #rightSidebar {
+                top: 0.75rem !important;
+                right: 0.75rem !important;
+                bottom: 0.75rem !important;
+                width: min(22rem, calc(100vw - 1.5rem)) !important;
+                max-width: min(22rem, calc(100vw - 1.5rem)) !important;
+                transform: translateX(calc(100% + 1rem));
+            }
+
+            body.mobile-sidebar-open #rightSidebar {
+                transform: translateX(0);
+            }
+
+            .bottom-right-controls {
+                left: 0.75rem;
+                right: 0.75rem;
+                bottom: 0.75rem;
+                justify-content: space-between;
+                border-radius: 1rem;
+            }
         }
     </style>
 
@@ -1529,12 +1707,18 @@ void main() {
 
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen">
-    <!-- Header (transparent, floating over model) -->
-    <div class="absolute top-0 left-0 right-0 z-10 flex justify-between items-center px-6 py-3">
-        <div class="flex items-center">
-            <a href="/" class="text-xl font-bold text-gray-700 dark:text-gray-200 hover:opacity-80 transition-opacity" style="text-shadow: 0 1px 8px rgba(255,255,255,0.5);">arvision</a>
+    <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
+
+    <!-- Header -->
+    <div class="top-header">
+        <div class="brand-shell">
+            <a href="/" class="brand-mark hover:opacity-80 transition-opacity">arvision</a>
+            <div class="brand-meta">
+                <span class="brand-kicker">Viewer Studio</span>
+                <span class="brand-subtitle">Materials, transforms and slicing in one workspace</span>
+            </div>
         </div>
-        <div class="flex items-center space-x-4">
+        <div class="top-actions">
             {% if current_user.is_authenticated %}
             <a href="/my_models" class="nav-button">
                 <svg class="mr-2" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1589,15 +1773,18 @@ void main() {
     </div>
 
     <!-- Model Viewer -->
-    <div class="relative h-screen">
-        <!-- Container div with w-full h-full classes -->
-        <div class="absolute inset-0" style="z-index: 1;">
+    <div class="viewer-shell relative h-screen">
+        <div class="viewer-stage absolute inset-0" style="z-index: 1;">
             <model-viewer
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
-                shadow-intensity="1"
+                shadow-intensity="1.15"
+                shadow-softness="0.9"
+                exposure="1.05"
                 ar-scale="auto"
                 camera-controls
+                camera-orbit="32deg 74deg auto"
+                field-of-view="28deg"
                 interaction-prompt="none"
                 ar
                 ar-placement="floor"
@@ -1608,7 +1795,10 @@ void main() {
         <!-- Bottom Left Controls -->
         <div class="absolute bottom-3 left-3 z-20">
             <div class="color-picker-container glass-panel rounded-lg p-2.5">
-                <label class="control-text block mb-1.5 text-gray-600 dark:text-gray-400 text-[10px] font-medium">BG Color</label>
+                <div class="mb-2">
+                    <p class="scene-dock-title font-semibold">Scene</p>
+                    <p class="scene-dock-subtitle">Tune canvas contrast for light or dark models.</p>
+                </div>
                 <div class="flex gap-1.5 items-center">
                     <input type="color" id="colorPicker" class="w-5 h-5 rounded cursor-pointer">
                     <input type="text" id="hexInput" class="px-1.5 py-0.5 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs w-16" placeholder="#FFFFFF">
@@ -1617,6 +1807,12 @@ void main() {
             </div>
         </div>
 
+        <button id="mobileEditFab" type="button" aria-controls="rightSidebar" aria-expanded="false">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h10"></path>
+            </svg>
+            Edit Model
+        </button>
 
         <!-- Right Side Panels -->
         <div id="rightSidebar" class="absolute right-3 top-12 bottom-12 z-20 flex flex-col gap-1.5 overflow-y-auto" style="max-width: 300px; width: 300px; scrollbar-width: thin; padding-right: 2px;">
@@ -1627,6 +1823,8 @@ void main() {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 18l6-6-6-6"/>
                 </svg>
             </button>
+
+            <div class="sidebar-section-label">View</div>
 
             <!-- Reset Camera Button -->
             <button id="resetCamera" class="w-full px-3 py-2 glass-panel hover:bg-white/30 dark:hover:bg-white/8 text-gray-600 dark:text-gray-300 rounded-lg transition-all flex items-center justify-center gap-1.5 font-medium text-xs flex-shrink-0">
@@ -1688,6 +1886,8 @@ void main() {
                 </div>
             </div>
             
+            <div class="sidebar-section-label">Edit</div>
+
             <!-- Material Editor Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
                 <button class="panel-header w-full px-3 py-2 flex items-center justify-between hover:bg-white/30 dark:hover:bg-white/5 transition-colors" onclick="togglePanel('materialPanel')">
@@ -1800,7 +2000,7 @@ void main() {
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-2">
                             <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate X</label>
-                            <span id="rotateXValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                            <span id="rotateXValue" class="text-xs text-gray-500 dark:text-gray-400">0&deg;</span>
                         </div>
                         <input type="range" id="rotateXSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                     </div>
@@ -1809,7 +2009,7 @@ void main() {
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-2">
                             <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Y</label>
-                            <span id="rotateYValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                            <span id="rotateYValue" class="text-xs text-gray-500 dark:text-gray-400">0&deg;</span>
                         </div>
                         <input type="range" id="rotateYSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                     </div>
@@ -1818,7 +2018,7 @@ void main() {
                     <div class="mb-4">
                         <div class="flex justify-between items-center mb-2">
                             <label class="text-xs font-medium text-gray-700 dark:text-gray-300">Rotate Z</label>
-                            <span id="rotateZValue" class="text-xs text-gray-500 dark:text-gray-400">0┬░</span>
+                            <span id="rotateZValue" class="text-xs text-gray-500 dark:text-gray-400">0&deg;</span>
                         </div>
                         <input type="range" id="rotateZSlider" min="0" max="360" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
                     </div>
@@ -1841,6 +2041,8 @@ void main() {
                     </button>
                 </div>
             </div>
+
+            <div class="sidebar-section-label">Review</div>
 
             <!-- Annotations Panel -->
             <div class="panel-container glass-panel rounded-xl shadow-lg overflow-hidden">
@@ -2006,6 +2208,8 @@ void main() {
                 </div>
             </div>
 
+            <div class="sidebar-section-label">Apply</div>
+
             <!-- Save Changes Panel (sticky bottom) -->
             <div id="saveChangesWrapper">
             <div class="panel-container glass-panel rounded-lg overflow-hidden border border-green-500/30">
@@ -2016,8 +2220,8 @@ void main() {
                         </svg>
                         Save & Apply to AR
                     </button>
-                    <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-1.5 text-center">
-                        Saves material & transform changes
+                    <p class="save-summary mt-1.5">
+                        Persist material, transform and texture edits without leaving the viewer.
                     </p>
                 </div>
             </div>
@@ -2311,8 +2515,8 @@ void main() {
         // ===================================================================
         document.getElementById('resetCamera')?.addEventListener('click', () => {
             if (!modelViewer) return;
-            modelViewer.cameraOrbit = 'auto auto 105%';
-            modelViewer.fieldOfView = 'auto';
+            modelViewer.cameraOrbit = '32deg 74deg auto';
+            modelViewer.fieldOfView = '28deg';
             modelViewer.cameraTarget = 'auto auto auto';
         });
 
@@ -2323,9 +2527,14 @@ void main() {
             const sidebar = document.getElementById('rightSidebar');
             const toggleBtn = document.getElementById('sidebarToggle');
             const toggleIcon = document.getElementById('sidebarToggleIcon');
+            const backdrop = document.getElementById('mobileSidebarBackdrop');
+            const mobileFab = document.getElementById('mobileEditFab');
 
             const chevronRight = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 18l6-6-6-6"/>';
             const chevronLeft  = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 18l-6-6 6-6"/>';
+
+            const isMobile = () => window.innerWidth <= 640;
+            let desktopOpen = true;
 
             function setSidebar(open) {
                 if (open) {
@@ -2337,13 +2546,35 @@ void main() {
                     toggleIcon.innerHTML = chevronLeft;
                     toggleBtn.title = 'Open panel';
                 }
+
+                document.body.classList.toggle('mobile-sidebar-open', isMobile() && open);
+                mobileFab?.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (!isMobile()) desktopOpen = open;
             }
 
-            // Start open
-            setSidebar(true);
+            function syncSidebarMode() {
+                setSidebar(isMobile() ? false : desktopOpen);
+            }
+
+            syncSidebarMode();
 
             toggleBtn?.addEventListener('click', () => {
                 setSidebar(sidebar.classList.contains('sidebar-collapsed'));
+            });
+
+            mobileFab?.addEventListener('click', () => {
+                setSidebar(true);
+            });
+
+            backdrop?.addEventListener('click', () => {
+                if (isMobile()) setSidebar(false);
+            });
+
+            window.addEventListener('resize', syncSidebarMode);
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && isMobile()) {
+                    setSidebar(false);
+                }
             });
         })();
 
@@ -3065,6 +3296,7 @@ void main() {
         // SAVE CHANGES
         // ===================================================================
         const saveChangesBtn = document.getElementById('saveChanges');
+        const defaultSaveButtonMarkup = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Save & Apply to AR';
 
         function gatherModifications() {
             const mods = {};
@@ -3111,7 +3343,7 @@ void main() {
             }
 
             saveChangesBtn.disabled = true;
-            saveChangesBtn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Saving...';
+            saveChangesBtn.innerHTML = '<svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Saving...';
 
             try {
                 // Convert pending texture file to base64 if present
@@ -3143,7 +3375,7 @@ void main() {
                 alert('Failed to save changes.');
             } finally {
                 saveChangesBtn.disabled = false;
-                saveChangesBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg> Save & Apply to AR';
+                saveChangesBtn.innerHTML = defaultSaveButtonMarkup;
             }
         });
     });

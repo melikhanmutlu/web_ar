@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR — {{ display_name }}</title>
+
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-environment-component@2.0.0/dist/aframe-environment-component.min.js"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #000; }
+
+        /* Top overlay bar */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%);
+            pointer-events: none;
+        }
+
+        #overlay > * { pointer-events: all; }
+
+        #backBtn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.4rem 0.85rem;
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-family: system-ui, sans-serif;
+            text-decoration: none;
+            backdrop-filter: blur(6px);
+            transition: background 0.15s;
+        }
+        #backBtn:hover { background: rgba(255,255,255,0.25); }
+
+        #modelTitle {
+            color: #fff;
+            font-size: 0.9rem;
+            font-family: system-ui, sans-serif;
+            font-weight: 500;
+            opacity: 0.9;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 220px;
+        }
+
+        #envBar {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-left: auto;
+            flex-wrap: wrap;
+        }
+
+        .env-btn {
+            padding: 0.35rem 0.75rem;
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-family: system-ui, sans-serif;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .env-btn:hover { background: rgba(255,255,255,0.25); }
+        .env-btn.active {
+            background: rgba(255,255,255,0.9);
+            color: #000;
+            border-color: transparent;
+        }
+
+        /* Hint shown on non-VR devices */
+        #vrHint {
+            position: fixed;
+            bottom: 5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9998;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-family: system-ui, sans-serif;
+            font-size: 0.82rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        /* Hide hint once in VR */
+        .a-enter-vr-button { z-index: 9990 !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Overlay UI -->
+    <div id="overlay">
+        <a href="/view/{{ model_id }}" id="backBtn">← Back</a>
+        <span id="modelTitle">{{ display_name }}</span>
+        <div id="envBar">
+            <button class="env-btn active" onclick="setEnv('forest', this)">Forest</button>
+            <button class="env-btn" onclick="setEnv('japan', this)">Japan</button>
+            <button class="env-btn" onclick="setEnv('starry', this)">Starry</button>
+            <button class="env-btn" onclick="setEnv('egypt', this)">Egypt</button>
+            <button class="env-btn" onclick="setEnv('moon', this)">Moon</button>
+            <button class="env-btn" onclick="setEnv('dream', this)">Dream</button>
+        </div>
+    </div>
+
+    <div id="vrHint">Press "Enter VR" to view in your headset</div>
+
+    <!-- A-Frame Scene -->
+    <a-scene
+        webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor, hand-tracking"
+        renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true"
+        loading-screen="dotsColor: white; backgroundColor: black"
+        vr-mode-ui="enabled: true">
+
+        <a-assets timeout="30000">
+            <a-asset-item
+                id="vrModel"
+                src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+                crossorigin="anonymous">
+            </a-asset-item>
+        </a-assets>
+
+        <!-- Environment -->
+        <a-entity id="vrEnvironment" environment="preset: forest; lighting: distant; shadow: true; fog: 0.8"></a-entity>
+
+        <!-- Model — centered, slightly elevated from floor -->
+        <a-entity
+            id="vrModelEntity"
+            gltf-model="#vrModel"
+            position="0 0 -3"
+            scale="1 1 1"
+            rotation="0 0 0">
+        </a-entity>
+
+        <!-- Lighting -->
+        <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
+        <a-light type="directional" color="#ffffff" intensity="0.9" position="5 8 5" cast-shadow="true"></a-light>
+
+        <!-- Camera rig — seated/standing height -->
+        <a-entity id="cameraRig" position="0 0 2">
+            <a-entity
+                camera
+                look-controls="pointerLockEnabled: false"
+                wasd-controls="acceleration: 20"
+                position="0 1.6 0">
+            </a-entity>
+        </a-entity>
+
+    </a-scene>
+
+    <script>
+        // Environment switcher
+        function setEnv(preset, btn) {
+            const env = document.getElementById('vrEnvironment');
+            if (env) {
+                env.setAttribute('environment', 'preset', preset);
+            }
+            // Update active button
+            document.querySelectorAll('.env-btn').forEach(b => b.classList.remove('active'));
+            if (btn) btn.classList.add('active');
+        }
+
+        // Hide hint when VR session starts
+        const scene = document.querySelector('a-scene');
+        scene.addEventListener('enter-vr', () => {
+            const hint = document.getElementById('vrHint');
+            const overlay = document.getElementById('overlay');
+            if (hint) hint.style.display = 'none';
+            if (overlay) overlay.style.display = 'none';
+        });
+        scene.addEventListener('exit-vr', () => {
+            const hint = document.getElementById('vrHint');
+            const overlay = document.getElementById('overlay');
+            if (hint) hint.style.display = 'block';
+            if (overlay) overlay.style.display = 'flex';
+        });
+
+        // Auto-scale model to reasonable size after load
+        const modelEl = document.getElementById('vrModelEntity');
+        modelEl.addEventListener('model-loaded', () => {
+            const mesh = modelEl.getObject3D('mesh');
+            if (!mesh) return;
+            const box = new THREE.Box3().setFromObject(mesh);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            if (maxDim > 0) {
+                // Target size: ~1.5 meters max dimension
+                const targetSize = 1.5;
+                const scale = targetSize / maxDim;
+                modelEl.setAttribute('scale', `${scale} ${scale} ${scale}`);
+                // Re-center vertically so model sits on floor level
+                const center = new THREE.Vector3();
+                box.getCenter(center);
+                const yOffset = -center.y * scale;
+                const currentPos = modelEl.getAttribute('position');
+                modelEl.setAttribute('position', `${currentPos.x} ${yOffset} ${currentPos.z}`);
+            }
+        });
+    </script>
+
+</body>
+</html>

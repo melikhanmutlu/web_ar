@@ -2179,6 +2179,52 @@ def view_model(model_id):
     return response
 
 
+@app.route("/vr/<model_id>")
+def vr_view(model_id):
+    """VR viewer page for a specific model using A-Frame."""
+    model = UserModel.query.get(model_id)
+    if not model:
+        flash("Model not found", "error")
+        return redirect(url_for("index"))
+
+    if not model.filename or not os.path.exists(model.filename):
+        flash("Converted model file not found", "error")
+        return redirect(url_for("index"))
+
+    # Parse unique_id and actual_filename from model.filename (same logic as view_model)
+    try:
+        full_path = model.filename
+        converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
+        if full_path.startswith(converted_folder_abs):
+            relative_path = os.path.relpath(full_path, converted_folder_abs)
+            parts = os.path.normpath(relative_path).split(os.sep)
+            if len(parts) == 2:
+                model_unique_id = parts[0]
+                actual_filename = parts[1]
+            else:
+                raise ValueError(f"Invalid model path structure: {relative_path}")
+        else:
+            raise ValueError("Model path is not within the expected converted folder")
+    except Exception as e:
+        app.logger.error(f"VR view: error parsing model path: {e}")
+        flash("Error processing model path.", "error")
+        return redirect(url_for("index"))
+
+    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+                     if model.filename else "Model")
+    display_name = model.display_name or filename_base
+
+    response = make_response(render_template(
+        "vr.html",
+        model_id=model_id,
+        model_unique_id=model_unique_id,
+        actual_filename=actual_filename,
+        display_name=display_name,
+    ))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/api/models/<model_id>/like", methods=["POST"])
 def toggle_like(model_id):
     model = UserModel.query.get_or_404(model_id)

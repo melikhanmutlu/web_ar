@@ -85,6 +85,15 @@ class UserModel(db.Model):
     
     # Hotspot visibility
     hotspots_visible = db.Column(db.Boolean, default=True)  # Toggle for showing/hiding hotspots
+
+    # User-editable display name (separate from file path)
+    display_name = db.Column(db.String(255), nullable=True)
+
+    # Social / engagement fields
+    description = db.Column(db.Text, nullable=True)
+    view_count = db.Column(db.Integer, default=0)
+    download_count = db.Column(db.Integer, default=0)
+    share_count = db.Column(db.Integer, default=0)
     
     # Version tracking
     versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
@@ -237,3 +246,22 @@ class ModelVersion(db.Model):
         if not self.created_at:
             return 'Unknown'
         return self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+
+
+class ModelLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    session_id = db.Column(db.String(128), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    model = db.relationship('UserModel', backref=db.backref('likes', lazy=True))
+
+
+class ModelSave(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    model = db.relationship('UserModel', backref=db.backref('saves', lazy=True))

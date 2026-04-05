@@ -98,18 +98,16 @@
         .modal-container.active { transform: scale(1); opacity: 1; }
 
         /* QR Modal — overlay */
-        #qrModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; align-items: center; justify-content: center; }
-        #qrModal.show { display: flex; }
-        #qrModal .modal-card { background: var(--color-white); border: 1px solid var(--color-gray-200); padding: 1.5rem; width: 22rem; max-width: 90vw; }
-        .dark #qrModal .modal-card { background: var(--color-gray-900); border-color: var(--color-gray-700); }
-        #qrcode { background: var(--color-white); display: block; }
-        #qrcode img, #qrcode canvas { display: block; }
+        #qrModal { display: none !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.6) !important; z-index: 9999 !important; align-items: center !important; justify-content: center !important; }
+        #qrModal.show { display: flex !important; }
+        #qrModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 1.5rem; width: 22rem; max-width: 90vw; box-sizing: border-box; }
+        #qrcode { display: block; line-height: 0; }
+        #qrcode img, #qrcode canvas { display: block !important; }
 
         /* AR Modal — overlay */
-        #arModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; align-items: center; justify-content: center; }
-        #arModal.show { display: flex; }
-        #arModal .modal-card { background: var(--color-white); border: 1px solid var(--color-gray-200); padding: 1.5rem; width: 22rem; max-width: 90vw; position: relative; }
-        .dark #arModal .modal-card { background: var(--color-gray-900); border-color: var(--color-gray-700); color: var(--color-gray-200); }
+        #arModal { display: none !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.6) !important; z-index: 9999 !important; align-items: center !important; justify-content: center !important; }
+        #arModal.show { display: flex !important; }
+        #arModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 1.5rem; width: 22rem; max-width: 90vw; position: relative; box-sizing: border-box; }
         model-viewer::part(ar-button) { display: none; }
 
         .viewer-shell { position: relative; height: 100vh; overflow: hidden; }

@@ -1,14 +1,31 @@
 from datetime import datetime
 import os
 import json
-from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, url_for, flash, session
-from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_from_directory,
+    render_template,
+    redirect,
+    url_for,
+    flash,
+    session,
+    make_response,
+)
+from flask_login import (
+    LoginManager,
+    login_user,
+    login_required,
+    logout_user,
+    current_user,
+)
 from werkzeug.utils import secure_filename
 import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave
 from auth import auth
 import re
 import traceback
@@ -25,16 +42,23 @@ from glb_modifier import modify_glb, normalize_model_to_center
 from mesh_slicer import slice_mesh, get_mesh_bounds
 from pygltflib import GLTF2
 import time
-from version_manager import create_version, get_version_history, restore_version, delete_version
+from version_manager import (
+    create_version,
+    get_version_history,
+    restore_version,
+    delete_version,
+)
 
 app = Flask(__name__)
-app.config.from_object('config')
-app.secret_key = 'super secret key'
+app.config.from_object("config")
+app.secret_key = "super secret key"
+
 
 # Add headers to allow all origins
 @app.after_request
 def after_request(response):
     return response
+
 
 # Initialize directories
 def create_directories():
@@ -42,30 +66,27 @@ def create_directories():
     os.makedirs(CONVERTED_FOLDER, exist_ok=True)
     os.makedirs(TEMP_FOLDER, exist_ok=True)
 
+
 create_directories()
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # SQLite thread-safe configuration
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'connect_args': {
-        'check_same_thread': False
-    }
-}
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"check_same_thread": False}}
 
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['CONVERTED_FOLDER'] = CONVERTED_FOLDER
-app.config['TEMP_FOLDER'] = TEMP_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB limit
-app.config['ALLOWED_EXTENSIONS'] = {'obj', 'stl', 'fbx'}
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["CONVERTED_FOLDER"] = CONVERTED_FOLDER
+app.config["TEMP_FOLDER"] = TEMP_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB limit
+app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx"}
 
 # Constants
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'converted')
-TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'temp')
-QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'qr_codes')
-ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx'}
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "converted")
+TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
+QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_codes")
+ALLOWED_EXTENSIONS = {"obj", "stl", "fbx"}
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit
 
 # Initialize extensions
@@ -75,11 +96,13 @@ migrate = Migrate(app, db)
 # Initialize login manager
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'auth.login'
+login_manager.login_view = "auth.login"
+
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
 
 # Register blueprints
 app.register_blueprint(auth)
@@ -87,11 +110,8 @@ app.register_blueprint(auth)
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -109,47 +129,62 @@ with app.app_context():
                 # Check if original_dimensions column exists
                 result = conn.execute(db.text("PRAGMA table_info(user_model)"))
                 columns = [row[1] for row in result]
-                
-                if 'original_dimensions' not in columns:
-                    conn.execute(db.text("ALTER TABLE user_model ADD COLUMN original_dimensions TEXT"))
+
+                if "original_dimensions" not in columns:
+                    conn.execute(
+                        db.text(
+                            "ALTER TABLE user_model ADD COLUMN original_dimensions TEXT"
+                        )
+                    )
                     conn.commit()
                     logger.info("Added original_dimensions column")
-                
-                if 'cumulative_scale' not in columns:
-                    conn.execute(db.text("ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0"))
+
+                if "cumulative_scale" not in columns:
+                    conn.execute(
+                        db.text(
+                            "ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0"
+                        )
+                    )
                     conn.commit()
                     logger.info("Added cumulative_scale column")
         except Exception as migration_error:
             logger.error(f"Migration error: {migration_error}")
             # Continue anyway - app might still work
 
+
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+    return (
+        "." in filename
+        and filename.rsplit(".", 1)[1].lower() in app.config["ALLOWED_EXTENSIONS"]
+    )
+
 
 def get_file_info(file_path):
     """Get detailed information about the uploaded file."""
     try:
         file_size = os.path.getsize(file_path)
         file_ext = os.path.splitext(file_path)[1].lower()
-        
+
         info = {
-            'size': file_size,
-            'extension': file_ext,
-            'vertices': 0,
-            'faces': 0,
-            'is_watertight': False,
-            'bounds': None,
-            'is_binary': False
+            "size": file_size,
+            "extension": file_ext,
+            "vertices": 0,
+            "faces": 0,
+            "is_watertight": False,
+            "bounds": None,
+            "is_binary": False,
         }
-        
+
         # For 3D models, get additional information
-        if file_ext[1:] in app.config['ALLOWED_EXTENSIONS']:
+        if file_ext[1:] in app.config["ALLOWED_EXTENSIONS"]:
             try:
                 # For FBX files, we can't get mesh information directly
-                if file_ext == '.fbx':
-                    logger.info("FBX file detected - mesh information will be updated after conversion")
+                if file_ext == ".fbx":
+                    logger.info(
+                        "FBX file detected - mesh information will be updated after conversion"
+                    )
                     return info
-                    
+
                 mesh = trimesh.load(file_path)
                 if isinstance(mesh, trimesh.Scene):
                     # For scenes (like OBJ with multiple meshes), combine the statistics
@@ -159,75 +194,82 @@ def get_file_info(file_path):
                         if isinstance(geometry, trimesh.Trimesh):
                             total_vertices += len(geometry.vertices)
                             total_faces += len(geometry.faces)
-                    info['vertices'] = total_vertices
-                    info['faces'] = total_faces
+                    info["vertices"] = total_vertices
+                    info["faces"] = total_faces
                 else:
-                    info['vertices'] = len(mesh.vertices)
-                    info['faces'] = len(mesh.faces)
-                    info['is_watertight'] = mesh.is_watertight
-                    info['bounds'] = mesh.bounds.tolist() if hasattr(mesh, 'bounds') else None
-                    if hasattr(mesh, 'is_binary'):
-                        info['is_binary'] = mesh.is_binary
+                    info["vertices"] = len(mesh.vertices)
+                    info["faces"] = len(mesh.faces)
+                    info["is_watertight"] = mesh.is_watertight
+                    info["bounds"] = (
+                        mesh.bounds.tolist() if hasattr(mesh, "bounds") else None
+                    )
+                    if hasattr(mesh, "is_binary"):
+                        info["is_binary"] = mesh.is_binary
             except Exception as e:
                 logger.warning(f"Could not load mesh information: {str(e)}")
-        
+
         return info
     except Exception as e:
         logger.error(f"Error getting file info: {str(e)}")
         return None
+
 
 def generate_unique_filename(original_filename):
     """Generate a unique filename while preserving the original extension."""
     ext = os.path.splitext(original_filename)[1]
     return f"{uuid.uuid4()}{ext}"
 
+
 def apply_color_to_mesh(mesh, color_hex):
     """Apply color to a single mesh using face_colors."""
     try:
         # Convert hex color to RGBA (0-255 range)
-        hex_color = color_hex.lstrip('#')
+        hex_color = color_hex.lstrip("#")
         # Ensure hex string is valid (6 digits)
         if len(hex_color) != 6:
             logger.error(f"Invalid hex color format: {color_hex}")
             return False
         try:
-            rgb_255 = [int(hex_color[i:i+2], 16) for i in (0, 2, 4)]
+            rgb_255 = [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)]
         except ValueError:
-             logger.error(f"Invalid characters in hex color: {color_hex}")
-             return False
-             
+            logger.error(f"Invalid characters in hex color: {color_hex}")
+            return False
+
         rgba_255 = rgb_255 + [255]  # Add Alpha channel (fully opaque)
         logger.info(f"Applying RGBA(0-255) values: {rgba_255}")
-        
+
         # Ensure the mesh has faces
-        if not hasattr(mesh, 'faces') or mesh.faces is None or len(mesh.faces) == 0:
-             logger.warning("Mesh has no faces, cannot apply face colors.")
-             # Depending on workflow, might want to return True or False
-             # If color should always be applied if possible, False is better
-             return False
-             
+        if not hasattr(mesh, "faces") or mesh.faces is None or len(mesh.faces) == 0:
+            logger.warning("Mesh has no faces, cannot apply face colors.")
+            # Depending on workflow, might want to return True or False
+            # If color should always be applied if possible, False is better
+            return False
+
         # Ensure the mesh has a visual component, creating one if necessary
-        if not hasattr(mesh, 'visual') or mesh.visual is None:
+        if not hasattr(mesh, "visual") or mesh.visual is None:
             # If no visual exists, create a basic ColorVisuals
             mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh)
             logger.info("Created new ColorVisuals for mesh.")
         elif not isinstance(mesh.visual, trimesh.visual.ColorVisuals):
             # If visual exists but isn't ColorVisuals, overwrite it cautiously
             # This might discard existing texture/material info, which is intended here
-            logger.warning("Overwriting existing non-ColorVisuals visual data with ColorVisuals.")
+            logger.warning(
+                "Overwriting existing non-ColorVisuals visual data with ColorVisuals."
+            )
             # Create new ColorVisuals, potentially losing old visual data
             mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh)
-                 
+
         # Apply the color to all faces
         # Assigning a single color array will broadcast it to all faces
         mesh.visual.face_colors = rgba_255
-        
+
         logger.info("Color applied successfully to mesh face_colors")
         return True
     except Exception as e:
         logger.error(f"Error applying color to mesh face_colors: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return False
+
 
 def apply_color_to_scene(scene, color_hex):
     """Apply color to all meshes in a scene."""
@@ -248,12 +290,13 @@ def apply_color_to_scene(scene, color_hex):
         else:
             logger.error(f"Unsupported scene type: {type(scene)}")
             return False
-        
+
         return success
     except Exception as e:
         logger.error(f"Error applying color to scene: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return False
+
 
 def apply_size_limit(mesh, max_size_meters=0.35):
     """Scale the model to fit within the maximum size while maintaining proportions."""
@@ -269,35 +312,43 @@ def apply_size_limit(mesh, max_size_meters=0.35):
     elif isinstance(mesh, trimesh.Trimesh):
         bounds = mesh.bounds
     else:
-        logger.warning("apply_size_limit called with unsupported type. Skipping scaling.")
-        return mesh # Return unmodified if not Scene or Trimesh
+        logger.warning(
+            "apply_size_limit called with unsupported type. Skipping scaling."
+        )
+        return mesh  # Return unmodified if not Scene or Trimesh
 
     # Calculate current dimensions
     dimensions = bounds[1] - bounds[0]
     # Handle potential NaN or Inf values in dimensions gracefully
     dimensions = np.nan_to_num(dimensions, nan=0.0, posinf=0.0, neginf=0.0)
     max_dimension = np.max(dimensions)
-    
+
     # Calculate scale factor ONLY if target size and current size are positive
-    if max_size_meters <= 0 or max_dimension <= 1e-9: # Use epsilon for float comparison
+    if (
+        max_size_meters <= 0 or max_dimension <= 1e-9
+    ):  # Use epsilon for float comparison
         logger.warning(
             f"Skipping scaling: Target size ({max_size_meters:.4f}m) or model dimension "
             f"({max_dimension:.4f}m) is non-positive or too small."
         )
-        return mesh # Return the original mesh without scaling
-        
+        return mesh  # Return the original mesh without scaling
+
     scale_factor = max_size_meters / max_dimension
-    logger.info(f"Calculated scale factor: {scale_factor:.4f} (Target: {max_size_meters:.4f}m / Current: {max_dimension:.4f}m)")
+    logger.info(
+        f"Calculated scale factor: {scale_factor:.4f} (Target: {max_size_meters:.4f}m / Current: {max_dimension:.4f}m)"
+    )
 
     # Define the scaling transformation matrix
     # Using trimesh.transformations is generally preferred and clearer
     # Scaling is applied relative to the mesh's centroid to avoid shifting
     center = mesh.centroid
     T_neg = trimesh.transformations.translation_matrix(-center)
-    S = trimesh.transformations.scale_matrix(scale_factor, origin=None) # Scale uniformly
+    S = trimesh.transformations.scale_matrix(
+        scale_factor, origin=None
+    )  # Scale uniformly
     T_pos = trimesh.transformations.translation_matrix(center)
     transform_matrix = trimesh.transformations.concatenate_matrices(T_pos, S, T_neg)
-        
+
     # Apply scaling transformation
     try:
         mesh.apply_transform(transform_matrix)
@@ -308,9 +359,10 @@ def apply_size_limit(mesh, max_size_meters=0.35):
         # (Need to reload original state or handle this more robustly if needed)
         # For now, we might be returning a partially transformed mesh, which isn't ideal.
         # A safer approach would be to work on a copy if scaling might fail.
-        pass # Allow process to continue with potentially unscaled/partially scaled mesh
+        pass  # Allow process to continue with potentially unscaled/partially scaled mesh
 
     return mesh
+
 
 def convert_model_new(input_file, output_path=None, color=None):
     """Convert 3D model to GLB format with optional color application."""
@@ -318,15 +370,15 @@ def convert_model_new(input_file, output_path=None, color=None):
         # Generate output path if not provided
         if output_path is None:
             output_path = os.path.join(
-                app.config['CONVERTED_FOLDER'],
-                os.path.splitext(os.path.basename(input_file))[0] + '.glb'
+                app.config["CONVERTED_FOLDER"],
+                os.path.splitext(os.path.basename(input_file))[0] + ".glb",
             )
 
         # Get file extension
         file_ext = os.path.splitext(input_file)[1].lower()
 
         # For FBX files, first convert to GLB then apply color
-        if file_ext == '.fbx':
+        if file_ext == ".fbx":
             # Convert FBX to GLB
             temp_glb = convert_fbx_to_glb(input_file, output_path)
             if not temp_glb:
@@ -361,24 +413,26 @@ def convert_model_new(input_file, output_path=None, color=None):
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
+
 def convert_stl_to_glb(stl_path, output_path):
     """Convert STL file to GLB format using trimesh."""
     try:
         # Load the STL file
         mesh = trimesh.load(stl_path)
-        
+
         # Create a scene with a single geometry
         scene = trimesh.Scene()
         scene.add_geometry(mesh)
-        
+
         # Export as GLB
         scene.export(output_path)
-        
+
         return output_path
-        
+
     except Exception as e:
         app.logger.error(f"Error converting STL to GLB: {str(e)}")
         return None
+
 
 def convert_fbx_to_glb(fbx_path, output_path):
     """Convert FBX file to GLB format using FBX2glTF."""
@@ -386,70 +440,78 @@ def convert_fbx_to_glb(fbx_path, output_path):
         logger.info("Starting FBX to GLB conversion")
         # Platform-aware FBX2glTF path
         import platform
-        if platform.system() == 'Windows':
-            fbx2gltf_path = os.path.join(TOOLS_DIR, 'FBX2glTF.exe')
+
+        if platform.system() == "Windows":
+            fbx2gltf_path = os.path.join(TOOLS_DIR, "FBX2glTF.exe")
         else:
-            fbx2gltf_path = os.path.join(TOOLS_DIR, 'FBX2glTF')
-        
+            fbx2gltf_path = os.path.join(TOOLS_DIR, "FBX2glTF")
+
         # Ensure output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+
         # Construct and run the conversion command
         cmd = [
             fbx2gltf_path,
-            '--binary',
-            '--input', fbx_path,
-            '--output', output_path,
-            '--draco'  # Optimize model for better performance
+            "--binary",
+            "--input",
+            fbx_path,
+            "--output",
+            output_path,
+            "--draco",  # Optimize model for better performance
         ]
-        
+
         logger.info(f"Running FBX2glTF command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if result.returncode != 0:
             logger.error(f"FBX conversion failed: {result.stderr}")
             return None
-            
+
         logger.info("FBX converted successfully")
         return output_path
-        
+
     except Exception as e:
         logger.error(f"Error in FBX conversion: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
+
 def convert_obj_to_glb(obj_path, output_path):
     """Convert OBJ file to GLB format using obj2gltf."""
     try:
         logger.info("Starting OBJ to GLB conversion")
-        
+
         # Create OBJ converter
         converter = OBJConverter()
-        
+
         # Validate file
         if not converter.validate(obj_path):
             logger.error("OBJ file validation error")
             return None
-            
+
         # Process MTL file
-        if 'mtl' in request.files:
-            mtl_file = request.files['mtl']
+        if "mtl" in request.files:
+            mtl_file = request.files["mtl"]
             if mtl_file.filename:
-                mtl_path = os.path.join(os.path.dirname(obj_path), secure_filename(mtl_file.filename))
+                mtl_path = os.path.join(
+                    os.path.dirname(obj_path), secure_filename(mtl_file.filename)
+                )
                 mtl_file.save(mtl_path)
                 converter.set_material_file(mtl_path)
                 logger.info(f"MTL file saved: {mtl_path}")
-        
+
         # Process texture files
-        if 'textures' in request.files:
-            textures = request.files.getlist('textures')
+        if "textures" in request.files:
+            textures = request.files.getlist("textures")
             for texture in textures:
                 if texture.filename:
-                    texture_path = os.path.join(os.path.dirname(obj_path), secure_filename(texture.filename))
+                    texture_path = os.path.join(
+                        os.path.dirname(obj_path), secure_filename(texture.filename)
+                    )
                     texture.save(texture_path)
                     converter.add_texture_file(texture_path)
                     logger.info(f"Texture file saved: {texture_path}")
-        
+
         # Start conversion
         if converter.convert(obj_path, output_path):
             logger.info("OBJ conversion successful")
@@ -457,75 +519,83 @@ def convert_obj_to_glb(obj_path, output_path):
         else:
             logger.error("OBJ conversion failed")
             return None
-            
+
     except Exception as e:
         logger.error(f"Error during OBJ conversion: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
+
 def convert_to_glb(file_path):
     """Convert uploaded 3D model to GLB format using appropriate converter."""
     try:
-        file_ext = os.path.splitext(file_path)[1].lower()[1:]  # Get extension without dot
-        output_path = os.path.join(app.config['CONVERTED_FOLDER'], os.path.splitext(os.path.basename(file_path))[0] + '.glb')
-        
+        file_ext = os.path.splitext(file_path)[1].lower()[
+            1:
+        ]  # Get extension without dot
+        output_path = os.path.join(
+            app.config["CONVERTED_FOLDER"],
+            os.path.splitext(os.path.basename(file_path))[0] + ".glb",
+        )
+
         if file_ext not in ALLOWED_EXTENSIONS:
             logger.error(f"Unsupported file format: {file_ext}")
             return None
-            
+
         # Create appropriate converter based on file extension
-        if file_ext == 'obj':
+        if file_ext == "obj":
             converter = OBJConverter()
-        elif file_ext == 'stl':
+        elif file_ext == "stl":
             converter = STLConverter()
-        elif file_ext == 'fbx':
+        elif file_ext == "fbx":
             converter = FBXConverter()
         else:
             logger.error(f"No converter available for {file_ext}")
             return None
-            
+
         # Validate and convert the file
         if not converter.validate(file_path):
             logger.error("File validation failed")
             return None
-            
+
         if converter.convert(file_path, output_path):
             logger.info(f"Successfully converted {file_ext.upper()} to GLB")
             return output_path
         else:
             logger.error("Conversion failed")
             return None
-            
+
     except Exception as e:
         logger.error(f"Error in convert_to_glb: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return None
+
 
 def normalize_texture_name(filename):
     """Normalize texture filename for comparison by removing common variations."""
     # Convert to lowercase
     name = filename.lower()
     # Remove common prefixes
-    prefixes = ['indoor_', 'indoor']
+    prefixes = ["indoor_", "indoor"]
     for prefix in prefixes:
         if name.startswith(prefix):
-            name = name[len(prefix):]
+            name = name[len(prefix) :]
     # Remove underscores and spaces
-    name = name.replace('_', '').replace(' ', '')
+    name = name.replace("_", "").replace(" ", "")
     return name
+
 
 def extract_texture_references(mtl_path):
     """Extract texture file references from MTL file."""
     texture_files = set()
     if not mtl_path or not os.path.exists(mtl_path):
         return texture_files
-        
+
     try:
-        with open(mtl_path, 'r') as f:
+        with open(mtl_path, "r") as f:
             for line in f:
                 line = line.strip().lower()
                 # Check for common texture map types
-                if any(line.startswith(prefix) for prefix in ['map_', 'bump', 'disp']):
+                if any(line.startswith(prefix) for prefix in ["map_", "bump", "disp"]):
                     parts = line.split()
                     if len(parts) >= 2:
                         # Get the texture filename, removing any path
@@ -533,26 +603,30 @@ def extract_texture_references(mtl_path):
                         texture_files.add(texture_file)
     except Exception as e:
         app.logger.error(f"Error reading MTL file: {str(e)}")
-    
+
     return texture_files
+
 
 def process_mtl_file(mtl_path, available_textures, temp_dir):
     """Process MTL file and handle missing textures."""
     if not os.path.exists(mtl_path):
         return None
-        
+
     try:
-        with open(mtl_path, 'r') as f:
+        with open(mtl_path, "r") as f:
             mtl_content = f.read()
-            
+
         # Create textures directory in temp folder
-        temp_textures_dir = os.path.join(temp_dir, 'textures')
+        temp_textures_dir = os.path.join(temp_dir, "textures")
         os.makedirs(temp_textures_dir, exist_ok=True)
-        
+
         # Process each texture reference
         modified_content = []
         for line in mtl_content.splitlines():
-            if any(line.strip().lower().startswith(prefix) for prefix in ['map_', 'bump', 'disp']):
+            if any(
+                line.strip().lower().startswith(prefix)
+                for prefix in ["map_", "bump", "disp"]
+            ):
                 parts = line.strip().split()
                 if len(parts) >= 2:
                     texture_name = os.path.basename(parts[-1]).lower()
@@ -560,42 +634,47 @@ def process_mtl_file(mtl_path, available_textures, temp_dir):
                     if texture_name in available_textures:
                         # Copy and reference available texture with original case
                         original_name = available_textures[texture_name]
-                        src_path = os.path.join(app.config['UPLOAD_FOLDER'], original_name)
+                        src_path = os.path.join(
+                            app.config["UPLOAD_FOLDER"], original_name
+                        )
                         dst_path = os.path.join(temp_textures_dir, original_name)
                         shutil.copy2(src_path, dst_path)
                         # Update path in MTL
                         parts[-1] = f"textures/{original_name}"
-                        modified_content.append(' '.join(parts))
+                        modified_content.append(" ".join(parts))
                         app.logger.info(f"Copied texture file: {original_name}")
                     else:
                         # Skip missing texture line and log warning
-                        app.logger.warning(f"Texture file not found in map: {texture_name}")
+                        app.logger.warning(
+                            f"Texture file not found in map: {texture_name}"
+                        )
                         continue
             else:
                 modified_content.append(line)
-                
+
         # Write modified MTL
         temp_mtl = os.path.join(temp_dir, os.path.basename(mtl_path))
-        with open(temp_mtl, 'w') as f:
-            f.write('\n'.join(modified_content))
-            
-        app.logger.info("Updated MTL content:\n" + '\n'.join(modified_content))
+        with open(temp_mtl, "w") as f:
+            f.write("\n".join(modified_content))
+
+        app.logger.info("Updated MTL content:\n" + "\n".join(modified_content))
         return temp_mtl
-        
+
     except Exception as e:
         app.logger.error(f"Error processing MTL file: {str(e)}")
         return None
 
+
 def fix_mtl_paths(content, texture_map):
     """Fix texture paths in MTL content to use only filenames."""
     app.logger.info(f"Original MTL content:\n{content}")
-    
+
     # Split content into lines
-    lines = content.split('\n')
+    lines = content.split("\n")
     updated_lines = []
-    
+
     for line in lines:
-        if line.strip().startswith('map_Kd'):
+        if line.strip().startswith("map_Kd"):
             # Extract the texture filename from the path
             parts = line.strip().split()
             if len(parts) >= 2:
@@ -611,10 +690,11 @@ def fix_mtl_paths(content, texture_map):
                     updated_lines.append(line)
         else:
             updated_lines.append(line)
-    
-    updated_content = '\n'.join(updated_lines)
+
+    updated_content = "\n".join(updated_lines)
     app.logger.info(f"Updated MTL content:\n{updated_content}")
     return updated_content
+
 
 def generate_qr_code(model_id):
     """Generate QR code for a model."""
@@ -626,9 +706,9 @@ def generate_qr_code(model_id):
             return None
 
         # Generate the absolute URL for the model view
-        base_url = request.host_url.rstrip('/')  # Get base URL without trailing slash
+        base_url = request.host_url.rstrip("/")  # Get base URL without trailing slash
         model_url = f"{base_url}{url_for('view_model', model_id=model_id)}"
-        
+
         # Create QR code instance
         qr = qrcode.QRCode(
             version=1,
@@ -636,43 +716,48 @@ def generate_qr_code(model_id):
             box_size=10,
             border=4,
         )
-        
+
         # Add data to QR code
         qr.add_data(model_url)
         qr.make(fit=True)
 
         # Create QR code image with proper coloring
         qr_image = qr.make_image(fill_color="black", back_color="white")
-        
+
         # Generate unique filename for QR code
         qr_filename = f"qr_{model_id}_{uuid.uuid4()}.png"
-        qr_path = os.path.join(app.config['CONVERTED_FOLDER'], qr_filename)
-        
+        qr_path = os.path.join(app.config["CONVERTED_FOLDER"], qr_filename)
+
         # Save QR code image
         qr_image.save(qr_path)
-        
+
         # Update model with QR code filename
         model.qr_code = qr_filename
         db.session.commit()
-        
+
         logger.info(f"QR code generated successfully: {qr_filename}")
         return qr_filename
     except Exception as e:
         logger.error(f"Error generating QR code: {str(e)}")
         return None
 
+
 def validate_color(color):
     """Validate hex color format."""
     if not color:
-        return '#4CAF50'  # Default green
-    if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', color):
-        raise ValueError('Invalid color format. Must be a valid hex color (e.g., #FF0000)')
+        return "#4CAF50"  # Default green
+    if not re.match(r"^#(?:[0-9a-fA-F]{3}){1,2}$", color):
+        raise ValueError(
+            "Invalid color format. Must be a valid hex color (e.g., #FF0000)"
+        )
     return color
+
 
 def hex_to_rgb(hex_color):
     """Convert hex color string to RGB values (0-1 range)."""
-    hex_color = hex_color.lstrip('#')
-    return [int(hex_color[i:i+2], 16)/255 for i in (0, 2, 4)]
+    hex_color = hex_color.lstrip("#")
+    return [int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4)]
+
 
 def cleanup_files(*file_paths):
     """Clean up temporary files."""
@@ -684,8 +769,10 @@ def cleanup_files(*file_paths):
             except Exception as e:
                 logger.warning(f"Failed to clean up file {file_path}: {str(e)}")
 
+
 def generate_unique_id():
     return str(uuid.uuid4())
+
 
 def cleanup_missing_models():
     """Clean up database records for models whose files no longer exist."""
@@ -694,42 +781,52 @@ def cleanup_missing_models():
         session = Session(db.engine)
         models = session.query(UserModel).all()
         deleted_count = 0
-        
+
         for model in models:
             # Check if the original uploaded file exists
             if not os.path.exists(model.file_path):
-                logger.info(f"Model {model.id} ({model.original_filename}) file not found at: {model.file_path}")
+                logger.info(
+                    f"Model {model.id} ({model.original_filename}) file not found at: {model.file_path}"
+                )
                 try:
                     # Also try to delete the converted file if it exists
-                    converted_path = os.path.join(app.config['CONVERTED_FOLDER'], f"{model.id}.glb")
+                    converted_path = os.path.join(
+                        app.config["CONVERTED_FOLDER"], f"{model.id}.glb"
+                    )
                     if os.path.exists(converted_path):
                         os.remove(converted_path)
                         logger.info(f"Deleted converted file: {converted_path}")
                 except Exception as e:
-                    logger.warning(f"Error deleting converted file for model {model.id}: {str(e)}")
-                
+                    logger.warning(
+                        f"Error deleting converted file for model {model.id}: {str(e)}"
+                    )
+
                 # Delete from database
                 session.delete(model)
                 deleted_count += 1
                 logger.info(f"Deleted model {model.id} from database")
-        
+
         if deleted_count > 0:
             db.session.commit()
-            logger.info(f"Cleaned up {deleted_count} missing model records from database")
-            flash(f"{deleted_count} missing model(s) were cleaned up from the database", "info")
-        
+            logger.info(
+                f"Cleaned up {deleted_count} missing model records from database"
+            )
+            flash(
+                f"{deleted_count} missing model(s) were cleaned up from the database",
+                "info",
+            )
+
     except Exception as e:
         logger.error(f"Error cleaning up missing models: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         db.session.rollback()
         flash("Error cleaning up missing models", "error")
 
+
 def check_node_installed():
     """Check if Node.js is installed."""
     try:
-        result = subprocess.run(['node', '--version'], 
-                              capture_output=True, 
-                              text=True)
+        result = subprocess.run(["node", "--version"], capture_output=True, text=True)
         if result.returncode == 0:
             app.logger.info(f"Node.js is installed: {result.stdout.strip()}")
             return True
@@ -740,28 +837,30 @@ def check_node_installed():
         app.logger.error(f"Error checking Node.js: {str(e)}")
         return False
 
+
 def ensure_obj2gltf_installed():
     """Ensure obj2gltf is installed globally."""
     try:
         # Platform-aware npx path
         import platform
-        if platform.system() == 'Windows':
+
+        if platform.system() == "Windows":
             npx_path = r"C:\Program Files\nodejs\npx.cmd"
         else:
-            npx_path = shutil.which('npx') or 'npx'
-        
+            npx_path = shutil.which("npx") or "npx"
+
         # Check if obj2gltf is installed
-        result = subprocess.run([npx_path, 'obj2gltf', '--version'],
-                              capture_output=True,
-                              text=True)
+        result = subprocess.run(
+            [npx_path, "obj2gltf", "--version"], capture_output=True, text=True
+        )
         if result.returncode == 0:
             app.logger.info(f"obj2gltf is installed: {result.stdout.strip()}")
             return True
         else:
             app.logger.info("Installing obj2gltf globally...")
-            install_result = subprocess.run(['npm', 'install', '-g', 'obj2gltf'],
-                                         capture_output=True,
-                                         text=True)
+            install_result = subprocess.run(
+                ["npm", "install", "-g", "obj2gltf"], capture_output=True, text=True
+            )
             if install_result.returncode == 0:
                 app.logger.info("obj2gltf installed successfully")
                 return True
@@ -772,13 +871,14 @@ def ensure_obj2gltf_installed():
         app.logger.error(f"Error with obj2gltf: {str(e)}")
         return False
 
+
 def init_app_dependencies():
     """Initialize application dependencies and directories."""
     try:
         # Create necessary directories
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        os.makedirs(app.config['CONVERTED_FOLDER'], exist_ok=True)
-        os.makedirs(app.config['TEMP_FOLDER'], exist_ok=True)
+        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+        os.makedirs(app.config["CONVERTED_FOLDER"], exist_ok=True)
+        os.makedirs(app.config["TEMP_FOLDER"], exist_ok=True)
         app.logger.info("Created necessary directories")
 
         # Check for Node.js and obj2gltf
@@ -798,9 +898,11 @@ def init_app_dependencies():
         app.logger.error(traceback.format_exc())
         return False
 
-@app.route('/', methods=['GET'])
+
+@app.route("/", methods=["GET"])
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
+
 
 def convert_to_usdz(input_glb_path, output_usdz_path):
     """
@@ -809,51 +911,56 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
     """
     try:
         logger.info(f"Starting USDZ conversion: {input_glb_path} -> {output_usdz_path}")
-        
+
         # Path to the blender script
-        blender_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tools', 'blender_usdz_export.py')
-        
+        blender_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "tools",
+            "blender_usdz_export.py",
+        )
+
         # Check for blender executable
-        blender_exec = 'blender'
+        blender_exec = "blender"
         # On Windows, try to find commonly used paths if not in PATH
-        if os.name == 'nt':
+        if os.name == "nt":
             possible_paths = [
                 r"C:\Program Files\Blender Foundation\Blender 3.6\blender.exe",
                 r"C:\Program Files\Blender Foundation\Blender 4.0\blender.exe",
                 r"C:\Program Files\Blender Foundation\Blender 4.1\blender.exe",
                 r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe",
-                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe"
+                r"C:\Program Files\Blender Foundation\Blender 4.3\blender.exe",
             ]
             # Check if 'blender' is in PATH first
-            if shutil.which('blender'):
-                blender_exec = 'blender'
+            if shutil.which("blender"):
+                blender_exec = "blender"
             else:
                 for p in possible_paths:
                     if os.path.exists(p):
                         blender_exec = p
                         break
-        
+
         # Construct command
         cmd = [
             blender_exec,
-            '--background',
-            '--python', blender_script,
-            '--',
+            "--background",
+            "--python",
+            blender_script,
+            "--",
             input_glb_path,
-            output_usdz_path
+            output_usdz_path,
         ]
-        
+
         logger.info(f"Running Blender command: {cmd}")
-        
+
         # Run conversion
         process = subprocess.run(
-            cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            text=True, 
-            timeout=300 # 5 minute timeout
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=300,  # 5 minute timeout
         )
-        
+
         if process.returncode == 0 and os.path.exists(output_usdz_path):
             logger.info(f"USDZ conversion successful: {output_usdz_path}")
             return True
@@ -862,7 +969,7 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             logger.warning(f"Stdout: {process.stdout}")
             logger.warning(f"Stderr: {process.stderr}")
             return False
-            
+
     except Exception as e:
         logger.error(f"Error during USDZ conversion: {e}")
         return False
@@ -875,9 +982,9 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
     """
     try:
         logger.info(f"[USDZ Async - {model_id}] Starting background USDZ conversion")
-        
+
         success = convert_to_usdz(input_glb_path, output_usdz_path)
-        
+
         if success:
             # Update database with USDZ path
             with app.app_context():
@@ -885,14 +992,175 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
                 if model:
                     model.usdz_filename = output_usdz_path
                     db.session.commit()
-                    logger.info(f"[USDZ Async - {model_id}] Database updated with USDZ path")
+                    logger.info(
+                        f"[USDZ Async - {model_id}] Database updated with USDZ path"
+                    )
                 else:
-                    logger.warning(f"[USDZ Async - {model_id}] Model not found in database")
+                    logger.warning(
+                        f"[USDZ Async - {model_id}] Model not found in database"
+                    )
         else:
             logger.warning(f"[USDZ Async - {model_id}] USDZ conversion failed")
-            
+
     except Exception as e:
         logger.error(f"[USDZ Async - {model_id}] Error in background conversion: {e}")
+
+
+def generate_thumbnail_async(model_id, input_glb_path, color=None):
+    """
+    Background task to generate a thumbnail image for a 3D model.
+    This runs in a separate thread to not block the upload response.
+    """
+    try:
+        logger.info(
+            f"[Thumbnail Async - {model_id}] Starting background thumbnail generation"
+        )
+
+        thumbnail_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, "thumbnail.png"
+        )
+
+        # If thumbnail already exists, skip
+        if os.path.exists(thumbnail_path):
+            logger.info(
+                f"[Thumbnail Async - {model_id}] Thumbnail already exists, skipping"
+            )
+            return
+
+        # Try to generate from 3D model using trimesh
+        try:
+            import trimesh
+            import numpy as np
+            from PIL import Image, ImageDraw, ImageFont
+
+            # Load mesh
+            mesh = trimesh.load(input_glb_path, file_type="glb")
+
+            # Get combined geometry if it's a Scene
+            if isinstance(mesh, trimesh.Scene):
+                meshes = [
+                    g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)
+                ]
+                if meshes:
+                    combined = trimesh.util.concatenate(meshes)
+                else:
+                    raise ValueError("No meshes found in scene")
+            else:
+                combined = mesh
+
+            # Create image
+            img = Image.new("RGB", (256, 256), color=(30, 30, 40))
+            draw = ImageDraw.Draw(img)
+
+            # Try to use default font
+            try:
+                font = ImageFont.truetype("arial.ttf", 14)
+                font_small = ImageFont.truetype("arial.ttf", 10)
+            except:
+                font = ImageFont.load_default()
+                font_small = font
+
+            # Get model name from database
+            with app.app_context():
+                model = UserModel.query.get(model_id)
+                name = model.original_filename[:25] if model else "Model"
+
+            # Draw model name
+            draw.text((128, 100), name, fill=(255, 255, 255), font=font, anchor="mm")
+
+            # Draw model stats
+            stats = []
+            if hasattr(combined, "vertices"):
+                stats.append(f"{len(combined.vertices)} vertices")
+            if hasattr(combined, "faces"):
+                stats.append(f"{len(combined.faces)} faces")
+
+            for i, stat in enumerate(stats):
+                draw.text(
+                    (128, 130 + i * 20),
+                    stat,
+                    fill=(150, 160, 180),
+                    font=font_small,
+                    anchor="mm",
+                )
+
+            # Save thumbnail
+            img.save(thumbnail_path, "PNG")
+            logger.info(
+                f"[Thumbnail Async - {model_id}] Thumbnail generated from 3D model"
+            )
+            return
+
+        except Exception as e:
+            logger.warning(
+                f"[Thumbnail Async - {model_id}] Failed to generate 3D thumbnail: {e}"
+            )
+
+        # Fallback: Generate gradient-based thumbnail
+        with app.app_context():
+            model = UserModel.query.get(model_id)
+            if not model:
+                logger.warning(
+                    f"[Thumbnail Async - {model_id}] Model not found in database"
+                )
+                return
+
+            thumb_color = color or model.color or "#667eea"
+            name = model.original_filename[:20]
+            file_type = model.file_type or "GLB"
+
+            svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+                <defs>
+                    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:{thumb_color};stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:{thumb_color}cc;stop-opacity:1" />
+                    </linearGradient>
+                    <radialGradient id="glow" cx="50%" cy="60%" r="50%">
+                        <stop offset="0%" style="stop-color:rgba(255,255,255,0.2);stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:rgba(255,255,255,0);stop-opacity:1" />
+                    </radialGradient>
+                </defs>
+                <rect width="256" height="256" fill="url(#bg)"/>
+                <rect width="256" height="256" fill="url(#glow)"/>
+                <text x="128" y="120" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">
+                    {name}
+                </text>
+                <text x="128" y="145" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-family="Arial, sans-serif" font-size="12">
+                    {file_type} Model
+                </text>
+            </svg>"""
+
+            # Try to convert SVG to PNG
+            try:
+                import cairosvg
+
+                png_data = cairosvg.svg2png(
+                    bytestring=svg_content.encode(), output_width=256, output_height=256
+                )
+
+                with open(thumbnail_path, "wb") as f:
+                    f.write(png_data)
+
+                logger.info(
+                    f"[Thumbnail Async - {model_id}] Thumbnail generated from SVG (PNG)"
+                )
+            except ImportError:
+                # If cairosvg is not available, save SVG
+                svg_path = os.path.join(
+                    app.config["CONVERTED_FOLDER"], model_id, "thumbnail.svg"
+                )
+                with open(svg_path, "w") as f:
+                    f.write(svg_content)
+                logger.info(f"[Thumbnail Async - {model_id}] Thumbnail saved as SVG")
+            except Exception as e:
+                logger.warning(
+                    f"[Thumbnail Async - {model_id}] Failed to convert SVG: {e}"
+                )
+
+    except Exception as e:
+        logger.error(
+            f"[Thumbnail Async - {model_id}] Error in thumbnail generation: {e}"
+        )
 
 
 def cleanup_old_backups(model_dir, max_backups=3):
@@ -900,154 +1168,162 @@ def cleanup_old_backups(model_dir, max_backups=3):
     try:
         if not os.path.isdir(model_dir):
             return
-        
+
         backup_files = [
-            f for f in os.listdir(model_dir)
-            if f.startswith('model_backup_') and f.endswith('.glb')
+            f
+            for f in os.listdir(model_dir)
+            if f.startswith("model_backup_") and f.endswith(".glb")
         ]
-        
+
         if len(backup_files) <= max_backups:
             return
-        
+
         # Sort by modification time (oldest first)
-        backup_files.sort(
-            key=lambda f: os.path.getmtime(os.path.join(model_dir, f))
-        )
-        
+        backup_files.sort(key=lambda f: os.path.getmtime(os.path.join(model_dir, f)))
+
         # Remove oldest backups, keep most recent
         for old_backup in backup_files[:-max_backups]:
             old_path = os.path.join(model_dir, old_backup)
             os.remove(old_path)
             logger.info(f"Cleaned up old backup: {old_path}")
-            
+
     except Exception as e:
         logger.error(f"Error cleaning up backups: {e}")
 
 
-@app.route('/api/models/<model_id>/usdz_status')
+@app.route("/api/models/<model_id>/usdz_status")
 def get_usdz_status(model_id):
     """Check if USDZ file is ready for iOS AR viewing."""
     try:
         model = UserModel.query.get(model_id)
         if not model:
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
         usdz_ready = False
         usdz_filename = None
-        
+
         if model.usdz_filename and os.path.exists(model.usdz_filename):
             usdz_ready = True
             usdz_filename = os.path.basename(model.usdz_filename)
         else:
             # Also check the converted directory for usdz files
-            converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
+            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
             if os.path.isdir(converted_dir):
-                usdz_files = [f for f in os.listdir(converted_dir) if f.endswith('.usdz')]
+                usdz_files = [
+                    f for f in os.listdir(converted_dir) if f.endswith(".usdz")
+                ]
                 if usdz_files:
                     usdz_ready = True
                     usdz_filename = usdz_files[0]
-        
-        return jsonify({
-            'success': True,
-            'usdz_ready': usdz_ready,
-            'usdz_filename': usdz_filename
-        })
+
+        return jsonify(
+            {"success": True, "usdz_ready": usdz_ready, "usdz_filename": usdz_filename}
+        )
     except Exception as e:
         logger.error(f"Error checking USDZ status: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/upload', methods=['POST'])
+
+@app.route("/upload", methods=["POST"])
 def upload_file():
     """DEPRECATED: Legacy upload route. Use /upload_model instead.
     Kept for backward compatibility with existing tests."""
     try:
         logger.info("Starting upload process")
-        
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file uploaded'}), 400
-            
-        file = request.files['file']
+
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files["file"]
         logger.info(f"File object: {file}")
-        
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-            
+
+        if file.filename == "":
+            return jsonify({"error": "No file selected"}), 400
+
         if not allowed_file(file.filename):
-            return jsonify({'error': 'File type not allowed'}), 400
-            
+            return jsonify({"error": "File type not allowed"}), 400
+
         # Generate unique ID
         unique_id = str(uuid.uuid4())
         logger.info(f"Generated unique ID: {unique_id}")
-        
+
         # Create upload subdirectory
-        upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], unique_id)
+        upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], unique_id)
         os.makedirs(upload_subdir, exist_ok=True)
         logger.info(f"Created upload subdirectory: {upload_subdir}")
-        
+
         # Save uploaded file
         filename = secure_filename(file.filename)
         file_path = os.path.join(upload_subdir, filename)
         file.save(file_path)
         logger.info(f"File saved successfully: {file_path}")
-        
+
         # Get file extension
         file_extension = os.path.splitext(filename)[1].lower()
         logger.info(f"File extension: {file_extension}")
-        
+
         # Get color settings
         # Handle both string and boolean values for useColor
-        use_color_raw = request.form.get('useColor', 'false')
+        use_color_raw = request.form.get("useColor", "false")
         if isinstance(use_color_raw, str):
-            use_color = use_color_raw.lower() in ('true', '1', 'yes')
+            use_color = use_color_raw.lower() in ("true", "1", "yes")
         else:
             use_color = bool(use_color_raw)
-        
-        color = request.form.get('color', '#4CAF50')
+
+        color = request.form.get("color", "#4CAF50")
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
-        
+
         # Get texture removal setting (for FBX)
-        remove_textures_raw = request.form.get('removeTextures')
-        remove_textures = remove_textures_raw == 'true' if remove_textures_raw else False
+        remove_textures_raw = request.form.get("removeTextures")
+        remove_textures = (
+            remove_textures_raw == "true" if remove_textures_raw else False
+        )
         logger.info(f"Remove textures setting: {remove_textures}")
-        
+
         # Get maximum dimension setting (only if checkbox is checked)
-        use_max_dimension_raw = request.form.get('useMaxDimension')
-        logger.info(f"DEBUG: useMaxDimension raw value: {use_max_dimension_raw}, type: {type(use_max_dimension_raw)}")
-        use_max_dimension = use_max_dimension_raw == 'true' if use_max_dimension_raw else False
+        use_max_dimension_raw = request.form.get("useMaxDimension")
+        logger.info(
+            f"DEBUG: useMaxDimension raw value: {use_max_dimension_raw}, type: {type(use_max_dimension_raw)}"
+        )
+        use_max_dimension = (
+            use_max_dimension_raw == "true" if use_max_dimension_raw else False
+        )
         logger.info(f"DEBUG: useMaxDimension parsed: {use_max_dimension}")
-        
+
         if use_max_dimension:
-            max_dimension = float(request.form.get('maxDimension', '50'))  # Keep in cm
+            max_dimension = float(request.form.get("maxDimension", "50"))  # Keep in cm
             logger.info(f"Maximum dimension limit enabled: {max_dimension} cm")
         else:
             max_dimension = None  # No scaling
-            logger.info(f"Maximum dimension limit disabled - model will keep original size")
-        
+            logger.info(
+                f"Maximum dimension limit disabled - model will keep original size"
+            )
+
         # Create converted directory
-        converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], unique_id)
+        converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
         os.makedirs(converted_dir, exist_ok=True)
-        output_path = os.path.join(converted_dir, 'model.glb')
-        
+        output_path = os.path.join(converted_dir, "model.glb")
+
         # Get file info
         file_info = get_file_info(file_path)
-        
+
         # Convert based on file type
-        if file_extension == '.obj':
+        if file_extension == ".obj":
             converter = OBJConverter()
-            
+
             # Handle MTL file for OBJ
-            if 'mtl' in request.files:
-                mtl_file = request.files['mtl']
+            if "mtl" in request.files:
+                mtl_file = request.files["mtl"]
                 if mtl_file and mtl_file.filename:
                     mtl_filename = secure_filename(mtl_file.filename)
                     mtl_path = os.path.join(upload_subdir, mtl_filename)
                     mtl_file.save(mtl_path)
                     converter.set_material_file(mtl_path)
                     logger.info(f"MTL file saved: {mtl_path}")
-            
+
             # Handle texture files for OBJ
-            if 'textures' in request.files:
-                texture_files = request.files.getlist('textures')
+            if "textures" in request.files:
+                texture_files = request.files.getlist("textures")
                 for texture_file in texture_files:
                     if texture_file and texture_file.filename:
                         texture_filename = secure_filename(texture_file.filename)
@@ -1055,463 +1331,600 @@ def upload_file():
                         texture_file.save(texture_path)
                         converter.add_texture_file(texture_path)
                         logger.info(f"Texture file saved: {texture_path}")
-                        
-        elif file_extension == '.stl':
+
+        elif file_extension == ".stl":
             converter = STLConverter()
-        elif file_extension == '.fbx':
+        elif file_extension == ".fbx":
             converter = FBXConverter()
             # Set texture removal for FBX if requested
             if remove_textures:
                 converter.remove_textures = True
                 logger.info("FBX texture removal enabled")
         else:
-            return jsonify({'error': 'Unsupported file format'}), 400
-            
+            return jsonify({"error": "Unsupported file format"}), 400
+
         # Set maximum dimension (already in cm from form)
         if max_dimension is not None:
             converter.set_max_dimension(max_dimension)
-        
+
         # Apply color if specified
         if use_color and color:
             success = converter.convert(file_path, output_path, color=color)
         else:
             success = converter.convert(file_path, output_path)
-            
+
         if not success:
-            return jsonify({'error': 'Conversion failed'}), 500
+            return jsonify({"error": "Conversion failed"}), 500
 
         # Save model info to database
         model = UserModel(
-            id=unique_id, # Use the same unique_id generated for the folder
+            id=unique_id,  # Use the same unique_id generated for the folder
             user_id=current_user.id if current_user.is_authenticated else None,
             filename=output_path,  # Store the full path to the GLB file
             file_size=os.path.getsize(output_path),
             file_type=os.path.splitext(filename)[1][1:],  # Remove the dot
             upload_date=datetime.utcnow(),
-            color=color if use_color else None
+            color=color if use_color else None,
         )
         db.session.add(model)
         db.session.commit()
         logger.info(f"Model info saved to database with ID: {unique_id}")
-            
+
         # Generate QR code
         qr_code_filename = generate_qr_code(unique_id)
         logger.info(f"QR code generated: {qr_code_filename}")
-        
+
         # Return success response
-        viewer_url = url_for('view_model', model_id=unique_id)
-        return jsonify({
-            'success': True,
-            'viewer_url': viewer_url,
-            'message': 'Model uploaded and converted successfully'
-        })
-        
+        viewer_url = url_for("view_model", model_id=unique_id)
+        return jsonify(
+            {
+                "success": True,
+                "viewer_url": viewer_url,
+                "message": "Model uploaded and converted successfully",
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error during upload: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/upload_progress')
+
+@app.route("/upload_progress")
 def upload_progress():
     """Get the current upload progress."""
-    progress = session.get('upload_progress', 0)
-    return jsonify({'progress': progress})
+    progress = session.get("upload_progress", 0)
+    return jsonify({"progress": progress})
 
-@app.route('/upload_model', methods=['POST'])
+
+@app.route("/upload_model", methods=["POST"])
 def upload_model():
     """Upload and convert 3D model. Works with or without login."""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
-        
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
-        
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
     original_filename = secure_filename(file.filename)
     if not allowed_file(original_filename):
-        return jsonify({'error': 'File type not allowed'}), 400
-        
-    temp_dir = None # Initialize temp_dir
+        return jsonify({"error": "File type not allowed"}), 400
+
+    temp_dir = None  # Initialize temp_dir
     try:
         # Get form data
         # Handle both string and boolean values for useColor
-        use_color_raw = request.form.get('useColor', 'false')
+        use_color_raw = request.form.get("useColor", "false")
         if isinstance(use_color_raw, str):
-            use_color = use_color_raw.lower() in ('true', '1', 'yes')
+            use_color = use_color_raw.lower() in ("true", "1", "yes")
         else:
             use_color = bool(use_color_raw)
-        
-        color = request.form.get('color', '#4CAF50')
+
+        color = request.form.get("color", "#4CAF50")
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
-        
+
         # Get maximum dimension setting (only if checkbox is checked)
-        use_max_dimension_raw = request.form.get('useMaxDimension')
-        use_max_dimension = use_max_dimension_raw == 'true' if use_max_dimension_raw else False
+        use_max_dimension_raw = request.form.get("useMaxDimension")
+        use_max_dimension = (
+            use_max_dimension_raw == "true" if use_max_dimension_raw else False
+        )
         logger.info(f"useMaxDimension checkbox: {use_max_dimension}")
-        
+
         max_dimension = None
         if use_max_dimension:
-            max_dimension_str = request.form.get('maxDimension')
+            max_dimension_str = request.form.get("maxDimension")
             if max_dimension_str:
                 try:
-                    max_dimension = float(max_dimension_str) / 100.0  # Convert cm to meters
-                    logger.info(f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)")
+                    max_dimension = (
+                        float(max_dimension_str) / 100.0
+                    )  # Convert cm to meters
+                    logger.info(
+                        f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)"
+                    )
                 except ValueError:
                     logger.warning(f"Invalid maxDimension value: {max_dimension_str}")
         else:
-            logger.info("Maximum dimension limit disabled - model will keep original size")
+            logger.info(
+                "Maximum dimension limit disabled - model will keep original size"
+            )
 
-        # --- Start: Consistent File Handling Logic --- 
+        # --- Start: Consistent File Handling Logic ---
         unique_id = str(uuid.uuid4())
         logger.info(f"[upload_model - {unique_id}] Generated unique ID")
 
         # Define temporary save path for uploaded file
-        temp_dir = os.path.join(app.config['TEMP_FOLDER'], unique_id)
+        temp_dir = os.path.join(app.config["TEMP_FOLDER"], unique_id)
         os.makedirs(temp_dir, exist_ok=True)
         temp_file_path = os.path.join(temp_dir, original_filename)
-        
+
         # Save uploaded file temporarily
         file.save(temp_file_path)
-        logger.info(f"[upload_model - {unique_id}] Temporary file saved: {temp_file_path}")
+        logger.info(
+            f"[upload_model - {unique_id}] Temporary file saved: {temp_file_path}"
+        )
 
         # Define final output path in unique converted directory
-        converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], unique_id)
+        converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
         os.makedirs(converted_dir, exist_ok=True)
-        output_path = os.path.join(converted_dir, 'model.glb')
-        logger.info(f"[upload_model - {unique_id}] Defined final output path: {output_path}")
+        output_path = os.path.join(converted_dir, "model.glb")
+        logger.info(
+            f"[upload_model - {unique_id}] Defined final output path: {output_path}"
+        )
 
         # Get file extension
         file_extension = os.path.splitext(original_filename)[1].lower()
 
         # Instantiate appropriate converter
         converter = None
-        if file_extension == '.obj':
+        if file_extension == ".obj":
             converter = OBJConverter()
-            
+
             # Handle MTL file for OBJ
-            if 'mtl' in request.files:
-                mtl_file = request.files['mtl']
+            if "mtl" in request.files:
+                mtl_file = request.files["mtl"]
                 if mtl_file and mtl_file.filename:
                     mtl_filename = secure_filename(mtl_file.filename)
                     mtl_path = os.path.join(temp_dir, mtl_filename)
                     mtl_file.save(mtl_path)
                     converter.set_material_file(mtl_path)
-                    logger.info(f"[upload_model - {unique_id}] MTL file saved: {mtl_path}")
-            
+                    logger.info(
+                        f"[upload_model - {unique_id}] MTL file saved: {mtl_path}"
+                    )
+
             # Handle texture files for OBJ
-            if 'textures' in request.files:
-                texture_files = request.files.getlist('textures')
+            if "textures" in request.files:
+                texture_files = request.files.getlist("textures")
                 for texture_file in texture_files:
                     if texture_file and texture_file.filename:
                         texture_filename = secure_filename(texture_file.filename)
                         texture_path = os.path.join(temp_dir, texture_filename)
                         texture_file.save(texture_path)
                         converter.add_texture_file(texture_path)
-                        logger.info(f"[upload_model - {unique_id}] Texture file saved: {texture_path}")
-            
-        elif file_extension == '.stl':
+                        logger.info(
+                            f"[upload_model - {unique_id}] Texture file saved: {texture_path}"
+                        )
+
+        elif file_extension == ".stl":
             converter = STLConverter()
-        elif file_extension == '.fbx':
+        elif file_extension == ".fbx":
             converter = FBXConverter()
-        elif file_extension in ('.glb', '.gltf'):
+        elif file_extension in (".glb", ".gltf"):
             # GLB is already the target format; GLTF can be loaded+exported as GLB
             converter = None  # No converter needed, handle directly below
-        
+
         # Handle GLB/GLTF directly (no converter needed)
-        if file_extension in ('.glb', '.gltf'):
+        if file_extension in (".glb", ".gltf"):
             try:
-                if file_extension == '.glb':
+                if file_extension == ".glb":
                     # GLB is already binary glTF - just copy it
                     shutil.copy2(temp_file_path, output_path)
-                    logger.info(f"[upload_model - {unique_id}] GLB file copied directly to {output_path}")
+                    logger.info(
+                        f"[upload_model - {unique_id}] GLB file copied directly to {output_path}"
+                    )
                 else:
                     # GLTF (text-based) needs to be loaded and re-exported as GLB
                     import trimesh as tm_gltf
+
                     gltf_mesh = tm_gltf.load(temp_file_path)
-                    gltf_mesh.export(output_path, file_type='glb')
-                    logger.info(f"[upload_model - {unique_id}] GLTF converted to GLB: {output_path}")
+                    gltf_mesh.export(output_path, file_type="glb")
+                    logger.info(
+                        f"[upload_model - {unique_id}] GLTF converted to GLB: {output_path}"
+                    )
                 conversion_success = os.path.exists(output_path)
             except Exception as e:
-                logger.error(f"[upload_model - {unique_id}] Error handling GLB/GLTF: {e}", exc_info=True)
+                logger.error(
+                    f"[upload_model - {unique_id}] Error handling GLB/GLTF: {e}",
+                    exc_info=True,
+                )
                 conversion_success = False
         elif not converter:
-            if temp_dir: shutil.rmtree(temp_dir)
-            return jsonify({'error': 'Unsupported file format'}), 400
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            return jsonify({"error": "Unsupported file format"}), 400
         else:
             # Set max dimension if specified (max_dimension is in meters)
             if max_dimension is not None:
                 converter.set_max_dimension(max_dimension)
 
             # Perform conversion
-            logger.info(f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}")
-            conversion_success = converter.convert(temp_file_path, output_path, color=color if use_color else None)
-            logger.info(f"[upload_model - {unique_id}] Conversion result: {conversion_success}")
+            logger.info(
+                f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}"
+            )
+            conversion_success = converter.convert(
+                temp_file_path, output_path, color=color if use_color else None
+            )
+            logger.info(
+                f"[upload_model - {unique_id}] Conversion result: {conversion_success}"
+            )
 
         if not conversion_success or not os.path.exists(output_path):
-            logger.error(f"[upload_model - {unique_id}] Conversion failed or output file missing for {temp_file_path}")
-            if temp_dir: shutil.rmtree(temp_dir)
-            return jsonify({'error': 'Conversion failed'}), 500
+            logger.error(
+                f"[upload_model - {unique_id}] Conversion failed or output file missing for {temp_file_path}"
+            )
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            return jsonify({"error": "Conversion failed"}), 500
         else:
-            logger.info(f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}")
+            logger.info(
+                f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}"
+            )
 
         # Apply size limit for GLB/GLTF files that bypassed the converter
-        if file_extension in ('.glb', '.gltf') and max_dimension is not None and os.path.exists(output_path):
-            logger.info(f"[upload_model - {unique_id}] Applying size limit to GLB: {max_dimension}m to {output_path}")
+        if (
+            file_extension in (".glb", ".gltf")
+            and max_dimension is not None
+            and os.path.exists(output_path)
+        ):
+            logger.info(
+                f"[upload_model - {unique_id}] Applying size limit to GLB: {max_dimension}m to {output_path}"
+            )
             try:
                 import trimesh as tm
+
                 mesh = tm.load(output_path)
-                apply_size_limit(mesh, max_dimension)  # max_dimension is already in meters
-                logger.info(f"[upload_model - {unique_id}] Scaling applied, attempting export...")
+                apply_size_limit(
+                    mesh, max_dimension
+                )  # max_dimension is already in meters
+                logger.info(
+                    f"[upload_model - {unique_id}] Scaling applied, attempting export..."
+                )
                 mesh.export(output_path)
-                logger.info(f"[upload_model - {unique_id}] Export after scaling successful.")
+                logger.info(
+                    f"[upload_model - {unique_id}] Export after scaling successful."
+                )
             except Exception as e:
-                logger.error(f"[upload_model - {unique_id}] Error scaling GLB model: {str(e)}", exc_info=True)
+                logger.error(
+                    f"[upload_model - {unique_id}] Error scaling GLB model: {str(e)}",
+                    exc_info=True,
+                )
         else:
-             logger.info(f"[upload_model - {unique_id}] Scaling handled by converter or not requested.")
+            logger.info(
+                f"[upload_model - {unique_id}] Scaling handled by converter or not requested."
+            )
 
         # Check file size before saving to DB
         final_file_size = 0
         if os.path.exists(output_path):
             final_file_size = os.path.getsize(output_path)
-            logger.info(f"[upload_model - {unique_id}] Final file size of {output_path}: {final_file_size} bytes")
+            logger.info(
+                f"[upload_model - {unique_id}] Final file size of {output_path}: {final_file_size} bytes"
+            )
         else:
-            logger.error(f"[upload_model - {unique_id}] CRITICAL: Output file {output_path} does not exist before saving to DB!")
-            if temp_dir: shutil.rmtree(temp_dir)
-            return jsonify({'error': 'Internal server error: Processed file missing'}), 500
+            logger.error(
+                f"[upload_model - {unique_id}] CRITICAL: Output file {output_path} does not exist before saving to DB!"
+            )
+            if temp_dir:
+                shutil.rmtree(temp_dir)
+            return jsonify(
+                {"error": "Internal server error: Processed file missing"}
+            ), 500
 
         if final_file_size == 0:
-             logger.warning(f"[upload_model - {unique_id}] WARNING: Final file size of {output_path} is 0 bytes!")
-             # Decide if 0-byte file is an error
-             # return jsonify({'error': 'Internal server error: Processed file is empty'}), 500
+            logger.warning(
+                f"[upload_model - {unique_id}] WARNING: Final file size of {output_path} is 0 bytes!"
+            )
+            # Decide if 0-byte file is an error
+            # return jsonify({'error': 'Internal server error: Processed file is empty'}), 500
 
         # Normalize model to center origin for consistent pivot behavior
         try:
-            logger.info(f"[upload_model - {unique_id}] Normalizing model to center origin")
+            logger.info(
+                f"[upload_model - {unique_id}] Normalizing model to center origin"
+            )
             gltf = GLTF2().load(output_path)
             gltf = normalize_model_to_center(gltf)
             gltf.save(output_path)
             logger.info(f"[upload_model - {unique_id}] Model normalized and saved")
         except Exception as e:
-            logger.error(f"[upload_model - {unique_id}] Error normalizing model: {e}", exc_info=True)
+            logger.error(
+                f"[upload_model - {unique_id}] Error normalizing model: {e}",
+                exc_info=True,
+            )
             # Continue even if normalization fails
 
         # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
         # Start USDZ conversion in background thread to not block upload response
-        usdz_output_path = os.path.join(converted_dir, 'model.usdz')
+        usdz_output_path = os.path.join(converted_dir, "model.usdz")
         try:
-            logger.info(f"[upload_model - {unique_id}] Starting ASYNC USDZ conversion in background")
+            logger.info(
+                f"[upload_model - {unique_id}] Starting ASYNC USDZ conversion in background"
+            )
             usdz_thread = threading.Thread(
                 target=convert_usdz_async,
                 args=(unique_id, output_path, usdz_output_path),
-                daemon=True
+                daemon=True,
             )
             usdz_thread.start()
             logger.info(f"[upload_model - {unique_id}] USDZ conversion thread started")
         except Exception as e:
-            logger.error(f"[upload_model - {unique_id}] Error starting USDZ conversion thread: {e}")
+            logger.error(
+                f"[upload_model - {unique_id}] Error starting USDZ conversion thread: {e}"
+            )
             # Don't fail the whole upload if USDZ thread fails to start
 
         # Clean up temporary file and directory
         try:
-            if temp_dir: 
+            if temp_dir:
                 shutil.rmtree(temp_dir)
-                logger.info(f"[upload_model - {unique_id}] Cleaned up temporary directory: {temp_dir}")
+                logger.info(
+                    f"[upload_model - {unique_id}] Cleaned up temporary directory: {temp_dir}"
+                )
         except Exception as cleanup_error:
-             logger.error(f"[upload_model - {unique_id}] Error cleaning up temp directory {temp_dir}: {cleanup_error}")
+            logger.error(
+                f"[upload_model - {unique_id}] Error cleaning up temp directory {temp_dir}: {cleanup_error}"
+            )
 
-        # --- End: Consistent File Handling Logic --- 
+        # --- End: Consistent File Handling Logic ---
 
         # Calculate model dimensions for database
         model_bounds = None
-        
+
         # For FBX, try to use original dimensions from converter
         # BUT if scaling was applied, we need to scale the dimensions too!
-        if file_extension == '.fbx' and hasattr(converter, 'original_dimensions') and converter.original_dimensions:
+        if (
+            file_extension == ".fbx"
+            and hasattr(converter, "original_dimensions")
+            and converter.original_dimensions
+        ):
             try:
                 import json
+
                 orig_dims = converter.original_dimensions
-                
+
                 # Check if scaling was applied
                 scale_factor = 1.0
-                if hasattr(converter, 'max_dimension') and converter.max_dimension > 0:
+                if hasattr(converter, "max_dimension") and converter.max_dimension > 0:
                     # Scaling was applied - calculate the scale factor
-                    orig_max_m = orig_dims['max']
+                    orig_max_m = orig_dims["max"]
                     target_max_m = converter.max_dimension
                     scale_factor = target_max_m / orig_max_m
-                    logger.info(f"[upload_model - {unique_id}] FBX was scaled: {scale_factor:.4f}x (orig: {orig_max_m:.4f}m -> target: {target_max_m:.4f}m)")
-                
+                    logger.info(
+                        f"[upload_model - {unique_id}] FBX was scaled: {scale_factor:.4f}x (orig: {orig_max_m:.4f}m -> target: {target_max_m:.4f}m)"
+                    )
+
                 # Apply scale factor to dimensions
-                x_cm = round(orig_dims['x'] * scale_factor * 100, 2)
-                y_cm = round(orig_dims['y'] * scale_factor * 100, 2)
-                z_cm = round(orig_dims['z'] * scale_factor * 100, 2)
-                max_cm = round(orig_dims['max'] * scale_factor * 100, 2)
-                
-                model_bounds = json.dumps({
-                    'extents': [x_cm, y_cm, z_cm],
-                    'max': max_cm
-                })
-                logger.info(f"[upload_model - {unique_id}] Using FBX dimensions (after scaling): {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
+                x_cm = round(orig_dims["x"] * scale_factor * 100, 2)
+                y_cm = round(orig_dims["y"] * scale_factor * 100, 2)
+                z_cm = round(orig_dims["z"] * scale_factor * 100, 2)
+                max_cm = round(orig_dims["max"] * scale_factor * 100, 2)
+
+                model_bounds = json.dumps(
+                    {"extents": [x_cm, y_cm, z_cm], "max": max_cm}
+                )
+                logger.info(
+                    f"[upload_model - {unique_id}] Using FBX dimensions (after scaling): {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)"
+                )
             except Exception as e:
-                logger.warning(f"[upload_model - {unique_id}] Could not use original FBX dimensions: {str(e)}")
-        
+                logger.warning(
+                    f"[upload_model - {unique_id}] Could not use original FBX dimensions: {str(e)}"
+                )
+
         # If not FBX or FBX dimensions failed, try from GLB
         if not model_bounds:
             try:
                 import trimesh
                 import numpy as np
                 import json
-                
+
                 mesh = trimesh.load(output_path)
-                logger.info(f"[upload_model - {unique_id}] Loaded mesh type: {type(mesh)}")
-                
+                logger.info(
+                    f"[upload_model - {unique_id}] Loaded mesh type: {type(mesh)}"
+                )
+
                 # Get extents
                 if isinstance(mesh, trimesh.Scene):
-                    logger.info(f"[upload_model - {unique_id}] Scene has {len(mesh.geometry)} geometries")
+                    logger.info(
+                        f"[upload_model - {unique_id}] Scene has {len(mesh.geometry)} geometries"
+                    )
                     all_vertices = []
                     for geom in mesh.geometry.values():
                         if isinstance(geom, trimesh.Trimesh):
                             all_vertices.append(geom.vertices)
-                    
+
                     if all_vertices:
                         combined_vertices = np.vstack(all_vertices)
-                        logger.info(f"[upload_model - {unique_id}] Combined {len(all_vertices)} vertex arrays, total vertices: {len(combined_vertices)}")
+                        logger.info(
+                            f"[upload_model - {unique_id}] Combined {len(all_vertices)} vertex arrays, total vertices: {len(combined_vertices)}"
+                        )
                         min_bounds = combined_vertices.min(axis=0)
                         max_bounds = combined_vertices.max(axis=0)
                         extents = max_bounds - min_bounds
-                        logger.info(f"[upload_model - {unique_id}] Extents from vertices: {extents}")
+                        logger.info(
+                            f"[upload_model - {unique_id}] Extents from vertices: {extents}"
+                        )
                     else:
                         bounds = mesh.bounds
                         extents = bounds[1] - bounds[0]
-                        logger.info(f"[upload_model - {unique_id}] Extents from scene bounds: {extents}")
+                        logger.info(
+                            f"[upload_model - {unique_id}] Extents from scene bounds: {extents}"
+                        )
                 else:
                     extents = mesh.extents
-                    logger.info(f"[upload_model - {unique_id}] Extents from mesh: {extents}")
-            
+                    logger.info(
+                        f"[upload_model - {unique_id}] Extents from mesh: {extents}"
+                    )
+
                 # Convert to cm and store
                 if max(extents) > 0.001:
                     x_cm = round(float(extents[0]) * 100, 2)
                     y_cm = round(float(extents[1]) * 100, 2)
                     z_cm = round(float(extents[2]) * 100, 2)
                     max_cm = round(float(max(extents)) * 100, 2)
-                    
-                    model_bounds = json.dumps({
-                        'extents': [x_cm, y_cm, z_cm],
-                        'max': max_cm
-                    })
-                    logger.info(f"[upload_model - {unique_id}] Model dimensions: {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)")
+
+                    model_bounds = json.dumps(
+                        {"extents": [x_cm, y_cm, z_cm], "max": max_cm}
+                    )
+                    logger.info(
+                        f"[upload_model - {unique_id}] Model dimensions: {x_cm} x {y_cm} x {z_cm} cm (max: {max_cm} cm)"
+                    )
                 else:
-                    logger.warning(f"[upload_model - {unique_id}] Extents too small or zero: {extents}")
+                    logger.warning(
+                        f"[upload_model - {unique_id}] Extents too small or zero: {extents}"
+                    )
             except Exception as e:
-                logger.warning(f"[upload_model - {unique_id}] Could not calculate dimensions: {str(e)}")
-        
+                logger.warning(
+                    f"[upload_model - {unique_id}] Could not calculate dimensions: {str(e)}"
+                )
+
         # Parse dimensions for original_dimensions field
         original_dims = None
         if model_bounds:
             try:
                 import json
+
                 bounds_data = json.loads(model_bounds)
                 original_dims = {
-                    'x': bounds_data['extents'][0],
-                    'y': bounds_data['extents'][1],
-                    'z': bounds_data['extents'][2],
-                    'max': bounds_data['max']
+                    "x": bounds_data["extents"][0],
+                    "y": bounds_data["extents"][1],
+                    "z": bounds_data["extents"][2],
+                    "max": bounds_data["max"],
                 }
             except:
                 pass
-        
+
         # Create model record in database using the unique_id
         # user_id is optional - can be None if user is not logged in
         model = UserModel(
-            id=unique_id, # Use the same ID as the directory
+            id=unique_id,  # Use the same ID as the directory
             user_id=current_user.id if current_user.is_authenticated else None,
             filename=output_path,  # Store the full path to the GLB file
-            usdz_filename=None, # USDZ conversion runs async, will be updated when complete
-            file_size=final_file_size, # Use the checked size
+            usdz_filename=None,  # USDZ conversion runs async, will be updated when complete
+            file_size=final_file_size,  # Use the checked size
             file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
             upload_date=datetime.utcnow(),
             color=color if use_color else None,
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
-            cumulative_scale=1.0  # Initial scale is 1.0
+            cumulative_scale=1.0,  # Initial scale is 1.0
         )
         db.session.add(model)
         db.session.commit()
-        logger.info(f"[upload_model - {unique_id}] Model info saved to database. User: {'logged in' if current_user.is_authenticated else 'anonymous'}")
-        
+        logger.info(
+            f"[upload_model - {unique_id}] Model info saved to database. User: {'logged in' if current_user.is_authenticated else 'anonymous'}"
+        )
+
         # Create initial version entry
         try:
             create_version(
                 model_id=unique_id,
-                operation_type='upload',
+                operation_type="upload",
                 operation_details={
-                    'original_filename': file.filename,
-                    'file_type': file_extension,
-                    'max_dimension': max_dimension
+                    "original_filename": file.filename,
+                    "file_type": file_extension,
+                    "max_dimension": max_dimension,
                 },
-                comment='Initial upload'
+                comment="Initial upload",
             )
             logger.info(f"[upload_model - {unique_id}] Created initial version entry")
         except Exception as version_error:
-            logger.error(f"[upload_model - {unique_id}] Failed to create initial version: {version_error}")
-        
+            logger.error(
+                f"[upload_model - {unique_id}] Failed to create initial version: {version_error}"
+            )
+
+        # Generate thumbnail in background thread
+        try:
+            thumb_thread = threading.Thread(
+                target=generate_thumbnail_async,
+                args=(unique_id, output_path, color if use_color else None),
+                daemon=True,
+            )
+            thumb_thread.start()
+            logger.info(
+                f"[upload_model - {unique_id}] Thumbnail generation thread started"
+            )
+        except Exception as e:
+            logger.error(
+                f"[upload_model - {unique_id}] Error starting thumbnail generation thread: {e}"
+            )
+
         # Generate QR code (using the same unique_id)
         # qr_code_filename = generate_qr_code(unique_id)
         # logger.info(f"QR code generated: {qr_code_filename}")
         # Consider generating QR on demand or storing path in DB
 
-        return jsonify({
-            'success': True,
-            'message': f'Model uploaded and processed successfully{" (scaled to " + str(round(max_dimension * 100, 1)) + "cm)" if max_dimension else ""}',
-            'viewer_url': url_for('view_model', model_id=unique_id)
-        })
-        
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Model uploaded and processed successfully{' (scaled to ' + str(round(max_dimension * 100, 1)) + 'cm)' if max_dimension else ''}",
+                "viewer_url": url_for("view_model", model_id=unique_id),
+            }
+        )
+
     except Exception as e:
         # Ensure temporary directory cleanup on any exception
         if temp_dir and os.path.exists(temp_dir):
-             try:
-                 shutil.rmtree(temp_dir)
-             except Exception as cleanup_error:
-                 logger.error(f"[upload_model] Error cleaning up temp directory {temp_dir} during exception: {cleanup_error}")
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as cleanup_error:
+                logger.error(
+                    f"[upload_model] Error cleaning up temp directory {temp_dir} during exception: {cleanup_error}"
+                )
         logger.error(f"[upload_model] Error in upload_model: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/convert', methods=['POST'])
+
+@app.route("/convert", methods=["POST"])
 def convert():
     try:
         logger.info("Starting model conversion process")
         data = request.get_json()
 
-        if not data or 'modelId' not in data:
+        if not data or "modelId" not in data:
             logger.warning("No model ID provided")
-            return jsonify({'error': 'No model ID provided'}), 400
+            return jsonify({"error": "No model ID provided"}), 400
 
-        model_id = data['modelId']
-        selected_color = data.get('selectedColor', '#FFFFFF')
+        model_id = data["modelId"]
+        selected_color = data.get("selectedColor", "#FFFFFF")
 
         # Find original file in upload subfirectory
-        upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], model_id)
+        upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], model_id)
         if not os.path.isdir(upload_subdir):
             logger.error(f"Upload directory not found: {upload_subdir}")
-            return jsonify({'success': False, 'error': 'Upload directory not found'}), 404
-        
+            return jsonify(
+                {"success": False, "error": "Upload directory not found"}
+            ), 404
+
         original_files = os.listdir(upload_subdir)
         if not original_files:
             logger.error("No valid source file found in upload directory")
-            return jsonify({'success': False, 'error': 'No valid source file found'}), 404
+            return jsonify(
+                {"success": False, "error": "No valid source file found"}
+            ), 404
 
         source_file = os.path.join(upload_subdir, original_files[0])
-        
+
         # Create model-specific directory
-        model_dir = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
+        model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
         os.makedirs(model_dir, exist_ok=True)
-        output_file = os.path.join(model_dir, 'model.glb')
+        output_file = os.path.join(model_dir, "model.glb")
 
         # Convert the model
         file_ext = os.path.splitext(source_file)[1].lower()
         if not convert_model_new(source_file, output_file, color=selected_color):
             logger.error(f"Model conversion failed for {model_id}")
-            return jsonify({'success': False, 'error': 'Model conversion failed'}), 500
+            return jsonify({"success": False, "error": "Model conversion failed"}), 500
 
         logger.info(f"Model converted successfully: {output_file}")
 
@@ -1525,61 +1938,66 @@ def convert():
                 db.session.commit()
                 logger.info(f"Model conversion status updated in database: {model_id}")
 
-        return jsonify({
-            'message': 'Model converted successfully',
-            'model_id': model_id
-        }), 200
+        return jsonify(
+            {"message": "Model converted successfully", "model_id": model_id}
+        ), 200
 
     except Exception as e:
         logger.error(f"Error in convert: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/view/<model_id>')
+
+@app.route("/view/<model_id>")
 def view_model(model_id):
     """View a specific model."""
     app.logger.info(f"Accessing view_model with ID: {model_id}")
-    
+
     # Check if model exists in database
     model = UserModel.query.get(model_id)
     if not model:
-        flash('Model not found', 'error')
-        return redirect(url_for('index'))
-    
+        flash("Model not found", "error")
+        return redirect(url_for("index"))
+
+    # Increment view count
+    model.view_count = (model.view_count or 0) + 1
+    db.session.commit()
+
     # Check if converted file exists
     if not model.filename or not os.path.exists(model.filename):
         app.logger.error(f"Converted GLB file not found at path: {model.filename}")
-        flash('Converted model file not found', 'error')
-        return redirect(url_for('index'))
-    
+        flash("Converted model file not found", "error")
+        return redirect(url_for("index"))
+
     # Get model dimensions - try database first, then GLB file
     model_dimensions = None
-    
+
     # First, try to get from database (faster)
     if model.bounds:
         try:
             import json
+
             bounds_data = json.loads(model.bounds)
-            if 'extents' in bounds_data:
-                db_extents = bounds_data['extents']
+            if "extents" in bounds_data:
+                db_extents = bounds_data["extents"]
                 model_dimensions = {
-                    'x': round(float(db_extents[0]), 2),
-                    'y': round(float(db_extents[1]), 2),
-                    'z': round(float(db_extents[2]), 2),
-                    'max': round(float(bounds_data.get('max', max(db_extents))), 2)
+                    "x": round(float(db_extents[0]), 2),
+                    "y": round(float(db_extents[1]), 2),
+                    "z": round(float(db_extents[2]), 2),
+                    "max": round(float(bounds_data.get("max", max(db_extents))), 2),
                 }
                 app.logger.info(f"Using dimensions from database: {model_dimensions}")
         except Exception as db_e:
             app.logger.warning(f"Could not parse bounds from database: {db_e}")
-    
+
     # If not in database, calculate from GLB file
     if not model_dimensions:
         try:
             import trimesh
             import numpy as np
-            
+
             mesh = trimesh.load(model.filename)
             app.logger.info(f"Loaded mesh type: {type(mesh)}")
-            
+
             # Get extents based on mesh type
             if isinstance(mesh, trimesh.Scene):
                 # Prefer scene.bounds which includes node transforms (AABB of entire scene)
@@ -1587,13 +2005,15 @@ def view_model(model_id):
                 bounds = mesh.bounds
                 extents = bounds[1] - bounds[0]
                 app.logger.info(f"Scene extents from scene.bounds (AABB): {extents}")
-                
+
                 # If bounds also gives zero, try dump(concatenate=True) as fallback
                 if max(extents) <= 0.001:
                     try:
                         combined_mesh = mesh.dump(concatenate=True)
                         extents = combined_mesh.extents
-                        app.logger.info(f"Scene extents from dump(concatenate=True): {extents}")
+                        app.logger.info(
+                            f"Scene extents from dump(concatenate=True): {extents}"
+                        )
                     except Exception as _e:
                         app.logger.info(f"dump(concatenate=True) failed: {_e}")
                         # Final fallback: stack raw vertices
@@ -1606,33 +2026,38 @@ def view_model(model_id):
                             min_bounds = combined_vertices.min(axis=0)
                             max_bounds = combined_vertices.max(axis=0)
                             extents = max_bounds - min_bounds
-                            app.logger.info(f"Scene extents from stacked vertices: {extents}")
+                            app.logger.info(
+                                f"Scene extents from stacked vertices: {extents}"
+                            )
             else:
                 extents = mesh.extents
                 app.logger.info(f"Mesh extents: {extents}")
-            
+
             # Convert to cm and round to 2 decimal places (show even if zero for FBX debugging)
             model_dimensions = {
-                'x': round(float(extents[0]) * 100, 2),
-                'y': round(float(extents[1]) * 100, 2),
-                'z': round(float(extents[2]) * 100, 2),
-                'max': round(float(max(extents)) * 100, 2)
+                "x": round(float(extents[0]) * 100, 2),
+                "y": round(float(extents[1]) * 100, 2),
+                "z": round(float(extents[2]) * 100, 2),
+                "max": round(float(max(extents)) * 100, 2),
             }
             app.logger.info(f"Model dimensions (cm): {model_dimensions}")
-            
+
             if max(extents) <= 0.001:
-                app.logger.warning(f"Warning: Extents are zero or very small: {extents} - GLB may be corrupted")
+                app.logger.warning(
+                    f"Warning: Extents are zero or very small: {extents} - GLB may be corrupted"
+                )
         except Exception as e:
             app.logger.error(f"Error getting model dimensions: {str(e)}")
             import traceback
+
             app.logger.error(traceback.format_exc())
 
     # Parse the path to get unique_id and actual filename for URL generation
     try:
         full_path = model.filename
         app.logger.info(f"Model full path from DB: {full_path}")
-        converted_folder_abs = os.path.abspath(app.config['CONVERTED_FOLDER'])
-        
+        converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
+
         if full_path.startswith(converted_folder_abs):
             relative_path = os.path.relpath(full_path, converted_folder_abs)
             # Use os.path.normpath to handle mixed slashes if any, then split
@@ -1640,114 +2065,282 @@ def view_model(model_id):
             if len(parts) == 2:
                 model_unique_id = parts[0]
                 actual_filename = parts[1]
-                app.logger.info(f"Extracted ID: {model_unique_id}, Filename: {actual_filename}")
+                app.logger.info(
+                    f"Extracted ID: {model_unique_id}, Filename: {actual_filename}"
+                )
             else:
-                app.logger.error(f"Could not parse unique_id and filename from relative path: {relative_path}")
+                app.logger.error(
+                    f"Could not parse unique_id and filename from relative path: {relative_path}"
+                )
                 raise ValueError(f"Invalid model path structure: {relative_path}")
         else:
-            app.logger.error(f"Model path {full_path} does not start with converted folder {converted_folder_abs}")
+            app.logger.error(
+                f"Model path {full_path} does not start with converted folder {converted_folder_abs}"
+            )
             raise ValueError("Model path is not within the expected converted folder")
 
         # Check for USDZ file
         usdz_actual_filename = None
-        if hasattr(model, 'usdz_filename') and model.usdz_filename and os.path.exists(model.usdz_filename):
+        if (
+            hasattr(model, "usdz_filename")
+            and model.usdz_filename
+            and os.path.exists(model.usdz_filename)
+        ):
             usdz_actual_filename = os.path.basename(model.usdz_filename)
             app.logger.info(f"Found USDZ file: {usdz_actual_filename}")
 
     except Exception as e:
         import traceback as tb
+
         app.logger.error(f"Error parsing model path '{model.filename}': {e}")
         app.logger.error(tb.format_exc())
-        flash('Error processing model path.', 'error')
-        return redirect(url_for('index'))
-    
+        flash("Error processing model path.", "error")
+        return redirect(url_for("index"))
+
     # Get last applied rotation from latest version
-    applied_rotation = {'x': 0, 'y': 0, 'z': 0}
+    applied_rotation = {"x": 0, "y": 0, "z": 0}
     if model.versions:
         latest_version = model.versions[0]  # Already ordered by created_at desc
-        if latest_version.operation_details and 'transform' in latest_version.operation_details:
-            transform_details = latest_version.operation_details['transform']
-            if 'rotation' in transform_details:
-                applied_rotation = transform_details['rotation']
-                app.logger.info(f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}")
-    
-    return render_template('view.html', 
-                           model_id=model_id, 
-                           model=model, 
-                           model_unique_id=model_unique_id, 
-                           actual_filename=actual_filename,
-                           usdz_filename=usdz_actual_filename,
-                           model_dimensions=model_dimensions,
-                           cumulative_scale=model.cumulative_scale or 1.0,
-                           applied_rotation=applied_rotation)
+        if (
+            latest_version.operation_details
+            and "transform" in latest_version.operation_details
+        ):
+            transform_details = latest_version.operation_details["transform"]
+            if "rotation" in transform_details:
+                applied_rotation = transform_details["rotation"]
+                app.logger.info(
+                    f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}"
+                )
 
-@app.route('/api/models/<model_id>/bounds')
+    # Social data
+    owner_username = model.user.username if model.user else "anonymous"
+    like_count = ModelLike.query.filter_by(model_id=model_id).count()
+    is_liked = False
+    is_saved = False
+    if current_user.is_authenticated:
+        is_liked = (
+            ModelLike.query.filter_by(
+                model_id=model_id, user_id=current_user.id
+            ).first()
+            is not None
+        )
+        is_saved = (
+            ModelSave.query.filter_by(
+                model_id=model_id, user_id=current_user.id
+            ).first()
+            is not None
+        )
+    else:
+        sid = session.get("_id") or session.sid if hasattr(session, "sid") else None
+        if sid:
+            is_liked = (
+                ModelLike.query.filter_by(model_id=model_id, session_id=sid).first()
+                is not None
+            )
+
+    # Owner's other models for gallery (up to 9, excluding current)
+    owner_models = []
+    if model.user_id:
+        owner_models = (
+            UserModel.query.filter(
+                UserModel.user_id == model.user_id, UserModel.id != model_id
+            )
+            .order_by(UserModel.upload_date.desc())
+            .limit(9)
+            .all()
+        )
+
+    # Derive display name
+    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+                     if model.filename else "Model")
+    display_name = model.display_name or filename_base
+    is_owner = current_user.is_authenticated and model.user_id == current_user.id
+
+    response = make_response(render_template(
+        "view.html",
+        model_id=model_id,
+        model=model,
+        model_unique_id=model_unique_id,
+        actual_filename=actual_filename,
+        usdz_filename=usdz_actual_filename,
+        model_dimensions=model_dimensions,
+        cumulative_scale=model.cumulative_scale or 1.0,
+        applied_rotation=applied_rotation,
+        owner_username=owner_username,
+        like_count=like_count,
+        is_liked=is_liked,
+        is_saved=is_saved,
+        owner_models=owner_models,
+        display_name=display_name,
+        is_owner=is_owner,
+    ))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+@app.route("/api/models/<model_id>/like", methods=["POST"])
+def toggle_like(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    if current_user.is_authenticated:
+        existing = ModelLike.query.filter_by(
+            model_id=model_id, user_id=current_user.id
+        ).first()
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            return jsonify(
+                {
+                    "liked": False,
+                    "count": ModelLike.query.filter_by(model_id=model_id).count(),
+                }
+            )
+        like = ModelLike(model_id=model_id, user_id=current_user.id)
+    else:
+        sid = session.get("_id", str(uuid.uuid4()))
+        session["_id"] = sid
+        existing = ModelLike.query.filter_by(model_id=model_id, session_id=sid).first()
+        if existing:
+            db.session.delete(existing)
+            db.session.commit()
+            return jsonify(
+                {
+                    "liked": False,
+                    "count": ModelLike.query.filter_by(model_id=model_id).count(),
+                }
+            )
+        like = ModelLike(model_id=model_id, session_id=sid)
+    db.session.add(like)
+    db.session.commit()
+    return jsonify(
+        {"liked": True, "count": ModelLike.query.filter_by(model_id=model_id).count()}
+    )
+
+
+@app.route("/api/models/<model_id>/save", methods=["POST"])
+@login_required
+def toggle_save(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    existing = ModelSave.query.filter_by(
+        model_id=model_id, user_id=current_user.id
+    ).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"saved": False})
+    save = ModelSave(model_id=model_id, user_id=current_user.id)
+    db.session.add(save)
+    db.session.commit()
+    return jsonify({"saved": True})
+
+
+@app.route("/api/models/<model_id>/share", methods=["POST"])
+def track_share(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    model.share_count = (model.share_count or 0) + 1
+    db.session.commit()
+    return jsonify({"shares": model.share_count})
+
+
+@app.route("/api/models/<model_id>/track-download", methods=["POST"])
+def track_download(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    model.download_count = (model.download_count or 0) + 1
+    db.session.commit()
+    return jsonify({"downloads": model.download_count})
+
+
+@app.route("/api/models/<model_id>/metadata", methods=["PATCH"])
+@login_required
+def update_model_metadata(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    if model.user_id != current_user.id:
+        return jsonify({"error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    if "display_name" in data:
+        model.display_name = str(data["display_name"])[:255] or None
+    if "description" in data:
+        model.description = str(data["description"])[:2000] or None
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/models/<model_id>/bounds")
 def get_model_bounds(model_id):
     """Get model bounding box for slicer"""
     try:
         # Get model from database
         model = UserModel.query.get(model_id)
         if not model:
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
         # Check if model file exists
         if not model.filename or not os.path.exists(model.filename):
-            return jsonify({'success': False, 'error': 'Model file not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model file not found"}), 404
+
         # Try to get bounds from database first
         if model.bounds:
             try:
                 import json
+
                 bounds_data = json.loads(model.bounds)
-                if 'min' in bounds_data and 'max' in bounds_data:
-                    return jsonify({
-                        'success': True,
-                        'bounds': {
-                            'min': bounds_data['min'],
-                            'max': bounds_data['max'],
-                            'extents': bounds_data['extents']
+                if "min" in bounds_data and "max" in bounds_data:
+                    return jsonify(
+                        {
+                            "success": True,
+                            "bounds": {
+                                "min": bounds_data["min"],
+                                "max": bounds_data["max"],
+                                "extents": bounds_data["extents"],
+                            },
                         }
-                    })
+                    )
             except Exception as e:
                 logger.warning(f"Could not parse bounds from database: {e}")
-        
+
         # Calculate bounds from GLB file
         try:
             import trimesh
-            mesh = trimesh.load(model.filename, force='scene')
-            
+
+            mesh = trimesh.load(model.filename, force="scene")
+
             # Get bounds
             if isinstance(mesh, trimesh.Scene):
                 bounds = mesh.bounds
             else:
                 bounds = mesh.bounds
-            
+
             # Convert to list and meters
             min_bounds = bounds[0].tolist()
             max_bounds = bounds[1].tolist()
             extents = (bounds[1] - bounds[0]).tolist()
-            
-            return jsonify({
-                'success': True,
-                'bounds': {
-                    'min': min_bounds,
-                    'max': max_bounds,
-                    'extents': extents
+
+            return jsonify(
+                {
+                    "success": True,
+                    "bounds": {
+                        "min": min_bounds,
+                        "max": max_bounds,
+                        "extents": extents,
+                    },
                 }
-            })
-            
+            )
+
         except Exception as e:
             logger.error(f"Error calculating bounds: {e}")
-            return jsonify({'success': False, 'error': 'Failed to calculate bounds'}), 500
-            
+            return jsonify(
+                {"success": False, "error": "Failed to calculate bounds"}
+            ), 500
+
     except Exception as e:
         logger.error(f"Error in get_model_bounds: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 # Route to serve converted model files
-@app.route('/converted_files/<path:unique_id>/<path:filename>')
+@app.route("/converted_files/<path:unique_id>/<path:filename>")
 def serve_converted_file(unique_id, filename):
-    directory = os.path.join(app.config['CONVERTED_FOLDER'], unique_id)
+    directory = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     app.logger.info(f"Attempting to serve file: {filename} from directory: {directory}")
     # Basic security check: ensure filename is just a filename, not trying to escape
     if os.path.basename(filename) != filename:
@@ -1756,14 +2349,202 @@ def serve_converted_file(unique_id, filename):
     try:
         return send_from_directory(directory, filename, as_attachment=False)
     except FileNotFoundError:
-        app.logger.error(f"File not found in serve_converted_file: {directory}/{filename}")
+        app.logger.error(
+            f"File not found in serve_converted_file: {directory}/{filename}"
+        )
         return "File not found", 404
     except Exception as e:
         app.logger.error(f"Error serving file: {e}")
         return "Server error", 500
 
-@app.route('/my_models')
-@app.route('/my_models/<folder_id>')
+
+@app.route("/api/thumbnail/<unique_id>", methods=["POST"])
+@login_required
+def save_viewer_thumbnail(unique_id):
+    """Save a screenshot from the viewer as the model thumbnail."""
+    model = UserModel.query.get(unique_id)
+    if not model or model.user_id != current_user.id:
+        return jsonify({"error": "Not authorized"}), 403
+
+    data = request.get_json()
+    if not data or not data.get("image"):
+        return jsonify({"error": "No image data"}), 400
+
+    try:
+        import base64
+        import re
+
+        img_data = data["image"]
+        # Strip data URL prefix if present
+        img_data = re.sub(r"^data:image/\w+;base64,", "", img_data)
+        img_bytes = base64.b64decode(img_data)
+
+        thumb_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
+        os.makedirs(thumb_dir, exist_ok=True)
+        thumb_path = os.path.join(thumb_dir, "thumbnail.png")
+
+        with open(thumb_path, "wb") as f:
+            f.write(img_bytes)
+
+        return jsonify({"success": True})
+    except Exception as e:
+        logger.error(f"Failed to save viewer thumbnail for {unique_id}: {e}")
+        return jsonify({"error": "Failed to save thumbnail"}), 500
+
+
+@app.route("/thumbnail/<unique_id>")
+def serve_thumbnail(unique_id):
+    """Serve model thumbnail image, generating one on-the-fly if needed."""
+    import io
+    import base64
+
+    thumbnail_path = os.path.join(
+        app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.png"
+    )
+
+    # If thumbnail exists, serve it
+    if os.path.exists(thumbnail_path):
+        return send_from_directory(
+            os.path.join(app.config["CONVERTED_FOLDER"], unique_id), "thumbnail.png"
+        )
+
+    # Generate thumbnail on-the-fly
+    try:
+        model = UserModel.query.get(unique_id)
+        if not model:
+            return "Model not found", 404
+
+        # Try to generate from 3D model using trimesh
+        model_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], unique_id, "model.glb"
+        )
+
+        if os.path.exists(model_path):
+            try:
+                import trimesh
+                import numpy as np
+
+                # Load mesh
+                mesh = trimesh.load(model_path, file_type="glb")
+
+                # Get scene if it's a Scene object
+                if isinstance(mesh, trimesh.Scene):
+                    # Combine all geometries
+                    meshes = [
+                        g
+                        for g in mesh.geometry.values()
+                        if isinstance(g, trimesh.Trimesh)
+                    ]
+                    if meshes:
+                        combined = trimesh.util.concatenate(meshes)
+                    else:
+                        raise ValueError("No meshes found in scene")
+                else:
+                    combined = mesh
+
+                # Render using trimesh's built-in rendering
+                # Create a simple PNG with model info
+                from PIL import Image, ImageDraw, ImageFont
+
+                img = Image.new("RGB", (256, 256), color=(30, 30, 40))
+                draw = ImageDraw.Draw(img)
+
+                # Try to use default font
+                try:
+                    font = ImageFont.truetype("arial.ttf", 14)
+                    font_small = ImageFont.truetype("arial.ttf", 10)
+                except:
+                    font = ImageFont.load_default()
+                    font_small = font
+
+                # Draw model name
+                name = model.original_filename[:25]
+                draw.text(
+                    (128, 100), name, fill=(255, 255, 255), font=font, anchor="mm"
+                )
+
+                # Draw model stats
+                stats = []
+                if hasattr(combined, "vertices"):
+                    stats.append(f"{len(combined.vertices)} vertices")
+                if hasattr(combined, "faces"):
+                    stats.append(f"{len(combined.faces)} faces")
+
+                for i, stat in enumerate(stats):
+                    draw.text(
+                        (128, 130 + i * 20),
+                        stat,
+                        fill=(150, 160, 180),
+                        font=font_small,
+                        anchor="mm",
+                    )
+
+                # Save thumbnail
+                img.save(thumbnail_path, "PNG")
+                return send_from_directory(
+                    os.path.join(app.config["CONVERTED_FOLDER"], unique_id),
+                    "thumbnail.png",
+                )
+
+            except Exception as e:
+                app.logger.warning(
+                    f"Failed to generate 3D thumbnail for {unique_id}: {e}"
+                )
+
+        # Fallback: Generate SVG-based gradient thumbnail
+        import html as html_module
+
+        color = model.color if model.color else "#667eea"
+        name = html_module.escape(model.original_filename[:20])
+        file_type = html_module.escape(model.file_type or "GLB")
+
+        svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+            <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:{color};stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:{color}cc;stop-opacity:1" />
+                </linearGradient>
+                <radialGradient id="glow" cx="50%" cy="60%" r="50%">
+                    <stop offset="0%" style="stop-color:rgba(255,255,255,0.2);stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:rgba(255,255,255,0);stop-opacity:1" />
+                </radialGradient>
+            </defs>
+            <rect width="256" height="256" fill="url(#bg)"/>
+            <rect width="256" height="256" fill="url(#glow)"/>
+            <text x="128" y="120" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">
+                {name}
+            </text>
+            <text x="128" y="145" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-family="Arial, sans-serif" font-size="12">
+                {file_type} Model
+            </text>
+        </svg>"""
+
+        # Save SVG and return directly
+        try:
+            svg_path = os.path.join(
+                app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.svg"
+            )
+            with open(svg_path, "w", encoding="utf-8") as f:
+                f.write(svg_content)
+
+            response = app.response_class(
+                response=svg_content, status=200, mimetype="image/svg+xml"
+            )
+            return response
+        except Exception as e:
+            app.logger.warning(f"Failed to save SVG thumbnail for {unique_id}: {e}")
+            response = app.response_class(
+                response=svg_content, status=200, mimetype="image/svg+xml"
+            )
+            return response
+
+    except Exception as e:
+        app.logger.error(f"Error generating thumbnail for {unique_id}: {e}")
+        return "Error generating thumbnail", 500
+
+
+@app.route("/my_models")
+@app.route("/my_models/<folder_id>")
 @login_required
 def my_models(folder_id=None):
     try:
@@ -1779,23 +2560,30 @@ def my_models(folder_id=None):
         # Get model counts for each folder
         folder_model_counts = {}
         for folder in folders:
-            folder_model_counts[folder.id] = UserModel.query.filter_by(folder_id=folder.id).count()
+            folder_model_counts[folder.id] = UserModel.query.filter_by(
+                folder_id=folder.id
+            ).count()
 
-        return render_template('my_models.html',
-                            folders=folders,
-                            models=models,
-                            current_folder=current_folder,
-                            folder_model_counts=folder_model_counts)
+        return render_template(
+            "my_models.html",
+            folders=folders,
+            models=models,
+            current_folder=current_folder,
+            folder_model_counts=folder_model_counts,
+        )
     except Exception as e:
         app.logger.error(f"Error in my_models: {str(e)}")
-        return redirect('/')
+        return redirect("/")
 
-@app.route('/converted/<path:filename>')
+
+@app.route("/converted/<path:filename>")
 def get_converted_file(filename):
     """Serve converted model files."""
     try:
         # Get model from database
-        model = UserModel.query.filter_by(filename=os.path.join(app.config['CONVERTED_FOLDER'], filename)).first()
+        model = UserModel.query.filter_by(
+            filename=os.path.join(app.config["CONVERTED_FOLDER"], filename)
+        ).first()
         if not model:
             app.logger.error(f"Model not found for file: {filename}")
             return "File not found", 404
@@ -1814,7 +2602,8 @@ def get_converted_file(filename):
         app.logger.error(f"Error serving file: {str(e)}")
         return "Error serving file", 500
 
-@app.route('/download/<model_id>')
+
+@app.route("/download/<model_id>")
 @login_required
 def download_model(model_id):
     """Download the converted model file."""
@@ -1827,7 +2616,7 @@ def download_model(model_id):
         if model.user_id != current_user.id:
             return "Unauthorized", 403
 
-        file_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        file_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
         if not os.path.exists(file_path):
             return "Dosya bulunamadı", 404
 
@@ -1835,76 +2624,89 @@ def download_model(model_id):
             file_path,
             as_attachment=True,
             download_name=model.original_filename,
-            mimetype='application/octet-stream'
+            mimetype="application/octet-stream",
         )
     except Exception as e:
         logger.error(f"Error in download_model: {str(e)}")
         return "Dosya indirilirken bir hata oluştu", 500
 
-@app.route('/api/model-info/<int:model_id>')
+
+@app.route("/api/model-info/<int:model_id>")
 @login_required
 def get_model_info_api(model_id):
     session = Session(db.engine)
     model = session.get(UserModel, model_id)
     if model.user_id != current_user.id:
-        flash('Bu modele erişim izniniz yok.', 'error')
-        return redirect(url_for('auth.profile'))
+        flash("Bu modele erişim izniniz yok.", "error")
+        return redirect(url_for("auth.profile"))
 
     model_info = get_file_info(model.file_path)
     if model_info is None:
-        return jsonify({'error': 'Model not found'}), 404
+        return jsonify({"error": "Model not found"}), 404
 
     return jsonify(model_info)
 
-@app.route('/api/update-model-color', methods=['POST'])
+
+@app.route("/api/update-model-color", methods=["POST"])
 @login_required
 def update_model_color():
     try:
         data = request.get_json()
-        model_id = data.get('model_id')
-        color = data.get('color')
+        model_id = data.get("model_id")
+        color = data.get("color")
 
         if not model_id or not color:
-            return jsonify({'success': False, 'error': 'Missing model_id or color'}), 400
+            return jsonify(
+                {"success": False, "error": "Missing model_id or color"}
+            ), 400
 
         # Get the model
         model = UserModel.query.get(model_id)
         if not model or model.user_id != current_user.id:
-            return jsonify({'success': False, 'error': 'Model not found or unauthorized'}), 404
+            return jsonify(
+                {"success": False, "error": "Model not found or unauthorized"}
+            ), 404
 
         # Update the model's color in database
         model.color = color
         db.session.commit()
 
         # Find source file in upload directory
-        upload_subdir = os.path.join(app.config['UPLOAD_FOLDER'], model_id)
+        upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], model_id)
         if not os.path.isdir(upload_subdir):
-            return jsonify({'success': False, 'error': 'Upload directory not found'}), 404
-        
+            return jsonify(
+                {"success": False, "error": "Upload directory not found"}
+            ), 404
+
         source_files = os.listdir(upload_subdir)
         if not source_files:
-            return jsonify({'success': False, 'error': 'Source file not found'}), 404
-        
+            return jsonify({"success": False, "error": "Source file not found"}), 404
+
         input_path = os.path.join(upload_subdir, source_files[0])
-        output_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
+        output_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, "model.glb"
+        )
 
         # Re-convert the model with the new color
         try:
             convert_model_new(input_path, output_path, color=color)
-            return jsonify({'success': True}), 200
+            return jsonify({"success": True}), 200
         except Exception as e:
             logger.error(f"Error converting model with new color: {str(e)}")
-            return jsonify({'success': False, 'error': 'Failed to update model color'}), 500
+            return jsonify(
+                {"success": False, "error": "Failed to update model color"}
+            ), 500
 
     except Exception as e:
         logger.error(f"Error in update_model_color: {str(e)}")
-        return jsonify({'success': False, 'error': 'Server error'}), 500
+        return jsonify({"success": False, "error": "Server error"}), 500
 
-@app.route('/temp/<filename>')
+
+@app.route("/temp/<filename>")
 def get_temp_file(filename):
     """Serve temporary files (like QR codes)."""
     try:
-        temp_path = os.path.join(app.config['CONVERTED_FOLDER'], filename)
+        temp_path = os.path.join(app.config["CONVERTED_FOLDER"], filename)
         if os.path.exists(temp_path):
             return send_file(temp_path)
         else:
@@ -1914,40 +2716,42 @@ def get_temp_file(filename):
         logger.error(f"Error serving temp file: {str(e)}")
         return str(e), 500
 
-@app.route('/qr/<filename>')
+
+@app.route("/qr/<filename>")
 def get_qr_code(filename):
     """Serve QR code files."""
     try:
-        return send_from_directory(app.config['CONVERTED_FOLDER'], filename)
+        return send_from_directory(app.config["CONVERTED_FOLDER"], filename)
     except Exception as e:
         logger.error(f"Error serving QR code: {str(e)}")
         return "QR code not found", 404
 
-@app.route('/delete_model/<string:model_id>', methods=['POST'])
+
+@app.route("/delete_model/<string:model_id>", methods=["POST"])
 def delete_model(model_id):
     session = None
     try:
         logger.info(f"Attempting to delete model with ID: {model_id}")
         session = Session(db.engine)
-        
+
         # Get the model and log its details
         model = session.get(UserModel, model_id)
         if not model:
             logger.warning(f"Model {model_id} not found in database")
             return jsonify({"error": "Model not found"}), 404
-        
+
         logger.info(f"Found model: ID={model.id}")
 
         # Delete the files
         try:
             # Delete files in converted folder
-            converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], str(model_id))
+            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], str(model_id))
             if os.path.exists(converted_dir):
                 shutil.rmtree(converted_dir)
                 logger.info(f"Deleted converted directory: {converted_dir}")
 
             # Delete files in uploads folder
-            upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(model_id))
+            upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], str(model_id))
             if os.path.exists(upload_dir):
                 shutil.rmtree(upload_dir)
                 logger.info(f"Deleted upload directory: {upload_dir}")
@@ -1979,7 +2783,8 @@ def delete_model(model_id):
             session.close()
             logger.debug(f"Session closed for model {model_id}")
 
-@app.route('/delete_all_models', methods=['POST'])
+
+@app.route("/delete_all_models", methods=["POST"])
 @login_required
 def delete_all_models():
     try:
@@ -1993,13 +2798,13 @@ def delete_all_models():
         for model in models:
             try:
                 # Delete files in converted folder
-                converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], model.id)
+                converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
                 if os.path.exists(converted_dir):
                     shutil.rmtree(converted_dir)
                     logger.info(f"Deleted converted directory: {converted_dir}")
 
                 # Delete files in uploads folder
-                upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], model.id)
+                upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
                 if os.path.exists(upload_dir):
                     shutil.rmtree(upload_dir)
                     logger.info(f"Deleted upload directory: {upload_dir}")
@@ -2007,7 +2812,7 @@ def delete_all_models():
                 # Delete from database
                 session.delete(model)
                 deleted_count += 1
-                
+
             except Exception as e:
                 failed_count += 1
                 logger.error(f"Error deleting model {model.id}: {str(e)}")
@@ -2015,12 +2820,16 @@ def delete_all_models():
 
         # Commit database changes
         session.commit()
-        logger.info(f"Deleted {deleted_count} models, failed to delete {failed_count} models")
+        logger.info(
+            f"Deleted {deleted_count} models, failed to delete {failed_count} models"
+        )
 
         if failed_count > 0:
-            return jsonify({
-                "message": f"Partially successful: deleted {deleted_count} models, failed to delete {failed_count} models"
-            }), 207
+            return jsonify(
+                {
+                    "message": f"Partially successful: deleted {deleted_count} models, failed to delete {failed_count} models"
+                }
+            ), 207
         return jsonify({"message": f"Successfully deleted {deleted_count} models"}), 200
 
     except Exception as e:
@@ -2028,30 +2837,30 @@ def delete_all_models():
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": "Error deleting models"}), 500
 
-@app.route('/delete_selected_models', methods=['POST'])
+
+@app.route("/delete_selected_models", methods=["POST"])
 @login_required
 def delete_selected_models():
     try:
         data = request.get_json()
-        model_ids = data.get('model_ids', [])
-        
+        model_ids = data.get("model_ids", [])
+
         if not model_ids:
-            return jsonify({'success': False, 'message': 'No models selected'})
-        
+            return jsonify({"success": False, "message": "No models selected"})
+
         # Get all models that belong to the current user
         models = UserModel.query.filter(
-            UserModel.id.in_(model_ids),
-            UserModel.user_id == current_user.id
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
         ).all()
-        
+
         if not models:
-            return jsonify({'success': False, 'message': 'No valid models found'})
-        
+            return jsonify({"success": False, "message": "No valid models found"})
+
         for model in models:
             # Delete the model files
-            model_dir = os.path.join(app.config['UPLOAD_FOLDER'], model.id)
-            converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], model.id)
-            
+            model_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
+            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
+
             try:
                 if os.path.exists(model_dir):
                     shutil.rmtree(model_dir)
@@ -2059,678 +2868,767 @@ def delete_selected_models():
                     shutil.rmtree(converted_dir)
             except Exception as e:
                 app.logger.error(f"Error deleting files for model {model.id}: {e}")
-            
+
             # Delete from database
             db.session.delete(model)
-        
+
         db.session.commit()
-        return jsonify({'success': True, 'message': f'Successfully deleted {len(models)} models'})
+        return jsonify(
+            {"success": True, "message": f"Successfully deleted {len(models)} models"}
+        )
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error deleting models: {str(e)}")
-        return jsonify({'success': False, 'message': str(e)})
+        return jsonify({"success": False, "message": str(e)})
 
-@app.route('/create_folder', methods=['POST'])
+
+@app.route("/create_folder", methods=["POST"])
 @login_required
 def create_folder():
     try:
-        folder_name = request.form.get('folder_name')
-        parent_id = request.form.get('parent_id')
-        
+        folder_name = request.form.get("folder_name")
+        parent_id = request.form.get("parent_id")
+
         if not folder_name:
-            flash('Folder name is required', 'error')
-            return redirect(url_for('my_models'))
+            flash("Folder name is required", "error")
+            return redirect(url_for("my_models"))
 
         # Convert parent_id to int if it exists, otherwise None
         parent_id = int(parent_id) if parent_id else None
-        
+
         # Create a URL-friendly slug from the folder name
         slug = slugify(folder_name)
-        
+
         # Check if folder with same name exists in the same parent
         existing_folder = Folder.query.filter_by(
-            name=folder_name,
-            parent_id=parent_id,
-            user_id=current_user.id
+            name=folder_name, parent_id=parent_id, user_id=current_user.id
         ).first()
-        
+
         if existing_folder:
-            flash('A folder with this name already exists', 'error')
-            return redirect(url_for('my_models', folder_id=parent_id) if parent_id else url_for('my_models'))
-        
+            flash("A folder with this name already exists", "error")
+            return redirect(
+                url_for("my_models", folder_id=parent_id)
+                if parent_id
+                else url_for("my_models")
+            )
+
         new_folder = Folder(
-            name=folder_name,
-            slug=slug,
-            parent_id=parent_id,
-            user_id=current_user.id
+            name=folder_name, slug=slug, parent_id=parent_id, user_id=current_user.id
         )
-        
+
         db.session.add(new_folder)
         db.session.commit()
-        
-        flash('Folder created successfully', 'success')
-        return redirect(url_for('my_models', folder_id=parent_id) if parent_id else url_for('my_models'))
-        
+
+        flash("Folder created successfully", "success")
+        return redirect(
+            url_for("my_models", folder_id=parent_id)
+            if parent_id
+            else url_for("my_models")
+        )
+
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error creating folder: {str(e)}")
-        flash('An error occurred while creating the folder', 'error')
-        return redirect(url_for('my_models'))
+        flash("An error occurred while creating the folder", "error")
+        return redirect(url_for("my_models"))
+
 
 def delete_folder_recursive(folder):
     # First, recursively delete all subfolders
     for subfolder in Folder.query.filter_by(parent_id=folder.id).all():
         delete_folder_recursive(subfolder)
-    
+
     # Delete all models in this folder
-    UserModel.query.filter_by(folder_id=folder.id).update({'folder_id': None})
-    
+    UserModel.query.filter_by(folder_id=folder.id).update({"folder_id": None})
+
     # Delete the folder itself
     db.session.delete(folder)
 
-@app.route('/delete_folder/<int:folder_id>', methods=['POST'])
+
+@app.route("/delete_folder/<int:folder_id>", methods=["POST"])
 @login_required
 def delete_folder(folder_id):
     try:
         folder = Folder.query.get_or_404(folder_id)
-        
+
         # Check if folder belongs to current user
         if folder.user_id != current_user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
-        
+            return jsonify({"error": "Unauthorized"}), 403
+
         # Recursively delete folder and its contents
         delete_folder_recursive(folder)
-        
+
         db.session.commit()
         app.logger.info(f"Folder {folder_id} deleted successfully")
-        return jsonify({'success': True, 'message': 'Folder deleted successfully'}), 200
-        
+        return jsonify({"success": True, "message": "Folder deleted successfully"}), 200
+
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error deleting folder {folder_id}: {str(e)}")
         app.logger.error(traceback.format_exc())
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/move_model', methods=['POST'])
+
+@app.route("/move_model", methods=["POST"])
 @login_required
 def move_model():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'success': False, 'error': 'No JSON data received'}), 400
-            
-        model_id = data.get('model_id')
-        folder_id = data.get('folder_id')
-        
+            return jsonify({"success": False, "error": "No JSON data received"}), 400
+
+        model_id = data.get("model_id")
+        folder_id = data.get("folder_id")
+
         if not model_id:
-            return jsonify({'success': False, 'error': 'Model ID is required'}), 400
-            
+            return jsonify({"success": False, "error": "Model ID is required"}), 400
+
         # Convert folder_id to int if it exists, otherwise None
         folder_id = int(folder_id) if folder_id else None
-        
+
         # Get the model
         model = UserModel.query.get_or_404(model_id)
-        
+
         # Check if the model belongs to the current user
         if model.user_id != current_user.id:
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-            
+            return jsonify({"success": False, "error": "Unauthorized"}), 403
+
         # If folder_id is provided, check if the folder exists and belongs to the user
         if folder_id:
             folder = Folder.query.get_or_404(folder_id)
             if folder.user_id != current_user.id:
-                return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-        
+                return jsonify({"success": False, "error": "Unauthorized"}), 403
+
         # Update model's folder
         model.folder_id = folder_id
         db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Model moved successfully'}), 200
-        
+
+        return jsonify({"success": True, "message": "Model moved successfully"}), 200
+
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error moving model: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/move_selected_models', methods=['POST'])
+
+@app.route("/move_selected_models", methods=["POST"])
 @login_required
 def move_selected_models():
     try:
         data = request.get_json()
-        model_ids = data.get('model_ids', [])
-        folder_id = data.get('folder_id')
+        model_ids = data.get("model_ids", [])
+        folder_id = data.get("folder_id")
 
         if not model_ids:
-            return jsonify({'success': False, 'error': 'No models selected'}), 400
+            return jsonify({"success": False, "error": "No models selected"}), 400
 
         # Verify folder exists and belongs to user if folder_id is provided
         if folder_id:
             folder = Folder.query.get_or_404(folder_id)
             if folder.user_id != current_user.id:
-                return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+                return jsonify({"success": False, "error": "Unauthorized"}), 403
 
         # Move all selected models
         models = UserModel.query.filter(
-            UserModel.id.in_(model_ids),
-            UserModel.user_id == current_user.id
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
         ).all()
 
         if len(models) != len(model_ids):
-            return jsonify({'success': False, 'error': 'Some models were not found or do not belong to you'}), 403
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Some models were not found or do not belong to you",
+                }
+            ), 403
 
         for model in models:
             model.folder_id = folder_id
 
         db.session.commit()
-        return jsonify({
-            'success': True,
-            'message': f'Successfully moved {len(models)} models'
-        })
+        return jsonify(
+            {"success": True, "message": f"Successfully moved {len(models)} models"}
+        )
 
     except Exception as e:
         db.session.rollback()
         app.logger.error(f"Error moving models: {str(e)}")
-        return jsonify({'success': False, 'error': 'Failed to move models'}), 500
+        return jsonify({"success": False, "error": "Failed to move models"}), 500
+
 
 @app.errorhandler(413)
 def too_large(e):
-    return jsonify({'error': 'Dosya boyutu çok büyük. Maksimum dosya boyutu 100MB.'}), 413
+    return jsonify(
+        {"error": "Dosya boyutu çok büyük. Maksimum dosya boyutu 100MB."}
+    ), 413
+
 
 @app.errorhandler(500)
 def server_error(e):
-    return jsonify({'error': 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.'}), 500
+    return jsonify({"error": "Sunucu hatası. Lütfen daha sonra tekrar deneyin."}), 500
+
 
 def check_model_files():
     """Check if model files exist and update database accordingly."""
     try:
         session = Session(db.engine)
         models = session.query(UserModel).all()
-        
+
         for model in models:
             # Check if model files exist
-            converted_dir = os.path.join(app.config['CONVERTED_FOLDER'], model.id)
-            upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], model.id)
-            
+            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
+            upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
+
             # If neither directory exists, delete the model from database
             if not os.path.exists(converted_dir) and not os.path.exists(upload_dir):
-                logger.info(f"Files for model {model.id} not found, removing from database")
+                logger.info(
+                    f"Files for model {model.id} not found, removing from database"
+                )
                 session.delete(model)
-        
+
         session.commit()
     except Exception as e:
         logger.error(f"Error checking model files: {str(e)}")
         session.rollback()
 
+
 @app.before_request
 def before_request():
     """Run before each request to ensure database is in sync with files."""
-    if request.endpoint == 'my_models':
+    if request.endpoint == "my_models":
         check_model_files()
 
-@app.route('/apply_modifications', methods=['POST'])
+
+@app.route("/apply_modifications", methods=["POST"])
 def apply_modifications():
     """Apply material and transform modifications to GLB model"""
     try:
         data = request.json
-        model_id = data.get('model_id')
-        modifications = data.get('modifications')
-        
+        model_id = data.get("model_id")
+        modifications = data.get("modifications")
+
         if not model_id or not modifications:
-            return jsonify({'success': False, 'error': 'Missing model_id or modifications'}), 400
-        
+            return jsonify(
+                {"success": False, "error": "Missing model_id or modifications"}
+            ), 400
+
         logger.info(f"[apply_modifications] Model ID: {model_id}")
         logger.info(f"[apply_modifications] Modifications: {modifications}")
-        
+
         # Get original GLB path
-        original_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
-        
+        original_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, "model.glb"
+        )
+
         if not os.path.exists(original_path):
             logger.error(f"Original GLB not found: {original_path}")
-            return jsonify({'success': False, 'error': 'Original model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Original model not found"}), 404
+
         # Create output filename with timestamp
         timestamp = int(time.time())
-        output_filename = f'modified_{timestamp}.glb'
-        output_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, output_filename)
-        
+        output_filename = f"modified_{timestamp}.glb"
+        output_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, output_filename
+        )
+
         logger.info(f"[apply_modifications] Input: {original_path}")
         logger.info(f"[apply_modifications] Output: {output_path}")
-        
+
         # Apply modifications
         success = modify_glb(original_path, output_path, modifications)
-        
+
         if success:
-            download_url = f'/download_modified/{model_id}/{output_filename}'
+            download_url = f"/download_modified/{model_id}/{output_filename}"
             logger.info(f"[apply_modifications] Success! Download URL: {download_url}")
-            return jsonify({
-                'success': True,
-                'download_url': download_url,
-                'filename': output_filename
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "download_url": download_url,
+                    "filename": output_filename,
+                }
+            )
         else:
             logger.error("[apply_modifications] Modification failed")
-            return jsonify({'success': False, 'error': 'Failed to modify GLB'}), 500
-            
+            return jsonify({"success": False, "error": "Failed to modify GLB"}), 500
+
     except Exception as e:
         logger.error(f"[apply_modifications] Error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-
-@app.route('/download_modified/<model_id>/<filename>')
+@app.route("/download_modified/<model_id>/<filename>")
 def download_modified(model_id, filename):
     """Download modified GLB file"""
     try:
-        directory = os.path.join(app.config['CONVERTED_FOLDER'], model_id)
+        directory = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
         logger.info(f"[download_modified] Serving {filename} from {directory}")
-        
+
         if not os.path.exists(os.path.join(directory, filename)):
             logger.error(f"File not found: {os.path.join(directory, filename)}")
             return "File not found", 404
-        
+
         return send_from_directory(
             directory,
             filename,
             as_attachment=True,
-            download_name=f'modified_model_{int(time.time())}.glb'
+            download_name=f"modified_model_{int(time.time())}.glb",
         )
     except Exception as e:
         logger.error(f"[download_modified] Error: {e}", exc_info=True)
         return str(e), 500
 
 
-@app.route('/get_model_dimensions/<model_id>')
+@app.route("/get_model_dimensions/<model_id>")
 def get_model_dimensions(model_id):
     """Get model dimensions in meters"""
     try:
-        glb_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
-        
+        glb_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
+
         if not os.path.exists(glb_path):
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
         # Load model with trimesh
-        mesh = trimesh.load(glb_path, force='scene')
-        
+        mesh = trimesh.load(glb_path, force="scene")
+
         # Get bounding box
         if isinstance(mesh, trimesh.Scene):
             bounds = mesh.bounds
         else:
             bounds = mesh.bounds
-        
+
         # Calculate dimensions (in meters, assuming GLB units are meters)
         dimensions = bounds[1] - bounds[0]
-        
+
         # Convert to cm for display
         dimensions_cm = {
-            'width': float(dimensions[0] * 100),   # X
-            'height': float(dimensions[1] * 100),  # Y
-            'depth': float(dimensions[2] * 100),   # Z
-            'unit': 'cm'
+            "width": float(dimensions[0] * 100),  # X
+            "height": float(dimensions[1] * 100),  # Y
+            "depth": float(dimensions[2] * 100),  # Z
+            "unit": "cm",
         }
-        
-        logger.info(f"[get_model_dimensions] Model {model_id} dimensions: {dimensions_cm}")
-        
-        return jsonify({
-            'success': True,
-            'dimensions': dimensions_cm
-        })
-        
+
+        logger.info(
+            f"[get_model_dimensions] Model {model_id} dimensions: {dimensions_cm}"
+        )
+
+        return jsonify({"success": True, "dimensions": dimensions_cm})
+
     except Exception as e:
         logger.error(f"[get_model_dimensions] Error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-
-
-
-@app.route('/save_modifications', methods=['POST'])
+@app.route("/save_modifications", methods=["POST"])
 def save_modifications():
     """Save modifications to original GLB model (replaces model.glb)"""
     try:
         data = request.json
-        model_id = data.get('model_id')
-        modifications = data.get('modifications')
-        
+        model_id = data.get("model_id")
+        modifications = data.get("modifications")
+
         if not model_id or not modifications:
-            return jsonify({'success': False, 'error': 'Missing model_id or modifications'}), 400
-        
+            return jsonify(
+                {"success": False, "error": "Missing model_id or modifications"}
+            ), 400
+
         logger.info(f"[save_modifications] Model ID: {model_id}")
         logger.info(f"[save_modifications] Modifications: {modifications}")
-        
+
         # Use current model.glb as base (which may be sliced or modified)
         # This ensures modifications are applied to the current state, not original upload
         model = UserModel.query.get(model_id)
         if not model:
             logger.error(f"Model not found for ID: {model_id}")
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
         # Use current model.glb file as the base for modifications
-        current_model_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
-        
+        current_model_path = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, "model.glb"
+        )
+
         if not os.path.exists(current_model_path):
             logger.error(f"Current model.glb not found: {current_model_path}")
-            return jsonify({'success': False, 'error': 'Model file not found'}), 404
-        
-        logger.info(f"[save_modifications] Using current model.glb as base: {current_model_path}")
-        
+            return jsonify({"success": False, "error": "Model file not found"}), 404
+
+        logger.info(
+            f"[save_modifications] Using current model.glb as base: {current_model_path}"
+        )
+
         # Create backup of current model
-        backup_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'model_backup_{int(time.time())}.glb')
+        backup_path = os.path.join(
+            app.config["CONVERTED_FOLDER"],
+            model_id,
+            f"model_backup_{int(time.time())}.glb",
+        )
         shutil.copy2(current_model_path, backup_path)
         logger.info(f"[save_modifications] Created backup: {backup_path}")
         cleanup_old_backups(os.path.dirname(backup_path))
-        
+
         # Create temporary output path
-        temp_output = os.path.join(app.config['CONVERTED_FOLDER'], model_id, f'temp_{int(time.time())}.glb')
-        
+        temp_output = os.path.join(
+            app.config["CONVERTED_FOLDER"], model_id, f"temp_{int(time.time())}.glb"
+        )
+
         logger.info(f"[save_modifications] Input: {current_model_path}")
         logger.info(f"[save_modifications] Temp output: {temp_output}")
-        
+
         # Apply modifications to current model
         success = modify_glb(current_model_path, temp_output, modifications)
-        
+
         if success and os.path.exists(temp_output):
             # Replace current model.glb with modified version
             shutil.move(temp_output, current_model_path)
-            logger.info(f"[save_modifications] Successfully replaced model.glb with modified version")
-            
+            logger.info(
+                f"[save_modifications] Successfully replaced model.glb with modified version"
+            )
+
             # Update database dimensions after modifications
             try:
-                mesh = trimesh.load(current_model_path, force='scene')
+                mesh = trimesh.load(current_model_path, force="scene")
                 if isinstance(mesh, trimesh.Scene):
                     bounds = mesh.bounds
                 else:
                     bounds = mesh.bounds
-                
+
                 dimensions = bounds[1] - bounds[0]
                 new_dims = {
-                    'x': round(float(dimensions[0] * 100), 2),
-                    'y': round(float(dimensions[1] * 100), 2),
-                    'z': round(float(dimensions[2] * 100), 2),
-                    'max': round(float(max(dimensions) * 100), 2)
+                    "x": round(float(dimensions[0] * 100), 2),
+                    "y": round(float(dimensions[1] * 100), 2),
+                    "z": round(float(dimensions[2] * 100), 2),
+                    "max": round(float(max(dimensions) * 100), 2),
                 }
-                
+
                 # Update database
                 model = UserModel.query.get(model_id)
                 if model:
                     model.dimensions = new_dims
-                    
+
                     # Update cumulative scale if scale was applied
-                    if 'transform' in modifications and 'scale' in modifications['transform']:
-                        applied_scale = float(modifications['transform']['scale'])
+                    if (
+                        "transform" in modifications
+                        and "scale" in modifications["transform"]
+                    ):
+                        applied_scale = float(modifications["transform"]["scale"])
                         if applied_scale != 1.0:
                             current_cumulative = model.cumulative_scale or 1.0
                             model.cumulative_scale = current_cumulative * applied_scale
-                            logger.info(f"[save_modifications] Updated cumulative scale: {current_cumulative} * {applied_scale} = {model.cumulative_scale}")
-                    
+                            logger.info(
+                                f"[save_modifications] Updated cumulative scale: {current_cumulative} * {applied_scale} = {model.cumulative_scale}"
+                            )
+
                     db.session.commit()
-                    logger.info(f"[save_modifications] Updated database dimensions: {new_dims}")
-                
+                    logger.info(
+                        f"[save_modifications] Updated database dimensions: {new_dims}"
+                    )
+
             except Exception as dim_error:
-                logger.error(f"[save_modifications] Failed to update dimensions: {dim_error}")
-            
+                logger.error(
+                    f"[save_modifications] Failed to update dimensions: {dim_error}"
+                )
+
             # Create version entry
             try:
-                operation_type = 'transform' if 'transform' in modifications else 'material'
-                if 'material' in modifications and 'transform' in modifications:
-                    operation_type = 'transform+material'
-                
+                operation_type = (
+                    "transform" if "transform" in modifications else "material"
+                )
+                if "material" in modifications and "transform" in modifications:
+                    operation_type = "transform+material"
+
                 create_version(
                     model_id=model_id,
                     operation_type=operation_type,
                     operation_details=modifications,
-                    comment='Model modifications saved'
+                    comment="Model modifications saved",
                 )
-                logger.info(f"[save_modifications] Created version entry for {model_id}")
+                logger.info(
+                    f"[save_modifications] Created version entry for {model_id}"
+                )
             except Exception as version_error:
-                logger.error(f"[save_modifications] Failed to create version: {version_error}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Model saved successfully',
-                'backup': os.path.basename(backup_path)
-            })
+                logger.error(
+                    f"[save_modifications] Failed to create version: {version_error}"
+                )
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Model saved successfully",
+                    "backup": os.path.basename(backup_path),
+                }
+            )
         else:
             logger.error("[save_modifications] Modification failed")
-            return jsonify({'success': False, 'error': 'Failed to modify GLB'}), 500
-            
+            return jsonify({"success": False, "error": "Failed to modify GLB"}), 500
+
     except Exception as e:
         logger.error(f"[save_modifications] Error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/get_mesh_bounds/<model_id>')
+@app.route("/get_mesh_bounds/<model_id>")
 def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
     try:
         from mesh_slicer import get_mesh_bounds as get_bounds
-        
-        model_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
-        
+
+        model_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
+
         if not os.path.exists(model_path):
-            return jsonify({'success': False, 'error': 'Model not found'}), 404
-        
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
         bounds = get_bounds(model_path)
-        
+
         if bounds:
-            return jsonify({'success': True, 'bounds': bounds})
+            return jsonify({"success": True, "bounds": bounds})
         else:
-            return jsonify({'success': False, 'error': 'Failed to get bounds'}), 500
-            
+            return jsonify({"success": False, "error": "Failed to get bounds"}), 500
+
     except Exception as e:
         logger.error(f"Error getting mesh bounds: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/slice_model', methods=['POST'])
+@app.route("/slice_model", methods=["POST"])
 def slice_model():
     """Slice a 3D model with a plane"""
     try:
         from mesh_slicer import slice_mesh
-        
+
         data = request.json
-        model_id = data.get('model_id')
-        plane_origin = data.get('plane_origin')  # [x, y, z]
-        plane_normal = data.get('plane_normal')  # [x, y, z]
-        keep_side = data.get('keep_side', 'positive')  # 'positive' or 'negative'
-        
+        model_id = data.get("model_id")
+        plane_origin = data.get("plane_origin")  # [x, y, z]
+        plane_normal = data.get("plane_normal")  # [x, y, z]
+        keep_side = data.get("keep_side", "positive")  # 'positive' or 'negative'
+
         logger.info(f"[slice_model] Received request for model_id: {model_id}")
-        
+
         if not all([model_id, plane_origin, plane_normal]):
-            return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
-        
+            return jsonify(
+                {"success": False, "error": "Missing required parameters"}
+            ), 400
+
         # Try to find the model file
         # First check if model_id is a UUID (converted model)
-        input_path = os.path.join(app.config['CONVERTED_FOLDER'], model_id, 'model.glb')
-        
+        input_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
+
         if not os.path.exists(input_path):
             # Maybe model_id is the full filename from database
             model = UserModel.query.get(model_id)
             if model and model.filename:
                 # Extract folder from filename (e.g., "converted/uuid/model.glb" -> "uuid")
-                parts = model.filename.split('/')
+                parts = model.filename.split("/")
                 if len(parts) >= 2:
                     folder_id = parts[1]
-                    input_path = os.path.join(app.config['CONVERTED_FOLDER'], folder_id, 'model.glb')
+                    input_path = os.path.join(
+                        app.config["CONVERTED_FOLDER"], folder_id, "model.glb"
+                    )
                     logger.info(f"[slice_model] Trying alternate path: {input_path}")
-        
+
         if not os.path.exists(input_path):
             logger.error(f"[slice_model] Model not found at: {input_path}")
-            logger.error(f"[slice_model] CONVERTED_FOLDER: {app.config['CONVERTED_FOLDER']}")
+            logger.error(
+                f"[slice_model] CONVERTED_FOLDER: {app.config['CONVERTED_FOLDER']}"
+            )
             logger.error(f"[slice_model] model_id: {model_id}")
-            return jsonify({'success': False, 'error': f'Model not found at {input_path}'}), 404
-        
+            return jsonify(
+                {"success": False, "error": f"Model not found at {input_path}"}
+            ), 404
+
         # Create backup
         import time
+
         backup_path = os.path.join(
-            app.config['CONVERTED_FOLDER'], 
-            model_id, 
-            f'model_backup_{int(time.time())}.glb'
+            app.config["CONVERTED_FOLDER"],
+            model_id,
+            f"model_backup_{int(time.time())}.glb",
         )
         import shutil
+
         shutil.copy2(input_path, backup_path)
         logger.info(f"[slice_model] Created backup: {backup_path}")
         cleanup_old_backups(os.path.dirname(backup_path))
-        
+
         # Slice the mesh
         temp_output = os.path.join(
-            app.config['CONVERTED_FOLDER'], 
-            model_id, 
-            f'temp_sliced_{int(time.time())}.glb'
+            app.config["CONVERTED_FOLDER"],
+            model_id,
+            f"temp_sliced_{int(time.time())}.glb",
         )
-        
+
         success = slice_mesh(
             input_path=input_path,
             output_path=temp_output,
             plane_origin=plane_origin,
             plane_normal=plane_normal,
-            keep_side=keep_side
+            keep_side=keep_side,
         )
-        
+
         if success and os.path.exists(temp_output):
             # Replace original with sliced version
             shutil.move(temp_output, input_path)
-            logger.info(f"[slice_model] Successfully replaced original with sliced mesh")
-            
+            logger.info(
+                f"[slice_model] Successfully replaced original with sliced mesh"
+            )
+
             # Update dimensions in database
             try:
                 import trimesh
-                mesh = trimesh.load(input_path, force='mesh')
-                
+
+                mesh = trimesh.load(input_path, force="mesh")
+
                 if isinstance(mesh, trimesh.Scene):
                     meshes = list(mesh.geometry.values())
                     if meshes:
                         mesh = trimesh.util.concatenate(meshes)
-                
+
                 bounds = mesh.bounds
                 dimensions = bounds[1] - bounds[0]
                 new_dims = {
-                    'x': round(float(dimensions[0] * 100), 2),
-                    'y': round(float(dimensions[1] * 100), 2),
-                    'z': round(float(dimensions[2] * 100), 2),
-                    'max': round(float(max(dimensions) * 100), 2)
+                    "x": round(float(dimensions[0] * 100), 2),
+                    "y": round(float(dimensions[1] * 100), 2),
+                    "z": round(float(dimensions[2] * 100), 2),
+                    "max": round(float(max(dimensions) * 100), 2),
                 }
-                
+
                 model = UserModel.query.get(model_id)
                 if model:
                     model.dimensions = new_dims
                     db.session.commit()
                     logger.info(f"[slice_model] Updated dimensions: {new_dims}")
-                    
+
             except Exception as dim_error:
                 logger.error(f"[slice_model] Failed to update dimensions: {dim_error}")
-            
+
             # Create version entry
             try:
                 create_version(
                     model_id=model_id,
-                    operation_type='slice',
+                    operation_type="slice",
                     operation_details={
-                        'plane_origin': plane_origin,
-                        'plane_normal': plane_normal,
-                        'keep_side': keep_side
+                        "plane_origin": plane_origin,
+                        "plane_normal": plane_normal,
+                        "keep_side": keep_side,
                     },
-                    comment=f'Sliced model (keep {keep_side} side)'
+                    comment=f"Sliced model (keep {keep_side} side)",
                 )
                 logger.info(f"[slice_model] Created version entry for {model_id}")
             except Exception as version_error:
                 logger.error(f"[slice_model] Failed to create version: {version_error}")
-            
-            return jsonify({
-                'success': True,
-                'message': 'Model sliced successfully',
-                'backup': os.path.basename(backup_path)
-            })
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Model sliced successfully",
+                    "backup": os.path.basename(backup_path),
+                }
+            )
         else:
             logger.error("[slice_model] Slicing failed")
-            return jsonify({'success': False, 'error': 'Failed to slice model'}), 500
-            
+            return jsonify({"success": False, "error": "Failed to slice model"}), 500
+
     except Exception as e:
         logger.error(f"[slice_model] Error: {e}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ========== MODEL VERSION MANAGEMENT ==========
 
-@app.route('/api/versions/<model_id>', methods=['GET'])
+
+@app.route("/api/versions/<model_id>", methods=["GET"])
 def get_versions(model_id):
     """Get version history for a model"""
     try:
         versions = get_version_history(model_id)
-        return jsonify({
-            'success': True,
-            'versions': [{
-                'id': v.id,
-                'version_number': v.version_number,
-                'operation_type': v.operation_type,
-                'operation_details': v.operation_details,
-                'dimensions': v.dimensions,
-                'vertices': v.vertices,
-                'faces': v.faces,
-                'file_size': v.file_size,
-                'file_size_formatted': v.file_size_formatted,
-                'created_at': v.created_at_formatted,
-                'comment': v.comment
-            } for v in versions]
-        })
+        return jsonify(
+            {
+                "success": True,
+                "versions": [
+                    {
+                        "id": v.id,
+                        "version_number": v.version_number,
+                        "operation_type": v.operation_type,
+                        "operation_details": v.operation_details,
+                        "dimensions": v.dimensions,
+                        "vertices": v.vertices,
+                        "faces": v.faces,
+                        "file_size": v.file_size,
+                        "file_size_formatted": v.file_size_formatted,
+                        "created_at": v.created_at_formatted,
+                        "comment": v.comment,
+                    }
+                    for v in versions
+                ],
+            }
+        )
     except Exception as e:
         logger.error(f"Failed to get versions for {model_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/versions/<model_id>/restore/<int:version_number>', methods=['POST'])
+@app.route("/api/versions/<model_id>/restore/<int:version_number>", methods=["POST"])
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     try:
         success = restore_version(model_id, version_number)
         if success:
-            return jsonify({'success': True, 'message': f'Restored to version {version_number}'})
+            return jsonify(
+                {"success": True, "message": f"Restored to version {version_number}"}
+            )
         else:
-            return jsonify({'success': False, 'error': 'Failed to restore version'}), 500
+            return jsonify(
+                {"success": False, "error": "Failed to restore version"}
+            ), 500
     except Exception as e:
         logger.error(f"Failed to restore version {version_number} for {model_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/versions/<model_id>/delete/<int:version_number>', methods=['DELETE'])
+@app.route("/api/versions/<model_id>/delete/<int:version_number>", methods=["DELETE"])
 def delete_model_version(model_id, version_number):
     """Delete a specific version"""
     try:
         success = delete_version(model_id, version_number)
         if success:
-            return jsonify({'success': True, 'message': f'Deleted version {version_number}'})
+            return jsonify(
+                {"success": True, "message": f"Deleted version {version_number}"}
+            )
         else:
-            return jsonify({'success': False, 'error': 'Failed to delete version'}), 500
+            return jsonify({"success": False, "error": "Failed to delete version"}), 500
     except Exception as e:
         logger.error(f"Failed to delete version {version_number} for {model_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route('/api/versions/<model_id>/download/<int:version_number>', methods=['GET'])
+@app.route("/api/versions/<model_id>/download/<int:version_number>", methods=["GET"])
 def download_version(model_id, version_number):
     """Download a specific version"""
     try:
-        version = ModelVersion.query.filter_by(model_id=model_id, version_number=version_number).first()
+        version = ModelVersion.query.filter_by(
+            model_id=model_id, version_number=version_number
+        ).first()
         if not version:
-            return jsonify({'success': False, 'error': 'Version not found'}), 404
-        
+            return jsonify({"success": False, "error": "Version not found"}), 404
+
         if not os.path.exists(version.filename):
-            return jsonify({'success': False, 'error': 'Version file not found'}), 404
-        
+            return jsonify({"success": False, "error": "Version file not found"}), 404
+
         directory = os.path.dirname(version.filename)
         filename = os.path.basename(version.filename)
-        
-        return send_from_directory(directory, filename, as_attachment=True, 
-                                   download_name=f'model_v{version_number}.glb')
+
+        return send_from_directory(
+            directory,
+            filename,
+            as_attachment=True,
+            download_name=f"model_v{version_number}.glb",
+        )
     except Exception as e:
         logger.error(f"Failed to download version {version_number} for {model_id}: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if init_app_dependencies():
         app.logger.info("Dependencies initialized successfully")
         # Railway/Heroku için PORT environment variable
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=app.config.get('DEBUG', True))
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", True))
     else:
         app.logger.error("Failed to initialize dependencies")

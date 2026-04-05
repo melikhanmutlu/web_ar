@@ -97,14 +97,19 @@
         .modal-container { transform: scale(0.95); opacity: 0; transition: all 0.3s ease; }
         .modal-container.active { transform: scale(1); opacity: 1; }
 
-        #qrModal { display: none; background: var(--color-white); padding: var(--spacing-2xl); text-align: center; border: 1px solid var(--color-gray-200); max-width: 90%; width: 400px; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; }
-        .dark #qrModal { background: var(--color-gray-800); border-color: var(--color-gray-700); }
-        #qrModal.show { display: block; }
-        #qrcode { background: var(--color-white); padding: var(--spacing-lg); display: inline-block; margin: var(--spacing-lg) 0; }
+        /* QR Modal — overlay */
+        #qrModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; align-items: center; justify-content: center; }
+        #qrModal.show { display: flex; }
+        #qrModal .modal-card { background: var(--color-white); border: 1px solid var(--color-gray-200); padding: 1.5rem; width: 22rem; max-width: 90vw; }
+        .dark #qrModal .modal-card { background: var(--color-gray-900); border-color: var(--color-gray-700); }
+        #qrcode { background: var(--color-white); display: block; }
+        #qrcode img, #qrcode canvas { display: block; }
 
-        #arModal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--color-white); padding: var(--spacing-2xl); z-index: 1000; border: 1px solid var(--color-gray-200); max-width: 90%; width: 400px; text-align: center; }
-        .dark #arModal { background: var(--color-gray-900); color: var(--color-gray-200); }
-        #arModal.show { display: block; }
+        /* AR Modal — overlay */
+        #arModal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; align-items: center; justify-content: center; }
+        #arModal.show { display: flex; }
+        #arModal .modal-card { background: var(--color-white); border: 1px solid var(--color-gray-200); padding: 1.5rem; width: 22rem; max-width: 90vw; position: relative; }
+        .dark #arModal .modal-card { background: var(--color-gray-900); border-color: var(--color-gray-700); color: var(--color-gray-200); }
         model-viewer::part(ar-button) { display: none; }
 
         .viewer-shell { position: relative; height: 100vh; overflow: hidden; }
@@ -731,59 +736,59 @@
             // Function to show AR modal with QR code
             function showArModal() {
                 const arModal = document.getElementById('arModal');
-                if (arModal) {
-                    // Show modal
-                    arModal.style.display = 'flex';
-                    arModal.classList.remove('hidden');
-                    
-                    // Generate QR code
-                    const qrContainer = document.getElementById('arModalQrCode');
-                    if (qrContainer) {
-                        qrContainer.innerHTML = ''; // Clear previous QR code
-                        new QRCode(qrContainer, {
-                            text: window.location.href,
-                            width: 128,
-                            height: 128,
-                            colorDark: document.documentElement.classList.contains('dark') ? '#FFFFFF' : '#000000',
-                            colorLight: document.documentElement.classList.contains('dark') ? '#1F2937' : '#FFFFFF'
-                        });
-                    }
+                if (!arModal) return;
+                arModal.classList.add('show');
+                document.getElementById('arButton')?.classList.add('is-active');
+                const qrContainer = document.getElementById('arModalQrCode');
+                if (qrContainer) {
+                    qrContainer.innerHTML = '';
+                    new QRCode(qrContainer, {
+                        text: window.location.href,
+                        width: 120,
+                        height: 120,
+                        colorDark: '#000000',
+                        colorLight: '#ffffff'
+                    });
                 }
             }
 
             // Function to hide AR modal
             function hideArModal() {
-                const arModal = document.getElementById('arModal');
-                if (arModal) {
-                    arModal.style.display = 'none';
-                    arModal.classList.add('hidden');
-                }
+                document.getElementById('arModal')?.classList.remove('show');
+                document.getElementById('arButton')?.classList.remove('is-active');
             }
+
+            document.getElementById('closeArModal')?.addEventListener('click', hideArModal);
+            document.getElementById('arModal')?.addEventListener('click', function(e) {
+                if (e.target === this) hideArModal();
+            });
 
             // Function to show QR modal
             function showQRModal() {
-                if (qrcode) {
-                    qrcode.clear();
-                    document.getElementById('qrcode').innerHTML = '';
-                }
-
-                const currentUrl = window.location.href;
-                qrcode = new QRCode(document.getElementById('qrcode'), {
-                    text: currentUrl,
-                    width: 256,
-                    height: 256,
+                const el = document.getElementById('qrcode');
+                if (qrcode) { qrcode.clear(); el.innerHTML = ''; }
+                qrcode = new QRCode(el, {
+                    text: window.location.href,
+                    width: 120,
+                    height: 120,
                     colorDark: '#000000',
                     colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.H
                 });
-
                 qrModal.classList.add('show');
+                document.getElementById('qrButton')?.classList.add('is-active');
             }
 
             // Function to hide QR modal
             function hideQRModal() {
                 qrModal.classList.remove('show');
+                document.getElementById('qrButton')?.classList.remove('is-active');
             }
+
+            // Close on overlay click
+            qrModal?.addEventListener('click', function(e) {
+                if (e.target === this) hideQRModal();
+            });
 
             // Event Listeners
             arButton?.addEventListener('click', () => {
@@ -1503,17 +1508,19 @@ void main() {
     </div>
 
     <!-- QR Modal -->
-    <div id="qrModal" style="padding:1.5rem;width:22rem;">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
-            <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
-                    <h3 style="font-size:1rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
-                    <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+    <div id="qrModal">
+        <div class="modal-card">
+            <div style="display:flex;align-items:flex-start;gap:1.25rem;">
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+                        <h3 style="font-size:0.95rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
+                        <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+                    </div>
+                    <p style="font-size:0.8rem;color:var(--color-gray-500);margin:0;line-height:1.5;">Scan this QR code with your mobile device to view the model in AR</p>
                 </div>
-                <p style="font-size:0.82rem;color:var(--color-gray-500);margin:0;">Scan this QR code to view the model on a supported device</p>
-            </div>
-            <div style="background:var(--color-white);padding:0.5rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
-                <div id="qrcode"></div>
+                <div style="background:#fff;padding:0.4rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
+                    <div id="qrcode"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -2110,13 +2117,19 @@ void main() {
         </div>
     </div>
 
-    <!-- AR Modal Overlay -->
-    <div id="arModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
-        <div style="background:var(--color-white);border:1px solid var(--color-gray-200);max-width:22rem;width:90%;padding:2rem;position:relative;">
-            <button id="closeArModal" style="position:absolute;top:1rem;right:1rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);"><i data-lucide="x" style="width:1.1rem;height:1.1rem;"></i></button>
-            <h3 style="font-size:1rem;font-weight:700;margin:0 0 0.5rem;color:var(--color-gray-900);">AR Not Supported</h3>
-            <p style="font-size:0.82rem;color:var(--color-gray-500);margin:0 0 1rem;">Your device doesn't support AR. Scan the QR code with a mobile device.</p>
-            <div id="arModalQrCode" style="display:flex;justify-content:center;"></div>
+    <!-- AR Modal -->
+    <div id="arModal">
+        <div class="modal-card">
+            <button id="closeArModal" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <div style="display:flex;align-items:flex-start;gap:1.25rem;">
+                <div style="flex:1;min-width:0;">
+                    <h3 style="font-size:0.95rem;font-weight:700;margin:0 0 0.5rem;color:var(--color-gray-900);">AR Not Supported</h3>
+                    <p style="font-size:0.8rem;color:var(--color-gray-500);margin:0;line-height:1.5;">Your device doesn't support AR. Scan the QR code with a mobile device.</p>
+                </div>
+                <div style="background:#fff;padding:0.4rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
+                    <div id="arModalQrCode"></div>
+                </div>
+            </div>
         </div>
     </div>
 

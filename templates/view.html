@@ -200,7 +200,7 @@
         .dark #infoToggleBtn.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
         /* Tools panel */
-        #toolsPanel { position: fixed; top: 50%; right: calc(19rem + 2rem); transform: translateY(-50%); width: 17rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 35; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
+        #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 19rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
         #toolsPanel.is-open { display: flex; }
         #toolsPanelBody { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--color-gray-700) transparent; }
         #toolsPanelBody::-webkit-scrollbar { width: 4px; }
@@ -382,17 +382,19 @@
             line-height: 1.4;
         }
         .tagline-line {
-            font-size: 1rem;
-            font-weight: 500;
-            color: var(--color-gray-400);
-            letter-spacing: 0.02em;
+            font-size: 2rem;
+            font-weight: 300;
+            color: var(--color-gray-900);
+            letter-spacing: -0.01em;
             margin: 0;
         }
+        .dark .tagline-line { color: var(--color-gray-200); }
         .tagline-main {
-            color: var(--color-gray-200);
+            color: var(--color-gray-900);
             text-decoration: underline;
-            text-underline-offset: 3px;
+            text-underline-offset: 4px;
         }
+        .dark .tagline-main { color: var(--color-gray-200); }
         .tagline-cursor {
             display: inline-block;
             width: 1px;
@@ -1501,19 +1503,19 @@ void main() {
     </div>
 
     <!-- QR Modal -->
-    <div id="qrModal" style="padding:1.5rem;">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Scan QR Code</h3>
-            <button id="closeQrModal" class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300">
-                <i data-lucide="x"></i>
-            </button>
+    <div id="qrModal" style="padding:1.5rem;width:22rem;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+            <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+                    <h3 style="font-size:1rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
+                    <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+                </div>
+                <p style="font-size:0.82rem;color:var(--color-gray-500);margin:0;">Scan this QR code to view the model on a supported device</p>
+            </div>
+            <div style="background:var(--color-white);padding:0.5rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
+                <div id="qrcode"></div>
+            </div>
         </div>
-        <div class="qr-code-container" style="background:var(--color-white);padding:1rem;">
-            <div id="qrcode" class="mx-auto"></div>
-        </div>
-        <p class="text-sm text-gray-500 dark:text-gray-400 text-center mt-4">
-            Scan this QR code to view the model on a supported device
-        </p>
     </div>
 
     <!-- Model Viewer -->
@@ -2109,25 +2111,12 @@ void main() {
     </div>
 
     <!-- AR Modal Overlay -->
-    <div id="arModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-[9999]" style="display: none;">
-        <div style="position:relative;padding:2rem;background:var(--color-white);border:1px solid var(--color-gray-200);max-width:24rem;margin:auto;" class="dark-ar-modal">
-            <div class="text-center">
-                <i data-lucide="loader-2"></i>
-                <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">AR Not Supported</h3>
-                <p class="text-gray-600 dark:text-gray-400 mb-4">Your device doesn't support AR viewing. Please use a mobile device with AR capabilities.</p>
-                
-                <!-- QR Code Section -->
-                <div class="mb-4">
-                    <p class="text-gray-600 dark:text-gray-400 mb-2">Scan this QR code with your mobile device:</p>
-                    <div id="arModalQrCode" class="flex justify-center"></div>
-                </div>
-
-                <div class="flex justify-center gap-2">
-                    <button id="closeArModal" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                        Close
-                    </button>
-                </div>
-            </div>
+    <div id="arModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+        <div style="background:var(--color-white);border:1px solid var(--color-gray-200);max-width:22rem;width:90%;padding:2rem;position:relative;">
+            <button id="closeArModal" style="position:absolute;top:1rem;right:1rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);"><i data-lucide="x" style="width:1.1rem;height:1.1rem;"></i></button>
+            <h3 style="font-size:1rem;font-weight:700;margin:0 0 0.5rem;color:var(--color-gray-900);">AR Not Supported</h3>
+            <p style="font-size:0.82rem;color:var(--color-gray-500);margin:0 0 1rem;">Your device doesn't support AR. Scan the QR code with a mobile device.</p>
+            <div id="arModalQrCode" style="display:flex;justify-content:center;"></div>
         </div>
     </div>
 

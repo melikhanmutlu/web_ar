@@ -102,13 +102,15 @@
         #qrModal.show { display: flex !important; }
         #qrModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 2rem; width: 32rem; max-width: 92vw; box-sizing: border-box; }
         #qrcode { display: block; line-height: 0; }
-        #qrcode img, #qrcode canvas { display: block !important; width: 200px !important; height: 200px !important; }
+        #qrcode canvas { display: none !important; }
+        #qrcode img { display: block !important; width: 200px !important; height: 200px !important; }
 
         /* AR Modal — overlay */
         #arModal { display: none !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.6) !important; z-index: 9999 !important; align-items: center !important; justify-content: center !important; }
         #arModal.show { display: flex !important; }
         #arModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 2rem; width: 32rem; max-width: 92vw; position: relative; box-sizing: border-box; }
-        #arModalQrCode img, #arModalQrCode canvas { display: block !important; width: 200px !important; height: 200px !important; }
+        #arModalQrCode canvas { display: none !important; }
+        #arModalQrCode img { display: block !important; width: 200px !important; height: 200px !important; }
         model-viewer::part(ar-button) { display: none; }
 
         .viewer-shell { position: relative; height: 100vh; overflow: hidden; }

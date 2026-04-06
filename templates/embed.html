@@ -54,12 +54,12 @@
         shadow-intensity="1.2"
         shadow-softness="0.8"
         exposure="0.96"
-        tone-mapping="aces"
+        tone-mapping="neutral"
         camera-controls
         camera-orbit="30deg 70deg auto"
         field-of-view="24deg"
         interaction-prompt="none"
-        {% if ar %}ar ar-scale="auto" ar-placement="floor"{% endif %}
+        {% if ar %}ar ar-scale="auto" ar-placement="floor" ar-modes="webxr scene-viewer quick-look" xr-environment{% endif %}
         {% if autoplay %}autoplay{% endif %}
         loading="eager"
     ></model-viewer>

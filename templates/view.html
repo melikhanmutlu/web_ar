@@ -1571,14 +1571,16 @@ void main() {
                 shadow-intensity="1.45"
                 shadow-softness="0.72"
                 exposure="0.96"
-                tone-mapping="aces"
+                tone-mapping="neutral"
                 ar-scale="auto"
+                ar-modes="webxr scene-viewer quick-look"
                 camera-controls
                 camera-orbit="36deg 70deg auto"
                 field-of-view="24deg"
                 interaction-prompt="none"
                 ar
                 ar-placement="floor"
+                xr-environment
             >
             </model-viewer>
         </div>
@@ -1688,15 +1690,15 @@ void main() {
                         <div style="display:flex;gap:0.5rem;">
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">W</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.x * 100) }}</div>
+                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.x) }}</div>
                             </div>
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">H</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.y * 100) }}</div>
+                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.y) }}</div>
                             </div>
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">D</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.z * 100) }}</div>
+                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.z) }}</div>
                             </div>
                         </div>
                     </div>

@@ -135,12 +135,18 @@ class STLConverter(BaseConverter):
             mesh.apply_transform(basis_correction)
             self.log_operation("Applied basis correction: -90° around X (Z-up to Y-up)")
 
-            # Get model dimensions
+            # STL files are unitless; most CAD tools export in mm or cm.
+            # GLB standard requires meters. Apply cm→m conversion (÷100) unconditionally
+            # so the model appears at the correct real-world scale in model-viewer and AR.
+            mesh.apply_scale(0.01)
+            self.log_operation("Applied cm→m unit conversion: scale 0.01 (STL assumed cm)")
+
+            # Get model dimensions (now in meters, consistent with GLB standard)
             extents = mesh.extents
 
             dimensions = {"x": extents[0], "y": extents[1], "z": extents[2]}
 
-            self.log_operation(f"Model dimensions: {dimensions}")
+            self.log_operation(f"Model dimensions (meters): {dimensions}")
 
             # Calculate scale factor only if max_dimension was explicitly set by user
             # Default max_dimension is 0.5 but we only scale if user checked the checkbox

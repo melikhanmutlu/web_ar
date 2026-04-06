@@ -430,12 +430,22 @@
         const mtlUploadText = document.getElementById('mtlUploadText');
         
         mtlInput.addEventListener('change', (e) => {
+            // Remove existing MTL color warning if any
+            document.getElementById('mtlColorWarning')?.remove();
+
             if (e.target.files.length > 0) {
                 const file = e.target.files[0];
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 selectedMtlFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
                 selectedMtlFileName.classList.remove('hidden');
                 mtlUploadText.classList.add('hidden');
+
+                // Show warning that color will be ignored when MTL is present
+                const warning = document.createElement('div');
+                warning.id = 'mtlColorWarning';
+                warning.className = 'mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg text-xs text-amber-700 dark:text-amber-300';
+                warning.innerHTML = '<strong>Note:</strong> When an MTL file is provided, the selected color will be ignored. The model will use materials defined in the MTL file.';
+                selectedMtlFileName.parentElement.appendChild(warning);
             } else {
                 selectedMtlFileName.classList.add('hidden');
                 mtlUploadText.classList.remove('hidden');

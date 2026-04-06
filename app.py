@@ -25,7 +25,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView
 from auth import auth
 import re
 import traceback
@@ -365,48 +365,50 @@ def apply_size_limit(mesh, max_size_meters=0.35):
 
 
 def convert_model_new(input_file, output_path=None, color=None):
-    """Convert 3D model to GLB format with optional color application."""
+    """Convert 3D model to GLB format using converter classes with optional color."""
     try:
-        # Generate output path if not provided
         if output_path is None:
             output_path = os.path.join(
                 app.config["CONVERTED_FOLDER"],
                 os.path.splitext(os.path.basename(input_file))[0] + ".glb",
             )
 
-        # Get file extension
         file_ext = os.path.splitext(input_file)[1].lower()
 
-        # For FBX files, first convert to GLB then apply color
+        # Select appropriate converter class
         if file_ext == ".fbx":
-            # Convert FBX to GLB
-            temp_glb = convert_fbx_to_glb(input_file, output_path)
-            if not temp_glb:
+            converter = FBXConverter()
+        elif file_ext == ".stl":
+            converter = STLConverter()
+        elif file_ext == ".obj":
+            converter = OBJConverter()
+        elif file_ext in (".glb", ".gltf"):
+            # Direct copy/re-export for GLB/GLTF
+            try:
+                scene = trimesh.load(input_file)
+                if color:
+                    apply_color_to_scene(scene, color)
+                scene.export(output_path)
+                return output_path
+            except Exception as e:
+                logger.error(f"Error processing GLB/GLTF: {str(e)}")
                 return None
+        else:
+            logger.error(f"Unsupported format: {file_ext}")
+            return None
 
-            # Apply color if specified
-            if color:
-                try:
-                    mesh = trimesh.load(output_path)
-                    if apply_color_to_scene(mesh, color):
-                        mesh.export(output_path)
-                except Exception as e:
-                    logger.error(f"Error applying color to converted FBX: {str(e)}")
-                    # Continue even if color application fails
+        if not converter.validate(input_file):
+            logger.error(f"Validation failed for {file_ext}")
+            return None
+
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        success = converter.convert(input_file, output_path, color=color) if color else converter.convert(input_file, output_path)
+
+        if success and os.path.exists(output_path):
             return output_path
 
-        # For other formats
-        try:
-            scene = trimesh.load(input_file)
-            if color:
-                if not apply_color_to_scene(scene, color):
-                    logger.warning("Failed to apply color to model")
-            scene.export(output_path)
-            return output_path
-        except Exception as e:
-            logger.error(f"Error in color application: {str(e)}")
-            # If color application fails, try regular conversion
-            return convert_to_glb(input_file)
+        logger.error(f"Conversion failed for {file_ext}")
+        return None
 
     except Exception as e:
         logger.error(f"Error in convert_model_new: {str(e)}")
@@ -415,7 +417,7 @@ def convert_model_new(input_file, output_path=None, color=None):
 
 
 def convert_stl_to_glb(stl_path, output_path):
-    """Convert STL file to GLB format using trimesh."""
+    """DEPRECATED: Use STLConverter class instead. Kept for backward compatibility."""
     try:
         # Load the STL file
         mesh = trimesh.load(stl_path)
@@ -435,7 +437,7 @@ def convert_stl_to_glb(stl_path, output_path):
 
 
 def convert_fbx_to_glb(fbx_path, output_path):
-    """Convert FBX file to GLB format using FBX2glTF."""
+    """DEPRECATED: Use FBXConverter class instead. Kept for backward compatibility."""
     try:
         logger.info("Starting FBX to GLB conversion")
         # Platform-aware FBX2glTF path
@@ -457,7 +459,7 @@ def convert_fbx_to_glb(fbx_path, output_path):
             fbx_path,
             "--output",
             output_path,
-            "--draco",  # Optimize model for better performance
+            # "--draco",  # Disabled: Draco compression corrupts textures and geometry
         ]
 
         logger.info(f"Running FBX2glTF command: {' '.join(cmd)}")
@@ -477,7 +479,7 @@ def convert_fbx_to_glb(fbx_path, output_path):
 
 
 def convert_obj_to_glb(obj_path, output_path):
-    """Convert OBJ file to GLB format using obj2gltf."""
+    """DEPRECATED: Use OBJConverter class instead. Kept for backward compatibility."""
     try:
         logger.info("Starting OBJ to GLB conversion")
 
@@ -527,7 +529,7 @@ def convert_obj_to_glb(obj_path, output_path):
 
 
 def convert_to_glb(file_path):
-    """Convert uploaded 3D model to GLB format using appropriate converter."""
+    """DEPRECATED: Use convert_model_new() instead. Kept for backward compatibility."""
     try:
         file_ext = os.path.splitext(file_path)[1].lower()[
             1:
@@ -1787,12 +1789,27 @@ def upload_model():
                     f"[upload_model - {unique_id}] Could not calculate dimensions: {str(e)}"
                 )
 
-        # Parse dimensions for original_dimensions field
+        # Store original (pre-scaling) dimensions separately from current bounds
+        # original_dimensions = dimensions BEFORE any user scaling was applied
+        # bounds = current dimensions (after scaling if any)
         original_dims = None
-        if model_bounds:
+        if (
+            hasattr(converter, "original_dimensions")
+            and converter.original_dimensions
+        ):
             try:
-                import json
-
+                orig = converter.original_dimensions
+                original_dims = {
+                    "x": round(orig["x"] * 100, 2),
+                    "y": round(orig["y"] * 100, 2),
+                    "z": round(orig["z"] * 100, 2),
+                    "max": round(orig["max"] * 100, 2),
+                }
+            except Exception:
+                pass
+        # Fallback: if no pre-scaling dims available, use current bounds
+        if not original_dims and model_bounds:
+            try:
                 bounds_data = json.loads(model_bounds)
                 original_dims = {
                     "x": bounds_data["extents"][0],
@@ -1800,7 +1817,7 @@ def upload_model():
                     "z": bounds_data["extents"][2],
                     "max": bounds_data["max"],
                 }
-            except:
+            except Exception:
                 pass
 
         # Create model record in database using the unique_id
@@ -2177,6 +2194,59 @@ def view_model(model_id):
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.route("/embed/<model_id>")
+def embed_view(model_id):
+    """Minimal embed viewer for iframe integration (e-commerce, portfolios)."""
+    model = UserModel.query.get(model_id)
+    if not model:
+        return "Model not found", 404
+
+    if not model.filename or not os.path.exists(model.filename):
+        return "Model file not found", 404
+
+    # Parse path
+    try:
+        full_path = model.filename
+        converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
+        relative_path = os.path.relpath(full_path, converted_folder_abs)
+        parts = os.path.normpath(relative_path).split(os.sep)
+        model_unique_id = parts[0]
+        actual_filename = parts[1]
+    except Exception:
+        return "Invalid model path", 500
+
+    # Check USDZ
+    usdz_actual_filename = None
+    if model.usdz_filename and os.path.exists(model.usdz_filename):
+        usdz_actual_filename = os.path.basename(model.usdz_filename)
+
+    # Dimensions
+    model_dimensions = None
+    if model.bounds:
+        try:
+            import json
+            bounds = json.loads(model.bounds) if isinstance(model.bounds, str) else model.bounds
+            extents = bounds.get("extents", [0, 0, 0])
+            model_dimensions = {
+                "width": round(extents[0], 2),
+                "height": round(extents[1], 2),
+                "depth": round(extents[2], 2),
+            }
+        except Exception:
+            pass
+
+    return render_template(
+        "embed.html",
+        model=model,
+        model_unique_id=model_unique_id,
+        actual_filename=actual_filename,
+        usdz_filename=usdz_actual_filename,
+        model_dimensions=model_dimensions,
+        autoplay=request.args.get("autoplay", "0") == "1",
+        ar=request.args.get("ar", "1") != "0",
+    )
 
 
 @app.route("/vr/<model_id>")
@@ -3667,6 +3737,193 @@ def download_version(model_id, version_number):
         )
     except Exception as e:
         logger.error(f"Failed to download version {version_number} for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ===================================================================
+# HOTSPOT CRUD API
+# ===================================================================
+
+@app.route("/api/models/<model_id>/hotspots", methods=["GET"])
+def get_hotspots(model_id):
+    """Get all hotspots for a model"""
+    try:
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
+        hotspots = ModelHotspot.query.filter_by(model_id=model_id).order_by(ModelHotspot.created_at).all()
+        return jsonify({
+            "success": True,
+            "hotspots": [h.to_dict() for h in hotspots],
+            "hotspots_visible": model.hotspots_visible
+        })
+    except Exception as e:
+        logger.error(f"Error getting hotspots for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/hotspots", methods=["POST"])
+def create_hotspot(model_id):
+    """Create a new hotspot on a model"""
+    try:
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data provided"}), 400
+
+        hotspot = ModelHotspot(
+            model_id=model_id,
+            hotspot_id=data.get("id", f"hotspot-{int(time.time()*1000)}"),
+            title=data.get("title", "Untitled"),
+            description=data.get("description"),
+            position_x=data["position"]["x"],
+            position_y=data["position"]["y"],
+            position_z=data["position"]["z"],
+            normal_x=data.get("normal", {}).get("x"),
+            normal_y=data.get("normal", {}).get("y"),
+            normal_z=data.get("normal", {}).get("z"),
+        )
+
+        # Optional camera view
+        camera = data.get("cameraView")
+        if camera:
+            hotspot.camera_view_id = data.get("cameraViewId")
+            orbit = camera.get("orbit", {})
+            hotspot.camera_orbit_theta = orbit.get("theta")
+            hotspot.camera_orbit_phi = orbit.get("phi")
+            hotspot.camera_orbit_radius = orbit.get("radius")
+            target = camera.get("target", {})
+            hotspot.camera_target_x = target.get("x")
+            hotspot.camera_target_y = target.get("y")
+            hotspot.camera_target_z = target.get("z")
+            hotspot.camera_fov = camera.get("fov")
+
+        db.session.add(hotspot)
+        db.session.commit()
+
+        return jsonify({"success": True, "hotspot": hotspot.to_dict()}), 201
+    except KeyError as e:
+        return jsonify({"success": False, "error": f"Missing required field: {e}"}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating hotspot for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/hotspots/<hotspot_id>", methods=["DELETE"])
+def delete_hotspot(model_id, hotspot_id):
+    """Delete a specific hotspot"""
+    try:
+        hotspot = ModelHotspot.query.filter_by(
+            model_id=model_id, hotspot_id=hotspot_id
+        ).first()
+        if not hotspot:
+            return jsonify({"success": False, "error": "Hotspot not found"}), 404
+
+        db.session.delete(hotspot)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting hotspot {hotspot_id} for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/hotspots", methods=["DELETE"])
+def delete_all_hotspots(model_id):
+    """Delete all hotspots for a model"""
+    try:
+        ModelHotspot.query.filter_by(model_id=model_id).delete()
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting all hotspots for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/hotspots/visibility", methods=["PATCH"])
+def toggle_hotspots_visibility(model_id):
+    """Toggle hotspot visibility for a model"""
+    try:
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
+        data = request.get_json()
+        model.hotspots_visible = data.get("visible", not model.hotspots_visible)
+        db.session.commit()
+        return jsonify({"success": True, "hotspots_visible": model.hotspots_visible})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error toggling hotspot visibility for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ===================================================================
+# CAMERA VIEW CRUD API
+# ===================================================================
+
+@app.route("/api/models/<model_id>/camera-views", methods=["GET"])
+def get_camera_views(model_id):
+    """Get all saved camera views for a model"""
+    try:
+        views = CameraView.query.filter_by(model_id=model_id).order_by(CameraView.created_at).all()
+        return jsonify({"success": True, "views": [v.to_dict() for v in views]})
+    except Exception as e:
+        logger.error(f"Error getting camera views for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/camera-views", methods=["POST"])
+def create_camera_view(model_id):
+    """Save a camera view"""
+    try:
+        model = UserModel.query.get(model_id)
+        if not model:
+            return jsonify({"success": False, "error": "Model not found"}), 404
+
+        data = request.get_json()
+        orbit = data.get("orbit", {})
+        target = data.get("target", {})
+
+        view = CameraView(
+            model_id=model_id,
+            name=data.get("name", "View"),
+            orbit_theta=orbit.get("theta", 0),
+            orbit_phi=orbit.get("phi", 0),
+            orbit_radius=orbit.get("radius", 0),
+            target_x=target.get("x", 0),
+            target_y=target.get("y", 0),
+            target_z=target.get("z", 0),
+            fov=data.get("fov"),
+        )
+        db.session.add(view)
+        db.session.commit()
+        return jsonify({"success": True, "view": view.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating camera view for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/camera-views/<int:view_id>", methods=["DELETE"])
+def delete_camera_view(model_id, view_id):
+    """Delete a camera view"""
+    try:
+        view = CameraView.query.filter_by(id=view_id, model_id=model_id).first()
+        if not view:
+            return jsonify({"success": False, "error": "View not found"}), 404
+        db.session.delete(view)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting camera view {view_id}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

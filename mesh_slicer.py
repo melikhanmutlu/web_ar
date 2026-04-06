@@ -186,10 +186,6 @@ def _inject_materials(sliced_path, mat_data):
                 if prim.material is None or prim.material >= num_mats:
                     prim.material = 0      # fall back to first material
 
-        # ---- force double-sided so cut faces are visible from both sides ----
-        for mat in (gltf.materials or []):
-            mat.doubleSided = True
-
         gltf.save(sliced_path)
         logger.info(
             f"Restored {num_mats} materials, "
@@ -335,6 +331,20 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
             if sliced is None or len(sliced.vertices) == 0:
                 logger.error("Slicing resulted in empty mesh")
                 return False
+
+            # Guard: check for degenerate (near-flat) result
+            sliced_bounds = sliced.bounds  # (2, 3) array
+            sliced_extents = sliced_bounds[1] - sliced_bounds[0]
+            logger.info(
+                f"Sliced mesh: {len(sliced.vertices)} verts, "
+                f"extents=[{sliced_extents[0]:.6f}, {sliced_extents[1]:.6f}, {sliced_extents[2]:.6f}]"
+            )
+            if np.any(sliced_extents < 1e-6):
+                logger.warning(
+                    f"Sliced mesh is near-degenerate on at least one axis "
+                    f"(extents={sliced_extents.tolist()}). Result may look flat."
+                )
+
             sliced.export(output_path, file_type='glb')
 
         else:

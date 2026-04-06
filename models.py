@@ -248,6 +248,32 @@ class ModelVersion(db.Model):
         return self.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
 
+class CameraView(db.Model):
+    """Saved camera views for 3D models"""
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    orbit_theta = db.Column(db.Float, nullable=False)
+    orbit_phi = db.Column(db.Float, nullable=False)
+    orbit_radius = db.Column(db.Float, nullable=False)
+    target_x = db.Column(db.Float, default=0.0)
+    target_y = db.Column(db.Float, default=0.0)
+    target_z = db.Column(db.Float, default=0.0)
+    fov = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    model = db.relationship('UserModel', backref=db.backref('camera_views', lazy=True, cascade='all, delete-orphan', order_by='CameraView.created_at'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'orbit': {'theta': self.orbit_theta, 'phi': self.orbit_phi, 'radius': self.orbit_radius},
+            'target': {'x': self.target_x, 'y': self.target_y, 'z': self.target_z},
+            'fov': self.fov
+        }
+
+
 class ModelLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)

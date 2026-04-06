@@ -1,6 +1,7 @@
 """
 FBX format to GLB format conversion operations using FBX2glTF.
 """
+
 import os
 import subprocess
 import logging
@@ -10,47 +11,72 @@ import numpy as np
 import platform
 from pathlib import Path
 from .base_converter import BaseConverter
-from .utils.file_utils import ensure_directory
 from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
+
+
+# Inline utility functions (replacing deleted utils/)
+def ensure_directory(path):
+    """Ensure directory exists, create if needed."""
+    import os
+
+    os.makedirs(path, exist_ok=True)
+
+
+def safe_delete_file(path):
+    """Safely delete a file if it exists."""
+    import os
+
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def is_valid_extension(filename, extensions):
+    """Check if filename has valid extension."""
+    return any(filename.lower().endswith(ext) for ext in extensions)
+
 
 logger = logging.getLogger(__name__)
 
+
 class FBXConverter(BaseConverter):
     """Converter for FBX files to GLB format using FBX2glTF."""
-    
+
     def __init__(self):
         super().__init__()
-        self.supported_extensions = {'.fbx'}
-        
+        self.supported_extensions = {".fbx"}
+
         # Platform-aware FBX2glTF path
-        tools_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tools')
-        if platform.system() == 'Windows':
-            self.fbx2gltf_path = os.path.join(tools_dir, 'FBX2glTF.exe')
+        tools_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tools")
+        if platform.system() == "Windows":
+            self.fbx2gltf_path = os.path.join(tools_dir, "FBX2glTF.exe")
         else:
-            self.fbx2gltf_path = os.path.join(tools_dir, 'FBX2glTF')
-        
+            self.fbx2gltf_path = os.path.join(tools_dir, "FBX2glTF")
+
         self.remove_textures = False  # Option to remove existing textures
         self._fbx_material_textures = {}  # Store material -> texture mapping from pyassimp
-        
+
     def validate(self, file_path: str) -> bool:
         """Validate if the file exists and has .fbx extension."""
         if not super().validate(file_path):
             return False
-            
+
         if not os.path.exists(file_path):
             self.handle_error(f"File does not exist: {file_path}")
             return False
-        
+
         file_ext = os.path.splitext(file_path)[1].lower()
         if file_ext not in self.supported_extensions:
             self.handle_error(f"Unsupported file format: {file_ext}")
             return False
-            
+
         if not os.path.exists(self.fbx2gltf_path):
             self.handle_error(f"FBX2glTF not found at path: {self.fbx2gltf_path}")
             self.log_operation("Please ensure FBX2glTF.exe is in the tools directory")
             return False
-            
+
         return True
 
     def calculate_scale_factor(self, mesh) -> float:
@@ -59,13 +85,13 @@ class FBXConverter(BaseConverter):
             # Get the current dimensions
             extents = mesh.extents
             max_dimension = max(extents)
-            
+
             # Calculate scale factor if needed
             if max_dimension > self.max_dimension:
                 return self.max_dimension / max_dimension
-                
+
             return 1.0
-            
+
         except Exception as e:
             self.handle_error(f"Error calculating scale factor: {str(e)}")
             return 1.0
@@ -77,39 +103,42 @@ class FBXConverter(BaseConverter):
                 return mesh
 
             # Convert hex color to RGB (0-255 range)
-            hex_color = color_str.lstrip('#')
+            hex_color = color_str.lstrip("#")
             if len(hex_color) != 6:
                 raise ValueError(f"Invalid hex color: {color_str}")
-            
+
             r = int(hex_color[0:2], 16)
             g = int(hex_color[2:4], 16)
             b = int(hex_color[4:6], 16)
-            
+
             self.log_operation(f"Applying color RGB({r}, {g}, {b}) to mesh")
-            
+
             # Remove existing textures if requested
             if self.remove_textures:
-                self.log_operation("Removing existing textures and applying solid color")
+                self.log_operation(
+                    "Removing existing textures and applying solid color"
+                )
                 mesh.visual = None
-            
+
             # Create PBR material with the specified color
             material = trimesh.visual.material.PBRMaterial(
-                baseColorFactor=[r/255.0, g/255.0, b/255.0, 1.0],
+                baseColorFactor=[r / 255.0, g / 255.0, b / 255.0, 1.0],
                 metallicFactor=0.1,
-                roughnessFactor=0.9
+                roughnessFactor=0.9,
             )
-            
+
             # Apply both material and vertex colors for maximum compatibility
             mesh.visual = trimesh.visual.TextureVisuals(material=material)
             vertex_colors = np.tile([r, g, b, 255], (len(mesh.vertices), 1))
             mesh.visual.vertex_colors = vertex_colors.astype(np.uint8)
-            
+
             self.log_operation(f"Solid color applied successfully: RGB({r}, {g}, {b})")
             return mesh
-            
+
         except Exception as e:
             self.handle_error(f"Error applying color: {str(e)}")
             import traceback
+
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return mesh
 
@@ -118,139 +147,230 @@ class FBXConverter(BaseConverter):
         try:
             self.update_status("CONVERTING")
             self.log_operation("Starting FBX conversion")
-            
+
             # FIRST: Read original FBX dimensions before conversion using pyassimp
             original_dimensions = None
             try:
                 # Attempt to load pyassimp and the underlying library
                 import pyassimp
                 from pyassimp import postprocess
-                
+
                 # Use context manager (with statement) for pyassimp
-                with pyassimp.load(input_path, processing=postprocess.aiProcess_Triangulate) as scene:
-                    self.log_operation(f"Scene type: {type(scene)}, has mMeshes: {hasattr(scene, 'mMeshes')}")
-                    if hasattr(scene, 'mNumMeshes'):
+                with pyassimp.load(
+                    input_path, processing=postprocess.aiProcess_Triangulate
+                ) as scene:
+                    self.log_operation(
+                        f"Scene type: {type(scene)}, has mMeshes: {hasattr(scene, 'mMeshes')}"
+                    )
+                    if hasattr(scene, "mNumMeshes"):
                         self.log_operation(f"Number of meshes: {scene.mNumMeshes}")
-                    
+
+                    # DETECT FBX UNIT SCALE FACTOR
+                    # FBX files can use different units (mm, cm, m)
+                    # UnitScaleFactor tells us how to convert to cm, then we convert to meters
+                    self._fbx_unit_scale = 1.0  # Default: assume meters
+                    try:
+                        if hasattr(scene, 'metadata') and scene.metadata:
+                            for key in scene.metadata:
+                                if isinstance(key, bytes):
+                                    key_str = key.decode('utf-8', errors='ignore')
+                                else:
+                                    key_str = str(key)
+                                if key_str.lower() in ('unitscalefactor', 'unit_scale_factor'):
+                                    val = scene.metadata[key]
+                                    if hasattr(val, 'data'):
+                                        val = val.data
+                                    unit_scale = float(val)
+                                    # UnitScaleFactor is typically: 1.0=cm, 100.0=m, 0.1=mm
+                                    # Convert to meters: value_in_meters = value_in_fbx_units * (unit_scale / 100.0)
+                                    self._fbx_unit_scale = unit_scale / 100.0
+                                    self.log_operation(
+                                        f"FBX UnitScaleFactor: {unit_scale} -> scale to meters: {self._fbx_unit_scale}"
+                                    )
+                                    break
+                        if self._fbx_unit_scale == 1.0:
+                            self.log_operation(
+                                "No UnitScaleFactor found in FBX metadata, assuming cm (default FBX unit)"
+                            )
+                            self._fbx_unit_scale = 0.01  # Default FBX unit is cm
+                    except Exception as unit_err:
+                        self.log_operation(f"Warning: Could not read FBX unit scale: {unit_err}", "WARNING")
+                        self._fbx_unit_scale = 0.01  # Fallback: assume cm
+
                     # EXTRACT EMBEDDED TEXTURES
                     self._fbx_material_textures = {}
-                    extracted_texture_paths = {} # index -> path
-                    
-                    if hasattr(scene, 'textures') and scene.textures:
-                        self.log_operation(f"Found {len(scene.textures)} embedded textures")
+                    extracted_texture_paths = {}  # index -> path
+
+                    if hasattr(scene, "textures") and scene.textures:
+                        self.log_operation(
+                            f"Found {len(scene.textures)} embedded textures"
+                        )
                         texture_dir = os.path.dirname(input_path)
-                        
+
                         for idx, texture in enumerate(scene.textures):
                             try:
                                 # Get texture data
-                                if hasattr(texture, 'achFormatHint'):
-                                    format_hint = texture.achFormatHint.decode('utf-8') if isinstance(texture.achFormatHint, bytes) else texture.achFormatHint
+                                if hasattr(texture, "achFormatHint"):
+                                    format_hint = (
+                                        texture.achFormatHint.decode("utf-8")
+                                        if isinstance(texture.achFormatHint, bytes)
+                                        else texture.achFormatHint
+                                    )
                                     ext = f".{format_hint}" if format_hint else ".png"
                                 else:
                                     ext = ".png"
-                                
+
                                 # Save texture to file
                                 texture_filename = f"texture_{idx}{ext}"
-                                texture_path = os.path.join(texture_dir, texture_filename)
-                                
-                                if hasattr(texture, 'pcData') and texture.pcData:
-                                    with open(texture_path, 'wb') as f:
+                                texture_path = os.path.join(
+                                    texture_dir, texture_filename
+                                )
+
+                                if hasattr(texture, "pcData") and texture.pcData:
+                                    with open(texture_path, "wb") as f:
                                         f.write(texture.pcData)
-                                    self.log_operation(f"Extracted texture: {texture_filename}")
+                                    self.log_operation(
+                                        f"Extracted texture: {texture_filename}"
+                                    )
                                     extracted_texture_paths[idx] = texture_path
                             except Exception as tex_error:
-                                self.log_operation(f"Warning: Could not extract texture {idx}: {tex_error}", "WARNING")
-                    
+                                self.log_operation(
+                                    f"Warning: Could not extract texture {idx}: {tex_error}",
+                                    "WARNING",
+                                )
+
                     all_vertices = []
                     all_faces = []
                     all_uvs = []  # Store UV coordinates
                     all_materials = []  # Store material info
-                    
+
                     # EXTRACT MATERIAL TEXTURE MAPPINGS
-                    if hasattr(scene, 'materials'):
+                    if hasattr(scene, "materials"):
                         for mat_idx, material in enumerate(scene.materials):
-                            mat_name = material.properties.get('?mat.name', f"Material_{mat_idx}")
+                            mat_name = material.properties.get(
+                                "?mat.name", f"Material_{mat_idx}"
+                            )
                             # Try multiple possible texture property names in pyassimp
-                            tex_file = material.properties.get('$tex.file')
+                            tex_file = material.properties.get("$tex.file")
                             if not tex_file:
                                 # Try common keys for different slots
                                 for key in material.properties.keys():
-                                    if '$tex.file' in key:
+                                    if "$tex.file" in key:
                                         tex_file = material.properties[key]
                                         break
-                            
+
                             if tex_file:
                                 self._fbx_material_textures[mat_name] = tex_file
-                                self.log_operation(f"Material '{mat_name}' Texture: {tex_file}")
-                            elif mat_name == 'DB2X2_L02' and extracted_texture_paths:
+                                self.log_operation(
+                                    f"Material '{mat_name}' Texture: {tex_file}"
+                                )
+                            elif mat_name == "DB2X2_L02" and extracted_texture_paths:
                                 # Special case for Tree model if property is missing but we have extracted textures
                                 # Usually the first extracted texture for this material
-                                self._fbx_material_textures[mat_name] = list(extracted_texture_paths.values())[0]
-                                self.log_operation(f"Assigned extracted texture to known material '{mat_name}'")
-                    
+                                self._fbx_material_textures[mat_name] = list(
+                                    extracted_texture_paths.values()
+                                )[0]
+                                self.log_operation(
+                                    f"Assigned extracted texture to known material '{mat_name}'"
+                                )
+
                     # Try different pyassimp API approaches
                     # Approach 1: Direct meshes attribute (newer pyassimp)
-                    if hasattr(scene, 'meshes') and scene.meshes:
-                        self.log_operation(f"Using scene.meshes (found {len(scene.meshes)} meshes)")
+                    if hasattr(scene, "meshes") and scene.meshes:
+                        self.log_operation(
+                            f"Using scene.meshes (found {len(scene.meshes)} meshes)"
+                        )
                         for mesh_idx, mesh in enumerate(scene.meshes):
-                            if hasattr(mesh, 'vertices') and len(mesh.vertices) > 0:
+                            if hasattr(mesh, "vertices") and len(mesh.vertices) > 0:
                                 all_vertices.append(np.array(mesh.vertices))
-                                self.log_operation(f"Added {len(mesh.vertices)} vertices from mesh {mesh_idx}")
-                                
+                                self.log_operation(
+                                    f"Added {len(mesh.vertices)} vertices from mesh {mesh_idx}"
+                                )
+
                                 # Collect UV coordinates (texture coordinates)
-                                if hasattr(mesh, 'texturecoords') and mesh.texturecoords is not None:
+                                if (
+                                    hasattr(mesh, "texturecoords")
+                                    and mesh.texturecoords is not None
+                                ):
                                     # texturecoords[0] is the first UV channel
-                                    if len(mesh.texturecoords) > 0 and mesh.texturecoords[0] is not None:
-                                        uvs = np.array(mesh.texturecoords[0])[:, :2]  # Take only U,V (ignore W)
+                                    if (
+                                        len(mesh.texturecoords) > 0
+                                        and mesh.texturecoords[0] is not None
+                                    ):
+                                        uvs = np.array(mesh.texturecoords[0])[
+                                            :, :2
+                                        ]  # Take only U,V (ignore W)
                                         all_uvs.append(uvs)
-                                        self.log_operation(f"Added {len(uvs)} UV coordinates from mesh {mesh_idx}")
+                                        self.log_operation(
+                                            f"Added {len(uvs)} UV coordinates from mesh {mesh_idx}"
+                                        )
                                     else:
                                         all_uvs.append(None)
                                 else:
                                     all_uvs.append(None)
-                                
+
                                 # Collect material index
-                                if hasattr(mesh, 'materialindex'):
+                                if hasattr(mesh, "materialindex"):
                                     all_materials.append(mesh.materialindex)
-                                    self.log_operation(f"Mesh {mesh_idx} uses material index: {mesh.materialindex}")
+                                    self.log_operation(
+                                        f"Mesh {mesh_idx} uses material index: {mesh.materialindex}"
+                                    )
                                 else:
                                     all_materials.append(None)
-                                
+
                                 # Also collect faces (triangles)
-                                if hasattr(mesh, 'faces') and len(mesh.faces) > 0:
+                                if hasattr(mesh, "faces") and len(mesh.faces) > 0:
                                     # Faces are stored as arrays of vertex indices
                                     mesh_faces = []
                                     for face in mesh.faces:
                                         if len(face) >= 3:  # Triangle or polygon
                                             # Convert to triangle indices
-                                            mesh_faces.append([face[0], face[1], face[2]])
+                                            mesh_faces.append(
+                                                [face[0], face[1], face[2]]
+                                            )
                                     if mesh_faces:
                                         all_faces.append(np.array(mesh_faces))
-                                        self.log_operation(f"Added {len(mesh_faces)} faces from mesh {mesh_idx}")
+                                        self.log_operation(
+                                            f"Added {len(mesh_faces)} faces from mesh {mesh_idx}"
+                                        )
                     # Approach 2: mMeshes ctypes array (older pyassimp)
-                    elif hasattr(scene, 'mMeshes') and scene.mMeshes:
-                        self.log_operation(f"Using scene.mMeshes (found {scene.mNumMeshes} meshes)")
+                    elif hasattr(scene, "mMeshes") and scene.mMeshes:
+                        self.log_operation(
+                            f"Using scene.mMeshes (found {scene.mNumMeshes} meshes)"
+                        )
                         for i in range(scene.mNumMeshes):
                             mesh = scene.mMeshes[i].contents
-                            if hasattr(mesh, 'mVertices') and mesh.mNumVertices > 0:
-                                vertices = np.array([[mesh.mVertices[j].x, mesh.mVertices[j].y, mesh.mVertices[j].z] 
-                                                    for j in range(mesh.mNumVertices)])
+                            if hasattr(mesh, "mVertices") and mesh.mNumVertices > 0:
+                                vertices = np.array(
+                                    [
+                                        [
+                                            mesh.mVertices[j].x,
+                                            mesh.mVertices[j].y,
+                                            mesh.mVertices[j].z,
+                                        ]
+                                        for j in range(mesh.mNumVertices)
+                                    ]
+                                )
                                 all_vertices.append(vertices)
-                                self.log_operation(f"Added {mesh.mNumVertices} vertices from mesh {i}")
-                    
+                                self.log_operation(
+                                    f"Added {mesh.mNumVertices} vertices from mesh {i}"
+                                )
+
                     if all_vertices:
                         combined_vertices = np.vstack(all_vertices)
                         min_bounds = combined_vertices.min(axis=0)
                         max_bounds = combined_vertices.max(axis=0)
                         extents = max_bounds - min_bounds
-                        
+
                         # Store original vertices for later use (in case GLB has zero vertices)
                         # Note: FBX units vary (mm, cm, m) - we keep raw values and let FBX2glTF handle conversion
                         # FBX2glTF outputs in meters, so we trust its output for final dimensions
                         self._fbx_vertices = combined_vertices  # Keep raw units, will be scaled if needed
                         self._fbx_raw_extents = extents  # Store raw extents for logging
-                        self.log_operation(f"Stored {len(combined_vertices)} original FBX vertices (raw units)")
-                        
+                        self.log_operation(
+                            f"Stored {len(combined_vertices)} original FBX vertices (raw units)"
+                        )
+
                         # Store UV coordinates
                         if all_uvs and any(uv is not None for uv in all_uvs):
                             combined_uvs = []
@@ -259,14 +379,18 @@ class FBXConverter(BaseConverter):
                                     combined_uvs.append(uv)
                                 else:
                                     # If a mesh has no UVs, create dummy UVs
-                                    combined_uvs.append(np.zeros((len(all_vertices[idx]), 2)))
-                            
+                                    combined_uvs.append(
+                                        np.zeros((len(all_vertices[idx]), 2))
+                                    )
+
                             self._fbx_uvs = np.vstack(combined_uvs)
-                            self.log_operation(f"Stored {len(self._fbx_uvs)} UV coordinates")
+                            self.log_operation(
+                                f"Stored {len(self._fbx_uvs)} UV coordinates"
+                            )
                         else:
                             self._fbx_uvs = None
                             self.log_operation("No UV coordinates found in FBX")
-                        
+
                         # Store original faces if available
                         if all_faces:
                             # Combine all faces, adjusting indices for combined vertex array
@@ -277,38 +401,60 @@ class FBXConverter(BaseConverter):
                                 adjusted_faces = faces + vertex_offset
                                 combined_faces.append(adjusted_faces)
                                 vertex_offset += len(all_vertices[i])
-                            
+
                             self._fbx_faces = np.vstack(combined_faces)
-                            self.log_operation(f"Stored {len(self._fbx_faces)} original FBX faces for mesh creation")
+                            self.log_operation(
+                                f"Stored {len(self._fbx_faces)} original FBX faces for mesh creation"
+                            )
                         else:
                             self._fbx_faces = None
-                            self.log_operation("No faces found in FBX, will use vertices only")
-                        
+                            self.log_operation(
+                                "No faces found in FBX, will use vertices only"
+                            )
+
                         if max(extents) > 0.001:
-                            # FBX units are unknown - we'll get accurate dimensions from FBX2glTF output
-                            # Store raw extents for reference only, actual dimensions come from GLB
-                            self.log_operation(f"Original FBX dimensions (raw units): {extents}")
-                            self.log_operation(f"Note: FBX units are unknown, will use FBX2glTF output for accurate dimensions")
-                            # Don't set original_dimensions here - let it be calculated from GLB output
-                            original_dimensions = None
+                            # Apply detected FBX unit scale to convert to meters
+                            unit_scale = getattr(self, '_fbx_unit_scale', 0.01)
+                            extents_m = extents * unit_scale
+                            self.log_operation(
+                                f"Original FBX dimensions (raw units): {extents}"
+                            )
+                            self.log_operation(
+                                f"FBX unit scale: {unit_scale}, dimensions in meters: {extents_m}"
+                            )
+                            # Store original dimensions in meters for reference
+                            # FBX2glTF output is authoritative, but this helps validate
+                            original_dimensions = {
+                                "x": float(extents_m[0]),
+                                "y": float(extents_m[1]),
+                                "z": float(extents_m[2]),
+                                "max": float(max(extents_m)),
+                                "unit_scale": unit_scale,
+                            }
                         else:
-                            self.log_operation(f"Warning: Original FBX has zero dimensions: {extents}")
+                            self.log_operation(
+                                f"Warning: Original FBX has zero dimensions: {extents}"
+                            )
                     else:
                         self.log_operation("Warning: No vertices found in FBX file")
                         self._fbx_vertices = None
             except (Exception, BaseException) as e:
                 import traceback
-                self.log_operation(f"Warning: pyassimp initialization failed: {str(e)}. "
-                                   "FBX dimension reading and texture extraction will be skipped. "
-                                   "Conversion will still proceed using FBX2glTF.", "WARNING")
+
+                self.log_operation(
+                    f"Warning: pyassimp initialization failed: {str(e)}. "
+                    "FBX dimension reading and texture extraction will be skipped. "
+                    "Conversion will still proceed using FBX2glTF.",
+                    "WARNING",
+                )
                 self.log_operation(f"Traceback: {traceback.format_exc()}")
-            
+
             # Store dimensions for later use
             self.original_dimensions = original_dimensions
-            
+
             # Create output directory
             ensure_directory(os.path.dirname(output_path))
-            
+
             # Create a temporary directory for intermediate files
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
@@ -318,25 +464,34 @@ class FBXConverter(BaseConverter):
                     # Ensure FBX2glTF has execute permissions
                     try:
                         os.chmod(self.fbx2gltf_path, 0o755)
-                        self.log_operation(f"Set execute permissions for {self.fbx2gltf_path}")
+                        self.log_operation(
+                            f"Set execute permissions for {self.fbx2gltf_path}"
+                        )
                     except Exception as pe:
-                        self.log_operation(f"Warning: Could not set execute permissions: {pe}", "WARNING")
+                        self.log_operation(
+                            f"Warning: Could not set execute permissions: {pe}",
+                            "WARNING",
+                        )
 
                     cmd = [
                         str(self.fbx2gltf_path),
-                        '-i', str(input_path),
-                        '-o', str(output_path),
-                        '--binary'
+                        "-i",
+                        str(input_path),
+                        "-o",
+                        str(output_path),
+                        "--binary",
                     ]
-                    
+
                     self.log_operation(f"Running command: {' '.join(cmd)}")
-                    result = subprocess.run(cmd, 
-                                         capture_output=True, 
-                                         text=True, 
-                                         check=False,
-                                         stdin=subprocess.DEVNULL,  # Don't wait for input
-                                         timeout=300)  # 5 minute timeout
-                    
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        stdin=subprocess.DEVNULL,  # Don't wait for input
+                        timeout=300,
+                    )  # 5 minute timeout
+
                     # Check conversion result
                     if result.returncode != 0:
                         error_msg = f"FBX2glTF conversion failed (exit code {result.returncode})\n"
@@ -344,125 +499,179 @@ class FBXConverter(BaseConverter):
                         error_msg += f"STDOUT: {result.stdout}"
                         self.handle_error(error_msg)
                         return False
-                    
+
                     self.log_operation(f"FBX2glTF output: {result.stdout}")
-                    
+
                     # Post-processing: Only if color or scaling needed
                     # IMPORTANT: Use pygltflib for post-processing to preserve animations
-                    self.log_operation(f"Post-processing - color: {color}, max_dimension: {self.max_dimension}")
-                    
+                    self.log_operation(
+                        f"Post-processing - color: {color}, max_dimension: {self.max_dimension}"
+                    )
+
                     # Check if GLB has animations - if so, use pygltflib to preserve them
                     has_animations = False
                     try:
                         from pygltflib import GLTF2
+
                         gltf_check = GLTF2().load(output_path)
                         if gltf_check.animations and len(gltf_check.animations) > 0:
                             has_animations = True
-                            self.log_operation(f"✅ GLB has {len(gltf_check.animations)} animations - will use pygltflib to preserve them")
+                            self.log_operation(
+                                f"✅ GLB has {len(gltf_check.animations)} animations - will use pygltflib to preserve them"
+                            )
                         if gltf_check.skins and len(gltf_check.skins) > 0:
-                            self.log_operation(f"✅ GLB has {len(gltf_check.skins)} skins")
+                            self.log_operation(
+                                f"✅ GLB has {len(gltf_check.skins)} skins"
+                            )
                     except Exception as e:
-                        self.log_operation(f"Warning: Could not check for animations: {e}", "WARNING")
-                    
+                        self.log_operation(
+                            f"Warning: Could not check for animations: {e}", "WARNING"
+                        )
+
                     # Check if we need post-processing
                     needs_processing = False
                     needs_scaling = False
                     scale_factor = 1.0
-                    
+
                     # Check if color application needed
                     if color:
                         needs_processing = True
                         self.log_operation("Post-processing needed: color application")
-                    
+
                     # Check if scaling needed - get dimensions from GLB output (more accurate)
                     if self.max_dimension > 0 and os.path.exists(output_path):
                         try:
                             temp_mesh = trimesh.load(output_path)
                             if isinstance(temp_mesh, trimesh.Scene):
                                 bounds = temp_mesh.bounds
-                                extents = bounds[1] - bounds[0] if bounds is not None else np.array([0, 0, 0])
+                                extents = (
+                                    bounds[1] - bounds[0]
+                                    if bounds is not None
+                                    else np.array([0, 0, 0])
+                                )
                             else:
                                 extents = temp_mesh.extents
-                            
+
                             max_dim_m = float(max(extents))
                             if max_dim_m > 0:
                                 scale_factor = self.max_dimension / max_dim_m
-                                if abs(scale_factor - 1.0) > 0.001:  # Only scale if significant difference
+                                if (
+                                    abs(scale_factor - 1.0) > 0.001
+                                ):  # Only scale if significant difference
                                     needs_scaling = True
                                     needs_processing = True
-                                    self.log_operation(f"Post-processing needed: scaling (factor: {scale_factor:.4f})")
-                                    self.log_operation(f"Current max: {max_dim_m:.4f}m, Target: {self.max_dimension:.4f}m")
+                                    self.log_operation(
+                                        f"Post-processing needed: scaling (factor: {scale_factor:.4f})"
+                                    )
+                                    self.log_operation(
+                                        f"Current max: {max_dim_m:.4f}m, Target: {self.max_dimension:.4f}m"
+                                    )
                             del temp_mesh
                         except Exception as e:
-                            self.log_operation(f"Warning: Could not check dimensions: {e}", "WARNING")
-                    
+                            self.log_operation(
+                                f"Warning: Could not check dimensions: {e}", "WARNING"
+                            )
+
                     # If no post-processing needed, just embed external textures
                     if not needs_processing:
-                        self.log_operation("No post-processing needed - embedding external textures into GLB")
+                        self.log_operation(
+                            "No post-processing needed - embedding external textures into GLB"
+                        )
                         try:
                             self._embed_external_textures(output_path, input_path)
                         except Exception as tex_error:
-                            self.log_operation(f"Warning: Could not embed textures: {tex_error}", "WARNING")
+                            self.log_operation(
+                                f"Warning: Could not embed textures: {tex_error}",
+                                "WARNING",
+                            )
                         self.update_status("COMPLETED")
                         return True
-                    
+
                     # Use pygltflib for post-processing to preserve animations
                     # IMPORTANT: If model has animations, ALWAYS use pygltflib (never trimesh)
                     if has_animations or needs_scaling or color:
-                        self.log_operation("Using pygltflib for post-processing to preserve animations")
+                        self.log_operation(
+                            "Using pygltflib for post-processing to preserve animations"
+                        )
                         try:
                             from pygltflib import GLTF2
                             import sys
-                            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-                            from glb_modifier import apply_material_modifications, apply_transform_modifications
-                            
+
+                            sys.path.insert(
+                                0, os.path.dirname(os.path.dirname(__file__))
+                            )
+                            from glb_modifier import (
+                                apply_material_modifications,
+                                apply_transform_modifications,
+                            )
+
                             gltf = GLTF2().load(output_path)
-                            
+
                             # Apply scaling using glb_modifier (preserves animations)
                             if needs_scaling:
-                                transform_mods = {'scale': scale_factor, 'rotation': {'x': 0, 'y': 0, 'z': 0}}
-                                gltf = apply_transform_modifications(gltf, transform_mods)
-                                self.log_operation(f"Applied scale {scale_factor:.4f}x using pygltflib")
-                            
+                                transform_mods = {
+                                    "scale": scale_factor,
+                                    "rotation": {"x": 0, "y": 0, "z": 0},
+                                }
+                                gltf = apply_transform_modifications(
+                                    gltf, transform_mods
+                                )
+                                self.log_operation(
+                                    f"Applied scale {scale_factor:.4f}x using pygltflib"
+                                )
+
                             # Apply color using glb_modifier (preserves animations)
                             if color:
-                                hex_color = color.lstrip('#')
+                                hex_color = color.lstrip("#")
                                 material_mods = {
-                                    'color': color,
-                                    'metalness': 0.1,
-                                    'roughness': 0.9,
-                                    'opacity': 1.0
+                                    "color": color,
+                                    "metalness": 0.1,
+                                    "roughness": 0.9,
+                                    "opacity": 1.0,
                                 }
                                 gltf = apply_material_modifications(gltf, material_mods)
-                                self.log_operation(f"Applied color {color} using pygltflib")
-                            
+                                self.log_operation(
+                                    f"Applied color {color} using pygltflib"
+                                )
+
                             # Embed textures
                             try:
                                 self._embed_external_textures_gltf(gltf, input_path)
                             except Exception as tex_error:
-                                self.log_operation(f"Warning: Could not embed textures: {tex_error}", "WARNING")
-                            
+                                self.log_operation(
+                                    f"Warning: Could not embed textures: {tex_error}",
+                                    "WARNING",
+                                )
+
                             # Save modified GLB
                             gltf.save(output_path)
-                            
+
                             # Verify animations preserved
                             gltf_verify = GLTF2().load(output_path)
                             if gltf_verify.animations:
-                                self.log_operation(f"✅ Animations preserved: {len(gltf_verify.animations)} animations")
-                            
+                                self.log_operation(
+                                    f"✅ Animations preserved: {len(gltf_verify.animations)} animations"
+                                )
+
                             self.update_status("COMPLETED")
                             return True
-                            
+
                         except Exception as e:
-                            self.log_operation(f"Warning: pygltflib post-processing failed: {e}", "WARNING")
+                            self.log_operation(
+                                f"Warning: pygltflib post-processing failed: {e}",
+                                "WARNING",
+                            )
                             import traceback
+
                             self.log_operation(f"Traceback: {traceback.format_exc()}")
                             # If model has animations, don't fall back to trimesh - it will destroy animations
                             if has_animations:
-                                self.log_operation("Model has animations - skipping trimesh fallback to preserve them")
+                                self.log_operation(
+                                    "Model has animations - skipping trimesh fallback to preserve them"
+                                )
                                 self.update_status("COMPLETED")
                                 return True
-                    
+
                     # Trimesh fallback - ONLY for models WITHOUT animations
                     # Check if scaling is needed (fallback for non-FBX or if original_dimensions failed)
                     if not has_animations and os.path.exists(output_path):
@@ -475,7 +684,7 @@ class FBXConverter(BaseConverter):
                                 for geom in temp_mesh.geometry.values():
                                     if isinstance(geom, trimesh.Trimesh):
                                         all_vertices.append(geom.vertices)
-                                
+
                                 if all_vertices:
                                     combined_vertices = np.vstack(all_vertices)
                                     min_bounds = combined_vertices.min(axis=0)
@@ -486,229 +695,351 @@ class FBXConverter(BaseConverter):
                                     extents = bounds[1] - bounds[0]
                             else:
                                 extents = temp_mesh.extents
-                            
-                            dimensions = {'x': extents[0], 'y': extents[1], 'z': extents[2]}
+
+                            dimensions = {
+                                "x": extents[0],
+                                "y": extents[1],
+                                "z": extents[2],
+                            }
                             scale_factor = super().calculate_scale_factor(dimensions)
-                            
+
                             # Always apply scaling if max_dimension is set (standardize for AR)
                             if self.max_dimension > 0 and scale_factor != 1.0:
                                 needs_processing = True
-                                self.log_operation(f"Post-processing needed: scaling (factor: {scale_factor})")
-                            
+                                self.log_operation(
+                                    f"Post-processing needed: scaling (factor: {scale_factor})"
+                                )
+
                             del temp_mesh  # Free memory
-                            
+
                         except Exception as e:
-                            self.log_operation(f"Warning: Could not check dimensions: {str(e)}", "WARNING")
-                    
+                            self.log_operation(
+                                f"Warning: Could not check dimensions: {str(e)}",
+                                "WARNING",
+                            )
+
                     # Only reload and re-export if necessary - SKIP if model has animations
-                    if needs_processing and not has_animations and os.path.exists(output_path):
+                    if (
+                        needs_processing
+                        and not has_animations
+                        and os.path.exists(output_path)
+                    ):
                         try:
                             scene_or_mesh = trimesh.load(output_path)
-                            self.log_operation(f"Loaded GLB for post-processing (no animations, using trimesh)")
-                            
+                            self.log_operation(
+                                f"Loaded GLB for post-processing (no animations, using trimesh)"
+                            )
+
                             # NEW APPROACH: Work with Scene directly to preserve textures
                             if isinstance(scene_or_mesh, trimesh.Scene):
                                 self.log_operation("Processing Scene from FBX2glTF")
-                                
+
                                 # Check if scene has valid geometry (not all zeros)
                                 has_valid_geometry = False
                                 for name, geom in scene_or_mesh.geometry.items():
-                                    if isinstance(geom, trimesh.Trimesh) and geom.bounds is not None:
+                                    if (
+                                        isinstance(geom, trimesh.Trimesh)
+                                        and geom.bounds is not None
+                                    ):
                                         extents = geom.bounds[1] - geom.bounds[0]
                                         if np.any(extents > 0):
                                             has_valid_geometry = True
                                             break
-                                
+
                                 if not has_valid_geometry:
-                                    self.log_operation("WARNING: FBX2glTF GLB has zero geometry - using original FBX data")
+                                    self.log_operation(
+                                        "WARNING: FBX2glTF GLB has zero geometry - using original FBX data"
+                                    )
                                     # Use original FBX vertices instead
-                                    if hasattr(self, '_fbx_vertices') and self._fbx_vertices is not None:
-                                        if hasattr(self, '_fbx_faces') and self._fbx_faces is not None:
-                                            mesh = trimesh.Trimesh(vertices=self._fbx_vertices, faces=self._fbx_faces)
-                                            self.log_operation(f"Created mesh from original FBX: {len(mesh.vertices)} vertices")
-                                            
+                                    if (
+                                        hasattr(self, "_fbx_vertices")
+                                        and self._fbx_vertices is not None
+                                    ):
+                                        if (
+                                            hasattr(self, "_fbx_faces")
+                                            and self._fbx_faces is not None
+                                        ):
+                                            mesh = trimesh.Trimesh(
+                                                vertices=self._fbx_vertices,
+                                                faces=self._fbx_faces,
+                                            )
+                                            self.log_operation(
+                                                f"Created mesh from original FBX: {len(mesh.vertices)} vertices"
+                                            )
+
                                             # Apply scaling
-                                            if original_dimensions and self.max_dimension > 0:
-                                                max_dim_m = original_dimensions['max']
+                                            if (
+                                                original_dimensions
+                                                and self.max_dimension > 0
+                                            ):
+                                                max_dim_m = original_dimensions["max"]
                                                 max_allowed_m = self.max_dimension
                                                 scale_factor = max_allowed_m / max_dim_m
-                                                self.log_operation(f"Applying scale factor {scale_factor:.4f}")
+                                                self.log_operation(
+                                                    f"Applying scale factor {scale_factor:.4f}"
+                                                )
                                                 mesh.apply_scale(scale_factor)
-                                                
-                                                extents = mesh.bounds[1] - mesh.bounds[0]
-                                                self.log_operation(f"Mesh extents after scaling: {extents}")
-                                            
+
+                                                extents = (
+                                                    mesh.bounds[1] - mesh.bounds[0]
+                                                )
+                                                self.log_operation(
+                                                    f"Mesh extents after scaling: {extents}"
+                                                )
+
                                             # Apply color if needed
                                             if color:
                                                 self.apply_color(mesh, color)
-                                            
+
                                             # Export
-                                            self.log_operation(f"Exporting mesh to: {output_path}")
+                                            self.log_operation(
+                                                f"Exporting mesh to: {output_path}"
+                                            )
                                             if os.path.exists(output_path):
                                                 os.remove(output_path)
-                                            mesh.export(output_path, file_type='glb')
-                                            
+                                            mesh.export(output_path, file_type="glb")
+
                                             if os.path.exists(output_path):
                                                 file_size = os.path.getsize(output_path)
-                                                self.log_operation(f"Mesh exported: {file_size} bytes")
-                                            
+                                                self.log_operation(
+                                                    f"Mesh exported: {file_size} bytes"
+                                                )
+
                                             self.update_status("COMPLETED")
                                             return True
-                                
+
                                 # If scene has valid geometry, scale it
-                                self.log_operation("Scene has valid geometry - applying scaling")
+                                self.log_operation(
+                                    "Scene has valid geometry - applying scaling"
+                                )
                                 if original_dimensions and self.max_dimension > 0:
-                                    max_dim_m = original_dimensions['max']
+                                    max_dim_m = original_dimensions["max"]
                                     max_allowed_m = self.max_dimension
                                     scale_factor = max_allowed_m / max_dim_m
-                                    self.log_operation(f"Applying scale factor {scale_factor:.4f} to all scene geometries")
-                                    
+                                    self.log_operation(
+                                        f"Applying scale factor {scale_factor:.4f} to all scene geometries"
+                                    )
+
                                     for name, geom in scene_or_mesh.geometry.items():
                                         if isinstance(geom, trimesh.Trimesh):
                                             geom.apply_scale(scale_factor)
-                                            self.log_operation(f"Scaled geometry '{name}': {len(geom.vertices)} vertices")
+                                            self.log_operation(
+                                                f"Scaled geometry '{name}': {len(geom.vertices)} vertices"
+                                            )
                                             # Log bounds after scaling
                                             if geom.bounds is not None:
-                                                extents = geom.bounds[1] - geom.bounds[0]
-                                                self.log_operation(f"  Extents after scaling: {extents}")
-                                
+                                                extents = (
+                                                    geom.bounds[1] - geom.bounds[0]
+                                                )
+                                                self.log_operation(
+                                                    f"  Extents after scaling: {extents}"
+                                                )
+
                                 # Apply color if requested
                                 if color:
-                                    self.log_operation("Removing textures and applying solid color to all geometries")
+                                    self.log_operation(
+                                        "Removing textures and applying solid color to all geometries"
+                                    )
                                     # Convert hex to RGB
-                                    hex_color = color.lstrip('#')
+                                    hex_color = color.lstrip("#")
                                     r = int(hex_color[0:2], 16)
                                     g = int(hex_color[2:4], 16)
                                     b = int(hex_color[4:6], 16)
-                                    
+
                                     material = trimesh.visual.material.PBRMaterial(
-                                        baseColorFactor=[r/255.0, g/255.0, b/255.0, 1.0],
+                                        baseColorFactor=[
+                                            r / 255.0,
+                                            g / 255.0,
+                                            b / 255.0,
+                                            1.0,
+                                        ],
                                         metallicFactor=0.1,
-                                        roughnessFactor=0.9
+                                        roughnessFactor=0.9,
                                     )
-                                    
+
                                     for name, geom in scene_or_mesh.geometry.items():
                                         if isinstance(geom, trimesh.Trimesh):
-                                            geom.visual = trimesh.visual.TextureVisuals(material=material)
-                                            vertex_colors = np.tile([r, g, b, 255], (len(geom.vertices), 1))
-                                            geom.visual.vertex_colors = vertex_colors.astype(np.uint8)
-                                    
-                                    self.log_operation(f"Applied color RGB({r}, {g}, {b}) to all geometries")
-                                
+                                            geom.visual = trimesh.visual.TextureVisuals(
+                                                material=material
+                                            )
+                                            vertex_colors = np.tile(
+                                                [r, g, b, 255], (len(geom.vertices), 1)
+                                            )
+                                            geom.visual.vertex_colors = (
+                                                vertex_colors.astype(np.uint8)
+                                            )
+
+                                    self.log_operation(
+                                        f"Applied color RGB({r}, {g}, {b}) to all geometries"
+                                    )
+
                                 # Export: Concatenate to single mesh (best compromise)
                                 # Note: This may affect texture quality but preserves geometry
-                                self.log_operation("Concatenating scene to single mesh for export")
+                                self.log_operation(
+                                    "Concatenating scene to single mesh for export"
+                                )
                                 try:
                                     # Concatenate all geometries into single mesh
                                     mesh = scene_or_mesh.dump(concatenate=True)
-                                    self.log_operation(f"Concatenated mesh: {len(mesh.vertices)} vertices")
-                                    
+                                    self.log_operation(
+                                        f"Concatenated mesh: {len(mesh.vertices)} vertices"
+                                    )
+
                                     # Verify mesh has correct size
                                     if mesh.bounds is not None:
                                         extents = mesh.bounds[1] - mesh.bounds[0]
-                                        self.log_operation(f"Final mesh extents: {extents}")
-                                    
+                                        self.log_operation(
+                                            f"Final mesh extents: {extents}"
+                                        )
+
                                     # Export concatenated mesh
-                                    self.log_operation(f"Exporting mesh to: {output_path}")
+                                    self.log_operation(
+                                        f"Exporting mesh to: {output_path}"
+                                    )
                                     if os.path.exists(output_path):
                                         os.remove(output_path)
-                                    mesh.export(output_path, file_type='glb')
-                                    
+                                    mesh.export(output_path, file_type="glb")
+
                                     # Verify export
                                     if os.path.exists(output_path):
                                         file_size = os.path.getsize(output_path)
-                                        self.log_operation(f"Mesh exported successfully: {file_size} bytes")
+                                        self.log_operation(
+                                            f"Mesh exported successfully: {file_size} bytes"
+                                        )
                                     else:
-                                        self.log_operation("ERROR: Mesh export failed!", "ERROR")
+                                        self.log_operation(
+                                            "ERROR: Mesh export failed!", "ERROR"
+                                        )
                                         return False
-                                    
+
                                     self.update_status("COMPLETED")
                                     return True
-                                    
+
                                 except Exception as export_error:
-                                    self.log_operation(f"ERROR exporting mesh: {export_error}", "ERROR")
+                                    self.log_operation(
+                                        f"ERROR exporting mesh: {export_error}", "ERROR"
+                                    )
                                     import traceback
-                                    self.log_operation(f"Traceback: {traceback.format_exc()}")
+
+                                    self.log_operation(
+                                        f"Traceback: {traceback.format_exc()}"
+                                    )
                                     return False
-                            
+
                             else:
                                 # Single mesh (not scene)
                                 self.log_operation("Processing single mesh")
                                 mesh = scene_or_mesh
-                                
+
                                 # Check if mesh has valid vertices
-                                if len(mesh.vertices) == 0 and hasattr(self, '_fbx_vertices'):
-                                    self.log_operation("WARNING: Mesh has zero vertices, using original FBX data")
-                                    if self._fbx_vertices is not None and hasattr(self, '_fbx_faces') and self._fbx_faces is not None:
-                                        mesh = trimesh.Trimesh(vertices=self._fbx_vertices, faces=self._fbx_faces)
-                                        self.log_operation(f"Created mesh from original FBX ({len(mesh.vertices)} vertices)")
-                                
+                                if len(mesh.vertices) == 0 and hasattr(
+                                    self, "_fbx_vertices"
+                                ):
+                                    self.log_operation(
+                                        "WARNING: Mesh has zero vertices, using original FBX data"
+                                    )
+                                    if (
+                                        self._fbx_vertices is not None
+                                        and hasattr(self, "_fbx_faces")
+                                        and self._fbx_faces is not None
+                                    ):
+                                        mesh = trimesh.Trimesh(
+                                            vertices=self._fbx_vertices,
+                                            faces=self._fbx_faces,
+                                        )
+                                        self.log_operation(
+                                            f"Created mesh from original FBX ({len(mesh.vertices)} vertices)"
+                                        )
+
                                 # Apply scaling to single mesh
                                 if original_dimensions and self.max_dimension > 0:
-                                    max_dim_m = original_dimensions['max']
+                                    max_dim_m = original_dimensions["max"]
                                     max_allowed_m = self.max_dimension
                                     scale_factor = max_allowed_m / max_dim_m
-                                    self.log_operation(f"Applying scale factor from original FBX: {scale_factor:.4f}")
-                                    
+                                    self.log_operation(
+                                        f"Applying scale factor from original FBX: {scale_factor:.4f}"
+                                    )
+
                                     bounds_before = mesh.bounds
                                     if bounds_before is not None:
-                                        extents_before = bounds_before[1] - bounds_before[0]
-                                        self.log_operation(f"Bounds before scaling: {bounds_before}")
-                                        self.log_operation(f"Extents before scaling: {extents_before}")
+                                        extents_before = (
+                                            bounds_before[1] - bounds_before[0]
+                                        )
+                                        self.log_operation(
+                                            f"Bounds before scaling: {bounds_before}"
+                                        )
+                                        self.log_operation(
+                                            f"Extents before scaling: {extents_before}"
+                                        )
                                     else:
-                                        self.log_operation("Bounds before scaling: None")
+                                        self.log_operation(
+                                            "Bounds before scaling: None"
+                                        )
                                         extents_before = None
-                                    
+
                                     mesh.apply_scale(scale_factor)
-                                    
+
                                     bounds_after = mesh.bounds
                                     if bounds_after is not None:
-                                        extents_after = bounds_after[1] - bounds_after[0]
-                                        self.log_operation(f"Bounds after scaling: {bounds_after}")
-                                        self.log_operation(f"Extents after scaling: {extents_after}")
+                                        extents_after = (
+                                            bounds_after[1] - bounds_after[0]
+                                        )
+                                        self.log_operation(
+                                            f"Bounds after scaling: {bounds_after}"
+                                        )
+                                        self.log_operation(
+                                            f"Extents after scaling: {extents_after}"
+                                        )
                                     else:
                                         self.log_operation("Bounds after scaling: None")
-                                
+
                                 # Apply color if needed (for single mesh)
                                 if color:
                                     self.apply_color(mesh, color)
-                                
+
                                 # Export single mesh
-                                self.log_operation(f"Exporting single mesh to: {output_path}")
+                                self.log_operation(
+                                    f"Exporting single mesh to: {output_path}"
+                                )
                                 if os.path.exists(output_path):
                                     os.remove(output_path)
-                                mesh.export(output_path, file_type='glb')
+                                mesh.export(output_path, file_type="glb")
                                 self.log_operation(f"Single mesh exported successfully")
                                 self.update_status("COMPLETED")
                                 return True
-                        
+
                         except Exception as e:
                             self.handle_error(f"Error post-processing GLB: {str(e)}")
                             import traceback
+
                             self.log_operation(f"Traceback: {traceback.format_exc()}")
                             return False
-                    
+
                     # Verify output file exists
                     if not os.path.exists(output_path):
                         self.handle_error("GLB file was not created")
                         return False
-                    
+
                     file_size = os.path.getsize(output_path)
-                    self.log_operation(f"Conversion completed successfully. Output size: {file_size} bytes")
+                    self.log_operation(
+                        f"Conversion completed successfully. Output size: {file_size} bytes"
+                    )
                     return True
-                    
+
                 except subprocess.TimeoutExpired:
                     self.handle_error("FBX conversion timed out after 5 minutes")
                     return False
                 except Exception as e:
                     self.handle_error(f"Error during conversion: {str(e)}")
                     import traceback
+
                     self.log_operation(f"Traceback: {traceback.format_exc()}")
                     return False
-                    
+
         except Exception as e:
             self.handle_error(f"Conversion failed: {str(e)}")
             import traceback
+
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
 
@@ -718,104 +1049,140 @@ class FBXConverter(BaseConverter):
         """
         try:
             import base64
-            
+
             fbx_dir = os.path.dirname(fbx_path)
 
             # --- AGGRESSIVE TEXTURE RECOVERY ---
             # If pyassimp found textures that aren't in the GLB, add them now
-            if hasattr(self, '_fbx_material_textures') and self._fbx_material_textures and gltf.materials:
-                self.log_operation(f"Attempting aggressive texture recovery for {len(gltf.materials)} materials")
+            if (
+                hasattr(self, "_fbx_material_textures")
+                and self._fbx_material_textures
+                and gltf.materials
+            ):
+                self.log_operation(
+                    f"Attempting aggressive texture recovery for {len(gltf.materials)} materials"
+                )
                 for mat in gltf.materials:
                     mat_name = mat.name
                     if mat_name in self._fbx_material_textures:
                         # Found a mapping from pyassimp
                         tex_source = self._fbx_material_textures[mat_name]
-                        
+
                         # If baseColorTexture is missing or points to a non-existent image
                         has_texture = False
-                        if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
+                        if (
+                            mat.pbrMetallicRoughness
+                            and mat.pbrMetallicRoughness.baseColorTexture
+                        ):
                             has_texture = True
-                        
+
                         if not has_texture:
                             # Find the texture file
                             texture_file = None
                             search_paths = [
-                                os.path.abspath(tex_source) if os.path.isabs(tex_source) else os.path.join(fbx_dir, tex_source),
+                                os.path.abspath(tex_source)
+                                if os.path.isabs(tex_source)
+                                else os.path.join(fbx_dir, tex_source),
                                 os.path.join(fbx_dir, os.path.basename(tex_source)),
-                                os.path.join(fbx_dir, "textures", os.path.basename(tex_source)),
-                                os.path.join(os.path.dirname(fbx_path), os.path.basename(tex_source))
+                                os.path.join(
+                                    fbx_dir, "textures", os.path.basename(tex_source)
+                                ),
+                                os.path.join(
+                                    os.path.dirname(fbx_path),
+                                    os.path.basename(tex_source),
+                                ),
                             ]
-                            
+
                             for path in search_paths:
                                 if os.path.exists(path):
                                     texture_file = path
                                     break
-                            
+
                             if texture_file:
                                 # Add new image
                                 img_idx = len(gltf.images) if gltf.images else 0
                                 new_img = Image(uri=os.path.basename(texture_file))
-                                if gltf.images is None: gltf.images = []
+                                if gltf.images is None:
+                                    gltf.images = []
                                 gltf.images.append(new_img)
-                                
+
                                 # Add new texture
                                 tex_idx = len(gltf.textures) if gltf.textures else 0
                                 new_tex = Texture(source=img_idx)
-                                if gltf.textures is None: gltf.textures = []
+                                if gltf.textures is None:
+                                    gltf.textures = []
                                 gltf.textures.append(new_tex)
-                                
+
                                 # Assign to material
                                 if mat.pbrMetallicRoughness is None:
                                     mat.pbrMetallicRoughness = PbrMetallicRoughness()
-                                mat.pbrMetallicRoughness.baseColorTexture = TextureInfo(index=tex_idx)
-                                self.log_operation(f"  ✅ Recovered texture for material '{mat_name}': {os.path.basename(texture_file)}")
-            
+                                mat.pbrMetallicRoughness.baseColorTexture = TextureInfo(
+                                    index=tex_idx
+                                )
+                                self.log_operation(
+                                    f"  ✅ Recovered texture for material '{mat_name}': {os.path.basename(texture_file)}"
+                                )
+
             # --- FOLIAGE / TRANSPARENCY FIX ---
             # Tree leaves (DB2X2_L02) and similar materials often need BLEND mode
             if gltf.materials:
                 for mat in gltf.materials:
                     name_lower = mat.name.lower() if mat.name else ""
-                    is_foliage = any(key in name_lower for key in ["leaf", "leafs", "foliage", "branch", "tree", "plant"])
-                    is_special = mat.name == 'DB2X2_L02'
-                    
+                    is_foliage = any(
+                        key in name_lower
+                        for key in [
+                            "leaf",
+                            "leafs",
+                            "foliage",
+                            "branch",
+                            "tree",
+                            "plant",
+                        ]
+                    )
+                    is_special = mat.name == "DB2X2_L02"
+
                     if is_foliage or is_special:
                         mat.alphaMode = "BLEND"
                         mat.doubleSided = True
-                        self.log_operation(f"Enforced BLEND mode for foliage material '{mat.name}'")
+                        self.log_operation(
+                            f"Enforced BLEND mode for foliage material '{mat.name}'"
+                        )
 
             if not gltf.images:
                 self.log_operation("No images found in GLB to embed")
                 return
-            
+
             # Convert buffer-embedded images to data URIs
             binary_blob = gltf.binary_blob()
             if not binary_blob:
                 return
-            
+
             for i, img in enumerate(gltf.images):
                 if img.bufferView is not None:
                     try:
                         buffer_view = gltf.bufferViews[img.bufferView]
                         offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
                         length = buffer_view.byteLength
-                        
-                        image_data = binary_blob[offset:offset + length]
-                        
+
+                        image_data = binary_blob[offset : offset + length]
+
                         # Determine MIME type
-                        mime_type = 'image/png'
-                        if image_data[:4] == b'\x89PNG':
-                            mime_type = 'image/png'
-                        elif image_data[:2] == b'\xff\xd8':
-                            mime_type = 'image/jpeg'
-                        
+                        mime_type = "image/png"
+                        if image_data[:4] == b"\x89PNG":
+                            mime_type = "image/png"
+                        elif image_data[:2] == b"\xff\xd8":
+                            mime_type = "image/jpeg"
+
                         # Convert to data URI
                         data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
                         img.uri = data_uri
                         img.bufferView = None
                         self.log_operation(f"Converted image {i} to data URI")
                     except Exception as e:
-                        self.log_operation(f"Warning: Could not convert image {i}: {e}", "WARNING")
-                        
+                        self.log_operation(
+                            f"Warning: Could not convert image {i}: {e}", "WARNING"
+                        )
+
         except Exception as e:
             self.log_operation(f"Warning: Could not embed textures: {e}", "WARNING")
 
@@ -824,15 +1191,24 @@ class FBXConverter(BaseConverter):
         try:
             from pygltflib import GLTF2
             import base64
-            
+
             # LOG: FBX directory contents (textures that came with FBX)
             fbx_dir = os.path.dirname(fbx_path)
             self.log_operation(f"📁 FBX Directory: {fbx_dir}")
             self.log_operation(f"📁 Scanning for texture files in FBX directory...")
-            
-            texture_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.tif', '.tiff', '.webp'}
+
+            texture_extensions = {
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".tga",
+                ".bmp",
+                ".tif",
+                ".tiff",
+                ".webp",
+            }
             found_textures = []
-            
+
             try:
                 for file in os.listdir(fbx_dir):
                     file_path = os.path.join(fbx_dir, file)
@@ -841,31 +1217,43 @@ class FBXConverter(BaseConverter):
                         if ext in texture_extensions:
                             size = os.path.getsize(file_path)
                             found_textures.append((file, size, ext))
-                            self.log_operation(f"  🖼️  Found: {file} ({size} bytes, {ext})")
-                
+                            self.log_operation(
+                                f"  🖼️  Found: {file} ({size} bytes, {ext})"
+                            )
+
                 if not found_textures:
                     self.log_operation(f"  ⚠️  No texture files found in FBX directory")
                 else:
-                    self.log_operation(f"  ✅ Total textures found: {len(found_textures)}")
+                    self.log_operation(
+                        f"  ✅ Total textures found: {len(found_textures)}"
+                    )
             except Exception as e:
                 self.log_operation(f"  ⚠️  Error scanning FBX directory: {e}")
-            
+
             self.log_operation(f"Loading GLB to embed textures: {glb_path}")
             gltf = GLTF2().load(glb_path)
-            
+
             if not gltf.images:
-                self.log_operation("No images found in GLB - FBX2glTF may have discarded textures")
+                self.log_operation(
+                    "No images found in GLB - FBX2glTF may have discarded textures"
+                )
                 return
-            
-            self.log_operation(f"📦 GLB Analysis: Found {len(gltf.images)} images in GLB")
+
+            self.log_operation(
+                f"📦 GLB Analysis: Found {len(gltf.images)} images in GLB"
+            )
             self.log_operation(f"📦 Image Details:")
-            
+
             has_buffer_images = False
             for i, img in enumerate(gltf.images):
                 if img.uri:
-                    if img.uri.startswith('data:'):
-                        uri_preview = img.uri[:50] + "..." if len(img.uri) > 50 else img.uri
-                        self.log_operation(f"  🖼️  Image {i}: Data URI (embedded, {len(img.uri)} chars)")
+                    if img.uri.startswith("data:"):
+                        uri_preview = (
+                            img.uri[:50] + "..." if len(img.uri) > 50 else img.uri
+                        )
+                        self.log_operation(
+                            f"  🖼️  Image {i}: Data URI (embedded, {len(img.uri)} chars)"
+                        )
                         self.log_operation(f"       Preview: {uri_preview}")
                     else:
                         self.log_operation(f"  🖼️  Image {i}: External file - {img.uri}")
@@ -875,28 +1263,38 @@ class FBXConverter(BaseConverter):
                             size = os.path.getsize(external_path)
                             self.log_operation(f"       ✅ File exists: {size} bytes")
                         else:
-                            self.log_operation(f"       ❌ File NOT found at: {external_path}")
+                            self.log_operation(
+                                f"       ❌ File NOT found at: {external_path}"
+                            )
                 elif img.bufferView is not None:
                     # Get buffer size
                     buffer_view = gltf.bufferViews[img.bufferView]
                     buffer_size = buffer_view.byteLength
-                    self.log_operation(f"  🖼️  Image {i}: Buffer-embedded (bufferView: {img.bufferView}, {buffer_size} bytes)")
+                    self.log_operation(
+                        f"  🖼️  Image {i}: Buffer-embedded (bufferView: {img.bufferView}, {buffer_size} bytes)"
+                    )
                     has_buffer_images = True
                 else:
-                    self.log_operation(f"  ⚠️  Image {i}: Unknown format (no URI, no bufferView)")
-            
+                    self.log_operation(
+                        f"  ⚠️  Image {i}: Unknown format (no URI, no bufferView)"
+                    )
+
             # If images are embedded in buffer, convert to data URIs for model-viewer compatibility
             if has_buffer_images:
-                self.log_operation("🔄 Converting buffer-embedded textures to data URIs for model-viewer")
+                self.log_operation(
+                    "🔄 Converting buffer-embedded textures to data URIs for model-viewer"
+                )
                 try:
                     # Get binary blob
                     binary_blob = gltf.binary_blob()
                     if not binary_blob:
-                        self.log_operation("⚠️  Warning: No binary blob found", "WARNING")
+                        self.log_operation(
+                            "⚠️  Warning: No binary blob found", "WARNING"
+                        )
                         return
-                    
+
                     self.log_operation(f"📦 Binary blob size: {len(binary_blob)} bytes")
-                    
+
                     # Convert each buffer-embedded image to data URI
                     conversion_summary = []
                     for i, img in enumerate(gltf.images):
@@ -904,255 +1302,364 @@ class FBXConverter(BaseConverter):
                             try:
                                 # Get buffer view
                                 buffer_view = gltf.bufferViews[img.bufferView]
-                                offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                                offset = (
+                                    buffer_view.byteOffset
+                                    if buffer_view.byteOffset
+                                    else 0
+                                )
                                 length = buffer_view.byteLength
-                                
+
                                 self.log_operation(f"  🔄 Converting Image {i}:")
-                                self.log_operation(f"     Buffer offset: {offset}, length: {length}")
-                                
+                                self.log_operation(
+                                    f"     Buffer offset: {offset}, length: {length}"
+                                )
+
                                 # Extract image data from binary blob
-                                image_data = binary_blob[offset:offset + length]
-                                
+                                image_data = binary_blob[offset : offset + length]
+
                                 # Determine MIME type from image data
-                                mime_type = 'image/png'  # Default
-                                if image_data[:4] == b'\x89PNG':
-                                    mime_type = 'image/png'
-                                elif image_data[:2] == b'\xff\xd8':
-                                    mime_type = 'image/jpeg'
-                                elif image_data[:4] == b'RIFF' and image_data[8:12] == b'WEBP':
-                                    mime_type = 'image/webp'
-                                
+                                mime_type = "image/png"  # Default
+                                if image_data[:4] == b"\x89PNG":
+                                    mime_type = "image/png"
+                                elif image_data[:2] == b"\xff\xd8":
+                                    mime_type = "image/jpeg"
+                                elif (
+                                    image_data[:4] == b"RIFF"
+                                    and image_data[8:12] == b"WEBP"
+                                ):
+                                    mime_type = "image/webp"
+
                                 self.log_operation(f"     Detected format: {mime_type}")
-                                
+
                                 # Convert to data URI
                                 data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
-                                
+
                                 # Replace bufferView with data URI
                                 img.uri = data_uri
                                 img.bufferView = None
-                                
-                                conversion_summary.append({
-                                    'index': i,
-                                    'size': len(image_data),
-                                    'mime': mime_type,
-                                    'data_uri_size': len(data_uri)
-                                })
-                                
-                                self.log_operation(f"     ✅ Converted to data URI: {len(image_data)} bytes → {len(data_uri)} chars")
+
+                                conversion_summary.append(
+                                    {
+                                        "index": i,
+                                        "size": len(image_data),
+                                        "mime": mime_type,
+                                        "data_uri_size": len(data_uri),
+                                    }
+                                )
+
+                                self.log_operation(
+                                    f"     ✅ Converted to data URI: {len(image_data)} bytes → {len(data_uri)} chars"
+                                )
                             except Exception as img_error:
-                                self.log_operation(f"     ❌ Failed to convert image {i}: {img_error}", "WARNING")
-                                conversion_summary.append({
-                                    'index': i,
-                                    'error': str(img_error)
-                                })
-                    
+                                self.log_operation(
+                                    f"     ❌ Failed to convert image {i}: {img_error}",
+                                    "WARNING",
+                                )
+                                conversion_summary.append(
+                                    {"index": i, "error": str(img_error)}
+                                )
+
                     # Summary
-                    successful = len([c for c in conversion_summary if 'error' not in c])
-                    failed = len([c for c in conversion_summary if 'error' in c])
-                    self.log_operation(f"🔄 Conversion Summary: {successful} successful, {failed} failed")
-                    
+                    successful = len(
+                        [c for c in conversion_summary if "error" not in c]
+                    )
+                    failed = len([c for c in conversion_summary if "error" in c])
+                    self.log_operation(
+                        f"🔄 Conversion Summary: {successful} successful, {failed} failed"
+                    )
+
                     # Ensure all images have corresponding textures
                     from pygltflib import Texture, Sampler
-                    
+
                     if not gltf.textures:
                         gltf.textures = []
                     if not gltf.samplers:
                         gltf.samplers = []
-                    
+
                     # Create a default sampler if none exists
                     if len(gltf.samplers) == 0:
                         sampler = Sampler()
                         sampler.magFilter = 9729  # LINEAR
                         sampler.minFilter = 9987  # LINEAR_MIPMAP_LINEAR
-                        sampler.wrapS = 10497     # REPEAT
-                        sampler.wrapT = 10497     # REPEAT
+                        sampler.wrapS = 10497  # REPEAT
+                        sampler.wrapT = 10497  # REPEAT
                         gltf.samplers.append(sampler)
-                    
+
                     # Map images to textures
                     image_to_texture = {}
                     for tex_idx, tex in enumerate(gltf.textures):
                         if tex.source is not None:
                             image_to_texture[tex.source] = tex_idx
-                    
+
                     # Create missing textures for images without them
                     for img_idx in range(len(gltf.images)):
                         if img_idx not in image_to_texture:
-                            self.log_operation(f"Creating missing texture for image {img_idx}")
+                            self.log_operation(
+                                f"Creating missing texture for image {img_idx}"
+                            )
                             texture = Texture()
                             texture.source = img_idx
                             texture.sampler = 0  # Use first sampler
                             tex_idx = len(gltf.textures)
                             gltf.textures.append(texture)
                             image_to_texture[img_idx] = tex_idx
-                            self.log_operation(f"  Created Texture {tex_idx} → Image {img_idx}")
-                    
+                            self.log_operation(
+                                f"  Created Texture {tex_idx} → Image {img_idx}"
+                            )
+
                     # HARDCODED FIX: Force correct texture assignment for this specific model
                     # This is a temporary solution for the known issue with the Tree model.
-                    if gltf.materials and len(gltf.materials) > 1 and len(gltf.textures) > 1:
+                    if (
+                        gltf.materials
+                        and len(gltf.materials) > 1
+                        and len(gltf.textures) > 1
+                    ):
                         leaf_material = None
                         leaf_material_idx = -1
                         for i, mat in enumerate(gltf.materials):
-                            if mat.name == 'DB2X2_L02':
+                            if mat.name == "DB2X2_L02":
                                 leaf_material = mat
                                 leaf_material_idx = i
                                 break
-                        
+
                         if leaf_material:
                             # Preserve existing baseColorTexture assignment (FBX2glTF's choice)
                             pbr = leaf_material.pbrMetallicRoughness
                             existing_tex_idx = None
                             if pbr and pbr.baseColorTexture:
                                 existing_tex_idx = pbr.baseColorTexture.index
-                            self.log_operation(f"Preserving leaf material texture assignment: {existing_tex_idx}")
+                            self.log_operation(
+                                f"Preserving leaf material texture assignment: {existing_tex_idx}"
+                            )
 
                             # FIX ALPHA/TRANSPARENCY
-                            self.log_operation(f"Fixing transparency for material '{leaf_material.name}'.")
+                            self.log_operation(
+                                f"Fixing transparency for material '{leaf_material.name}'."
+                            )
                             leaf_material.alphaMode = "BLEND"
                             leaf_material.doubleSided = True
-                            self.log_operation(f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True")
+                            self.log_operation(
+                                f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True"
+                            )
 
                             # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
                             try:
                                 if pbr is not None:
-                                    if not pbr.baseColorFactor or len(pbr.baseColorFactor) < 4 or pbr.baseColorFactor[3] < 0.9:
+                                    if (
+                                        not pbr.baseColorFactor
+                                        or len(pbr.baseColorFactor) < 4
+                                        or pbr.baseColorFactor[3] < 0.9
+                                    ):
                                         pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
                                     pbr.metallicFactor = 0.0
                                     pbr.roughnessFactor = 1.0
-                                    self.log_operation("  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor alpha reset to 1")
+                                    self.log_operation(
+                                        "  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor alpha reset to 1"
+                                    )
                             except Exception as _e:
-                                self.log_operation(f"  ⚠️ Could not enforce foliage PBR defaults: {_e}", "WARNING")
-                    
+                                self.log_operation(
+                                    f"  ⚠️ Could not enforce foliage PBR defaults: {_e}",
+                                    "WARNING",
+                                )
+
                     # Log mesh-material assignments
                     if gltf.meshes:
-                        self.log_operation(f"Mesh-Material assignments ({len(gltf.meshes)} meshes):")
+                        self.log_operation(
+                            f"Mesh-Material assignments ({len(gltf.meshes)} meshes):"
+                        )
                         for mesh_idx, mesh in enumerate(gltf.meshes):
                             mesh_name = mesh.name if mesh.name else f"Mesh_{mesh_idx}"
                             for prim_idx, prim in enumerate(mesh.primitives):
-                                mat_idx = prim.material if prim.material is not None else "None"
-                                mat_name = gltf.materials[prim.material].name if prim.material is not None and prim.material < len(gltf.materials) else "Unknown"
-                                self.log_operation(f"  {mesh_name}[{prim_idx}] → Material {mat_idx} ({mat_name})")
-                    
+                                mat_idx = (
+                                    prim.material
+                                    if prim.material is not None
+                                    else "None"
+                                )
+                                mat_name = (
+                                    gltf.materials[prim.material].name
+                                    if prim.material is not None
+                                    and prim.material < len(gltf.materials)
+                                    else "Unknown"
+                                )
+                                self.log_operation(
+                                    f"  {mesh_name}[{prim_idx}] → Material {mat_idx} ({mat_name})"
+                                )
+
                     # Log material-texture assignments for debugging
                     if gltf.materials:
-                        self.log_operation(f"Material-Texture assignments ({len(gltf.materials)} materials):")
+                        self.log_operation(
+                            f"Material-Texture assignments ({len(gltf.materials)} materials):"
+                        )
                         for i, mat in enumerate(gltf.materials):
                             mat_name = mat.name if mat.name else f"Material_{i}"
-                            if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
-                                tex_idx = mat.pbrMetallicRoughness.baseColorTexture.index
-                                img_idx = gltf.textures[tex_idx].source if tex_idx < len(gltf.textures) else "?"
-                                self.log_operation(f"  Material {i} ({mat_name}): Texture {tex_idx} → Image {img_idx}")
+                            if (
+                                mat.pbrMetallicRoughness
+                                and mat.pbrMetallicRoughness.baseColorTexture
+                            ):
+                                tex_idx = (
+                                    mat.pbrMetallicRoughness.baseColorTexture.index
+                                )
+                                img_idx = (
+                                    gltf.textures[tex_idx].source
+                                    if tex_idx < len(gltf.textures)
+                                    else "?"
+                                )
+                                self.log_operation(
+                                    f"  Material {i} ({mat_name}): Texture {tex_idx} → Image {img_idx}"
+                                )
                             else:
-                                self.log_operation(f"  Material {i} ({mat_name}): No baseColorTexture ❌")
-                    
+                                self.log_operation(
+                                    f"  Material {i} ({mat_name}): No baseColorTexture ❌"
+                                )
+
                     # Log all textures
                     if gltf.textures:
-                        self.log_operation(f"All Textures ({len(gltf.textures)} total):")
+                        self.log_operation(
+                            f"All Textures ({len(gltf.textures)} total):"
+                        )
                         for tex_idx, tex in enumerate(gltf.textures):
                             img_idx = tex.source if tex.source is not None else "None"
                             self.log_operation(f"  Texture {tex_idx} → Image {img_idx}")
-                    
+
                     # FINAL SUMMARY
                     self.log_operation("=" * 60)
                     self.log_operation("📊 TEXTURE EMBEDDING SUMMARY")
                     self.log_operation("=" * 60)
-                    self.log_operation(f"📁 Textures in FBX directory: {len(found_textures)}")
-                    self.log_operation(f"📦 Images in GLB (from FBX2glTF): {len(gltf.images)}")
+                    self.log_operation(
+                        f"📁 Textures in FBX directory: {len(found_textures)}"
+                    )
+                    self.log_operation(
+                        f"📦 Images in GLB (from FBX2glTF): {len(gltf.images)}"
+                    )
                     self.log_operation(f"🔄 Images converted to Data URI: {successful}")
-                    self.log_operation(f"🎨 Textures in GLB: {len(gltf.textures) if gltf.textures else 0}")
-                    self.log_operation(f"🎭 Materials in GLB: {len(gltf.materials) if gltf.materials else 0}")
-                    
+                    self.log_operation(
+                        f"🎨 Textures in GLB: {len(gltf.textures) if gltf.textures else 0}"
+                    )
+                    self.log_operation(
+                        f"🎭 Materials in GLB: {len(gltf.materials) if gltf.materials else 0}"
+                    )
+
                     # Check which textures are actually used
                     used_textures = set()
                     if gltf.materials:
                         for mat in gltf.materials:
-                            if mat.pbrMetallicRoughness and mat.pbrMetallicRoughness.baseColorTexture:
-                                used_textures.add(mat.pbrMetallicRoughness.baseColorTexture.index)
-                    
-                    unused_count = len(gltf.textures) - len(used_textures) if gltf.textures else 0
-                    self.log_operation(f"✅ Textures assigned to materials: {len(used_textures)}")
+                            if (
+                                mat.pbrMetallicRoughness
+                                and mat.pbrMetallicRoughness.baseColorTexture
+                            ):
+                                used_textures.add(
+                                    mat.pbrMetallicRoughness.baseColorTexture.index
+                                )
+
+                    unused_count = (
+                        len(gltf.textures) - len(used_textures) if gltf.textures else 0
+                    )
+                    self.log_operation(
+                        f"✅ Textures assigned to materials: {len(used_textures)}"
+                    )
                     self.log_operation(f"⚠️  Unused textures: {unused_count}")
                     self.log_operation("=" * 60)
-                    
+
                     # Save with data URIs
-                    temp_path = glb_path.replace('.glb', '_temp.glb')
+                    temp_path = glb_path.replace(".glb", "_temp.glb")
                     gltf.save(temp_path)
-                    
+
                     if os.path.exists(temp_path):
                         temp_size = os.path.getsize(temp_path)
                         self.log_operation(f"Temp GLB created: {temp_size} bytes")
-                        
+
                         import shutil
+
                         shutil.move(temp_path, glb_path)
-                        
+
                         final_size = os.path.getsize(glb_path)
-                        self.log_operation(f"✅ GLB re-exported with data URI textures: {final_size} bytes")
+                        self.log_operation(
+                            f"✅ GLB re-exported with data URI textures: {final_size} bytes"
+                        )
                         return
                     else:
-                        self.log_operation("Warning: Temp file was not created", "WARNING")
+                        self.log_operation(
+                            "Warning: Temp file was not created", "WARNING"
+                        )
                 except Exception as e:
-                    self.log_operation(f"Warning: Could not convert textures: {e}", "WARNING")
+                    self.log_operation(
+                        f"Warning: Could not convert textures: {e}", "WARNING"
+                    )
                     import traceback
-                    self.log_operation(f"Traceback: {traceback.format_exc()}", "WARNING")
-            
+
+                    self.log_operation(
+                        f"Traceback: {traceback.format_exc()}", "WARNING"
+                    )
+
             fbx_dir = os.path.dirname(fbx_path)
             glb_dir = os.path.dirname(glb_path)
             modified = False
-            
+
             for i, image in enumerate(gltf.images):
                 # Check if image has external URI (not embedded)
-                if image.uri and not image.uri.startswith('data:'):
+                if image.uri and not image.uri.startswith("data:"):
                     self.log_operation(f"Found external texture: {image.uri}")
-                    
+
                     # Try multiple locations for texture file
                     texture_path = None
                     search_paths = [
                         os.path.join(glb_dir, image.uri),  # Same dir as GLB
                         os.path.join(fbx_dir, image.uri),  # Same dir as FBX
-                        os.path.join(glb_dir, os.path.basename(image.uri)),  # GLB dir, filename only
-                        os.path.join(fbx_dir, os.path.basename(image.uri)),  # FBX dir, filename only
+                        os.path.join(
+                            glb_dir, os.path.basename(image.uri)
+                        ),  # GLB dir, filename only
+                        os.path.join(
+                            fbx_dir, os.path.basename(image.uri)
+                        ),  # FBX dir, filename only
                     ]
-                    
+
                     for path in search_paths:
                         if os.path.exists(path):
                             texture_path = path
                             break
-                    
+
                     if not texture_path:
-                        self.log_operation(f"Warning: Texture file not found in any location: {image.uri}", "WARNING")
+                        self.log_operation(
+                            f"Warning: Texture file not found in any location: {image.uri}",
+                            "WARNING",
+                        )
                         self.log_operation(f"Searched: {search_paths}", "WARNING")
                         continue
-                    
+
                     self.log_operation(f"Embedding texture: {texture_path}")
-                    
+
                     # Read texture file
-                    with open(texture_path, 'rb') as f:
+                    with open(texture_path, "rb") as f:
                         texture_data = f.read()
-                    
+
                     # Determine MIME type
                     ext = os.path.splitext(texture_path)[1].lower()
                     mime_type = {
-                        '.png': 'image/png',
-                        '.jpg': 'image/jpeg',
-                        '.jpeg': 'image/jpeg',
-                        '.webp': 'image/webp'
-                    }.get(ext, 'image/png')
-                    
+                        ".png": "image/png",
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".webp": "image/webp",
+                    }.get(ext, "image/png")
+
                     # Convert to data URI
                     data_uri = f"data:{mime_type};base64,{base64.b64encode(texture_data).decode('utf-8')}"
                     image.uri = data_uri
                     modified = True
-                    self.log_operation(f"Embedded texture {i}: {len(texture_data)} bytes")
-            
+                    self.log_operation(
+                        f"Embedded texture {i}: {len(texture_data)} bytes"
+                    )
+
             if modified:
                 self.log_operation("Saving GLB with embedded textures")
                 gltf.save(glb_path)
                 self.log_operation("✅ Textures embedded successfully")
             else:
                 self.log_operation("No external textures to embed")
-                
+
         except Exception as e:
             self.log_operation(f"Error embedding textures: {e}", "ERROR")
             import traceback
+
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             raise
 

@@ -1,23 +1,49 @@
 """
 STL format to GLB format conversion operations using trimesh.
 """
+
 import os
 import logging
 import trimesh
 import numpy as np
 from .base_converter import BaseConverter
-from .utils.file_utils import ensure_directory
+
+
+# Inline utility functions (replacing deleted utils/)
+def ensure_directory(path):
+    """Ensure directory exists, create if needed."""
+    import os
+
+    os.makedirs(path, exist_ok=True)
+
+
+def safe_delete_file(path):
+    """Safely delete a file if it exists."""
+    import os
+
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def is_valid_extension(filename, extensions):
+    """Check if filename has valid extension."""
+    return any(filename.lower().endswith(ext) for ext in extensions)
+
 
 logger = logging.getLogger(__name__)
 
+
 class STLConverter(BaseConverter):
     """Converter for STL files to GLB format using trimesh."""
-    
+
     def __init__(self):
         super().__init__()
-        self.supported_extensions = {'.stl'}
+        self.supported_extensions = {".stl"}
         self.logger = logging.getLogger(__name__)
-        
+
     def validate(self, file_path: str) -> bool:
         """
         Validate STL file
@@ -28,12 +54,12 @@ class STLConverter(BaseConverter):
         """
         if not super().validate(file_path):
             return False
-            
+
         file_ext = os.path.splitext(file_path)[1].lower()
         if file_ext not in self.supported_extensions:
             self.handle_error(f"Unsupported file format: {file_ext}")
             return False
-            
+
         try:
             # Try to load the STL file to validate it
             mesh = trimesh.load(file_path)
@@ -43,9 +69,9 @@ class STLConverter(BaseConverter):
         except Exception as e:
             self.handle_error(f"Error validating STL file: {str(e)}")
             return False
-            
+
         return True
-        
+
     def convert(self, input_path: str, output_path: str, color: str = None) -> bool:
         """
         Convert STL file to GLB format using trimesh
@@ -61,14 +87,14 @@ class STLConverter(BaseConverter):
             self.log_operation("Starting STL to GLB conversion")
             self.log_operation(f"Input: {input_path}")
             self.log_operation(f"Output: {output_path}")
-            
+
             # Create output directory
             ensure_directory(os.path.dirname(output_path))
-            
+
             # Load the STL file
             self.log_operation("Loading STL file...")
             mesh = trimesh.load(input_path)
-            
+
             if not isinstance(mesh, (trimesh.Trimesh, trimesh.Scene)):
                 self.handle_error(f"Invalid mesh type: {type(mesh)}")
                 return False
@@ -98,27 +124,24 @@ class STLConverter(BaseConverter):
             else:
                 mesh = trimesh.util.concatenate(flattened_meshes)
 
-            self.log_operation(f"Flattened scene: {len(flattened_meshes)} geometries merged into single mesh")
+            self.log_operation(
+                f"Flattened scene: {len(flattened_meshes)} geometries merged into single mesh"
+            )
 
             # Apply basis correction once (Z-up -> Y-up) directly to vertices
             basis_correction = trimesh.transformations.rotation_matrix(
-                angle=np.radians(-90),
-                direction=[1, 0, 0]
+                angle=np.radians(-90), direction=[1, 0, 0]
             )
             mesh.apply_transform(basis_correction)
             self.log_operation("Applied basis correction: -90° around X (Z-up to Y-up)")
 
             # Get model dimensions
             extents = mesh.extents
-            
-            dimensions = {
-                'x': extents[0],
-                'y': extents[1],
-                'z': extents[2]
-            }
-            
+
+            dimensions = {"x": extents[0], "y": extents[1], "z": extents[2]}
+
             self.log_operation(f"Model dimensions: {dimensions}")
-            
+
             # Calculate scale factor only if max_dimension was explicitly set by user
             # Default max_dimension is 0.5 but we only scale if user checked the checkbox
             if self.max_dimension > 0:
@@ -132,98 +155,123 @@ class STLConverter(BaseConverter):
                     else:
                         mesh.apply_scale(scale_factor)
                 else:
-                    self.log_operation("No scaling needed - model already at target size")
+                    self.log_operation(
+                        "No scaling needed - model already at target size"
+                    )
             else:
                 self.log_operation("No scaling applied - max_dimension not set by user")
-            
+
             # Apply color if specified
             if color:
                 try:
                     self.log_operation(f"Applying color: {color}")
                     # Convert hex color to RGB (0-255 range)
-                    hex_color = color.lstrip('#')
+                    hex_color = color.lstrip("#")
                     if len(hex_color) != 6:
                         raise ValueError(f"Invalid hex color: {color}")
-                    
+
                     r = int(hex_color[0:2], 16)
                     g = int(hex_color[2:4], 16)
                     b = int(hex_color[4:6], 16)
-                    
+
                     # Create PBR material with the specified color
                     material = trimesh.visual.material.PBRMaterial(
-                        baseColorFactor=[r/255.0, g/255.0, b/255.0, 1.0],
+                        baseColorFactor=[r / 255.0, g / 255.0, b / 255.0, 1.0],
                         metallicFactor=0.1,
-                        roughnessFactor=0.9
+                        roughnessFactor=0.9,
                     )
-                    
+
                     # Apply color to all meshes
                     if isinstance(mesh, trimesh.Scene):
                         for geom in mesh.geometry.values():
                             if isinstance(geom, trimesh.Trimesh):
                                 # Apply both material and vertex colors for maximum compatibility
-                                geom.visual = trimesh.visual.TextureVisuals(material=material)
-                                vertex_colors = np.tile([r, g, b, 255], (len(geom.vertices), 1))
-                                geom.visual.vertex_colors = vertex_colors.astype(np.uint8)
+                                geom.visual = trimesh.visual.TextureVisuals(
+                                    material=material
+                                )
+                                vertex_colors = np.tile(
+                                    [r, g, b, 255], (len(geom.vertices), 1)
+                                )
+                                geom.visual.vertex_colors = vertex_colors.astype(
+                                    np.uint8
+                                )
                     else:
                         # Apply both material and vertex colors for maximum compatibility
                         mesh.visual = trimesh.visual.TextureVisuals(material=material)
                         vertex_colors = np.tile([r, g, b, 255], (len(mesh.vertices), 1))
                         mesh.visual.vertex_colors = vertex_colors.astype(np.uint8)
-                    
-                    self.log_operation(f"Color applied successfully: RGB({r}, {g}, {b})")
+
+                    self.log_operation(
+                        f"Color applied successfully: RGB({r}, {g}, {b})"
+                    )
                 except Exception as e:
-                    self.log_operation(f"Warning: Could not apply color: {str(e)}", "WARNING")
+                    self.log_operation(
+                        f"Warning: Could not apply color: {str(e)}", "WARNING"
+                    )
                     import traceback
+
                     self.log_operation(f"Traceback: {traceback.format_exc()}")
                     # Continue even if color application fails
             else:
                 # No color specified - apply default gray material to ensure visibility
-                self.log_operation("No color specified - applying default gray material")
+                self.log_operation(
+                    "No color specified - applying default gray material"
+                )
                 try:
                     default_material = trimesh.visual.material.PBRMaterial(
                         baseColorFactor=[0.8, 0.8, 0.8, 1.0],  # Light gray
                         metallicFactor=0.1,
-                        roughnessFactor=0.9
+                        roughnessFactor=0.9,
                     )
-                    
+
                     if isinstance(mesh, trimesh.Scene):
                         for geom in mesh.geometry.values():
                             if isinstance(geom, trimesh.Trimesh):
-                                geom.visual = trimesh.visual.TextureVisuals(material=default_material)
+                                geom.visual = trimesh.visual.TextureVisuals(
+                                    material=default_material
+                                )
                     else:
-                        mesh.visual = trimesh.visual.TextureVisuals(material=default_material)
+                        mesh.visual = trimesh.visual.TextureVisuals(
+                            material=default_material
+                        )
                 except Exception as e:
-                    self.log_operation(f"Warning: Could not apply default material: {str(e)}", "WARNING")
+                    self.log_operation(
+                        f"Warning: Could not apply default material: {str(e)}",
+                        "WARNING",
+                    )
 
             # Note: Basis correction (Z-up to Y-up) is NOT applied here
             # It will be handled in glb_modifier during normalization
             # This keeps the model in its original orientation on upload
-            
+
             # Convert to scene if it's a single mesh
             if isinstance(mesh, trimesh.Trimesh):
                 self.log_operation("Converting mesh to scene")
                 scene = trimesh.Scene([mesh])
             else:
                 scene = mesh
-                
+
             # Export as GLB
             self.log_operation("Exporting to GLB format")
             scene.export(output_path)
-            
+
             if not os.path.exists(output_path):
                 self.handle_error("Output file was not created")
                 return False
-            
+
             file_size = os.path.getsize(output_path)
-            self.log_operation(f"STL file converted successfully. Output size: {file_size} bytes")
+            self.log_operation(
+                f"STL file converted successfully. Output size: {file_size} bytes"
+            )
             return True
-            
+
         except Exception as e:
             self.handle_error(f"Error during conversion: {str(e)}")
             import traceback
+
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
-            
+
     def handle_error(self, error_message: str) -> None:
         """
         Handle and log error messages

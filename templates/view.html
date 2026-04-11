@@ -411,6 +411,7 @@
             animation: blink 0.7s step-end infinite;
         }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 
     <script>
@@ -1568,6 +1569,7 @@ void main() {
             <model-viewer
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+                {% if usdz_filename %}ios-src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
                 shadow-intensity="1.45"
                 shadow-softness="0.72"
                 exposure="0.96"
@@ -1947,6 +1949,7 @@ void main() {
                     <div style="display:flex;gap:0.35rem;margin-top:0.6rem;">
                         <button id="slicerReset" class="tp-btn-full" style="flex:1;">Reset</button>
                         <button id="slicerApply" class="tp-btn-primary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.3rem;">
+                            <svg id="slicerSpinner" class="hidden" style="width:0.75rem;height:0.75rem;animation:spin 0.6s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                             <i data-lucide="scissors" style="width:0.7rem;height:0.7rem;"></i> Apply Slice
                         </button>
                     </div>
@@ -2073,7 +2076,7 @@ void main() {
                     <!-- Faces -->
                     {% if model.faces %}
                     <div class="info-modal-row">
-                        <i data-lucide="calendar"></i>
+                        <i data-lucide="triangle"></i>
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Faces</p>
                             <p class="mt-1 text-sm text-gray-900 dark:text-white">{{ "{:,}".format(model.faces) }}</p>
@@ -2084,7 +2087,7 @@ void main() {
                     <!-- Color -->
                     {% if model.color %}
                     <div class="info-modal-row">
-                        <i data-lucide="link"></i>
+                        <i data-lucide="palette"></i>
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Applied Color</p>
                             <div class="mt-1 flex items-center gap-2">

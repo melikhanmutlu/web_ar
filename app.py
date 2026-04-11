@@ -12,6 +12,7 @@ from flask import (
     flash,
     session,
     make_response,
+    abort,
 )
 from flask_login import (
     LoginManager,
@@ -51,7 +52,6 @@ from version_manager import (
 
 app = Flask(__name__)
 app.config.from_object("config")
-app.secret_key = "super secret key"
 
 
 # Add headers to allow all origins
@@ -1345,9 +1345,9 @@ def upload_file():
         else:
             return jsonify({"error": "Unsupported file format"}), 400
 
-        # Set maximum dimension (already in cm from form)
+        # Set maximum dimension — form değeri cm, converter metre bekliyor
         if max_dimension is not None:
-            converter.set_max_dimension(max_dimension)
+            converter.set_max_dimension(max_dimension / 100.0)
 
         # Apply color if specified
         if use_color and color:
@@ -2454,8 +2454,17 @@ def get_model_bounds(model_id):
 
 
 # Route to serve converted model files
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
 @app.route("/converted_files/<path:unique_id>/<path:filename>")
 def serve_converted_file(unique_id, filename):
+    # Validate unique_id is a proper UUID to prevent path traversal
+    if not _UUID_RE.match(unique_id):
+        app.logger.warning(f"Invalid unique_id format rejected: {unique_id}")
+        return "Not Found", 404
     directory = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     app.logger.info(f"Attempting to serve file: {filename} from directory: {directory}")
     # Basic security check: ensure filename is just a filename, not trying to escape
@@ -2666,12 +2675,14 @@ def my_models(folder_id=None):
     try:
         if folder_id:
             current_folder = Folder.query.get_or_404(folder_id)
-            folders = Folder.query.filter_by(parent_id=folder_id).all()
-            models = UserModel.query.filter_by(folder_id=folder_id).all()
+            if current_folder.user_id != current_user.id:
+                abort(403)
+            folders = Folder.query.filter_by(parent_id=folder_id, user_id=current_user.id).all()
+            models = UserModel.query.filter_by(folder_id=folder_id, user_id=current_user.id).all()
         else:
             current_folder = None
-            folders = Folder.query.filter_by(parent_id=None).all()
-            models = UserModel.query.filter_by(folder_id=None).all()
+            folders = Folder.query.filter_by(parent_id=None, user_id=current_user.id).all()
+            models = UserModel.query.filter_by(folder_id=None, user_id=current_user.id).all()
 
         # Get model counts for each folder
         folder_model_counts = {}
@@ -2844,6 +2855,7 @@ def get_qr_code(filename):
 
 
 @app.route("/delete_model/<string:model_id>", methods=["POST"])
+@login_required
 def delete_model(model_id):
     session = None
     try:
@@ -2855,6 +2867,13 @@ def delete_model(model_id):
         if not model:
             logger.warning(f"Model {model_id} not found in database")
             return jsonify({"error": "Model not found"}), 404
+
+        # Ownership check: only the model owner can delete it
+        if model.user_id != current_user.id:
+            logger.warning(
+                f"Unauthorized delete attempt: user {current_user.id} tried to delete model {model_id} owned by {model.user_id}"
+            )
+            return jsonify({"error": "Unauthorized"}), 403
 
         logger.info(f"Found model: ID={model.id}")
 

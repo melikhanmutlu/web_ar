@@ -1407,60 +1407,85 @@ class FBXConverter(BaseConverter):
                                 f"  Created Texture {tex_idx} → Image {img_idx}"
                             )
 
-                    # HARDCODED FIX: Force correct texture assignment for this specific model
-                    # This is a temporary solution for the known issue with the Tree model.
-                    if (
-                        gltf.materials
-                        and len(gltf.materials) > 1
-                        and len(gltf.textures) > 1
-                    ):
-                        leaf_material = None
-                        leaf_material_idx = -1
-                        for i, mat in enumerate(gltf.materials):
-                            if mat.name == "DB2X2_L02":
-                                leaf_material = mat
-                                leaf_material_idx = i
-                                break
+                    # Generalised transparency fix (replaces the old model-specific
+                    # "DB2X2_L02" hardcode): any material whose base-color texture has an
+                    # alpha channel with transparent pixels (foliage/cutout) — or whose
+                    # baseColorFactor is itself translucent — gets alphaMode=BLEND +
+                    # doubleSided so it renders correctly in model-viewer / AR.
+                    def _image_has_transparency(image_index):
+                        try:
+                            from PIL import Image
+                            import io as _io
+                            import base64 as _b64
 
-                        if leaf_material:
-                            # Preserve existing baseColorTexture assignment (FBX2glTF's choice)
-                            pbr = leaf_material.pbrMetallicRoughness
-                            existing_tex_idx = None
-                            if pbr and pbr.baseColorTexture:
-                                existing_tex_idx = pbr.baseColorTexture.index
+                            if image_index is None or image_index >= len(gltf.images):
+                                return False
+                            gimg = gltf.images[image_index]
+                            data = None
+                            if gimg.uri and gimg.uri.startswith("data:"):
+                                data = _b64.b64decode(gimg.uri.split(",", 1)[1])
+                            elif gimg.bufferView is not None:
+                                blob = gltf.binary_blob()
+                                bv = gltf.bufferViews[gimg.bufferView]
+                                off = bv.byteOffset if bv.byteOffset else 0
+                                data = blob[off : off + bv.byteLength]
+                            if not data:
+                                return False
+                            pil = Image.open(_io.BytesIO(data))
+                            if pil.mode not in ("RGBA", "LA", "PA") and (
+                                "transparency" not in pil.info
+                            ):
+                                return False
+                            alpha = pil.convert("RGBA").getchannel("A")
+                            # Any meaningfully transparent pixel => cutout/foliage texture
+                            return alpha.getextrema()[0] < 250
+                        except Exception as _e:
                             self.log_operation(
-                                f"Preserving leaf material texture assignment: {existing_tex_idx}"
+                                f"Alpha detection failed for image {image_index}: {_e}",
+                                "WARNING",
                             )
+                            return False
 
-                            # FIX ALPHA/TRANSPARENCY
-                            self.log_operation(
-                                f"Fixing transparency for material '{leaf_material.name}'."
-                            )
-                            leaf_material.alphaMode = "BLEND"
-                            leaf_material.doubleSided = True
-                            self.log_operation(
-                                f"  ✅ Fixed Transparency: Set alphaMode=BLEND, doubleSided=True"
-                            )
-
-                            # Ensure foliage PBR defaults for visibility (non-metallic, rough, neutral color)
-                            try:
-                                if pbr is not None:
-                                    if (
-                                        not pbr.baseColorFactor
-                                        or len(pbr.baseColorFactor) < 4
-                                        or pbr.baseColorFactor[3] < 0.9
-                                    ):
-                                        pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
-                                    pbr.metallicFactor = 0.0
-                                    pbr.roughnessFactor = 1.0
-                                    self.log_operation(
-                                        "  ✅ Applied foliage PBR defaults: metallic=0.0, roughness=1.0, baseColorFactor alpha reset to 1"
-                                    )
-                            except Exception as _e:
-                                self.log_operation(
-                                    f"  ⚠️ Could not enforce foliage PBR defaults: {_e}",
-                                    "WARNING",
+                    for mat in (gltf.materials or []):
+                        pbr = mat.pbrMetallicRoughness
+                        factor_translucent = (
+                            pbr is not None
+                            and pbr.baseColorFactor
+                            and len(pbr.baseColorFactor) == 4
+                            and pbr.baseColorFactor[3] < 0.99
+                        )
+                        texture_alpha = False
+                        if pbr is not None and pbr.baseColorTexture is not None:
+                            tex_idx = pbr.baseColorTexture.index
+                            if tex_idx is not None and tex_idx < len(gltf.textures):
+                                texture_alpha = _image_has_transparency(
+                                    gltf.textures[tex_idx].source
                                 )
+
+                        if (factor_translucent or texture_alpha) and mat.alphaMode in (
+                            None,
+                            "OPAQUE",
+                        ):
+                            mat.alphaMode = "BLEND"
+                            mat.doubleSided = True
+                            if pbr is not None:
+                                # Foliage/cutout-safe PBR defaults (non-metallic, rough)
+                                pbr.metallicFactor = 0.0
+                                pbr.roughnessFactor = 1.0
+                                # When the transparency comes from the texture, a stray <1
+                                # factor alpha would dim the whole surface — let the texture
+                                # drive transparency instead.
+                                if texture_alpha and factor_translucent:
+                                    pbr.baseColorFactor = [
+                                        pbr.baseColorFactor[0],
+                                        pbr.baseColorFactor[1],
+                                        pbr.baseColorFactor[2],
+                                        1.0,
+                                    ]
+                            self.log_operation(
+                                f"Transparency fix → material '{mat.name}': "
+                                "alphaMode=BLEND, doubleSided=True"
+                            )
 
                     # Log mesh-material assignments
                     if gltf.meshes:

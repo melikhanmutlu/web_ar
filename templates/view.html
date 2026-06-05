@@ -2509,6 +2509,26 @@ void main() {
             } catch { return []; }
         }
 
+        // model-viewer 4.x lazily loads materials; accessing `pbrMetallicRoughness`
+        // before the material is loaded throws ("Material has not been loaded...").
+        // Pre-load every material once on model load so the sync editor handlers are safe.
+        async function ensureMaterialsLoaded() {
+            const mats = getMaterials();
+            await Promise.all(mats.map(m => {
+                try { return m.ensureLoaded ? m.ensureLoaded() : null; }
+                catch { return null; }
+            }));
+            return mats;
+        }
+
+        // Iterate materials defensively — if one isn't loaded yet, skip it instead of
+        // letting the pbrMetallicRoughness getter throw an uncaught error.
+        function forEachMaterial(cb) {
+            getMaterials().forEach((mat, i) => {
+                try { cb(mat, i); } catch (e) { /* material not loaded yet */ }
+            });
+        }
+
         function captureOriginalMaterials() {
             try {
                 const mats = getMaterials();
@@ -2556,7 +2576,10 @@ void main() {
             } catch (e) { console.warn('Could not capture original materials:', e); }
         }
 
-        modelViewer?.addEventListener('load', captureOriginalMaterials);
+        modelViewer?.addEventListener('load', async () => {
+            await ensureMaterialsLoaded();
+            captureOriginalMaterials();
+        });
 
         // Auto-capture viewer screenshot as thumbnail (owner only, once per model)
         {% if is_owner %}
@@ -2592,8 +2615,7 @@ void main() {
 
         function applyMaterialColor(hex) {
             const rgb = hexToRgb(hex);
-            const mats = getMaterials();
-            mats.forEach(mat => {
+            forEachMaterial(mat => {
                 const currentAlpha = mat.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
                 mat.pbrMetallicRoughness.setBaseColorFactor([rgb.r, rgb.g, rgb.b, currentAlpha]);
             });
@@ -2632,7 +2654,7 @@ void main() {
             metalnessSlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (metalnessValue) metalnessValue.textContent = val.toFixed(2);
-                getMaterials().forEach(mat => {
+                forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setMetallicFactor(val);
                 });
             });
@@ -2640,7 +2662,7 @@ void main() {
             roughnessSlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (roughnessValue) roughnessValue.textContent = val.toFixed(2);
-                getMaterials().forEach(mat => {
+                forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setRoughnessFactor(val);
                 });
             });
@@ -2648,7 +2670,7 @@ void main() {
             opacitySlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (opacityValue) opacityValue.textContent = val.toFixed(2);
-                getMaterials().forEach(mat => {
+                forEachMaterial(mat => {
                     const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
                     mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], val]);
                     if (val < 1) {
@@ -2669,7 +2691,7 @@ void main() {
                     if (texturePreview) texturePreview.classList.remove('hidden');
 
                     const texture = await modelViewer.createTexture(url);
-                    getMaterials().forEach(mat => {
+                    forEachMaterial(mat => {
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     });
                 } catch (err) {
@@ -2680,7 +2702,7 @@ void main() {
 
             // Remove texture (global function for onclick)
             window.removeTexture = function() {
-                getMaterials().forEach(mat => {
+                forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.baseColorTexture.setTexture(null);
                 });
                 if (texturePreview) texturePreview.classList.add('hidden');
@@ -2689,8 +2711,7 @@ void main() {
 
             // Reset material
             resetMaterial?.addEventListener('click', () => {
-                const mats = getMaterials();
-                mats.forEach((mat, i) => {
+                forEachMaterial((mat, i) => {
                     const orig = originalMaterials[i] || { baseColor: [1, 1, 1, 1], metallic: 0, roughness: 1 };
                     mat.pbrMetallicRoughness.setBaseColorFactor(orig.baseColor);
                     mat.pbrMetallicRoughness.setMetallicFactor(orig.metallic);
@@ -3253,21 +3274,24 @@ void main() {
         function gatherModifications() {
             const mods = {};
 
-            // Material modifications
+            // Material modifications (guard against not-yet-loaded materials)
             const mats = getMaterials();
             if (mats.length > 0) {
-                const mat = mats[0];
-                const cf = mat.pbrMetallicRoughness?.baseColorFactor;
-                mods.material = {
-                    color: cf ? [cf[0], cf[1], cf[2]] : null,
-                    metalness: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
-                    roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1,
-                    opacity: cf ? cf[3] : 1
-                };
+                try {
+                    const mat = mats[0];
+                    const cf = mat.pbrMetallicRoughness?.baseColorFactor;
+                    mods.material = {
+                        color: cf ? [cf[0], cf[1], cf[2]] : null,
+                        metalness: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
+                        roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1,
+                        opacity: cf ? cf[3] : 1
+                    };
+                } catch (e) { /* material not loaded — skip material mods */ }
 
                 // Include texture if one was uploaded
                 const _textureUpload = document.getElementById('textureUpload');
                 if (_textureUpload?.files?.length > 0) {
+                    if (!mods.material) mods.material = {};
                     mods.material._pendingTextureFile = _textureUpload.files[0];
                 }
             }

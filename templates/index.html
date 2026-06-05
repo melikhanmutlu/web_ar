@@ -1,364 +1,209 @@
-{% extends "base.html" %}
-
-{% block title %}Home - arvision{% endblock %}
-
-{% block content %}
-<div class="min-h-screen bg-gray-50 dark:bg-[#0a0e1a] text-gray-900 dark:text-white relative">
-    <div class="abstract-bg"></div>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            <div class="max-w-xl mx-auto mb-6 px-4">
-                {% for category, message in messages %}
-                    <div class="rounded-lg p-4 mb-4 {% if category == 'error' %}bg-red-100 text-red-700{% elif category == 'success' %}bg-green-100 text-green-700{% else %}bg-blue-100 text-blue-700{% endif %}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-    {% endwith %}
-
-    <!-- Upload Section -->
-    <div class="max-w-4xl mx-auto px-4 pt-24 pb-12">
-            
-            <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="space-y-6">
-                <!-- File Upload -->
-                <div>
-                    <div id="dropZone" class="relative border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-16 transition-all duration-300 hover:border-cyan-500 hover:bg-gray-50 dark:hover:bg-[#232938]/50 cursor-pointer text-center group mb-8">
-                        <input id="file-upload" name="file" type="file" class="hidden" accept=".obj,.glb,.gltf,.fbx,.stl">
-                        <svg class="mx-auto h-24 w-24 text-cyan-500 dark:text-cyan-400 mb-8 group-hover:scale-110 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                        </svg>
-                        <p class="text-gray-900 dark:text-white text-2xl font-semibold mb-3">Drag & drop your 3D models here</p>
-                        <p class="text-gray-500 dark:text-gray-400 text-base mb-6">or click to browse</p>
-                        <p class="text-gray-400 dark:text-gray-500 text-sm">
-                            Supported formats: <span class="text-cyan-600 dark:text-cyan-400 font-medium">FBX, OBJ, GLB, GLTF, STL</span> (max. 100MB)
-                        </p>
-                        <div id="selectedFileName" class="text-cyan-600 dark:text-cyan-400 text-base font-medium mt-6 hidden"></div>
-                    </div>
-                </div>
-
-                <!-- MTL File Upload (Optional) -->
-                <div id="mtlUpload" class="hidden">
-                    <div class="mt-2">
-                        <label for="mtl-upload" class="block cursor-pointer">
-                            <div class="flex items-center justify-center w-full px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-200">
-                                <div class="space-y-1 text-center">
-                                    <div id="mtlUploadText">
-                                        <span class="text-gray-900 dark:text-white font-medium hover:text-gray-600 dark:hover:text-gray-300">Upload MTL file</span>
-                                    </div>
-                                    <div id="selectedMtlFileName" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
-                                    <input id="mtl-upload" name="mtl" type="file" class="hidden" accept=".mtl">
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Texture Files Upload (Optional) -->
-                <div id="textureUpload" class="hidden">
-                    <div class="mt-2">
-                        <label for="texture-upload" class="block cursor-pointer">
-                            <div class="flex items-center justify-center w-full px-6 pt-5 pb-6 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-200">
-                                <div class="space-y-1 text-center">
-                                    <div id="textureUploadText">
-                                        <span class="text-gray-900 dark:text-white font-medium hover:text-gray-600 dark:hover:text-gray-300">Upload texture files</span>
-                                    </div>
-                                    <div id="selectedTextureFileNames" class="text-sm text-gray-600 dark:text-gray-400 hidden"></div>
-                                    <input id="texture-upload" name="textures" type="file" class="hidden" accept=".jpg,.jpeg,.png,.tga,.bmp" multiple>
-                                </div>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Options Section -->
-                <div class="space-y-3">
-                    <!-- Maximum Dimension -->
-                    <div class="bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
-                        <div class="flex items-center justify-between gap-4">
-                            <label class="flex items-center space-x-3 cursor-pointer group">
-                                <div class="relative">
-                                    <input type="checkbox" 
-                                        id="useMaxDimension" 
-                                        name="use_max_dimension" 
-                                        class="peer sr-only">
-                                    <div class="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:bg-cyan-500 transition-all"></div>
-                                    <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                                </div>
-                                <span class="text-gray-900 dark:text-white font-semibold text-lg">Limit Model Size</span>
-                            </label>
-                            <div id="maxDimensionInput" class="hidden flex items-center gap-2">
-                                <div class="relative">
-                                    <input type="number" 
-                                        id="max-dimension" 
-                                        name="max_dimension" 
-                                        min="10" 
-                                        max="100" 
-                                        value="50" 
-                                        class="w-24 px-3 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 pr-10">
-                                    <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                        <span class="text-gray-500 dark:text-gray-400 text-sm font-medium">cm</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Source Unit (shown for unitless .stl / .obj uploads) -->
-                    <div id="sourceUnitSection" class="hidden bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
-                        <div class="flex items-center justify-between gap-4">
-                            <div>
-                                <span class="text-gray-900 dark:text-white font-semibold text-lg">Source Unit</span>
-                                <p class="text-gray-500 dark:text-gray-400 text-sm">STL/OBJ files are unitless — choose how to interpret the source size.</p>
-                            </div>
-                            <select id="sourceUnit" name="sourceUnit"
-                                class="px-3 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500">
-                                <option value="mm">Millimeters (mm)</option>
-                                <option value="cm">Centimeters (cm)</option>
-                                <option value="m">Meters (m)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Color Input -->
-                    <div class="bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
-                        <div class="flex items-center justify-between gap-4">
-                            <label class="flex items-center space-x-3 cursor-pointer group">
-                                <div class="relative">
-                                    <input type="checkbox" id="useColor" name="useColor" value="true" class="peer sr-only">
-                                    <div class="w-11 h-6 bg-gray-700 rounded-full peer peer-checked:bg-cyan-500 transition-all"></div>
-                                    <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                                </div>
-                                <span class="text-gray-900 dark:text-white font-semibold text-lg">Apply Color</span>
-                            </label>
-                            <div id="colorPickerContainer" class="hidden flex items-center gap-3">
-                                <input type="color" id="colorPicker" name="color" value="#4CAF50" class="h-10 w-16 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 cursor-pointer hover:border-cyan-500 transition-colors">
-                                <input type="text" id="colorInput" class="w-32 rounded-lg border-2 border-gray-300 dark:border-gray-600 px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm" value="#4CAF50" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#4CAF50">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Upload Status -->
-                <div id="uploadStatus" class="hidden">
-                    <style>
-                        .progress-wrapper {
-                            margin: 1.5rem 0;
-                            background: var(--bg-secondary, #f3f4f6);
-                            border-radius: 0.5rem;
-                            padding: 1.5rem;
-                            border: 1px solid var(--border-color, #e5e7eb);
-                        }
-
-                        .dark .progress-wrapper {
-                            background: var(--bg-secondary-dark, #1f2937);
-                            border-color: var(--border-color-dark, #374151);
-                        }
-
-                        .progress-status {
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            margin-bottom: 0.75rem;
-                        }
-
-                        .progress-label {
-                            font-size: 0.875rem;
-                            font-weight: 500;
-                            color: var(--text-primary, #111827);
-                        }
-
-                        .dark .progress-label {
-                            color: var(--text-primary-dark, #f3f4f6);
-                        }
-
-                        .progress-percentage {
-                            font-size: 0.875rem;
-                            font-weight: 600;
-                            color: var(--text-primary, #111827);
-                        }
-
-                        .dark .progress-percentage {
-                            color: var(--text-primary-dark, #f3f4f6);
-                        }
-
-                        .progress-bar-container {
-                            width: 100%;
-                            height: 0.5rem;
-                            background: var(--bg-primary, #ffffff);
-                            border-radius: 0.25rem;
-                            overflow: hidden;
-                        }
-
-                        .dark .progress-bar-container {
-                            background: var(--bg-primary-dark, #111827);
-                        }
-
-                        .progress-bar {
-                            height: 100%;
-                            width: 0%;
-                            background: var(--progress-color, #111827);
-                            border-radius: 0.25rem;
-                            transition: width 0.3s ease, background-color 0.3s ease;
-                        }
-
-                        .dark .progress-bar {
-                            background: var(--progress-color-dark, #f3f4f6);
-                        }
-
-                        .progress-bar.success {
-                            background: var(--success-color, #111827);
-                        }
-
-                        .dark .progress-bar.success {
-                            background: var(--success-color-dark, #f3f4f6);
-                        }
-
-                        .progress-bar.error {
-                            background: var(--error-color, #dc2626);
-                        }
-
-                        .dark .progress-bar.error {
-                            background: var(--error-color-dark, #ef4444);
-                        }
-
-                        .upload-result {
-                            margin-top: 1rem;
-                            padding: 1rem;
-                            border-radius: 0.5rem;
-                            background: var(--bg-primary, #ffffff);
-                            border: 1px solid var(--border-color, #e5e7eb);
-                            text-align: center;
-                        }
-
-                        .dark .upload-result {
-                            background: var(--bg-primary-dark, #111827);
-                            border-color: var(--border-color-dark, #374151);
-                        }
-
-                        .upload-result.success {
-                            border-color: var(--success-color, #111827);
-                        }
-
-                        .dark .upload-result.success {
-                            border-color: var(--success-color-dark, #f3f4f6);
-                        }
-
-                        .upload-result.error {
-                            border-color: var(--error-color, #dc2626);
-                        }
-
-                        .dark .upload-result.error {
-                            border-color: var(--error-color-dark, #ef4444);
-                        }
-
-                        .view-model-button {
-                            display: inline-block;
-                            margin-top: 0.75rem;
-                            padding: 0.5rem 1rem;
-                            background: var(--bg-secondary, #f3f4f6);
-                            color: var(--text-primary, #111827);
-                            border: 1px solid var(--border-color, #e5e7eb);
-                            border-radius: 0.375rem;
-                            font-size: 0.875rem;
-                            font-weight: 500;
-                            text-decoration: none;
-                            transition: all 0.2s ease;
-                        }
-
-                        .dark .view-model-button {
-                            background: var(--bg-secondary-dark, #1f2937);
-                            color: var(--text-primary-dark, #f3f4f6);
-                            border-color: var(--border-color-dark, #374151);
-                        }
-
-                        .view-model-button:hover {
-                            background: var(--bg-hover, #e5e7eb);
-                        }
-
-                        .dark .view-model-button:hover {
-                            background: var(--bg-hover-dark, #374151);
-                        }
-                    </style>
-
-                    <div class="progress-wrapper">
-                        <div class="progress-status">
-                            <span class="progress-label" id="uploadStatusText">Uploading...</span>
-                            <span class="progress-percentage" id="progressText">0%</span>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div class="progress-bar" id="progressBar"></div>
-                        </div>
-                    </div>
-                    <div id="uploadResult" class="upload-result" style="display: none;"></div>
-                </div>
-
-                <!-- Submit Button -->
-                <button type="submit" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl py-5 px-8 text-xl font-bold hover:from-cyan-600 hover:to-blue-700 transition-all duration-300 shadow-2xl shadow-cyan-500/40 hover:shadow-cyan-500/60 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100" id="submitBtn" disabled>
-                    <span class="flex items-center justify-center">
-                        <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                        </svg>
-                        Upload and Convert
-                    </span>
-                </button>
-            </form>
-
-        <!-- Features Section -->
-        <div class="max-w-7xl mx-auto px-4 py-12">
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <!-- Card 1: Multiple Formats -->
-                <div class="rounded-2xl p-8 text-center hover:scale-105 transition-all duration-300 border border-gray-200/50 dark:border-gray-700/30 hover:border-cyan-400 shadow-sm hover:shadow-lg hover:shadow-cyan-500/10">
-                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-cyan-500/20 flex items-center justify-center">
-                        <svg class="w-8 h-8 text-cyan-500 dark:text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-3">Multiple Formats</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Support for FBX, OBJ, STL, and GLTF with textures and materials</p>
-                </div>
-
-                <!-- Card 2: AR Ready -->
-                <div class="rounded-2xl p-8 text-center hover:scale-105 transition-all duration-300 border border-gray-200/50 dark:border-gray-700/30 hover:border-red-400 shadow-sm hover:shadow-lg hover:shadow-red-500/10">
-                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                        <svg class="w-8 h-8 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-3">AR Ready</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">View your models in AR on iPhone and Android devices</p>
-                </div>
-
-                <!-- Card 3: Fast Conversion -->
-                <div class="rounded-2xl p-8 text-center hover:scale-105 transition-all duration-300 border border-gray-200/50 dark:border-gray-700/30 hover:border-green-400 shadow-sm hover:shadow-lg hover:shadow-green-500/10">
-                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                        <svg class="w-8 h-8 text-green-500 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-3">Fast Conversion</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Quick and efficient conversion process</p>
-                </div>
-
-                <!-- Card 4: Save History -->
-                <div class="rounded-2xl p-8 text-center hover:scale-105 transition-all duration-300 border border-gray-200/50 dark:border-gray-700/30 hover:border-orange-400 shadow-sm hover:shadow-lg hover:shadow-orange-500/10">
-                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
-                        <svg class="w-8 h-8 text-orange-500 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
-                        </svg>
-                    </div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-3">Save History</h3>
-                    <p class="text-sm text-gray-600 dark:text-gray-400">Registered users can access their conversion history</p>
-                </div>
-            </div>
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home — arvision</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+    <!-- Apply theme before paint to avoid a flash -->
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="top-header">
+        <div class="brand-shell">
+            <a href="/" class="brand-mark">arvision</a>
         </div>
-    </div>
-</div>
-{% endblock %}
+        <nav class="top-actions" aria-label="Primary">
+            <a href="/" class="showcase-nav-link is-active">home</a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('my_models') }}" class="showcase-nav-link">my models</a>
+            <a href="{{ url_for('auth.logout') }}" class="showcase-nav-link">log out</a>
+            {% else %}
+            <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link">register</a>
+            <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link login-pill">login</a>
+            {% endif %}
+            <button id="darkModeToggle" class="av-icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
+                <i data-lucide="moon" class="theme-moon"></i>
+                <i data-lucide="sun" class="theme-sun"></i>
+            </button>
+        </nav>
+    </header>
 
-{% block extra_scripts %}
-<script>
+    <main class="home-main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="av-flash {% if category == 'error' %}av-flash--error{% endif %}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="home-hero">
+            <p class="home-kicker">3D → AR Converter</p>
+            <h1 class="home-title">Upload a model. Get an AR-ready link.</h1>
+        </div>
+
+        <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="av-stack">
+            <!-- File Upload -->
+            <div>
+                <div id="dropZone" class="av-dropzone">
+                    <input id="file-upload" name="file" type="file" class="hidden" accept=".obj,.glb,.gltf,.fbx,.stl">
+                    <i data-lucide="upload-cloud" class="av-dropzone-icon"></i>
+                    <p class="av-dropzone-title">Drag &amp; drop your 3D model here</p>
+                    <p class="av-dropzone-hint">or click to browse</p>
+                    <p class="av-dropzone-formats">Supported: <strong>FBX, OBJ, GLB, GLTF, STL</strong> (max. 100MB)</p>
+                    <div id="selectedFileName" class="av-dropzone-selected hidden"></div>
+                </div>
+            </div>
+
+            <!-- MTL File Upload (OBJ, optional) -->
+            <div id="mtlUpload" class="hidden">
+                <label for="mtl-upload" class="av-subdrop">
+                    <div id="mtlUploadText"><span class="av-subdrop-label">Upload MTL file</span></div>
+                    <div id="selectedMtlFileName" class="av-subdrop-files hidden"></div>
+                    <input id="mtl-upload" name="mtl" type="file" class="hidden" accept=".mtl">
+                </label>
+            </div>
+
+            <!-- Texture Files Upload (OBJ, optional) -->
+            <div id="textureUpload" class="hidden">
+                <label for="texture-upload" class="av-subdrop">
+                    <div id="textureUploadText"><span class="av-subdrop-label">Upload texture files</span></div>
+                    <div id="selectedTextureFileNames" class="av-subdrop-files hidden"></div>
+                    <input id="texture-upload" name="textures" type="file" class="hidden" accept=".jpg,.jpeg,.png,.tga,.bmp" multiple>
+                </label>
+            </div>
+
+            <!-- Options -->
+            <!-- Limit Model Size -->
+            <div class="av-card">
+                <div class="av-card-row">
+                    <label class="av-switch-label">
+                        <span class="av-switch">
+                            <input type="checkbox" id="useMaxDimension" name="use_max_dimension">
+                            <span class="track"></span>
+                            <span class="knob"></span>
+                        </span>
+                        <span class="av-switch-text">Limit Model Size</span>
+                    </label>
+                    <div id="maxDimensionInput" class="hidden">
+                        <span class="av-number-wrap">
+                            <input type="number" id="max-dimension" name="max_dimension" min="10" max="100" value="50" class="av-number" style="padding-right:1.8rem;">
+                            <span class="av-number-unit">cm</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Source Unit (unitless STL/OBJ) -->
+            <div id="sourceUnitSection" class="av-card hidden">
+                <div class="av-card-row">
+                    <div>
+                        <div class="av-card-title">Source Unit</div>
+                        <p class="av-card-desc">STL/OBJ files are unitless — choose how to interpret the source size.</p>
+                    </div>
+                    <select id="sourceUnit" name="sourceUnit" class="av-select">
+                        <option value="mm">Millimeters (mm)</option>
+                        <option value="cm">Centimeters (cm)</option>
+                        <option value="m">Meters (m)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Apply Color -->
+            <div class="av-card">
+                <div class="av-card-row">
+                    <label class="av-switch-label">
+                        <span class="av-switch">
+                            <input type="checkbox" id="useColor" name="useColor" value="true">
+                            <span class="track"></span>
+                            <span class="knob"></span>
+                        </span>
+                        <span class="av-switch-text">Apply Color</span>
+                    </label>
+                    <div id="colorPickerContainer" class="hidden" style="display:flex;align-items:center;gap:0.6rem;">
+                        <input type="color" id="colorPicker" name="color" value="#4CAF50" class="av-color">
+                        <input type="text" id="colorInput" class="av-input" style="width:7rem;" value="#4CAF50" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#4CAF50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Status -->
+            <div id="uploadStatus" class="hidden">
+                <div class="progress-wrapper">
+                    <div class="progress-status">
+                        <span class="progress-label" id="uploadStatusText">Uploading...</span>
+                        <span class="progress-percentage" id="progressText">0%</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                </div>
+                <div id="uploadResult" class="upload-result" style="display: none;"></div>
+            </div>
+
+            <!-- Submit -->
+            <button type="submit" id="submitBtn" class="btn-primary" disabled>
+                <i data-lucide="upload-cloud" style="width:1.1rem;height:1.1rem;"></i>
+                Upload and Convert
+            </button>
+        </form>
+
+        <!-- Features -->
+        <section class="home-features">
+            <div class="feature-card">
+                <i data-lucide="boxes" class="feature-icon"></i>
+                <h3 class="feature-title">Multiple Formats</h3>
+                <p class="feature-desc">FBX, OBJ, STL and GLTF with textures and materials.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="scan-line" class="feature-icon"></i>
+                <h3 class="feature-title">AR Ready</h3>
+                <p class="feature-desc">View your models in AR on iPhone and Android.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="zap" class="feature-icon"></i>
+                <h3 class="feature-title">Fast Conversion</h3>
+                <p class="feature-desc">Quick and efficient conversion to GLB.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="history" class="feature-icon"></i>
+                <h3 class="feature-title">Save History</h3>
+                <p class="feature-desc">Registered users keep their conversion history.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Tagline -->
+    <div class="portfolio-tagline">
+        <p class="tagline-line">A Perfect Place</p>
+        <p class="tagline-line">for: <span class="tagline-main">Your Models</span><span class="tagline-cursor"></span></p>
+    </div>
+
+    <!-- Theme toggle + icons -->
+    <script>
+        function toggleDarkMode() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.theme = 'light';
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.theme = 'dark';
+            }
+        }
+        document.getElementById('darkModeToggle')?.addEventListener('click', toggleDarkMode);
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    </script>
+
+    <!-- Upload logic (ported verbatim; only class names adapted to the design system) -->
+    <script>
     document.addEventListener('DOMContentLoaded', function() {
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('file-upload');
@@ -371,7 +216,7 @@
         const colorPickerContainer = document.getElementById('colorPickerContainer');
         const colorPicker = document.getElementById('colorPicker');
         const colorInput = document.getElementById('colorInput');
-        
+
         if (colorPickerCheckbox && colorPickerContainer) {
             colorPickerCheckbox.addEventListener('change', function() {
                 if (this.checked) {
@@ -381,21 +226,20 @@
                 }
             });
         }
-        
+
         // Sync color picker and text input
         if (colorPicker && colorInput) {
             colorPicker.addEventListener('input', function() {
                 colorInput.value = this.value.toUpperCase();
             });
-            
+
             colorInput.addEventListener('input', function() {
                 const value = this.value.trim();
-                // Validate hex color format
                 if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
                     colorPicker.value = value;
-                    this.classList.remove('border-red-500');
+                    this.classList.remove('is-invalid');
                 } else {
-                    this.classList.add('border-red-500');
+                    this.classList.add('is-invalid');
                 }
             });
         }
@@ -419,7 +263,7 @@
         dropZone.addEventListener('drop', (e) => {
             const dt = e.dataTransfer;
             const files = dt.files;
-            
+
             if (files.length > 0) {
                 handleFiles(files);
                 fileInput.files = files; // Set the files to the input element
@@ -444,7 +288,7 @@
         const mtlInput = document.getElementById('mtl-upload');
         const selectedMtlFileName = document.getElementById('selectedMtlFileName');
         const mtlUploadText = document.getElementById('mtlUploadText');
-        
+
         mtlInput.addEventListener('change', (e) => {
             // Remove existing MTL color warning if any
             document.getElementById('mtlColorWarning')?.remove();
@@ -459,7 +303,7 @@
                 // Show warning that color will be ignored when MTL is present
                 const warning = document.createElement('div');
                 warning.id = 'mtlColorWarning';
-                warning.className = 'mt-2 p-2 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg text-xs text-amber-700 dark:text-amber-300';
+                warning.className = 'av-note';
                 warning.innerHTML = '<strong>Note:</strong> When an MTL file is provided, the selected color will be ignored. The model will use materials defined in the MTL file.';
                 selectedMtlFileName.parentElement.appendChild(warning);
             } else {
@@ -472,7 +316,7 @@
         const textureInput = document.getElementById('texture-upload');
         const selectedTextureFileNames = document.getElementById('selectedTextureFileNames');
         const textureUploadText = document.getElementById('textureUploadText');
-        
+
         textureInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 const files = Array.from(e.target.files);
@@ -493,13 +337,13 @@
                 // Check file type
                 const validExtensions = ['.obj', '.glb', '.gltf', '.fbx', '.stl'];
                 const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-                
+
                 if (!validExtensions.includes(fileExtension)) {
                     displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, or STL).');
                     return;
                 }
 
-                // Check file size (10MB limit)
+                // Check file size (100MB limit)
                 const maxSize = 100 * 1024 * 1024; // 100MB in bytes
                 if (file.size > maxSize) {
                     displayError('File size exceeds 100MB limit. Please choose a smaller file.');
@@ -510,7 +354,7 @@
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 selectedFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
                 selectedFileName.classList.remove('hidden');
-                
+
                 // Enable submit button
                 const submitBtn = document.getElementById('submitBtn');
                 if (submitBtn) submitBtn.disabled = false;
@@ -518,7 +362,7 @@
                 // Show/hide MTL and texture upload based on file type
                 const mtlUpload = document.getElementById('mtlUpload');
                 const textureUpload = document.getElementById('textureUpload');
-                
+
                 if (fileExtension === '.obj') {
                     mtlUpload?.classList.remove('hidden');
                     textureUpload?.classList.remove('hidden');
@@ -541,32 +385,32 @@
 
         function displayError(message) {
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'bg-red-100 text-red-700 p-4 rounded-lg mb-4';
+            errorDiv.className = 'av-alert av-alert--error';
             errorDiv.innerHTML = `
-                <div class="font-medium">Upload Failed</div>
-                <div class="mt-1 text-sm">${message}</div>
+                <div class="av-alert-title">Upload Failed</div>
+                <div style="margin-top:0.25rem;font-size:0.85rem;">${message}</div>
             `;
-            
+
             // Remove any existing error messages
-            const existingError = uploadForm.querySelector('.bg-red-100');
+            const existingError = uploadForm.querySelector('.av-alert--error');
             if (existingError) {
                 existingError.remove();
             }
-            
+
             // Insert error message at the top of the form
             uploadForm.insertBefore(errorDiv, uploadForm.firstChild);
-            
+
             // Clear the file input
             fileInput.value = '';
             selectedFileName.classList.add('hidden');
         }
 
         function highlight(e) {
-            dropZone.classList.add('border-gray-900', 'dark:border-white', 'bg-gray-50', 'dark:bg-gray-700/50');
+            dropZone.classList.add('is-dragover');
         }
 
         function unhighlight(e) {
-            dropZone.classList.remove('border-gray-900', 'dark:border-white', 'bg-gray-50', 'dark:bg-gray-700/50');
+            dropZone.classList.remove('is-dragover');
         }
 
         function preventDefaults(e) {
@@ -577,24 +421,24 @@
         // Handle form submission
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const fileInput = document.getElementById('file-upload');
             const file = fileInput.files[0];
-            
+
             if (!file) {
                 displayError('Please select a file to upload.');
                 return;
             }
-            
+
             const formData = new FormData();
             formData.append('file', file);
-            
+
             // Check if color should be applied
             const useColorCheckbox = document.getElementById('useColor');
             const shouldApplyColor = useColorCheckbox && useColorCheckbox.checked;
             formData.append('useColor', shouldApplyColor ? 'true' : 'false');
             formData.append('color', document.getElementById('colorPicker').value);
-            
+
             const useMaxDimensionCheckbox = document.getElementById('useMaxDimension');
             const shouldLimitDimension = useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked;
             formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
@@ -604,21 +448,20 @@
             const sourceUnitSelect = document.getElementById('sourceUnit');
             if (sourceUnitSelect) formData.append('sourceUnit', sourceUnitSelect.value);
 
-
             console.log('Upload settings:', {
                 useColor: shouldApplyColor,
                 color: document.getElementById('colorPicker').value,
                 useMaxDimension: shouldLimitDimension,
                 maxDimension: document.getElementById('max-dimension').value
             });
-            
+
             // Add MTL file if present (for OBJ files)
             const mtlInput = document.getElementById('mtl-upload');
             if (mtlInput && mtlInput.files.length > 0) {
                 formData.append('mtl', mtlInput.files[0]);
                 console.log('MTL file added:', mtlInput.files[0].name);
             }
-            
+
             // Add texture files if present (for OBJ files)
             const textureInput = document.getElementById('texture-upload');
             if (textureInput && textureInput.files.length > 0) {
@@ -627,7 +470,7 @@
                     console.log('Texture file added:', textureInput.files[i].name);
                 }
             }
-            
+
             // Reset progress bar and show upload status
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
@@ -637,9 +480,10 @@
 
             progressBar.style.width = '0%';
             progressText.textContent = '0%';
+            uploadStatus.classList.remove('hidden');
             uploadStatus.style.display = 'block';
             uploadResult.style.display = 'none';
-            
+
             let isUploading = true;
             let progress = 0;
 
@@ -670,21 +514,14 @@
                 if (response.success) {
                     uploadResult.className = 'upload-result success';
                     uploadResult.style.display = 'block';
-                    
-                    // Önce progress bar'ı 100% yapalım
+
                     progressBar.style.width = '100%';
                     progressText.textContent = '100%';
                     statusText.textContent = 'Upload completed';
-                    
-                    // Kısa bir gecikme sonra başarı mesajını gösterelim
+
                     setTimeout(() => {
-                        uploadResult.innerHTML = `
-                            <div style="color: var(--text-primary, #111827);" class="dark:text-gray-100">
-                                ${response.message}
-                            </div>
-                        `;
-                        
-                        // 1 saniye sonra yönlendirelim
+                        uploadResult.innerHTML = `<div>${response.message}</div>`;
+
                         setTimeout(() => {
                             window.location.href = response.viewer_url;
                         }, 1000);
@@ -698,20 +535,19 @@
                 progressBar.classList.add('error');
                 uploadResult.className = 'upload-result error';
                 uploadResult.style.display = 'block';
-                uploadResult.innerHTML = `
-                    <div class="text-red-600">
-                        ${error.message}
-                    </div>
-                `;
+                uploadResult.innerHTML = `<div class="av-text-error">${error.message}</div>`;
             });
         });
-    });
-    // Handle max dimension checkbox
-    const useMaxDimension = document.getElementById('useMaxDimension');
-    const maxDimensionInput = document.getElementById('maxDimensionInput');
 
-    useMaxDimension.addEventListener('change', function() {
-        maxDimensionInput.classList.toggle('hidden', !this.checked);
+        // Limit Model Size toggle
+        const useMaxDimension = document.getElementById('useMaxDimension');
+        const maxDimensionInput = document.getElementById('maxDimensionInput');
+        if (useMaxDimension && maxDimensionInput) {
+            useMaxDimension.addEventListener('change', function() {
+                maxDimensionInput.classList.toggle('hidden', !this.checked);
+            });
+        }
     });
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>

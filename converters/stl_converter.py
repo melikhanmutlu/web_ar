@@ -167,7 +167,10 @@ class STLConverter(BaseConverter):
             else:
                 self.log_operation("No scaling applied - max_dimension not set by user")
 
-            # Apply color if specified
+            # Apply color using vertex colors (no UV coordinates needed)
+            # STL meshes have no UV data, so TextureVisuals would create phantom TEXCOORD_0
+            # causing purple striped texture in AR (iOS Quick Look, Android Scene Viewer)
+            # Use ColorVisuals with vertex colors instead
             if color:
                 try:
                     self.log_operation(f"Applying color: {color}")
@@ -180,35 +183,24 @@ class STLConverter(BaseConverter):
                     g = int(hex_color[2:4], 16)
                     b = int(hex_color[4:6], 16)
 
-                    # Create PBR material with the specified color
-                    material = trimesh.visual.material.PBRMaterial(
-                        baseColorFactor=[r / 255.0, g / 255.0, b / 255.0, 1.0],
-                        metallicFactor=0.1,
-                        roughnessFactor=0.9,
-                    )
-
-                    # Apply color to all meshes
+                    # Apply vertex colors only (no TextureVisuals, no phantom UV data)
                     if isinstance(mesh, trimesh.Scene):
                         for geom in mesh.geometry.values():
                             if isinstance(geom, trimesh.Trimesh):
-                                # Apply both material and vertex colors for maximum compatibility
-                                geom.visual = trimesh.visual.TextureVisuals(
-                                    material=material
-                                )
                                 vertex_colors = np.tile(
                                     [r, g, b, 255], (len(geom.vertices), 1)
                                 )
-                                geom.visual.vertex_colors = vertex_colors.astype(
-                                    np.uint8
+                                geom.visual = trimesh.visual.ColorVisuals(
+                                    vertex_colors=vertex_colors.astype(np.uint8)
                                 )
                     else:
-                        # Apply both material and vertex colors for maximum compatibility
-                        mesh.visual = trimesh.visual.TextureVisuals(material=material)
                         vertex_colors = np.tile([r, g, b, 255], (len(mesh.vertices), 1))
-                        mesh.visual.vertex_colors = vertex_colors.astype(np.uint8)
+                        mesh.visual = trimesh.visual.ColorVisuals(
+                            vertex_colors=vertex_colors.astype(np.uint8)
+                        )
 
                     self.log_operation(
-                        f"Color applied successfully: RGB({r}, {g}, {b})"
+                        f"Color applied successfully: RGB({r}, {g}, {b}) using vertex colors (no UV)"
                     )
                 except Exception as e:
                     self.log_operation(
@@ -219,30 +211,38 @@ class STLConverter(BaseConverter):
                     self.log_operation(f"Traceback: {traceback.format_exc()}")
                     # Continue even if color application fails
             else:
-                # No color specified - apply default gray material to ensure visibility
+                # No color specified - apply default gray using vertex colors
                 self.log_operation(
-                    "No color specified - applying default gray material"
+                    "No color specified - applying default gray using vertex colors"
                 )
                 try:
-                    default_material = trimesh.visual.material.PBRMaterial(
-                        baseColorFactor=[0.8, 0.8, 0.8, 1.0],  # Light gray
-                        metallicFactor=0.1,
-                        roughnessFactor=0.9,
-                    )
+                    # Default light gray in RGB(255 scale): [204, 204, 204] = 0.8*255
+                    default_r, default_g, default_b = 204, 204, 204
 
                     if isinstance(mesh, trimesh.Scene):
                         for geom in mesh.geometry.values():
                             if isinstance(geom, trimesh.Trimesh):
-                                geom.visual = trimesh.visual.TextureVisuals(
-                                    material=default_material
+                                vertex_colors = np.tile(
+                                    [default_r, default_g, default_b, 255],
+                                    (len(geom.vertices), 1),
+                                )
+                                geom.visual = trimesh.visual.ColorVisuals(
+                                    vertex_colors=vertex_colors.astype(np.uint8)
                                 )
                     else:
-                        mesh.visual = trimesh.visual.TextureVisuals(
-                            material=default_material
+                        vertex_colors = np.tile(
+                            [default_r, default_g, default_b, 255], (len(mesh.vertices), 1)
                         )
+                        mesh.visual = trimesh.visual.ColorVisuals(
+                            vertex_colors=vertex_colors.astype(np.uint8)
+                        )
+
+                    self.log_operation(
+                        f"Default gray applied using vertex colors (no UV/texture data)"
+                    )
                 except Exception as e:
                     self.log_operation(
-                        f"Warning: Could not apply default material: {str(e)}",
+                        f"Warning: Could not apply default color: {str(e)}",
                         "WARNING",
                     )
 

@@ -38,6 +38,7 @@ import qrcode
 from slugify import slugify
 import trimesh
 from converters import OBJConverter, FBXConverter, STLConverter
+from converters.glb_optimizer import optimize_glb
 import numpy as np
 from glb_modifier import modify_glb, normalize_model_to_center
 from mesh_slicer import slice_mesh, get_mesh_bounds
@@ -1609,6 +1610,14 @@ def upload_model():
         else:
             logger.info(
                 f"[upload_model - {unique_id}] Scaling handled by converter or not requested."
+            )
+
+        # Optional, fail-safe GLB compression (no-op unless GLB_OPTIMIZE=true)
+        try:
+            optimize_glb(output_path)
+        except Exception as e:
+            logger.warning(
+                f"[upload_model - {unique_id}] GLB optimization skipped: {e}"
             )
 
         # Check file size before saving to DB

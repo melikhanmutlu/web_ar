@@ -10,6 +10,7 @@
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
     "fbx2gltf": "^0.9.7-p1",
+    "gltfpack": "^1.1.0",
     "obj2gltf": "^3.1.6",
     "three": "^0.182.0"
   },

@@ -16,11 +16,8 @@
     <!-- QR Code library -->
     <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
 
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Lucide Icons (pinned to avoid breaking changes from @latest) -->
+    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
 
     <!-- Tailwind Configuration -->
     <script>
@@ -676,10 +673,7 @@
                         window.URL.revokeObjectURL(url);
                     }, 100);
                     // Track download
-                    fetch('/api/models/{{ model_id }}/track-download', { method: 'POST' })
-                        .then(r => r.json())
-                        .then(d => { const el = document.getElementById('statDownloads'); if (el) el.textContent = d.downloads; })
-                        .catch(() => {});
+                    fetch('/api/models/{{ model_id }}/track-download', { method: 'POST' }).catch(() => {});
                 } catch (error) {
                     console.error('Download error:', error);
                     alert('Failed to download model. Please try again.');
@@ -697,8 +691,6 @@
                     } else {
                         btn.classList.remove('is-liked');
                     }
-                    const el = document.getElementById('statLikes');
-                    if (el) el.textContent = data.count;
                 } catch (e) { console.error('Like error:', e); }
             });
 
@@ -728,10 +720,7 @@
                         btn.title = 'Link copied!';
                         setTimeout(() => { btn.title = 'Share'; }, 2000);
                     }
-                    const resp = await fetch('/api/models/{{ model_id }}/share', { method: 'POST' });
-                    const data = await resp.json();
-                    const el = document.getElementById('statShares');
-                    if (el) el.textContent = data.shares;
+                    await fetch('/api/models/{{ model_id }}/share', { method: 'POST' });
                 } catch (e) { if (e.name !== 'AbortError') console.error('Share error:', e); }
             });
 
@@ -2165,7 +2154,7 @@ void main() {
                         Model Information
                     </h3>
                     <button id="closeModalButton" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <i data-lucide="package"></i>
+                        <i data-lucide="x"></i>
                     </button>
                 </div>
 
@@ -2777,14 +2766,8 @@ void main() {
             const ry = parseFloat(rotateYSlider?.value || 0);
             const rz = parseFloat(rotateZSlider?.value || 0);
 
-            const scaleValue = s + ' ' + s + ' ' + s;
-            const orientationValue = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
-
-            modelViewer.scale = scaleValue;
-            modelViewer.orientation = orientationValue;
-            modelViewer.setAttribute('scale', scaleValue);
-            modelViewer.setAttribute('orientation', orientationValue);
-
+            // NOTE: model-viewer has no `scale`/`orientation` attributes — transform is
+            // applied directly to the underlying THREE.js scene below.
             const scene = modelViewer.model?.scene;
             if (scene?.scale?.setScalar) {
                 scene.scale.setScalar(s);
@@ -2850,11 +2833,9 @@ void main() {
                 if (rotateXValue) rotateXValue.textContent = '0\u00B0';
                 if (rotateYValue) rotateYValue.textContent = '0\u00B0';
                 if (rotateZValue) rotateZValue.textContent = '0\u00B0';
-                if (modelViewer) {
-                    modelViewer.scale = '1 1 1';
-                    modelViewer.orientation = '0deg 0deg 0deg';
-                }
-                forceModelViewerRefresh();
+                // Apply the reset values to the actual THREE.js scene (applyTransform
+                // reads the sliders and calls forceModelViewerRefresh internally).
+                applyTransform();
             });
 
             transformEditorInitialized = true;
@@ -2877,7 +2858,9 @@ void main() {
                 if (_rxSlider) { _rxSlider.value = rx; if (_rxVal) _rxVal.textContent = rx + '\u00B0'; }
                 if (_rySlider) { _rySlider.value = ry; if (_ryVal) _ryVal.textContent = ry + '\u00B0'; }
                 if (_rzSlider) { _rzSlider.value = rz; if (_rzVal) _rzVal.textContent = rz + '\u00B0'; }
-                if (modelViewer) modelViewer.orientation = rx + 'deg ' + ry + 'deg ' + rz + 'deg';
+                // Apply the stored rotation to the actual THREE.js scene once the model
+                // has loaded (the scene is not available until then).
+                modelViewer?.addEventListener('load', () => applyTransform(), { once: true });
             }
         })();
         {% endif %}

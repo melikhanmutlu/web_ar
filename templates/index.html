@@ -104,17 +104,17 @@
                         </div>
                     </div>
 
-                    <!-- STL Source Unit (shown only for .stl uploads) -->
-                    <div id="stlUnitSection" class="hidden bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
+                    <!-- Source Unit (shown for unitless .stl / .obj uploads) -->
+                    <div id="sourceUnitSection" class="hidden bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
                         <div class="flex items-center justify-between gap-4">
                             <div>
-                                <span class="text-gray-900 dark:text-white font-semibold text-lg">STL Unit</span>
-                                <p class="text-gray-500 dark:text-gray-400 text-sm">STL files are unitless — choose how to interpret the source size.</p>
+                                <span class="text-gray-900 dark:text-white font-semibold text-lg">Source Unit</span>
+                                <p class="text-gray-500 dark:text-gray-400 text-sm">STL/OBJ files are unitless — choose how to interpret the source size.</p>
                             </div>
-                            <select id="stlUnit" name="stlUnit"
+                            <select id="sourceUnit" name="sourceUnit"
                                 class="px-3 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500">
                                 <option value="mm">Millimeters (mm)</option>
-                                <option value="cm" selected>Centimeters (cm)</option>
+                                <option value="cm">Centimeters (cm)</option>
                                 <option value="m">Meters (m)</option>
                             </select>
                         </div>
@@ -527,9 +527,15 @@
                     textureUpload?.classList.add('hidden');
                 }
 
-                // STL unit selector is only meaningful for unitless STL files
-                const stlUnitSection = document.getElementById('stlUnitSection');
-                stlUnitSection?.classList.toggle('hidden', fileExtension !== '.stl');
+                // Source-unit selector is only meaningful for unitless STL/OBJ files.
+                // Default differs by type: STL historically cm→m, OBJ historically as-is (m).
+                const sourceUnitSection = document.getElementById('sourceUnitSection');
+                const sourceUnitSelect = document.getElementById('sourceUnit');
+                const unitlessType = (fileExtension === '.stl' || fileExtension === '.obj');
+                sourceUnitSection?.classList.toggle('hidden', !unitlessType);
+                if (sourceUnitSelect && unitlessType) {
+                    sourceUnitSelect.value = (fileExtension === '.stl') ? 'cm' : 'm';
+                }
             }
         }
 
@@ -594,9 +600,9 @@
             formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
             formData.append('maxDimension', document.getElementById('max-dimension').value);
 
-            // STL source unit (ignored by the backend for non-STL files)
-            const stlUnitSelect = document.getElementById('stlUnit');
-            if (stlUnitSelect) formData.append('stlUnit', stlUnitSelect.value);
+            // Source unit for unitless STL/OBJ (ignored by the backend for other types)
+            const sourceUnitSelect = document.getElementById('sourceUnit');
+            if (sourceUnitSelect) formData.append('sourceUnit', sourceUnitSelect.value);
 
 
             console.log('Upload settings:', {

@@ -1283,10 +1283,21 @@ void main() {
             // Apply clipping via shader injection
             function applyClippingPlanes() {
                 discoverInternals();
+                const _slicerWarnEl = document.getElementById('slicerPreviewWarn');
                 if (!_mvScene) {
                     console.error('[Slicer] Scene not ready yet');
+                    // The scene may just not be ready yet (render pump retries discovery).
+                    // Only surface a warning if it's STILL unreachable shortly after.
+                    if (!_previewWarnTimer) {
+                        _previewWarnTimer = setTimeout(() => {
+                            _previewWarnTimer = null;
+                            discoverInternals();
+                            if (!_mvScene && _slicerWarnEl) _slicerWarnEl.classList.remove('hidden');
+                        }, 1200);
+                    }
                     return;
                 }
+                if (_slicerWarnEl) _slicerWarnEl.classList.add('hidden');
 
                 // Patch all mesh materials with our custom shader clipping
                 let meshCount = 0;
@@ -1356,6 +1367,10 @@ void main() {
                     } catch(e) {}
                 }
             }
+
+            // Deferred "preview unavailable" warning timer (avoids false alarms while
+            // model-viewer's internal scene is still initialising).
+            let _previewWarnTimer = null;
 
             // Render pump - continuously re-renders while clipping is active
             let _renderPumpId = null;
@@ -2019,6 +2034,7 @@ void main() {
                 </button>
                 <div class="tp-section-body" id="slicerPanel">
                     <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
+                    <p id="slicerPreviewWarn" class="tp-note hidden" style="margin-bottom:0.5rem;color:#f59e0b;">Live preview isn't available in this browser — the slice will still apply correctly when you press Apply.</p>
 
                     <!-- X Axis -->
                     <div class="tp-slicer-axis" id="slicerAxisX">

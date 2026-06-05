@@ -38,10 +38,16 @@ def is_valid_extension(filename, extensions):
 
 
 class OBJConverter(BaseConverter):
+    # OBJ is effectively unitless; map the user-declared source unit to metres.
+    # NOTE: unlike STL (which historically forced cm→m), OBJ historically applied
+    # NO unit scaling, so the default here is "m" (no scaling) for backward compat.
+    _UNIT_TO_METERS = {"mm": 0.001, "cm": 0.01, "m": 1.0}
+
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.supported_extensions = {".obj"}
+        self.source_unit = "m"
 
         # Resolve npx from PATH first (works on every OS / install location);
         # fall back to the common Windows install path, then a bare "npx".
@@ -55,6 +61,22 @@ class OBJConverter(BaseConverter):
 
         self.texture_files: List[str] = []
         self.mtl_file: Optional[str] = None
+
+    def set_source_unit(self, unit: str) -> None:
+        """Set the assumed source unit of the OBJ file (mm | cm | m).
+
+        Default 'm' means no scaling (obj2gltf output is treated as metres),
+        preserving the original behaviour.
+        """
+        unit = (unit or "").strip().lower()
+        if unit in self._UNIT_TO_METERS:
+            self.source_unit = unit
+            self.log_operation(f"OBJ source unit set to '{unit}'")
+        else:
+            self.log_operation(
+                f"Unknown OBJ source unit '{unit}', keeping '{self.source_unit}'",
+                "WARNING",
+            )
 
     def validate(self, file_path: str) -> bool:
         """
@@ -183,6 +205,9 @@ class OBJConverter(BaseConverter):
             # Determine if we need post-processing
             needs_color = color and not (self.mtl_file or self.texture_files)
             needs_scaling = False
+            # Unit conversion is needed whenever the user picked a non-metre source unit.
+            needs_unit_scale = self.source_unit != "m"
+            unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 1.0)
 
             # Check if scaling is needed
             try:
@@ -218,14 +243,26 @@ class OBJConverter(BaseConverter):
                 )
 
             # Only reload and process if needed
-            if needs_color or needs_scaling:
+            if needs_color or needs_scaling or needs_unit_scale:
                 try:
                     self.log_operation(
-                        f"Post-processing GLB - color: {needs_color}, scaling: {needs_scaling}"
+                        f"Post-processing GLB - color: {needs_color}, scaling: {needs_scaling}, unit: {self.source_unit}"
                     )
                     mesh = trimesh.load(output_path)
 
-                    # Apply scaling first (if needed)
+                    # Apply source-unit conversion first (before any max_dimension limit)
+                    if needs_unit_scale:
+                        self.log_operation(
+                            f"Applying {self.source_unit}->m unit scale: {unit_scale}"
+                        )
+                        if isinstance(mesh, trimesh.Scene):
+                            for geom in mesh.geometry.values():
+                                if isinstance(geom, trimesh.Trimesh):
+                                    geom.apply_scale(unit_scale)
+                        else:
+                            mesh.apply_scale(unit_scale)
+
+                    # Apply max-dimension scaling (recomputed on the unit-scaled mesh)
                     if needs_scaling:
                         if isinstance(mesh, trimesh.Scene):
                             bounds = mesh.bounds

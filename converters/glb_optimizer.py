@@ -28,6 +28,31 @@ def _safe_remove(path: str) -> None:
         pass
 
 
+def glb_requires_meshopt(glb_path: str) -> bool:
+    """Return True if the GLB requires KHR_meshopt_compression.
+
+    gltfpack output (when GLB_OPTIMIZE is on) uses meshopt compression, which
+    trimesh CANNOT decode. Editing such a file (slice / material / transform) would
+    silently corrupt it, so callers should refuse to edit when this returns True.
+    """
+    try:
+        if not glb_path or not os.path.exists(glb_path):
+            return False
+        from pygltflib import GLTF2
+
+        gltf = GLTF2().load(glb_path)
+        required = list(getattr(gltf, "extensionsRequired", None) or [])
+        return "KHR_meshopt_compression" in required
+    except Exception:
+        # Dependency-light fallback: scan the GLB JSON chunk for the extension name.
+        try:
+            with open(glb_path, "rb") as f:
+                head = f.read(262144)
+            return b"KHR_meshopt_compression" in head
+        except Exception:
+            return False
+
+
 def _resolve_gltfpack():
     """Return a runnable gltfpack command prefix, or None if unavailable."""
     direct = shutil.which("gltfpack")

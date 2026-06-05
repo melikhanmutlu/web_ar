@@ -1315,6 +1315,8 @@ def upload_file():
         # Convert based on file type
         if file_extension == ".obj":
             converter = OBJConverter()
+            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
+            converter.set_source_unit(request.form.get("sourceUnit", "m"))
 
             # Handle MTL file for OBJ
             if "mtl" in request.files:
@@ -1339,7 +1341,7 @@ def upload_file():
 
         elif file_extension == ".stl":
             converter = STLConverter()
-            converter.set_source_unit(request.form.get("stlUnit", "cm"))
+            converter.set_source_unit(request.form.get("sourceUnit", "cm"))
         elif file_extension == ".fbx":
             converter = FBXConverter()
             # Set texture removal for FBX if requested
@@ -1485,6 +1487,8 @@ def upload_model():
         converter = None
         if file_extension == ".obj":
             converter = OBJConverter()
+            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
+            converter.set_source_unit(request.form.get("sourceUnit", "m"))
 
             # Handle MTL file for OBJ
             if "mtl" in request.files:
@@ -1515,7 +1519,7 @@ def upload_model():
             converter = STLConverter()
             # STL is unitless — let the user declare the source unit (mm|cm|m),
             # defaulting to cm for backward compatibility.
-            converter.set_source_unit(request.form.get("stlUnit", "cm"))
+            converter.set_source_unit(request.form.get("sourceUnit", "cm"))
         elif file_extension == ".fbx":
             converter = FBXConverter()
         elif file_extension in (".glb", ".gltf"):
@@ -3399,6 +3403,17 @@ def save_modifications():
             logger.error(f"Current model.glb not found: {current_model_path}")
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
+        # Refuse to edit meshopt-compressed GLBs (trimesh cannot decode them).
+        from converters.glb_optimizer import glb_requires_meshopt
+
+        if glb_requires_meshopt(current_model_path):
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "This model is compressed (meshopt) and cannot be modified. Re-upload it without optimization to edit.",
+                }
+            ), 400
+
         logger.info(
             f"[save_modifications] Using current model.glb as base: {current_model_path}"
         )
@@ -3597,6 +3612,17 @@ def slice_model():
             return jsonify(
                 {"success": False, "error": f"Model not found at {input_path}"}
             ), 404
+
+        # Refuse to edit meshopt-compressed GLBs (trimesh cannot decode them).
+        from converters.glb_optimizer import glb_requires_meshopt
+
+        if glb_requires_meshopt(input_path):
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "This model is compressed (meshopt) and cannot be sliced. Re-upload it without optimization to edit.",
+                }
+            ), 400
 
         # Create backup
         import time

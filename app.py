@@ -3540,17 +3540,33 @@ def api_get_mesh_bounds_route(model_id):
 def slice_model():
     """Slice a 3D model with a plane"""
     try:
-        from mesh_slicer import slice_mesh
+        from mesh_slicer import slice_mesh_multi
 
         data = request.json
         model_id = data.get("model_id")
-        plane_origin = data.get("plane_origin")  # [x, y, z]
-        plane_normal = data.get("plane_normal")  # [x, y, z]
-        keep_side = data.get("keep_side", "positive")  # 'positive' or 'negative'
 
-        logger.info(f"[slice_model] Received request for model_id: {model_id}")
+        # Accept either the new atomic multi-plane payload (`planes`) or the legacy
+        # single-plane fields. Everything is funnelled through one multi-plane slice
+        # so X+Y+Z is applied in a single pass producing ONE backup + ONE version.
+        planes = data.get("planes")
+        if not planes:
+            single_origin = data.get("plane_origin")
+            single_normal = data.get("plane_normal")
+            if single_origin and single_normal:
+                planes = [
+                    {
+                        "plane_origin": single_origin,
+                        "plane_normal": single_normal,
+                        "keep_side": data.get("keep_side", "positive"),
+                    }
+                ]
 
-        if not all([model_id, plane_origin, plane_normal]):
+        logger.info(
+            f"[slice_model] Received request for model_id: {model_id}, "
+            f"{len(planes) if planes else 0} plane(s)"
+        )
+
+        if not model_id or not planes:
             return jsonify(
                 {"success": False, "error": "Missing required parameters"}
             ), 400
@@ -3603,13 +3619,12 @@ def slice_model():
             f"temp_sliced_{int(time.time())}.glb",
         )
 
-        success = slice_mesh(
+        slice_result = slice_mesh_multi(
             input_path=input_path,
             output_path=temp_output,
-            plane_origin=plane_origin,
-            plane_normal=plane_normal,
-            keep_side=keep_side,
+            planes=planes,
         )
+        success = bool(slice_result.get("success"))
 
         if success and os.path.exists(temp_output):
             # Replace original with sliced version
@@ -3647,29 +3662,32 @@ def slice_model():
             except Exception as dim_error:
                 logger.error(f"[slice_model] Failed to update dimensions: {dim_error}")
 
-            # Create version entry
+            # Create a SINGLE version entry for the whole multi-plane slice
             try:
+                axis_count = len(planes)
                 create_version(
                     model_id=model_id,
                     operation_type="slice",
-                    operation_details={
-                        "plane_origin": plane_origin,
-                        "plane_normal": plane_normal,
-                        "keep_side": keep_side,
-                    },
-                    comment=f"Sliced model (keep {keep_side} side)",
+                    operation_details={"planes": planes},
+                    comment=f"Sliced model ({axis_count} plane(s))",
                 )
                 logger.info(f"[slice_model] Created version entry for {model_id}")
             except Exception as version_error:
                 logger.error(f"[slice_model] Failed to create version: {version_error}")
 
-            return jsonify(
-                {
-                    "success": True,
-                    "message": "Model sliced successfully",
-                    "backup": os.path.basename(backup_path),
-                }
-            )
+            response = {
+                "success": True,
+                "message": "Model sliced successfully",
+                "backup": os.path.basename(backup_path),
+            }
+            # Surface near-flat results so the UI can warn the user instead of
+            # silently producing a degenerate model.
+            if slice_result.get("degenerate"):
+                response["warning"] = (
+                    "The slice result is nearly flat — one dimension is almost zero. "
+                    "Check the kept side / slider position."
+                )
+            return jsonify(response)
         else:
             logger.error("[slice_model] Slicing failed")
             return jsonify({"success": False, "error": "Failed to slice model"}), 500

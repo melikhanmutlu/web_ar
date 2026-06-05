@@ -221,7 +221,7 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
     Tries trimesh.slice_plane first, falls back to manual face-mask.
     Returns sliced mesh or None if result is empty.
     """
-    # --- Primary: trimesh built-in ---
+    # --- Primary: trimesh built-in, capped (needs shapely for cap triangulation) ---
     try:
         sliced = mesh.slice_plane(
             plane_origin=plane_origin,
@@ -231,9 +231,24 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
         if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
             return sliced
     except Exception as e:
-        logger.warning(f"slice_plane failed ({e}), using fallback")
+        logger.warning(f"slice_plane(cap=True) failed ({e}), trying cap=False")
 
-    # --- Fallback: manual face-mask ---
+    # --- Secondary: proper geometric cut WITHOUT a cap (open cross-section).
+    # Still cuts straddling faces correctly (new vertices on the plane), so the
+    # result keeps its real 3D shape instead of collapsing to a flat shell. ---
+    try:
+        sliced = mesh.slice_plane(
+            plane_origin=plane_origin,
+            plane_normal=plane_normal,
+            cap=False,
+        )
+        if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
+            return sliced
+    except Exception as e:
+        logger.warning(f"slice_plane(cap=False) failed ({e}), using face-mask fallback")
+
+    # --- Last resort: crude per-face mask (no face cutting; may look flat).
+    # Only reached if trimesh slicing is entirely unavailable. ---
     try:
         vertices = mesh.vertices
         distances = np.dot(vertices - plane_origin, plane_normal)
@@ -366,6 +381,89 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
         return False
 
 
+def slice_mesh_multi(input_path, output_path, planes):
+    """
+    Slice a GLB mesh with several planes in ONE pass (atomic multi-axis slice).
+
+    Loads the mesh once, applies each plane sequentially in-memory, then exports
+    once and re-injects the original PBR materials. This is the atomic equivalent
+    of calling slice_mesh() repeatedly, but produces a single output/version.
+
+    Args:
+        input_path:  Path to input GLB
+        output_path: Path to output GLB
+        planes:      list of dicts, each: {plane_origin:[x,y,z],
+                     plane_normal:[x,y,z], keep_side:'positive'|'negative'}
+
+    Returns:
+        dict: {'success': bool, 'degenerate': bool, 'extents': [x,y,z] | None}
+    """
+    try:
+        if not planes:
+            return {"success": False, "degenerate": False, "extents": None}
+
+        # ── Step 1: Save original PBR materials ──
+        mat_data = _extract_material_data(input_path)
+
+        # ── Step 2: Load mesh once, apply every plane sequentially ──
+        loaded = trimesh.load(input_path, force=None)
+        if isinstance(loaded, trimesh.Scene):
+            logger.info(
+                f"[multi] Scene with {len(loaded.geometry)} geometries — dumping to world space"
+            )
+            combined = loaded.dump(concatenate=True)
+        elif isinstance(loaded, trimesh.Trimesh):
+            combined = loaded
+        else:
+            logger.error(f"[multi] Unexpected type from trimesh.load: {type(loaded)}")
+            return {"success": False, "degenerate": False, "extents": None}
+
+        if combined is None or len(getattr(combined, "vertices", [])) == 0:
+            logger.error("[multi] Mesh is empty after loading")
+            return {"success": False, "degenerate": False, "extents": None}
+
+        current = combined
+        for i, plane in enumerate(planes):
+            origin, normal = _normalize_plane(
+                plane.get("plane_origin"),
+                plane.get("plane_normal"),
+                plane.get("keep_side", "positive"),
+            )
+            logger.info(f"[multi] plane {i}: origin={origin}, normal={normal}")
+            sliced = _slice_single_mesh(current, origin, normal)
+            if sliced is None or len(sliced.vertices) == 0:
+                logger.error(f"[multi] Slicing resulted in empty mesh at plane {i}")
+                return {"success": False, "degenerate": False, "extents": None}
+            current = sliced
+
+        # ── Degenerate (near-flat) detection ──
+        extents = (current.bounds[1] - current.bounds[0])
+        degenerate = bool(np.any(extents < 1e-4))
+        logger.info(
+            f"[multi] Final sliced mesh: {len(current.vertices)} verts, "
+            f"extents={extents.tolist()}, degenerate={degenerate}"
+        )
+
+        current.export(output_path, file_type="glb")
+
+        # ── Step 3: Re-inject original PBR materials ──
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            if mat_data:
+                _inject_materials(output_path, mat_data)
+            logger.info(f"[multi] Exported sliced model: {os.path.getsize(output_path)} bytes")
+            return {
+                "success": True,
+                "degenerate": degenerate,
+                "extents": [float(e) for e in extents],
+            }
+        logger.error("[multi] Output file missing or empty after export")
+        return {"success": False, "degenerate": False, "extents": None}
+
+    except Exception as e:
+        logger.error(f"slice_mesh_multi error: {e}", exc_info=True)
+        return {"success": False, "degenerate": False, "extents": None}
+
+
 def get_mesh_bounds(glb_path):
     """
     Get the bounding box of a mesh in mesh-space coordinates.
@@ -389,7 +487,9 @@ def get_mesh_bounds(glb_path):
             return None
 
         bounds = combined.bounds      # (2, 3)
-        center = combined.centroid    # (3,)
+        # Geometric bounding-box center (NOT centroid/center-of-mass) so the slicer
+        # slider starts at the visual middle of each axis for asymmetric meshes.
+        center = (bounds[0] + bounds[1]) / 2.0
 
         return {
             'min':    {'x': float(bounds[0][0]), 'y': float(bounds[0][1]), 'z': float(bounds[0][2])},

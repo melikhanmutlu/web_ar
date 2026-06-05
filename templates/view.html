@@ -1564,30 +1564,30 @@ void main() {
                 spinner?.classList.remove('hidden');
 
                 try {
-                    // Apply slices sequentially (each one modifies the model)
-                    for (const axis of enabledAxes) {
+                    // Build every enabled axis as one atomic multi-plane slice so the
+                    // whole operation produces a SINGLE backup + version.
+                    const planes = enabledAxes.map(axis => {
                         const state = slicerAxes[axis];
                         const planeNormal = [0, 0, 0];
                         const planeOrigin = [0, 0, 0];
-                        if (axis === 'x') { planeNormal[0] = 1; planeOrigin[0] = state.value; }
-                        if (axis === 'y') { planeNormal[1] = 1; planeOrigin[1] = state.value; }
-                        if (axis === 'z') { planeNormal[2] = 1; planeOrigin[2] = state.value; }
+                        const idx = { x: 0, y: 1, z: 2 }[axis];
+                        planeNormal[idx] = 1;
+                        planeOrigin[idx] = state.value;
+                        return { plane_origin: planeOrigin, plane_normal: planeNormal, keep_side: state.side };
+                    });
 
-                        const response = await fetch('/slice_model', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                model_id: '{{ model_unique_id }}',
-                                plane_origin: planeOrigin,
-                                plane_normal: planeNormal,
-                                keep_side: state.side
-                            })
-                        });
-                        const result = await response.json();
-                        if (!result.success && result.status !== 'success') {
-                            alert('Slice failed on ' + axis.toUpperCase() + ' axis: ' + (result.error || result.message));
-                            return;
-                        }
+                    const response = await fetch('/slice_model', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model_id: '{{ model_unique_id }}', planes: planes })
+                    });
+                    const result = await response.json();
+                    if (!result.success) {
+                        alert('Slice failed: ' + (result.error || result.message || 'Unknown error'));
+                        return;
+                    }
+                    if (result.warning) {
+                        alert(result.warning);
                     }
                     window.location.reload();
                 } catch (error) {
@@ -2018,7 +2018,7 @@ void main() {
                     <i data-lucide="chevron-down" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="slicerPanel">
-                    <p class="tp-note" style="margin-bottom:0.5rem;">Enable axis, adjust slider, then apply.</p>
+                    <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
 
                     <!-- X Axis -->
                     <div class="tp-slicer-axis" id="slicerAxisX">
@@ -2029,8 +2029,8 @@ void main() {
                                 <span class="tp-axis-dim">(Width)</span>
                             </label>
                             <div style="display:flex;gap:2px;">
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="x" data-side="positive">+ Keep</button>
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="x" data-side="negative">- Keep</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="x" data-side="positive" title="Keep the +X (right) side">Keep ▶</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="x" data-side="negative" title="Keep the −X (left) side">◀ Keep</button>
                             </div>
                         </div>
                         <input type="range" class="slicer-slider tp-range" data-axis="x" disabled min="-1" max="1" step="0.01" value="0">
@@ -2050,8 +2050,8 @@ void main() {
                                 <span class="tp-axis-dim">(Height)</span>
                             </label>
                             <div style="display:flex;gap:2px;">
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="y" data-side="positive">+ Keep</button>
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="y" data-side="negative">- Keep</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="y" data-side="positive" title="Keep the +Y (top) side">Keep ▲</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="y" data-side="negative" title="Keep the −Y (bottom) side">▼ Keep</button>
                             </div>
                         </div>
                         <input type="range" class="slicer-slider tp-range" data-axis="y" disabled min="-1" max="1" step="0.01" value="0">
@@ -2071,8 +2071,8 @@ void main() {
                                 <span class="tp-axis-dim">(Depth)</span>
                             </label>
                             <div style="display:flex;gap:2px;">
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="z" data-side="positive">+ Keep</button>
-                                <button class="slicer-side-btn tp-slicer-side" data-axis="z" data-side="negative">- Keep</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="z" data-side="positive" title="Keep the +Z (front) side">Keep ⊙</button>
+                                <button class="slicer-side-btn tp-slicer-side" data-axis="z" data-side="negative" title="Keep the −Z (back) side">⊗ Keep</button>
                             </div>
                         </div>
                         <input type="range" class="slicer-slider tp-range" data-axis="z" disabled min="-1" max="1" step="0.01" value="0">

@@ -103,7 +103,23 @@
                             </div>
                         </div>
                     </div>
-                    
+
+                    <!-- STL Source Unit (shown only for .stl uploads) -->
+                    <div id="stlUnitSection" class="hidden bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
+                        <div class="flex items-center justify-between gap-4">
+                            <div>
+                                <span class="text-gray-900 dark:text-white font-semibold text-lg">STL Unit</span>
+                                <p class="text-gray-500 dark:text-gray-400 text-sm">STL files are unitless — choose how to interpret the source size.</p>
+                            </div>
+                            <select id="stlUnit" name="stlUnit"
+                                class="px-3 py-2 text-gray-900 dark:text-white bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500">
+                                <option value="mm">Millimeters (mm)</option>
+                                <option value="cm" selected>Centimeters (cm)</option>
+                                <option value="m">Meters (m)</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Color Input -->
                     <div class="bg-white dark:bg-gray-800/50 rounded-xl p-6 border border-gray-200 dark:border-gray-700 transition-all duration-300">
                         <div class="flex items-center justify-between gap-4">
@@ -510,6 +526,10 @@
                     mtlUpload?.classList.add('hidden');
                     textureUpload?.classList.add('hidden');
                 }
+
+                // STL unit selector is only meaningful for unitless STL files
+                const stlUnitSection = document.getElementById('stlUnitSection');
+                stlUnitSection?.classList.toggle('hidden', fileExtension !== '.stl');
             }
         }
 
@@ -573,8 +593,12 @@
             const shouldLimitDimension = useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked;
             formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
             formData.append('maxDimension', document.getElementById('max-dimension').value);
-            
-            
+
+            // STL source unit (ignored by the backend for non-STL files)
+            const stlUnitSelect = document.getElementById('stlUnit');
+            if (stlUnitSelect) formData.append('stlUnit', stlUnitSelect.value);
+
+
             console.log('Upload settings:', {
                 useColor: shouldApplyColor,
                 color: document.getElementById('colorPicker').value,

@@ -39,10 +39,27 @@ logger = logging.getLogger(__name__)
 class STLConverter(BaseConverter):
     """Converter for STL files to GLB format using trimesh."""
 
+    # STL files are unitless; map the user-declared source unit to metres
+    # (GLB standard). "cm" stays the default for backward compatibility.
+    _UNIT_TO_METERS = {"mm": 0.001, "cm": 0.01, "m": 1.0}
+
     def __init__(self):
         super().__init__()
         self.supported_extensions = {".stl"}
         self.logger = logging.getLogger(__name__)
+        self.source_unit = "cm"
+
+    def set_source_unit(self, unit: str) -> None:
+        """Set the assumed source unit of the STL file (mm | cm | m)."""
+        unit = (unit or "").strip().lower()
+        if unit in self._UNIT_TO_METERS:
+            self.source_unit = unit
+            self.log_operation(f"STL source unit set to '{unit}'")
+        else:
+            self.log_operation(
+                f"Unknown STL source unit '{unit}', keeping '{self.source_unit}'",
+                "WARNING",
+            )
 
     def validate(self, file_path: str) -> bool:
         """
@@ -135,11 +152,14 @@ class STLConverter(BaseConverter):
             mesh.apply_transform(basis_correction)
             self.log_operation("Applied basis correction: -90° around X (Z-up to Y-up)")
 
-            # STL files are unitless; most CAD tools export in mm or cm.
-            # GLB standard requires meters. Apply cm→m conversion (÷100) unconditionally
-            # so the model appears at the correct real-world scale in model-viewer and AR.
-            mesh.apply_scale(0.01)
-            self.log_operation("Applied cm→m unit conversion: scale 0.01 (STL assumed cm)")
+            # STL files are unitless; GLB standard requires meters. Convert from the
+            # user-declared source unit (default cm) so the model appears at the correct
+            # real-world scale in model-viewer and AR.
+            unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 0.01)
+            mesh.apply_scale(unit_scale)
+            self.log_operation(
+                f"Applied {self.source_unit}→m unit conversion: scale {unit_scale}"
+            )
 
             # Get model dimensions (now in meters, consistent with GLB standard)
             extents = mesh.extents

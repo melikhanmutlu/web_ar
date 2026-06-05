@@ -1338,6 +1338,7 @@ def upload_file():
 
         elif file_extension == ".stl":
             converter = STLConverter()
+            converter.set_source_unit(request.form.get("stlUnit", "cm"))
         elif file_extension == ".fbx":
             converter = FBXConverter()
             # Set texture removal for FBX if requested
@@ -1511,6 +1512,9 @@ def upload_model():
 
         elif file_extension == ".stl":
             converter = STLConverter()
+            # STL is unitless — let the user declare the source unit (mm|cm|m),
+            # defaulting to cm for backward compatibility.
+            converter.set_source_unit(request.form.get("stlUnit", "cm"))
         elif file_extension == ".fbx":
             converter = FBXConverter()
         elif file_extension in (".glb", ".gltf"):

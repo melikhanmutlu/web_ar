@@ -43,13 +43,15 @@ class OBJConverter(BaseConverter):
         self.logger = logging.getLogger(__name__)
         self.supported_extensions = {".obj"}
 
-        # Platform-aware npx path
-        if platform.system() == "Windows":
-            self.npx_path = r"C:\Program Files\nodejs\npx.cmd"
-        else:
-            # Linux/Mac - use npx from PATH
-            npx_location = shutil.which("npx")
-            self.npx_path = npx_location if npx_location else "npx"
+        # Resolve npx from PATH first (works on every OS / install location);
+        # fall back to the common Windows install path, then a bare "npx".
+        self.npx_path = shutil.which("npx")
+        if not self.npx_path:
+            if platform.system() == "Windows":
+                default_win = r"C:\Program Files\nodejs\npx.cmd"
+                self.npx_path = default_win if os.path.exists(default_win) else "npx"
+            else:
+                self.npx_path = "npx"
 
         self.texture_files: List[str] = []
         self.mtl_file: Optional[str] = None

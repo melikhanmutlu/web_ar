@@ -220,6 +220,33 @@ a { color: inherit; }
 .dark .av-switch-text { color: var(--color-gray-100); }
 
 /* ===================================================================
+   Tabs (Upload / Generate)
+   =================================================================== */
+.av-tabs { display: flex; gap: 0; border: 1px solid var(--color-gray-200); margin-bottom: var(--spacing-2xl); }
+.dark .av-tabs { border-color: var(--color-gray-700); }
+.av-tabs--sub { margin-bottom: var(--spacing-lg); }
+.av-tab {
+    flex: 1; padding: 0.6rem 0.8rem; background: transparent; border: none;
+    border-right: 1px solid var(--color-gray-200);
+    color: var(--color-gray-500); font-family: inherit; font-size: 0.8rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.av-tab:last-child { border-right: none; }
+.dark .av-tab { border-color: var(--color-gray-700); color: var(--color-gray-400); }
+.av-tab:hover { color: var(--color-gray-900); }
+.dark .av-tab:hover { color: var(--color-gray-200); }
+.av-tab.is-active { background: var(--color-gray-900); color: var(--color-white); }
+.dark .av-tab.is-active { background: var(--color-gray-200); color: var(--color-gray-900); }
+
+.av-textarea {
+    width: 100%; background: var(--color-white); border: 1px solid var(--color-gray-300);
+    color: var(--color-gray-900); padding: 0.6rem 0.7rem; font-family: inherit; font-size: 0.95rem;
+    outline: none; resize: vertical; transition: border-color 0.15s ease;
+}
+.dark .av-textarea { background: var(--color-gray-800); border-color: var(--color-gray-700); color: var(--color-gray-200); }
+.av-textarea:focus { border-color: var(--color-gray-500); }
+
+/* ===================================================================
    Inputs
    =================================================================== */
 .av-input, .av-select, .av-number {

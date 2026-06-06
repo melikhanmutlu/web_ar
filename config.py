@@ -48,6 +48,13 @@ SQLALCHEMY_ENGINE_OPTIONS = {
 MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 100 * 1024 * 1024))  # 100MB default
 ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf'}
 
+# AI 3D generation (Meshy) — server-side only, never expose the key to clients.
+MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
+MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')
+MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-5')
+# Per-user daily generation quota (each generation costs Meshy credits = money).
+AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
+
 # Klasörleri oluştur
 def create_directories():
     """Create necessary directories if they don't exist."""

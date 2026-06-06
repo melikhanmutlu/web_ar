@@ -26,7 +26,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob
 from auth import auth
 import re
 import traceback
@@ -4003,6 +4003,272 @@ def delete_camera_view(model_id, view_id):
         db.session.rollback()
         logger.error(f"Error deleting camera view {view_id}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# =====================================================================
+#  AI Text/Image -> 3D generation (Meshy)
+# =====================================================================
+def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
+                          usdz_src_path=None, color=None):
+    """Register an already-prepared GLB into the same pipeline as /upload_model.
+
+    Mirrors the upload flow: UUID dir -> converted/<uuid>/model.glb -> bounds via
+    trimesh -> UserModel -> async thumbnail (+ USDZ: use the provided file if any,
+    otherwise fall back to the Blender async path). Returns the committed UserModel.
+    """
+    import json as _json
+
+    unique_id = str(uuid.uuid4())
+    converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
+    os.makedirs(converted_dir, exist_ok=True)
+    output_path = os.path.join(converted_dir, "model.glb")
+    shutil.copy2(glb_path, output_path)
+
+    # Best-effort centre-normalize (same as upload) for consistent pivot
+    try:
+        g = GLTF2().load(output_path)
+        g = normalize_model_to_center(g)
+        g.save(output_path)
+    except Exception as e:
+        logger.warning(f"[register_glb] normalize skipped: {e}")
+
+    # Dimensions / bounds (mirror upload_model GLB branch)
+    model_bounds = None
+    try:
+        import trimesh
+        import numpy as np
+
+        mesh = trimesh.load(output_path)
+        if isinstance(mesh, trimesh.Scene):
+            verts = [gm.vertices for gm in mesh.geometry.values()
+                     if isinstance(gm, trimesh.Trimesh)]
+            if verts:
+                cv = np.vstack(verts)
+                extents = cv.max(axis=0) - cv.min(axis=0)
+            else:
+                b = mesh.bounds
+                extents = b[1] - b[0]
+        else:
+            extents = mesh.extents
+        if max(extents) > 0.001:
+            model_bounds = _json.dumps({
+                "extents": [round(float(extents[0]) * 100, 2),
+                            round(float(extents[1]) * 100, 2),
+                            round(float(extents[2]) * 100, 2)],
+                "max": round(float(max(extents)) * 100, 2),
+            })
+    except Exception as e:
+        logger.warning(f"[register_glb] bounds calc failed: {e}")
+
+    # USDZ: prefer the supplied file (e.g. Meshy) so we skip Blender entirely
+    usdz_path = os.path.join(converted_dir, "model.usdz")
+    usdz_filename = None
+    if usdz_src_path and os.path.exists(usdz_src_path):
+        try:
+            shutil.copy2(usdz_src_path, usdz_path)
+            usdz_filename = usdz_path
+        except Exception as e:
+            logger.warning(f"[register_glb] usdz copy failed: {e}")
+
+    model = UserModel(
+        id=unique_id,
+        user_id=user_id,
+        filename=output_path,
+        usdz_filename=usdz_filename,
+        file_size=os.path.getsize(output_path),
+        file_type="glb",
+        upload_date=datetime.utcnow(),
+        color=color,
+        bounds=model_bounds,
+        original_dimensions=None,
+        cumulative_scale=1.0,
+        display_name=(prompt[:80] if prompt else None),
+        description=(f"AI generated ({source})" + (f": {prompt}" if prompt else "")),
+    )
+    db.session.add(model)
+    db.session.commit()
+
+    try:
+        create_version(model_id=unique_id, operation_type="upload",
+                       operation_details={"source": source, "prompt": prompt},
+                       comment="AI generation")
+    except Exception as e:
+        logger.error(f"[register_glb] version failed: {e}")
+
+    try:
+        threading.Thread(target=generate_thumbnail_async,
+                         args=(unique_id, output_path, color), daemon=True).start()
+    except Exception as e:
+        logger.error(f"[register_glb] thumbnail thread failed: {e}")
+
+    if not usdz_filename:
+        try:
+            threading.Thread(target=convert_usdz_async,
+                             args=(unique_id, output_path, usdz_path), daemon=True).start()
+        except Exception as e:
+            logger.error(f"[register_glb] usdz thread failed: {e}")
+
+    return model
+
+
+def _ai_quota_state(user_id):
+    from datetime import timedelta
+    since = datetime.utcnow() - timedelta(days=1)
+    limit = app.config.get("AI_GEN_DAILY_LIMIT", 10)
+    count = AIGenerationJob.query.filter(
+        AIGenerationJob.user_id == user_id,
+        AIGenerationJob.created_at >= since,
+    ).count()
+    return (count >= limit), count, limit
+
+
+def _finalize_ai_job(job, task):
+    """Download finished GLB (+USDZ), register as model, mark job ready."""
+    import ai_generator
+
+    model_urls = task.get("model_urls") or {}
+    glb_url = model_urls.get("glb")
+    if not glb_url:
+        job.status = "failed"
+        job.error = "Generation finished but returned no GLB"
+        db.session.commit()
+        resp = job.to_dict(); resp["success"] = True
+        return jsonify(resp)
+
+    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_" + job.id)
+    os.makedirs(tmp_dir, exist_ok=True)
+    glb_tmp = os.path.join(tmp_dir, "model.glb")
+    ai_generator.download(glb_url, glb_tmp)
+
+    usdz_tmp = None
+    if model_urls.get("usdz"):
+        try:
+            usdz_tmp = os.path.join(tmp_dir, "model.usdz")
+            ai_generator.download(model_urls["usdz"], usdz_tmp)
+        except Exception as e:
+            logger.warning(f"[generate-3d] USDZ download failed: {e}")
+            usdz_tmp = None
+
+    model = register_glb_as_model(
+        glb_tmp, user_id=job.user_id, source=f"ai-{job.kind}",
+        prompt=job.prompt, usdz_src_path=usdz_tmp,
+    )
+    try:
+        shutil.rmtree(tmp_dir)
+    except Exception:
+        pass
+
+    job.status = "ready"
+    job.progress = 100
+    job.model_id = model.id
+    db.session.commit()
+    resp = job.to_dict(); resp["success"] = True
+    resp["viewer_url"] = url_for("view_model", model_id=model.id)
+    return jsonify(resp)
+
+
+@app.route("/api/generate-3d", methods=["POST"])
+@login_required
+def generate_3d():
+    """Start a Meshy text/image -> 3D generation job (login + daily quota)."""
+    import ai_generator
+
+    if not ai_generator.is_configured():
+        return jsonify({"success": False,
+                        "error": "AI generation is not configured on this server."}), 503
+
+    exceeded, count, limit = _ai_quota_state(current_user.id)
+    if exceeded:
+        return jsonify({"success": False,
+                        "error": f"Daily generation limit reached ({limit}). Try again tomorrow."}), 429
+
+    data = request.get_json(silent=True) or {}
+    mode = (data.get("mode") or "text").strip()
+    job_id = str(uuid.uuid4())
+    try:
+        if mode == "image":
+            image = (data.get("image") or "").strip()
+            if not image.startswith("data:image/"):
+                return jsonify({"success": False,
+                                "error": "A valid image (jpg/png) is required."}), 400
+            task_id = ai_generator.start_image_to_3d(image)
+            job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
+                                  stage="image", meshy_image_id=task_id,
+                                  status="generating", progress=0)
+        else:
+            prompt = (data.get("prompt") or "").strip()
+            if not prompt:
+                return jsonify({"success": False,
+                                "error": "A text prompt is required."}), 400
+            task_id = ai_generator.start_text_to_3d(prompt)
+            job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="text",
+                                  prompt=prompt, stage="preview", meshy_preview_id=task_id,
+                                  status="generating", progress=0)
+        db.session.add(job)
+        db.session.commit()
+        return jsonify({"success": True, "job_id": job_id})
+    except ai_generator.MeshyError as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+    except Exception as e:
+        logger.error(f"[generate-3d] start error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "Failed to start generation."}), 500
+
+
+@app.route("/api/generate-3d/<job_id>/status", methods=["GET"])
+@login_required
+def generate_3d_status(job_id):
+    """Poll a generation job; advances text two-stage and finalizes on success."""
+    import ai_generator
+
+    job = AIGenerationJob.query.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    if job.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+    if job.status in ("ready", "failed"):
+        resp = job.to_dict(); resp["success"] = True
+        if job.status == "ready" and job.model_id:
+            resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
+        return jsonify(resp)
+
+    try:
+        if job.kind == "image":
+            t = ai_generator.get_task("image", job.meshy_image_id)
+            job.progress = min(99, t["progress"])
+            if t["status"] == ai_generator.SUCCEEDED:
+                return _finalize_ai_job(job, t)
+            if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Generation failed"
+        else:
+            if job.stage == "preview":
+                t = ai_generator.get_task("text", job.meshy_preview_id)
+                job.progress = min(49, t["progress"] // 2)
+                if t["status"] == ai_generator.SUCCEEDED:
+                    job.meshy_refine_id = ai_generator.start_refine(job.meshy_preview_id)
+                    job.stage = "refine"
+                    job.progress = 50
+                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                    job.status = "failed"
+                    job.error = t.get("task_error") or "Preview failed"
+            elif job.stage == "refine":
+                t = ai_generator.get_task("text", job.meshy_refine_id)
+                job.progress = min(99, 50 + t["progress"] // 2)
+                if t["status"] == ai_generator.SUCCEEDED:
+                    return _finalize_ai_job(job, t)
+                if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                    job.status = "failed"
+                    job.error = t.get("task_error") or "Texturing failed"
+        db.session.commit()
+    except ai_generator.MeshyError as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+    except Exception as e:
+        logger.error(f"[generate-3d] status error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "Status check failed."}), 500
+
+    resp = job.to_dict(); resp["success"] = True
+    return jsonify(resp)
 
 
 if __name__ == "__main__":

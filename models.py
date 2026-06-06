@@ -291,3 +291,36 @@ class ModelSave(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     model = db.relationship('UserModel', backref=db.backref('saves', lazy=True))
+
+
+class AIGenerationJob(db.Model):
+    """Tracks an AI text/image -> 3D generation (Meshy) so the frontend can poll
+    status without a long-lived server thread (gunicorn multi-worker safe)."""
+    id = db.Column(db.String(36), primary_key=True)  # our job UUID
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    kind = db.Column(db.String(10), nullable=False)        # 'text' | 'image'
+    prompt = db.Column(db.Text, nullable=True)
+
+    # Meshy task ids (text is two-stage: preview -> refine)
+    meshy_preview_id = db.Column(db.String(80), nullable=True)
+    meshy_refine_id = db.Column(db.String(80), nullable=True)
+    meshy_image_id = db.Column(db.String(80), nullable=True)
+    stage = db.Column(db.String(20), nullable=True)        # 'preview' | 'refine' | 'image'
+
+    status = db.Column(db.String(20), default='generating')  # generating | ready | failed
+    progress = db.Column(db.Integer, default=0)
+    model_id = db.Column(db.String(36), nullable=True)     # UserModel.id once ready
+    error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'job_id': self.id,
+            'kind': self.kind,
+            'status': self.status,
+            'progress': self.progress,
+            'model_id': self.model_id,
+            'error': self.error,
+        }

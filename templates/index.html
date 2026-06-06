@@ -50,6 +50,12 @@
             <h1 class="home-title">Upload a model. Get an AR-ready link.</h1>
         </div>
 
+        <div class="av-tabs" role="tablist">
+            <button type="button" class="av-tab is-active" data-panel="panel-upload">Upload</button>
+            <button type="button" class="av-tab" data-panel="panel-generate">Generate with AI</button>
+        </div>
+
+        <div id="panel-upload" class="home-panel">
         <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="av-stack">
             <!-- File Upload -->
             <div>
@@ -155,6 +161,63 @@
                 Upload and Convert
             </button>
         </form>
+        </div>
+
+        <!-- AI Generation panel -->
+        <div id="panel-generate" class="home-panel hidden">
+            {% if current_user.is_authenticated %}
+            <div class="av-stack">
+                <div class="home-hero" style="margin-bottom:0.5rem;">
+                    <p class="home-kicker">AI Studio</p>
+                    <h1 class="home-title">Describe it or show it — get a 3D model.</h1>
+                </div>
+
+                <div class="av-tabs av-tabs--sub" role="tablist">
+                    <button type="button" class="av-tab is-active" data-genmode="text">From Text</button>
+                    <button type="button" class="av-tab" data-genmode="image">From Image</button>
+                </div>
+
+                <div id="genText" class="av-card">
+                    <label class="av-card-title" for="aiPrompt">Prompt</label>
+                    <p class="av-card-desc" style="margin:0.15rem 0 0.6rem;">Describe the object you want.</p>
+                    <textarea id="aiPrompt" class="av-textarea" rows="3" maxlength="600" placeholder="a red ceramic vase with a glossy finish"></textarea>
+                </div>
+
+                <div id="genImage" class="av-card hidden">
+                    <div id="aiImageDrop" class="av-dropzone" style="padding:2rem 1.5rem;">
+                        <input id="ai-image" type="file" class="hidden" accept="image/png,image/jpeg">
+                        <i data-lucide="image" class="av-dropzone-icon"></i>
+                        <p class="av-dropzone-title" style="font-size:1rem;">Drop a photo or click to browse</p>
+                        <p class="av-dropzone-hint">PNG or JPG · a single object on a clean background works best.</p>
+                        <img id="aiImagePreview" alt="" class="hidden" style="max-height:160px;margin:1rem auto 0;display:block;">
+                    </div>
+                </div>
+
+                <div id="generationStatus" class="hidden">
+                    <div class="progress-wrapper">
+                        <div class="progress-status">
+                            <span class="progress-label" id="generationLabel">Generating 3D model…</span>
+                            <span class="progress-percentage" id="generationText">0%</span>
+                        </div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="generationBar"></div></div>
+                    </div>
+                    <div id="generationError" class="av-alert av-alert--error hidden"></div>
+                </div>
+
+                <button type="button" id="generateBtn" class="btn-primary">
+                    <i data-lucide="sparkles" style="width:1.1rem;height:1.1rem;"></i>
+                    Generate 3D Model
+                </button>
+                <p class="av-card-desc" style="text-align:center;">Uses AI credits · subject to a daily limit.</p>
+            </div>
+            {% else %}
+            <div class="av-card" style="text-align:center;">
+                <div class="av-card-title">Generate 3D with AI</div>
+                <p class="av-card-desc" style="margin:0.5rem 0 1rem;">Turn a text prompt or a photo into a 3D model. Sign in to start.</p>
+                <a href="{{ url_for('auth.login', next=request.path) }}" class="btn-primary" style="display:inline-flex;width:auto;text-decoration:none;">Login to generate</a>
+            </div>
+            {% endif %}
+        </div>
 
         <!-- Features -->
         <section class="home-features">
@@ -548,6 +611,123 @@
             });
         }
     });
+    </script>
+
+    <!-- Tab switching + AI generation -->
+    <script>
+    (function () {
+        // Top-level tabs: Upload | Generate
+        document.querySelectorAll('.av-tabs:not(.av-tabs--sub) .av-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.av-tabs:not(.av-tabs--sub) .av-tab').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                const panel = btn.dataset.panel;
+                document.getElementById('panel-upload')?.classList.toggle('hidden', panel !== 'panel-upload');
+                document.getElementById('panel-generate')?.classList.toggle('hidden', panel !== 'panel-generate');
+            });
+        });
+
+        const genBtn = document.getElementById('generateBtn');
+        if (!genBtn) return; // not authenticated -> no generate UI
+
+        let genMode = 'text';
+        let imageDataUri = null;
+
+        // Sub-tabs: From Text | From Image
+        document.querySelectorAll('.av-tabs--sub .av-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.av-tabs--sub .av-tab').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                genMode = btn.dataset.genmode;
+                document.getElementById('genText').classList.toggle('hidden', genMode !== 'text');
+                document.getElementById('genImage').classList.toggle('hidden', genMode !== 'image');
+            });
+        });
+
+        // Image selection -> data URI + preview
+        const aiImageDrop = document.getElementById('aiImageDrop');
+        const aiImage = document.getElementById('ai-image');
+        const aiImagePreview = document.getElementById('aiImagePreview');
+        aiImageDrop?.addEventListener('click', () => aiImage.click());
+        aiImage?.addEventListener('change', (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+            if (f.size > 10 * 1024 * 1024) { alert('Image too large (max 10MB).'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                imageDataUri = reader.result;
+                aiImagePreview.src = reader.result;
+                aiImagePreview.classList.remove('hidden');
+            };
+            reader.readAsDataURL(f);
+        });
+
+        const statusDiv = document.getElementById('generationStatus');
+        const bar = document.getElementById('generationBar');
+        const txt = document.getElementById('generationText');
+        const label = document.getElementById('generationLabel');
+        const errBox = document.getElementById('generationError');
+
+        function setProgress(p, msg) {
+            bar.style.width = p + '%';
+            txt.textContent = Math.round(p) + '%';
+            if (msg) label.textContent = msg;
+        }
+
+        genBtn.addEventListener('click', async () => {
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            const body = { mode: genMode };
+            if (genMode === 'text') {
+                const p = document.getElementById('aiPrompt').value.trim();
+                if (!p) { alert('Please enter a prompt.'); return; }
+                body.prompt = p;
+            } else {
+                if (!imageDataUri) { alert('Please choose an image.'); return; }
+                body.image = imageDataUri;
+            }
+
+            genBtn.disabled = true;
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Starting…');
+
+            try {
+                const r = await fetch('/api/generate-3d', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Failed to start generation');
+                const jobId = d.job_id;
+
+                let done = false, tries = 0;
+                while (!done && tries < 200) {
+                    await new Promise(res => setTimeout(res, 2500));
+                    tries++;
+                    const sr = await fetch('/api/generate-3d/' + jobId + '/status');
+                    const sd = await sr.json();
+                    if (!sd.success) throw new Error(sd.error || 'Status check failed');
+                    setProgress(Math.max(2, sd.progress || 0), 'Generating 3D model…');
+                    if (sd.status === 'ready' && sd.viewer_url) {
+                        setProgress(100, 'Done');
+                        window.location.href = sd.viewer_url;
+                        done = true;
+                    } else if (sd.status === 'failed') {
+                        throw new Error(sd.error || 'Generation failed');
+                    }
+                }
+                if (!done) throw new Error('Generation timed out. Please try again.');
+            } catch (e) {
+                bar.classList.add('error');
+                errBox.textContent = e.message;
+                errBox.classList.remove('hidden');
+                setProgress(0, 'Failed');
+            } finally {
+                genBtn.disabled = false;
+            }
+        });
+    })();
     </script>
 </body>
 </html>

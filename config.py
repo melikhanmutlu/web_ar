@@ -1,6 +1,14 @@
 import os
 import platform
 
+# Load a local .env if present (no-op in production where real env vars are set).
+# Railway/Heroku env vars take precedence — load_dotenv does not override them.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Base directory - projenin kök dizini
 BASE_DIR = os.getenv('WEB_AR_BASE_DIR', os.path.dirname(os.path.abspath(__file__)))
 

@@ -108,6 +108,14 @@ class TestFixMaterialTransparency:
         assert mat.alphaMode == "OPAQUE"
         assert mat.pbrMetallicRoughness.baseColorFactor[3] == 1.0
 
+    def test_cutout_marked_blend_by_fbx2gltf_is_upgraded_to_mask(self):
+        """FBX2glTF emits BLEND for foliage; depth sorting needs MASK."""
+        gltf = _textured_gltf(CUTOUT_PNG, alpha_mode="BLEND", name="DB2X2_L02")
+        fix_material_transparency(gltf)
+        mat = gltf.materials[0]
+        assert mat.alphaMode == "MASK"
+        assert mat.alphaCutoff == 0.5
+
     def test_idempotent(self):
         gltf = _textured_gltf(CUTOUT_PNG, factor_alpha=0.0, alpha_mode="OPAQUE")
         fix_material_transparency(gltf)

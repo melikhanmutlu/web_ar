@@ -114,7 +114,13 @@ def _analyze_alpha_channel(image_bytes):
     hist = alpha.histogram()
     total = sum(hist) or 1
     partial = sum(hist[16:240])  # neither fully transparent nor fully opaque
-    return True, (partial / total) < 0.02
+    # Foliage cutouts are dominated by fully-transparent/fully-opaque texels;
+    # partial alpha appears only on antialiased edges (typically 5-15%). Truly
+    # gradual textures (glass, fades) have large smooth partial regions. MASK
+    # must win for cutouts: BLEND disables depth sorting, so dense foliage
+    # blends against the background instead of the leaves behind it and the
+    # whole canopy washes out.
+    return True, (partial / total) < 0.25
 
 
 def fix_material_transparency(gltf, log=None):
@@ -152,9 +158,13 @@ def fix_material_transparency(gltf, log=None):
                         log(f"Alpha analysis failed for material '{mat.name}': {exc}", "WARNING")
 
         if has_alpha:
-            if mat.alphaMode not in ("BLEND", "MASK"):
-                mat.alphaMode = "MASK" if mostly_binary else "BLEND"
-                if mat.alphaMode == "MASK":
+            # Binary cutouts (foliage) must use MASK even when FBX2glTF already
+            # marked them BLEND: BLEND disables depth sorting, so dense leaves
+            # blend against the background and the canopy washes out.
+            target = "MASK" if mostly_binary else "BLEND"
+            if mat.alphaMode != target and mat.alphaMode != "MASK":
+                mat.alphaMode = target
+                if target == "MASK":
                     mat.alphaCutoff = 0.5
                 changed = True
             if mat.doubleSided is not True:

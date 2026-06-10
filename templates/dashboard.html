@@ -4,14 +4,14 @@
 <div class="container studio">
   <div class="studio-head">
     <div>
-      <p class="kicker" style="margin-bottom:10px">STÜDYO</p>
+      <p class="kicker" style="margin-bottom:10px">Stüdyo</p>
       <h1>{% if active_folder %}{{ active_folder.name }}{% else %}Modelleriniz{% endif %}</h1>
     </div>
     <div class="studio-actions">
       {% if ai_enabled %}
       <button class="btn btn-lilac" id="open-ai">◆ AI ile üret</button>
       {% endif %}
-      <button class="btn btn-pill" id="open-upload">Model yükle <span class="arr">↗</span></button>
+      <button class="btn btn-pill" id="open-upload">Model yükle <span class="arr">⟶</span></button>
     </div>
   </div>
 
@@ -38,7 +38,7 @@
   <div class="studio-toolbar">
     <input type="search" id="model-search" class="input input-sm search" placeholder="Modellerde ara…">
     <div class="folder-strip">
-      <a class="chip {{ 'active' if not active_folder }}" href="{{ url_for('views.dashboard') }}">TÜMÜ</a>
+      <a class="chip {{ 'active' if not active_folder }}" href="{{ url_for('views.dashboard') }}">Tümü</a>
       {% for folder in folders %}
         <span style="display:inline-flex; align-items:center; gap:2px">
           <a class="chip {{ 'active' if active_folder and active_folder.id == folder.id }}"
@@ -53,7 +53,7 @@
       <form action="{{ url_for('views.create_folder') }}" method="post" class="folder-form-inline">
         {{ folder_form.hidden_tag() }}
         {{ folder_form.name(class="input input-sm", placeholder="Yeni klasör") }}
-        <button type="submit" class="chip">+ EKLE</button>
+        <button type="submit" class="chip">+ Ekle</button>
       </form>
     </div>
   </div>
@@ -71,7 +71,7 @@
       </a>
       <div class="model-meta">
         <a class="model-name" href="{{ url_for('views.viewer', model_id=model.id) }}">{{ model.name }}</a>
-        <p class="model-sub">{{ model.file_size_human }} · {{ model.view_count }} GÖRÜNTÜLENME
+        <p class="model-sub">{{ model.file_size_human }} · {{ model.view_count }} görüntülenme
           {% if model.dimensions_human %} · {{ model.dimensions_human }}{% endif %}</p>
         <div class="model-actions">
           <a class="btn btn-ghost btn-sm" href="{{ url_for('views.viewer', model_id=model.id) }}">Aç</a>
@@ -87,11 +87,11 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <p class="kicker">BOŞ KÜTÜPHANE</p>
+    <p class="kicker">Boş kütüphane</p>
     <h3>İlk modelinizi ekleyin</h3>
     <p>Bir 3D dosya yükleyin{% if ai_enabled %} ya da yapay zekâya tarif edin{% endif %} —
       birkaç saniye sonra AR linkiniz hazır.</p>
-    <button class="btn btn-pill" onclick="document.getElementById('open-upload').click()">Model yükle <span class="arr">↗</span></button>
+    <button class="btn btn-pill" onclick="document.getElementById('open-upload').click()">Model yükle <span class="arr">⟶</span></button>
   </div>
   {% endif %}
 </div>
@@ -108,7 +108,7 @@
     <div id="upload-form-area">
       <div class="dropzone" id="dropzone">
         <p><strong>Dosyayı buraya bırakın</strong> ya da tıklayıp seçin</p>
-        <p class="dz-formats">{{ allowed_extensions|map('upper')|join(' · ') }} — MAKS. 100 MB</p>
+        <p class="dz-formats">{{ allowed_extensions|map('upper')|join(' · ') }} — maks. 100 MB</p>
         <p class="dz-file" id="dz-file" hidden></p>
         <input type="file" id="file-input" accept=".{{ allowed_extensions|join(',.') }}" hidden>
       </div>
@@ -140,7 +140,7 @@
           <input type="color" id="up-color" class="input" value="#a78ef0" hidden>
         </div>
       </div>
-      <button class="btn btn-pill btn-block" id="upload-start" disabled>Yükle ve dönüştür <span class="arr">↗</span></button>
+      <button class="btn btn-pill btn-block" id="upload-start" disabled>Yükle ve dönüştür <span class="arr">⟶</span></button>
     </div>
 
     <div id="upload-progress-area" hidden>
@@ -164,10 +164,10 @@
     <div id="ai-form-area">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
         <div class="tabbar">
-          <button type="button" class="active" data-tab="text">METİNDEN</button>
-          <button type="button" data-tab="image">GÖRSELDEN</button>
+          <button type="button" class="active" data-tab="text">Metinden</button>
+          <button type="button" data-tab="image">Görselden</button>
         </div>
-        <span class="ai-quota">BUGÜN KALAN: <strong id="ai-quota">{{ ai_remaining }}</strong></span>
+        <span class="ai-quota">Bugün kalan: <strong id="ai-quota">{{ ai_remaining }}</strong></span>
       </div>
 
       <div id="ai-tab-text">
@@ -188,7 +188,7 @@
       <div id="ai-tab-image" hidden>
         <div class="dropzone" id="ai-dropzone">
           <p><strong>Ürün fotoğrafını bırakın</strong> ya da tıklayıp seçin</p>
-          <p class="dz-formats">PNG · JPEG · WEBP — TEK NESNE, SADE ARKA PLAN</p>
+          <p class="dz-formats">PNG · JPEG · WebP — tek nesne, sade arka plan</p>
           <p class="dz-file" id="ai-dz-file" hidden></p>
           <input type="file" id="ai-image-input" accept="image/png,image/jpeg,image/webp" hidden>
         </div>
@@ -198,7 +198,7 @@
         </div>
       </div>
 
-      <button class="btn btn-lilac btn-block" id="ai-start">Üretimi başlat <span class="arr">↗</span></button>
+      <button class="btn btn-lilac btn-block" id="ai-start">Üretimi başlat <span class="arr">⟶</span></button>
       <p class="field-hint" style="margin-top:10px">Üretim genellikle 2–5 dakika sürer;
         bu pencereyi kapatmayın. Bittiğinde model otomatik açılır.</p>
     </div>

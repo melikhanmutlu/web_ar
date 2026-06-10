@@ -8,7 +8,7 @@
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   {% block head %}{% endblock %}
 </head>
@@ -21,15 +21,15 @@
       </a>
       <nav class="nav-links">
         {% if current_user.is_authenticated %}
-          <a href="{{ url_for('views.dashboard') }}" class="nav-link mono">STÜDYO</a>
+          <a href="{{ url_for('views.dashboard') }}" class="nav-link">Stüdyo</a>
           <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="nav-link mono as-btn">ÇIKIŞ</button>
+            <button type="submit" class="nav-link as-btn">Çıkış</button>
           </form>
-          <a href="{{ url_for('views.dashboard') }}" class="btn btn-pill">Model yükle <span class="arr">↗</span></a>
+          <a href="{{ url_for('views.dashboard') }}" class="btn btn-pill">Model yükle <span class="arr">⟶</span></a>
         {% else %}
-          <a href="{{ url_for('auth.login') }}" class="nav-link mono">GİRİŞ</a>
-          <a href="{{ url_for('auth.register') }}" class="btn btn-pill">Hemen başla <span class="arr">↗</span></a>
+          <a href="{{ url_for('auth.login') }}" class="nav-link">Giriş</a>
+          <a href="{{ url_for('auth.register') }}" class="btn btn-pill">Hemen başla <span class="arr">⟶</span></a>
         {% endif %}
       </nav>
     </div>
@@ -39,7 +39,7 @@
     {% if messages %}
       <div class="container flashes">
         {% for category, message in messages %}
-          <div class="flash flash-{{ category }} mono">{{ message }}</div>
+          <div class="flash flash-{{ category }}">{{ message }}</div>
         {% endfor %}
       </div>
     {% endif %}
@@ -55,19 +55,19 @@
           <p class="footer-tag">3D modelleriniz, gerçek dünyada.<br>Yükleyin, dönüştürün, AR'da paylaşın.</p>
         </div>
         <div class="footer-col">
-          <p class="footer-head mono">PLATFORM</p>
+          <p class="footer-head">Platform</p>
           <a href="{{ url_for('views.dashboard') }}">Stüdyo</a>
           <a href="{{ url_for('views.index') }}#pipeline">Dönüşüm hattı</a>
           <a href="{{ url_for('views.index') }}#ai">AI üretim</a>
         </div>
         <div class="footer-col">
-          <p class="footer-head mono">FORMATLAR</p>
+          <p class="footer-head">Formatlar</p>
           <span>OBJ · STL · FBX</span>
           <span>GLB · glTF</span>
           <span>USDZ (iOS AR)</span>
         </div>
         <div class="footer-col">
-          <p class="footer-head mono">HESAP</p>
+          <p class="footer-head">Hesap</p>
           {% if current_user.is_authenticated %}
             <a href="{{ url_for('views.dashboard') }}">Modellerim</a>
           {% else %}
@@ -77,7 +77,7 @@
         </div>
       </div>
       <div class="footer-word" aria-hidden="true">webar</div>
-      <p class="footer-fine mono">© 2026 WEBAR — TARAYICIDA ARTIRILMIŞ GERÇEKLİK</p>
+      <p class="footer-fine">© 2026 WebAR — Tarayıcıda artırılmış gerçeklik</p>
     </div>
   </footer>
   {% block scripts %}{% endblock %}

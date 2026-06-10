@@ -199,3 +199,24 @@ def test_ai_text_flow_mocked(client, app, monkeypatch):
     assert client.get(f"/m/{state['model_id']}").status_code == 200
 
     app.config["MESHY_API_KEY"] = ""
+
+
+def test_slice_model(client):
+    register_and_login(client)
+    resp = client.post(
+        "/api/upload",
+        data={"file": (io.BytesIO(make_stl_bytes()), "dilim.stl")},
+        content_type="multipart/form-data",
+    )
+    model_id = client.get(f"/api/jobs/{resp.get_json()['job_id']}").get_json()["model_id"]
+
+    cut = client.post(f"/api/models/{model_id}/slice",
+                      json={"axis": "x", "position": 0.5, "keep": "above", "cap": True})
+    body = cut.get_json()
+    assert cut.status_code == 200, body
+    # box was 0.2 wide on x; keeping the upper half leaves ~0.1
+    assert abs(body["dimensions"]["x"] - 0.1) < 0.01, body
+
+    bad = client.post(f"/api/models/{model_id}/slice",
+                      json={"axis": "q", "position": 0.5})
+    assert bad.status_code == 400

@@ -6,10 +6,11 @@
 - **AI üretim:** Meshy entegrasyonu ile metinden ve görselden 3D model (önizleme → rafine → PBR doku), günlük kota takibi
 - **Yükleme özelleştirme:** isim, klasör, hedef gerçek dünya boyutu (m) ve tek renk — dönüşüm sırasında uygulanır
 - **Model düzenleme:** yükledikten sonra yeniden boyutlandırma / renklendirme (GLB yeniden yazılır, USDZ tazelenir)
+- **Canlı önizlemeli slicer:** three.js clipping ile gerçek zamanlı kesim önizlemesi, trimesh ile kapaklı kalıcı kesim
 - **AR:** Android'de Scene Viewer, iOS'ta Quick Look (Blender ile otomatik USDZ üretimi)
 - **Paylaşım:** Her model için tahmin edilemez UUID linki + otomatik QR kodu + iframe embed
 - **Stüdyo görüntüleyici:** ortam ışığı ön ayarları, pozlama, gerçek boyut etiketleri, ekran görüntüsü, tam ekran
-- **Arayüz:** krem/antrasit/lavanta editoryal tasarım dili, canlı 3D hero, istatistikli stüdyo paneli
+- **Arayüz:** Inter tabanlı minimal krem/antrasit/lavanta dili, kaydırma animasyonları, ekrana yakın boyutlu görüntüleyici sahnesi
 
 ## Mimari
 

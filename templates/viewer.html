@@ -10,12 +10,9 @@
 <div class="viewer-shell on-dark">
   <div class="container">
     <div class="viewer-topbar">
-      <div>
-        <p class="kicker" style="margin-bottom:6px">3D GÖRÜNTÜLEYİCİ</p>
-        <h1>{{ model.name }}</h1>
-      </div>
-      <p class="meta">{{ model.created_at.strftime('%d.%m.%Y') }} · {{ model.view_count }} GÖRÜNTÜLENME ·
-        <span class="badge {{ 'badge-ai' if model.source_format == 'ai' }}">{{ 'AI ÜRETİMİ' if model.source_format == 'ai' else model.source_format|upper }}</span></p>
+      <h1>{{ model.name }}</h1>
+      <p class="meta">{{ model.created_at.strftime('%d.%m.%Y') }} · {{ model.view_count }} görüntülenme
+        <span class="badge {{ 'badge-ai' if model.source_format == 'ai' }}">{{ 'AI' if model.source_format == 'ai' else model.source_format|upper }}</span></p>
     </div>
   </div>
   <div class="container viewer-stage-wrap">
@@ -34,19 +31,19 @@
 
       <div class="stage-controls">
         <div class="ctl-group">
-          <button class="ctl" id="ctl-rotate" title="Otomatik döndür">⟳ DÖNDÜR</button>
-          <button class="ctl" id="ctl-dims" title="Gerçek boyut etiketleri">⤢ BOYUTLAR</button>
+          <button class="ctl" id="ctl-rotate" title="Otomatik döndür">⟳ Döndür</button>
+          <button class="ctl" id="ctl-dims" title="Gerçek boyut etiketleri">⤢ Boyutlar</button>
         </div>
         <div class="ctl-group">
-          <button class="ctl" id="ctl-env" title="Ortam ışığı">☼ STÜDYO</button>
-          <button class="ctl" id="ctl-bg" title="Arka plan">◐ ZEMİN</button>
+          <button class="ctl" id="ctl-env" title="Ortam ışığı">☼ Stüdyo</button>
+          <button class="ctl" id="ctl-bg" title="Arka plan">◐ Zemin</button>
         </div>
         <div class="ctl-group">
-          <button class="ctl" id="ctl-shot" title="PNG ekran görüntüsü">✦ GÖRÜNTÜ AL</button>
-          <button class="ctl" id="ctl-fs" title="Tam ekran">⛶ TAM EKRAN</button>
+          <button class="ctl" id="ctl-shot" title="PNG ekran görüntüsü">✦ Görüntü</button>
+          <button class="ctl" id="ctl-fs" title="Tam ekran">⛶ Tam ekran</button>
         </div>
         <div class="ctl-slider">
-          <label for="ctl-exposure">POZ</label>
+          <label for="ctl-exposure">Poz</label>
           <input type="range" id="ctl-exposure" min="0.3" max="2" step="0.05" value="1">
         </div>
       </div>
@@ -103,7 +100,8 @@
           </div>
         </div>
         <div class="owner-foot">
-          <button class="btn btn-pill" id="ed-save">Kaydet <span class="arr">↗</span></button>
+          <button class="btn btn-lilac" id="ed-save"><span class="arr">⟶</span> Kaydet</button>
+          <button class="btn btn-ghost" id="open-slicer">⌁ Slicer</button>
           <span class="field-hint" id="ed-status"></span>
           <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
                 onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
@@ -117,11 +115,11 @@
 
     <div>
       <div class="card action-card">
-        <p class="kicker" style="margin-bottom:8px">PAYLAŞ</p>
+        <p class="kicker" style="margin-bottom:8px">Paylaş</p>
         <button class="btn btn-pill btn-block" id="show-qr">▣ QR kod ile paylaş</button>
         <button class="btn btn-ghost btn-block" id="copy-link" data-url="{{ share_url }}">Linki kopyala</button>
         <hr class="divider">
-        <p class="kicker" style="margin-bottom:8px">İNDİR</p>
+        <p class="kicker" style="margin-bottom:8px">İndir</p>
         <a class="btn btn-ghost btn-block" download="{{ model.name }}.glb"
            href="{{ url_for('views.model_file', filename=model.glb_filename) }}">GLB indir — web/Android</a>
         {% if model.usdz_filename %}
@@ -130,13 +128,52 @@
         {% endif %}
         <hr class="divider">
         <details class="embed-box">
-          <summary class="kicker" style="cursor:pointer; margin-bottom:8px">SİTENE GÖM</summary>
+          <summary class="kicker" style="cursor:pointer; margin-bottom:8px">Sitene göm</summary>
           <textarea class="input" rows="3" readonly onclick="this.select()">&lt;iframe src="{{ share_url }}/embed" width="640" height="480" frameborder="0" allow="xr-spatial-tracking"&gt;&lt;/iframe&gt;</textarea>
         </details>
       </div>
     </div>
   </div>
 </div>
+
+{% if is_owner %}
+<!-- Slicer modal -->
+<div class="modal" id="slicer-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box card wide">
+    <div class="modal-head">
+      <h2>⌁ Slicer — canlı kesim</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    <div class="slicer-layout">
+      <div class="slicer-canvas-wrap" id="slicer-canvas">
+        <span class="slicer-hint">Sürükleyin: döndür · kaydırın: yakınlaş</span>
+      </div>
+      <div class="slicer-side">
+        <p class="field-label">Kesim ekseni</p>
+        <div class="axis-row">
+          <button class="chip active" data-axis="x">X</button>
+          <button class="chip" data-axis="y">Y</button>
+          <button class="chip" data-axis="z">Z</button>
+        </div>
+        <p class="field-label">Düzlem konumu</p>
+        <input type="range" id="slice-pos" min="0.02" max="0.98" step="0.005" value="0.5">
+        <label class="opt-toggle" style="margin-top:14px">
+          <input type="checkbox" id="slice-flip"> Diğer tarafı tut
+        </label>
+        <label class="opt-toggle">
+          <input type="checkbox" id="slice-cap" checked> Kesiti kapat (katı yüzey)
+        </label>
+        <p class="slicer-stats" id="slice-stats"></p>
+        <p class="slicer-warn">Kesim kalıcıdır ve geri alınamaz; dokular kesim
+          yüzeyinde korunmaz.</p>
+        <button class="btn btn-lilac btn-block" id="slice-apply"><span class="arr">⟶</span> Kesimi uygula</button>
+        <p class="field-hint" id="slice-status" style="text-align:center"></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- QR modal -->
 <div class="modal" id="qr-modal" hidden>
@@ -161,4 +198,14 @@
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
 <script>window.__MODEL__ = { id: {{ model.id|tojson }}, name: {{ model.name|tojson }} };</script>
 <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
+{% if is_owner %}
+<script type="importmap">
+  {"imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }}
+</script>
+<script type="module" src="{{ url_for('static', filename='js/slicer.js') }}"></script>
+<script>window.__GLB_URL__ = {{ url_for('views.model_file', filename=model.glb_filename)|tojson }};</script>
+{% endif %}
 {% endblock %}

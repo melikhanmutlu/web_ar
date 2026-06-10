@@ -18,7 +18,7 @@
         {{ form.password(class="input", autocomplete="current-password") }}
         {% for err in form.password.errors %}<p class="field-error">{{ err }}</p>{% endfor %}
       </div>
-      <button type="submit" class="btn btn-pill btn-block">Giriş yap <span class="arr">↗</span></button>
+      <button type="submit" class="btn btn-pill btn-block">Giriş yap <span class="arr">⟶</span></button>
     </form>
     <p class="auth-alt">Hesabınız yok mu? <a href="{{ url_for('auth.register') }}">Kayıt olun</a></p>
   </div>

@@ -7,7 +7,8 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 
 from . import ai
-from .conversion import ConversionError, apply_customizations, export_usdz, inspect_glb
+from .conversion import (ConversionError, apply_customizations, export_usdz,
+                         inspect_glb, slice_glb)
 from .extensions import db, limiter
 from .jobs import enqueue_conversion, run_conversion_job
 from .models import AIGenerationJob, ConversionJob, Folder, Model3D
@@ -226,4 +227,53 @@ def update_model(model_id: str):
     db.session.commit()
     return jsonify(ok=True, name=model.name, folder_id=model.folder_id,
                    file_size=model.file_size_human,
+                   dimensions=model.dimensions)
+
+
+@bp.route("/models/<model_id>/slice", methods=["POST"])
+@login_required
+@limiter.limit("60 per hour")
+def slice_model(model_id: str):
+    """Destructively cut the GLB with an axis-aligned plane.
+
+    The slicer UI shows a live three.js clipping preview; this endpoint
+    performs the real cut with trimesh and refreshes stats + USDZ.
+    """
+    model = db.session.get(Model3D, model_id)
+    if not model or model.user_id != current_user.id:
+        return jsonify(error="Model bulunamadı."), 404
+
+    data = request.get_json(silent=True) or {}
+    axis = str(data.get("axis") or "").lower()
+    keep = "below" if data.get("keep") == "below" else "above"
+    cap = bool(data.get("cap", True))
+    try:
+        position = float(data.get("position"))
+    except (TypeError, ValueError):
+        return jsonify(error="Kesim konumu 0–1 aralığında olmalı."), 400
+    if axis not in ("x", "y", "z") or not 0.0 <= position <= 1.0:
+        return jsonify(error="Geçersiz kesim parametreleri."), 400
+
+    config = current_app.config
+    glb_path = Path(config["CONVERTED_DIR"]) / model.glb_filename
+    if not glb_path.exists():
+        return jsonify(error="Model dosyası bulunamadı."), 500
+
+    try:
+        slice_glb(glb_path, axis=axis, position=position, keep=keep, cap=cap)
+    except ConversionError as e:
+        return jsonify(error=str(e)), 422
+
+    stats = inspect_glb(glb_path)
+    model.file_size = glb_path.stat().st_size
+    model.vertices = stats["vertices"]
+    model.faces = stats["faces"]
+    model.dimensions = stats["dimensions"]
+    if config.get("USDZ_EXPORT"):
+        usdz_path = Path(config["CONVERTED_DIR"]) / f"{model.id}.usdz"
+        if export_usdz(glb_path, usdz_path, config["TOOLS_DIR"]):
+            model.usdz_filename = usdz_path.name
+    db.session.commit()
+    return jsonify(ok=True, file_size=model.file_size_human,
+                   vertices=model.vertices, faces=model.faces,
                    dimensions=model.dimensions)

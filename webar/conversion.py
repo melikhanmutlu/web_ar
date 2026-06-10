@@ -112,6 +112,65 @@ def _hex_to_rgba(color: str) -> list[float]:
     return [int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4)] + [1.0]
 
 
+def slice_glb(glb_path: Path, axis: str, position: float,
+              keep: str = "above", cap: bool = True) -> None:
+    """Cut the model with an axis-aligned plane and keep one side.
+
+    axis — 'x' | 'y' | 'z'; position — 0..1 along the scene bounding box;
+    keep — 'above' keeps the +axis side, 'below' the -axis side;
+    cap — close the cut surface (falls back to an open cut if capping
+    fails on non-watertight geometry).
+
+    Geometry is sliced per node with world transforms baked in. Cut faces
+    lose UVs, so each piece keeps its material's base colour but textures
+    on the cut may not survive — same trade-off the live preview shows.
+    """
+    if axis not in ("x", "y", "z"):
+        raise ConversionError(f"Geçersiz eksen: {axis}")
+    position = min(1.0, max(0.0, float(position)))
+    idx = "xyz".index(axis)
+
+    scene = trimesh.load(str(glb_path), force="scene")
+    if scene.bounds is None:
+        raise ConversionError("Model geometrisi okunamadı.")
+    lo, hi = scene.bounds[0][idx], scene.bounds[1][idx]
+    origin = np.zeros(3)
+    origin[idx] = lo + (hi - lo) * position
+    normal = np.zeros(3)
+    normal[idx] = 1.0 if keep == "above" else -1.0
+
+    out = trimesh.Scene()
+    kept_faces = 0
+    for node_name in scene.graph.nodes_geometry:
+        transform, geom_name = scene.graph[node_name]
+        geom = scene.geometry.get(geom_name)
+        if geom is None or not hasattr(geom, "faces"):
+            continue
+        mesh = geom.copy()
+        mesh.apply_transform(transform)
+        sliced = None
+        try:
+            sliced = trimesh.intersections.slice_mesh_plane(
+                mesh, plane_normal=normal, plane_origin=origin, cap=cap)
+        except Exception:
+            try:
+                sliced = trimesh.intersections.slice_mesh_plane(
+                    mesh, plane_normal=normal, plane_origin=origin, cap=False)
+            except Exception:
+                continue
+        if sliced is None or len(sliced.faces) == 0:
+            continue
+        material = getattr(getattr(geom, "visual", None), "material", None)
+        if material is not None:
+            sliced.visual = trimesh.visual.TextureVisuals(material=material)
+        kept_faces += len(sliced.faces)
+        out.add_geometry(sliced)
+
+    if kept_faces == 0:
+        raise ConversionError("Kesim sonrası geometri kalmadı — düzlemi kaydırın.")
+    glb_path.write_bytes(out.export(file_type="glb"))
+
+
 def export_usdz(glb_path: Path, usdz_path: Path, tools_dir: Path) -> bool:
     """Export USDZ for iOS Quick Look via Blender. Returns False on any
     failure — USDZ is an enhancement, not a requirement."""

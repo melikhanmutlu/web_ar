@@ -71,11 +71,16 @@ def create_directories():
 
 create_directories()
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+# Database URI comes from config.py (DATABASE_URL on Railway -> postgres,
+# local fallback sqlite). The old hardcoded "sqlite:///app.db" here silently
+# overrode DATABASE_URL, so production never actually used postgres.
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# SQLite thread-safe configuration
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"check_same_thread": False}}
+if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+    # SQLite: thread-safe connect args; postgres pool options don't apply
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "connect_args": {"check_same_thread": False}
+    }
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["CONVERTED_FOLDER"] = CONVERTED_FOLDER
@@ -172,43 +177,76 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create database tables (migration-safe)
-with app.app_context():
-    try:
-        db.create_all()
-    except Exception as e:
-        # "table already exists" is expected under multi-worker gunicorn (race condition
-        # between workers both calling create_all at startup) — log at DEBUG, not WARNING.
-        if "already exists" in str(e).lower():
-            logger.debug(f"DB init (expected race): {e}")
+# Database bootstrap (migration-aware).
+# Once an alembic_version table exists, Alembic (flask db upgrade in the
+# deploy start command) owns the schema and this block does nothing. For
+# fresh or legacy DBs it bootstraps via create_all and then stamps the
+# alembic baseline so future `flask db upgrade` runs start from the right
+# revision. SKIP_DB_BOOTSTRAP=1 disables it entirely (used when generating
+# migrations against an empty DB).
+if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in ("1", "true", "yes"):
+    with app.app_context():
+        try:
+            from sqlalchemy import inspect as _sa_inspect
+
+            _inspector = _sa_inspect(db.engine)
+            _has_alembic = _inspector.has_table("alembic_version")
+        except Exception as e:
+            logger.warning(f"DB inspection failed: {e}")
+            _has_alembic = False
+
+        if _has_alembic:
+            logger.info("Alembic owns the schema (alembic_version found); skipping create_all")
         else:
-            logger.warning(f"Database initialization warning: {e}")
+            try:
+                db.create_all()
+            except Exception as e:
+                # "table already exists" is expected under multi-worker gunicorn
+                # (race between workers calling create_all at startup).
+                if "already exists" in str(e).lower():
+                    logger.debug(f"DB init (expected race): {e}")
+                else:
+                    logger.warning(f"Database initialization warning: {e}")
 
-    # Always run column migrations regardless of whether create_all succeeded
-    try:
-        with db.engine.connect() as conn:
-            result = conn.execute(db.text("PRAGMA table_info(user_model)"))
-            columns = [row[1] for row in result]
+            # Legacy column adds for old sqlite DBs created before these fields
+            if db.engine.dialect.name == "sqlite":
+                try:
+                    with db.engine.connect() as conn:
+                        result = conn.execute(db.text("PRAGMA table_info(user_model)"))
+                        columns = [row[1] for row in result]
 
-            if "original_dimensions" not in columns:
-                conn.execute(
-                    db.text(
-                        "ALTER TABLE user_model ADD COLUMN original_dimensions TEXT"
-                    )
+                        if "original_dimensions" not in columns:
+                            conn.execute(
+                                db.text(
+                                    "ALTER TABLE user_model ADD COLUMN original_dimensions TEXT"
+                                )
+                            )
+                            conn.commit()
+                            logger.info("Added original_dimensions column")
+
+                        if "cumulative_scale" not in columns:
+                            conn.execute(
+                                db.text(
+                                    "ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0"
+                                )
+                            )
+                            conn.commit()
+                            logger.info("Added cumulative_scale column")
+                except Exception as migration_error:
+                    logger.error(f"Migration error: {migration_error}")
+
+            # Stamp the baseline so `flask db upgrade` treats this schema as current
+            try:
+                _migrations_dir = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "migrations"
                 )
-                conn.commit()
-                logger.info("Added original_dimensions column")
+                if os.path.isdir(_migrations_dir):
+                    from flask_migrate import stamp as _alembic_stamp
 
-            if "cumulative_scale" not in columns:
-                conn.execute(
-                    db.text(
-                        "ALTER TABLE user_model ADD COLUMN cumulative_scale REAL DEFAULT 1.0"
-                    )
-                )
-                conn.commit()
-                logger.info("Added cumulative_scale column")
-    except Exception as migration_error:
-        logger.error(f"Migration error: {migration_error}")
+                    _alembic_stamp()
+                    logger.info("Alembic: stamped bootstrapped DB at head")
+            except Exception as e:
+                logger.warning(f"Alembic stamp skipped: {e}")
 
 
 def allowed_file(filename):

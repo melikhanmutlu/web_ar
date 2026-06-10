@@ -40,8 +40,8 @@ if DATABASE_URL:
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
 else:
-    # Local SQLite
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///instance/app.db'
+    # Local SQLite (Flask-SQLAlchemy resolves the relative path to instance/)
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///app.db'
 
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 

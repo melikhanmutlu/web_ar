@@ -220,3 +220,26 @@ def test_slice_model(client):
     bad = client.post(f"/api/models/{model_id}/slice",
                       json={"axis": "q", "position": 0.5})
     assert bad.status_code == 400
+
+
+def test_viewer_importmap_precedes_modules(client):
+    """The import map must come before every module script, otherwise the
+    browser rejects it and the slicer's bare 'three' import cannot resolve."""
+    register_and_login(client)
+    resp = client.post(
+        "/api/upload",
+        data={"file": (io.BytesIO(make_stl_bytes()), "sira.stl")},
+        content_type="multipart/form-data",
+    )
+    model_id = client.get(f"/api/jobs/{resp.get_json()['job_id']}").get_json()["model_id"]
+    html = client.get(f"/m/{model_id}").get_data(as_text=True)
+
+    importmap_at = html.find('type="importmap"')
+    first_module_at = html.find('type="module"')
+    assert importmap_at != -1 and first_module_at != -1
+    assert importmap_at < first_module_at, "importmap must precede all module scripts"
+
+    # full-bleed stage + toolbar + slicer hooks present
+    for needle in ("stage-bleed", "stage-toolbar", "ctl-exposure",
+                   "open-slicer", "slicer-canvas", "__GLB_URL__"):
+        assert needle in html, needle

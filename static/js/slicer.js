@@ -19,6 +19,7 @@ if (!modal || !openBtn) {
   const applyBtn = document.getElementById("slice-apply");
 
   let initialized = false;
+  let running = false;
   let renderer, scene, camera, controls, plane, planeMesh, bbox, modelRoot;
   let axis = "x";
   const AXIS_VEC = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
@@ -87,12 +88,14 @@ if (!modal || !openBtn) {
       scene.add(planeMesh);
 
       updatePlane();
-      animate();
+      startLoop();
     }, undefined, () => {
       statusEl.textContent = "Model yüklenemedi.";
+      applyBtn.disabled = true;
     });
 
     window.addEventListener("resize", resize);
+    if ("ResizeObserver" in window) new ResizeObserver(resize).observe(wrap);
   }
 
   function resize() {
@@ -103,8 +106,14 @@ if (!modal || !openBtn) {
     camera.updateProjectionMatrix();
   }
 
+  function startLoop() {
+    if (running) return; // never stack RAF loops
+    running = true;
+    requestAnimationFrame(animate);
+  }
+
   function animate() {
-    if (modal.hidden) return; // pause loop while closed
+    if (modal.hidden) { running = false; return; } // pause while closed
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
@@ -154,8 +163,8 @@ if (!modal || !openBtn) {
   openBtn.addEventListener("click", () => {
     modal.hidden = false;
     init();
-    resize();
-    if (renderer && bbox) animate();
+    // layout settles a frame after the modal becomes visible
+    requestAnimationFrame(() => { resize(); startLoop(); });
   });
   modal.querySelectorAll("[data-close]").forEach((el) => {
     el.addEventListener("click", () => { modal.hidden = true; });

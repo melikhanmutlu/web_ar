@@ -18,15 +18,15 @@
   <div class="stat-row">
     <div class="stat-tile">
       <p class="stat-label">Model</p>
-      <p class="stat-value">{{ stats.models }}</p>
+      <p class="stat-value"><span data-countup="{{ stats.models }}">{{ stats.models }}</span></p>
     </div>
     <div class="stat-tile">
       <p class="stat-label">Toplam görüntülenme</p>
-      <p class="stat-value">{{ stats.views }}</p>
+      <p class="stat-value"><span data-countup="{{ stats.views }}">{{ stats.views }}</span></p>
     </div>
     <div class="stat-tile">
       <p class="stat-label">Depolama</p>
-      <p class="stat-value">{{ '%.1f'|format(stats.storage / 1048576) }} <small>MB</small></p>
+      <p class="stat-value"><span data-countup="{{ '%.1f'|format(stats.storage / 1048576) }}">{{ '%.1f'|format(stats.storage / 1048576) }}</span> <small>MB</small></p>
     </div>
     <div class="stat-tile tile-lilac">
       <p class="stat-label">AI üretim — bugün kalan</p>
@@ -216,4 +216,5 @@
 {% block scripts %}
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/reveal.js') }}"></script>
 {% endblock %}

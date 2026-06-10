@@ -7,22 +7,22 @@
   <div class="container hero-grid">
     <div class="reveal-left in">
       <p class="kicker">Tarayıcıda artırılmış gerçeklik</p>
-      <h1>3D modelleriniz.<br><span class="hl">Gerçek dünyada.</span></h1>
+      <h1 class="word-in">3D modelleriniz.<br><span class="hl">Gerçek dünyada.</span></h1>
       <p class="hero-sub">
         Dosyanızı bırakın ya da yapay zekâya tarif edin.
         Saniyeler sonra QR kodunuz hazır.
       </p>
       <div class="hero-actions">
         {% if current_user.is_authenticated %}
-          <a class="btn btn-lilac btn-lg" href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> Stüdyoya git</a>
+          <a class="btn btn-lilac btn-lg" data-magnetic href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> Stüdyoya git</a>
         {% else %}
-          <a class="btn btn-lilac btn-lg" href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> Ücretsiz başla</a>
+          <a class="btn btn-lilac btn-lg" data-magnetic href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> Ücretsiz başla</a>
           <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Giriş yap</a>
         {% endif %}
       </div>
       <p class="hero-note">Kurulum yok · kart yok · QR okut, AR'da gör</p>
     </div>
-    <div class="hero-stage reveal-scale">
+    <div class="hero-stage reveal-scale" data-parallax="0.06">
       <span class="stage-tag">Canlı 3D — sürükleyin</span>
       <model-viewer src="{{ url_for('static', filename='models/demo.glb') }}"
                     camera-controls auto-rotate auto-rotate-delay="800"
@@ -45,7 +45,7 @@
 </div>
 
 <!-- PIPELINE (dark) -->
-<section class="band-dark on-dark" id="pipeline">
+<section class="band-dark on-dark grain" id="pipeline">
   <div class="container">
     <h2 class="reveal">Biz dönüştürüyoruz.<br>Siz paylaşıyorsunuz.</h2>
     <div class="tri-grid" data-stagger="0.12">
@@ -71,34 +71,52 @@
   </div>
 </section>
 
-<!-- PLATFORM (quiet list) -->
+<!-- PLATFORM (sticky split) -->
 <section class="section">
-  <div class="container">
-    <p class="kicker reveal">Platform</p>
-    <h2 class="reveal">Tek yükleme,<br>uçtan uca altyapı.</h2>
-    <div class="list-cards" data-stagger="0.08">
+  <div class="container split">
+    <div class="split-sticky">
+      <p class="kicker reveal">Platform</p>
+      <h2 class="reveal">Tek yükleme,<br>uçtan uca altyapı.</h2>
+      <p class="lead reveal">Dönüşümden AR'a kadar her adım otomatik —
+        siz sadece linki paylaşın.</p>
+    </div>
+    <div class="list-cards" data-stagger="0.1">
       <article class="list-card">
+        <span class="num">01</span>
         <h3>Stüdyo görüntüleyici</h3>
         <p>Işık ön ayarları, pozlama, gerçek boyut etiketleri ve tek tuş ekran görüntüsü.</p>
       </article>
       <article class="list-card">
+        <span class="num">02</span>
         <h3>Canlı önizlemeli slicer</h3>
         <p>Modeli bir düzlemle kesin — kesiti anlık görün, tek tıkla uygulayın.</p>
       </article>
       <article class="list-card">
+        <span class="num">03</span>
         <h3>Gerçek ölçek AR</h3>
         <p>Hedef boyutu belirleyin; ürün, müşterinizin masasında gerçek boyutunda dursun.</p>
       </article>
       <article class="list-card">
+        <span class="num">04</span>
         <h3>iOS + Android</h3>
         <p>Quick Look için USDZ, Scene Viewer için GLB — ikisi de otomatik üretilir.</p>
+      </article>
+      <article class="list-card">
+        <span class="num">05</span>
+        <h3>AI üretim</h3>
+        <p>Metinden ya da tek fotoğraftan dokulu, AR'a hazır model.</p>
       </article>
     </div>
   </div>
 </section>
 
+<!-- SCROLL-SCRUB STRIP -->
+<div class="scrub-strip" aria-hidden="true">
+  <p class="scrub-line">YÜKLE <span class="solid">⟶</span> DÖNÜŞTÜR <span class="solid">⟶</span> ÖZELLEŞTİR <span class="solid">⟶</span> AR'DA GÖR</p>
+</div>
+
 <!-- AI BAND -->
-<section class="band-lilac" id="ai">
+<section class="band-lilac grain" id="ai">
   <div class="container ai-grid">
     <div class="reveal-left">
       <p class="kicker">Yapay zekâ stüdyosu</p>
@@ -107,9 +125,9 @@
         Bir cümle ya da tek bir fotoğraf — dakikalar içinde AR'a hazır, dokulu model.
       </p>
       {% if current_user.is_authenticated %}
-        <a class="btn btn-pill" href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> AI ile üret</a>
+        <a class="btn btn-pill" data-magnetic href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> AI ile üret</a>
       {% else %}
-        <a class="btn btn-pill" href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> AI ile üret</a>
+        <a class="btn btn-pill" data-magnetic href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> AI ile üret</a>
       {% endif %}
     </div>
     <div class="ai-demo reveal-scale">
@@ -155,12 +173,12 @@
 <!-- CTA -->
 <div class="container">
   <div class="cta-panel reveal-scale">
-    <div class="cta-ink on-dark">
+    <div class="cta-ink on-dark grain">
       <h2>İlk QR kodunuz,<br>iki dakika.</h2>
       {% if current_user.is_authenticated %}
-        <a class="btn btn-lilac btn-lg" href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> Stüdyoya git</a>
+        <a class="btn btn-lilac btn-lg" data-magnetic href="{{ url_for('views.dashboard') }}"><span class="arr">⟶</span> Stüdyoya git</a>
       {% else %}
-        <a class="btn btn-lilac btn-lg" href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> Hesap oluştur</a>
+        <a class="btn btn-lilac btn-lg" data-magnetic href="{{ url_for('auth.register') }}"><span class="arr">⟶</span> Hesap oluştur</a>
       {% endif %}
     </div>
     <div class="cta-lilac">

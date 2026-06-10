@@ -106,6 +106,61 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# Rate limiting — keyed by user id when logged in, client IP otherwise.
+# Default storage is in-process memory (fine for the single-worker gunicorn
+# setup); point RATELIMIT_STORAGE_URI at redis:// when scaling out.
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+
+def _rate_limit_key():
+    try:
+        if current_user.is_authenticated:
+            return f"user:{current_user.id}"
+    except Exception:
+        pass
+    return get_remote_address()
+
+
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    app=app,
+    default_limits=[],
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+)
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify(
+        {"success": False, "error": f"Rate limit exceeded: {e.description}"}
+    ), 429
+
+
+def check_model_mutation_allowed(model_id, require_exists=True):
+    """Owner guard for model mutation endpoints.
+
+    Anonymous models (user_id is None) stay editable by anyone — anonymous
+    usage is an intentional product decision. Models owned by a user can only
+    be mutated by that user. Returns a (response, status) tuple to return from
+    the view, or None when the mutation is allowed.
+    """
+    model = UserModel.query.get(model_id)
+    if model is None:
+        if require_exists:
+            return jsonify({"success": False, "error": "Model not found"}), 404
+        return None
+    if model.user_id is not None:
+        is_owner = (
+            current_user.is_authenticated and current_user.id == model.user_id
+        )
+        if not is_owner:
+            return jsonify(
+                {"success": False, "error": "Forbidden: you do not own this model"}
+            ), 403
+    return None
+
+
 # Register blueprints
 app.register_blueprint(auth)
 
@@ -1231,6 +1286,7 @@ def get_usdz_status(model_id):
 
 
 @app.route("/upload", methods=["POST"])
+@limiter.limit("30 per hour")
 def upload_file():
     """DEPRECATED: Legacy upload route. Use /upload_model instead.
     Kept for backward compatibility with existing tests."""
@@ -1407,6 +1463,7 @@ def upload_progress():
 
 
 @app.route("/upload_model", methods=["POST"])
+@limiter.limit("30 per hour")
 def upload_model():
     """Upload and convert 3D model. Works with or without login."""
     if "file" not in request.files:
@@ -3385,6 +3442,7 @@ def get_model_dimensions(model_id):
 
 
 @app.route("/save_modifications", methods=["POST"])
+@limiter.limit("60 per minute")
 def save_modifications():
     """Save modifications to original GLB model (replaces model.glb)"""
     try:
@@ -3406,6 +3464,10 @@ def save_modifications():
         if not model:
             logger.error(f"Model not found for ID: {model_id}")
             return jsonify({"success": False, "error": "Model not found"}), 404
+
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
 
         # Use current model.glb file as the base for modifications
         current_model_path = os.path.join(
@@ -3565,6 +3627,7 @@ def api_get_mesh_bounds_route(model_id):
 
 
 @app.route("/slice_model", methods=["POST"])
+@limiter.limit("60 per minute")
 def slice_model():
     """Slice a 3D model with a plane"""
     try:
@@ -3598,6 +3661,11 @@ def slice_model():
             return jsonify(
                 {"success": False, "error": "Missing required parameters"}
             ), 400
+
+        # Owner guard (models without a DB record are treated as anonymous)
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
 
         # Try to find the model file
         # First check if model_id is a UUID (converted model)
@@ -3774,6 +3842,10 @@ def get_versions(model_id):
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         success = restore_version(model_id, version_number)
         if success:
             return jsonify(
@@ -3792,6 +3864,10 @@ def restore_model_version(model_id, version_number):
 def delete_model_version(model_id, version_number):
     """Delete a specific version"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         success = delete_version(model_id, version_number)
         if success:
             return jsonify(
@@ -3862,6 +3938,10 @@ def create_hotspot(model_id):
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
 
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
+
         data = request.get_json()
         if not data:
             return jsonify({"success": False, "error": "No data provided"}), 400
@@ -3909,6 +3989,10 @@ def create_hotspot(model_id):
 def delete_hotspot(model_id, hotspot_id):
     """Delete a specific hotspot"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         hotspot = ModelHotspot.query.filter_by(
             model_id=model_id, hotspot_id=hotspot_id
         ).first()
@@ -3928,6 +4012,10 @@ def delete_hotspot(model_id, hotspot_id):
 def delete_all_hotspots(model_id):
     """Delete all hotspots for a model"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         ModelHotspot.query.filter_by(model_id=model_id).delete()
         db.session.commit()
         return jsonify({"success": True})
@@ -3944,6 +4032,10 @@ def toggle_hotspots_visibility(model_id):
         model = UserModel.query.get(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
+
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
 
         data = request.get_json()
         model.hotspots_visible = data.get("visible", not model.hotspots_visible)
@@ -3978,6 +4070,10 @@ def create_camera_view(model_id):
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
 
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
+
         data = request.get_json()
         orbit = data.get("orbit", {})
         target = data.get("target", {})
@@ -4006,6 +4102,10 @@ def create_camera_view(model_id):
 def delete_camera_view(model_id, view_id):
     """Delete a camera view"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         view = CameraView.query.filter_by(id=view_id, model_id=model_id).first()
         if not view:
             return jsonify({"success": False, "error": "View not found"}), 404
@@ -4190,6 +4290,7 @@ def _finalize_ai_job(job, task):
 
 @app.route("/api/generate-3d", methods=["POST"])
 @login_required
+@limiter.limit("6 per minute")
 def generate_3d():
     """Start a Meshy text/image -> 3D generation job (login + daily quota)."""
     import ai_generator

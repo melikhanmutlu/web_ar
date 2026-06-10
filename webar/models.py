@@ -24,7 +24,7 @@ def new_uuid() -> str:
 
 
 class User(UserMixin, db.Model):
-    __tablename__ = "user"
+    __tablename__ = "webar_user"
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
@@ -48,11 +48,11 @@ class User(UserMixin, db.Model):
 
 
 class Folder(db.Model):
-    __tablename__ = "folder"
+    __tablename__ = "webar_folder"
     __table_args__ = (db.UniqueConstraint("user_id", "name", name="uq_folder_user_name"),)
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("webar_user.id"), nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
@@ -63,13 +63,13 @@ class Folder(db.Model):
 
 
 class Model3D(db.Model):
-    __tablename__ = "model3d"
+    __tablename__ = "webar_model"
 
     # UUID primary key: the public share/AR link is /m/<id>, so ids must be
     # unguessable rather than sequential.
     id = db.Column(db.String(36), primary_key=True, default=new_uuid)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
-    folder_id = db.Column(db.Integer, db.ForeignKey("folder.id"), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("webar_user.id"), nullable=False, index=True)
+    folder_id = db.Column(db.Integer, db.ForeignKey("webar_folder.id"), nullable=True, index=True)
 
     name = db.Column(db.String(255), nullable=False)
     source_format = db.Column(db.String(10), nullable=False)  # obj|stl|fbx|glb|gltf
@@ -115,10 +115,10 @@ class ConversionJob(db.Model):
     processes it inline. The frontend polls /api/jobs/<id> in both modes.
     """
 
-    __tablename__ = "conversion_job"
+    __tablename__ = "webar_job"
 
     id = db.Column(db.String(36), primary_key=True, default=new_uuid)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("webar_user.id"), nullable=False, index=True)
     status = db.Column(db.String(20), nullable=False, default="pending", index=True)
     # pending | processing | completed | failed
 

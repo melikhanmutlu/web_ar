@@ -65,17 +65,46 @@ def create_app(config_object: type[Config] = Config) -> Flask:
 
 
 def _bootstrap_database(app: Flask) -> None:
-    """Create missing tables and stamp Alembic on fresh databases.
+    """Create missing tables and force-stamp Alembic to this codebase's head.
 
     Production runs `flask db upgrade` (with SKIP_DB_BOOTSTRAP=1) before the
-    server starts; this fallback keeps local `python app.py` and unexpected
-    fresh databases working without a manual migration step.
+    server starts, but a database that previously belonged to another
+    migration chain (e.g. an older version of this app) carries an
+    alembic_version this chain cannot locate, which would make every
+    subsequent upgrade fail. Since create_all() guarantees our tables exist,
+    overwriting alembic_version with our head is always correct here.
+    Failures are logged, never fatal — gunicorn workers must still boot.
     """
+    import os
+
+    from sqlalchemy import text
+
     with app.app_context():
         try:
             db.create_all()
-            from flask_migrate import stamp
 
-            stamp()
-        except Exception as e:  # pragma: no cover
+            from alembic.config import Config as AlembicConfig
+            from alembic.script import ScriptDirectory
+
+            migrations_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "migrations",
+            )
+            alembic_cfg = AlembicConfig(os.path.join(migrations_dir, "alembic.ini"))
+            alembic_cfg.set_main_option("script_location", migrations_dir)
+            head = ScriptDirectory.from_config(alembic_cfg).get_current_head()
+
+            if head:
+                with db.engine.begin() as conn:
+                    conn.execute(text(
+                        "CREATE TABLE IF NOT EXISTS alembic_version ("
+                        "version_num VARCHAR(32) NOT NULL, "
+                        "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+                    ))
+                    conn.execute(text("DELETE FROM alembic_version"))
+                    conn.execute(
+                        text("INSERT INTO alembic_version (version_num) VALUES (:v)"),
+                        {"v": head},
+                    )
+        except BaseException as e:  # noqa: BLE001 — includes SystemExit from CLI helpers
             app.logger.warning(f"DB bootstrap skipped: {e}")

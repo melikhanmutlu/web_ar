@@ -12,12 +12,20 @@ except ImportError:
 # Base directory - projenin kök dizini
 BASE_DIR = os.getenv('WEB_AR_BASE_DIR', os.path.dirname(os.path.abspath(__file__)))
 
-# Alt dizinler
-UPLOAD_FOLDER = os.getenv('WEB_AR_UPLOAD_DIR', os.path.join(BASE_DIR, 'uploads'))
-CONVERTED_FOLDER = os.getenv('WEB_AR_CONVERTED_DIR', os.path.join(BASE_DIR, 'converted'))
-TEMP_FOLDER = os.getenv('WEB_AR_TEMP_DIR', os.path.join(BASE_DIR, 'temp'))
-QR_FOLDER = os.getenv('WEB_AR_QR_DIR', os.path.join(BASE_DIR, 'qr_codes'))
-TOOLS_DIR = os.getenv('WEB_AR_TOOLS_DIR', os.path.join(BASE_DIR, 'tools'))
+# Railway Volume: when a Volume is mounted, Railway injects RAILWAY_VOLUME_MOUNT_PATH
+# automatically — no manual env var needed. Falls back to BASE_DIR locally.
+_STORAGE_ROOT = (
+    os.environ.get('STORAGE_ROOT')
+    or os.environ.get('RAILWAY_VOLUME_MOUNT_PATH')
+    or BASE_DIR
+)
+
+# Alt dizinler — on Railway all data dirs live under the persistent volume root.
+UPLOAD_FOLDER = os.getenv('WEB_AR_UPLOAD_DIR', os.path.join(_STORAGE_ROOT, 'uploads'))
+CONVERTED_FOLDER = os.getenv('WEB_AR_CONVERTED_DIR', os.path.join(_STORAGE_ROOT, 'converted'))
+TEMP_FOLDER = os.getenv('WEB_AR_TEMP_DIR', os.path.join(_STORAGE_ROOT, 'temp'))
+QR_FOLDER = os.getenv('WEB_AR_QR_DIR', os.path.join(_STORAGE_ROOT, 'qr_codes'))
+TOOLS_DIR = os.getenv('WEB_AR_TOOLS_DIR', os.path.join(BASE_DIR, 'tools'))  # tools are in the image, not the volume
 
 # Dönüşüm araçları - Platform-specific
 if platform.system() == 'Windows':

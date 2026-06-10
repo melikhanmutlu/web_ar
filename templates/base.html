@@ -6,26 +6,30 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{% block title %}WebAR{% endblock %} · WebAR</title>
   <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   {% block head %}{% endblock %}
 </head>
-<body>
+<body class="{% block bodyclass %}{% endblock %}">
   <header class="nav">
     <div class="container nav-inner">
       <a class="brand" href="{{ url_for('views.index') }}">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7l-9-5Z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>
-        <span>Web<em>AR</em></span>
+        <span class="brand-mark">◆</span>
+        <span class="brand-word">web<em>ar</em></span>
       </a>
       <nav class="nav-links">
         {% if current_user.is_authenticated %}
-          <a href="{{ url_for('views.dashboard') }}" class="nav-link">Modellerim</a>
+          <a href="{{ url_for('views.dashboard') }}" class="nav-link mono">STÜDYO</a>
           <form action="{{ url_for('auth.logout') }}" method="post" class="inline-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-ghost btn-sm">Çıkış</button>
+            <button type="submit" class="nav-link mono as-btn">ÇIKIŞ</button>
           </form>
+          <a href="{{ url_for('views.dashboard') }}" class="btn btn-pill">Model yükle <span class="arr">↗</span></a>
         {% else %}
-          <a href="{{ url_for('auth.login') }}" class="nav-link">Giriş</a>
-          <a href="{{ url_for('auth.register') }}" class="btn btn-primary btn-sm">Kayıt ol</a>
+          <a href="{{ url_for('auth.login') }}" class="nav-link mono">GİRİŞ</a>
+          <a href="{{ url_for('auth.register') }}" class="btn btn-pill">Hemen başla <span class="arr">↗</span></a>
         {% endif %}
       </nav>
     </div>
@@ -35,7 +39,7 @@
     {% if messages %}
       <div class="container flashes">
         {% for category, message in messages %}
-          <div class="flash flash-{{ category }}">{{ message }}</div>
+          <div class="flash flash-{{ category }} mono">{{ message }}</div>
         {% endfor %}
       </div>
     {% endif %}
@@ -44,7 +48,37 @@
   <main>{% block content %}{% endblock %}</main>
 
   <footer class="footer">
-    <div class="container">WebAR — 3D modellerinizi artırılmış gerçeklikte paylaşın.</div>
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <span class="brand-mark">◆</span>
+          <p class="footer-tag">3D modelleriniz, gerçek dünyada.<br>Yükleyin, dönüştürün, AR'da paylaşın.</p>
+        </div>
+        <div class="footer-col">
+          <p class="footer-head mono">PLATFORM</p>
+          <a href="{{ url_for('views.dashboard') }}">Stüdyo</a>
+          <a href="{{ url_for('views.index') }}#pipeline">Dönüşüm hattı</a>
+          <a href="{{ url_for('views.index') }}#ai">AI üretim</a>
+        </div>
+        <div class="footer-col">
+          <p class="footer-head mono">FORMATLAR</p>
+          <span>OBJ · STL · FBX</span>
+          <span>GLB · glTF</span>
+          <span>USDZ (iOS AR)</span>
+        </div>
+        <div class="footer-col">
+          <p class="footer-head mono">HESAP</p>
+          {% if current_user.is_authenticated %}
+            <a href="{{ url_for('views.dashboard') }}">Modellerim</a>
+          {% else %}
+            <a href="{{ url_for('auth.register') }}">Kayıt ol</a>
+            <a href="{{ url_for('auth.login') }}">Giriş yap</a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="footer-word" aria-hidden="true">webar</div>
+      <p class="footer-fine mono">© 2026 WEBAR — TARAYICIDA ARTIRILMIŞ GERÇEKLİK</p>
+    </div>
   </footer>
   {% block scripts %}{% endblock %}
 </body>

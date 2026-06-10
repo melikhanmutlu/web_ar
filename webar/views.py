@@ -6,6 +6,7 @@ from flask import (Blueprint, abort, current_app, flash, redirect,
                    render_template, request, send_from_directory, url_for)
 from flask_login import current_user, login_required
 
+from . import ai
 from .extensions import db
 from .forms import FolderForm
 from .models import Folder, Model3D
@@ -33,6 +34,14 @@ def dashboard():
     models = query.order_by(Model3D.created_at.desc()).all()
     folders = (Folder.query.filter_by(user_id=current_user.id)
                .order_by(Folder.name).all())
+
+    all_models = Model3D.query.filter_by(user_id=current_user.id).all()
+    stats = {
+        "models": len(all_models),
+        "views": sum(m.view_count or 0 for m in all_models),
+        "storage": sum(m.file_size or 0 for m in all_models),
+        "ai_models": sum(1 for m in all_models if m.source_format == "ai"),
+    }
     return render_template(
         "dashboard.html",
         models=models,
@@ -40,6 +49,9 @@ def dashboard():
         active_folder=active_folder,
         folder_form=FolderForm(),
         allowed_extensions=sorted(current_app.config["ALLOWED_EXTENSIONS"]),
+        stats=stats,
+        ai_enabled=ai.enabled(),
+        ai_remaining=ai.remaining_quota(current_user.id) if ai.enabled() else 0,
     )
 
 
@@ -89,11 +101,15 @@ def viewer(model_id: str):
         abort(404)
     model.view_count = (model.view_count or 0) + 1
     db.session.commit()
+    is_owner = current_user.is_authenticated and current_user.id == model.user_id
+    folders = (Folder.query.filter_by(user_id=current_user.id)
+               .order_by(Folder.name).all()) if is_owner else []
     return render_template(
         "viewer.html",
         model=model,
         share_url=f"{public_base_url()}/m/{model.id}",
-        is_owner=current_user.is_authenticated and current_user.id == model.user_id,
+        is_owner=is_owner,
+        folders=folders,
     )
 
 

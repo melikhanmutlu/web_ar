@@ -1,78 +1,102 @@
 {% extends "base.html" %}
-{% block title %}Modellerim{% endblock %}
+{% block title %}Stüdyo{% endblock %}
 {% block content %}
-<div class="container dashboard">
-  <div class="dash-header">
-    <h1>{% if active_folder %}{{ active_folder.name }}{% else %}Modellerim{% endif %}</h1>
-    <button class="btn btn-primary" id="open-upload">+ Model yükle</button>
+<div class="container studio">
+  <div class="studio-head">
+    <div>
+      <p class="kicker" style="margin-bottom:10px">STÜDYO</p>
+      <h1>{% if active_folder %}{{ active_folder.name }}{% else %}Modelleriniz{% endif %}</h1>
+    </div>
+    <div class="studio-actions">
+      {% if ai_enabled %}
+      <button class="btn btn-lilac" id="open-ai">◆ AI ile üret</button>
+      {% endif %}
+      <button class="btn btn-pill" id="open-upload">Model yükle <span class="arr">↗</span></button>
+    </div>
   </div>
 
-  <div class="dash-layout">
-    <aside class="sidebar">
-      <h2 class="sidebar-title">Klasörler</h2>
-      <ul class="folder-list">
-        <li class="{{ 'active' if not active_folder }}">
-          <a href="{{ url_for('views.dashboard') }}">Tüm modeller</a>
-        </li>
-        {% for folder in folders %}
-        <li class="{{ 'active' if active_folder and active_folder.id == folder.id }}">
-          <a href="{{ url_for('views.dashboard', folder=folder.id) }}">{{ folder.name }}
-            <span class="count">{{ folder.models|length }}</span></a>
-          <form action="{{ url_for('views.delete_folder', folder_id=folder.id) }}" method="post"
+  <div class="stat-row">
+    <div class="stat-tile">
+      <p class="stat-label">Model</p>
+      <p class="stat-value">{{ stats.models }}</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Toplam görüntülenme</p>
+      <p class="stat-value">{{ stats.views }}</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Depolama</p>
+      <p class="stat-value">{{ '%.1f'|format(stats.storage / 1048576) }} <small>MB</small></p>
+    </div>
+    <div class="stat-tile tile-lilac">
+      <p class="stat-label">AI üretim — bugün kalan</p>
+      <p class="stat-value">{% if ai_enabled %}{{ ai_remaining }}{% else %}—{% endif %}
+        <small>{% if ai_enabled %}hak{% else %}kapalı{% endif %}</small></p>
+    </div>
+  </div>
+
+  <div class="studio-toolbar">
+    <input type="search" id="model-search" class="input input-sm search" placeholder="Modellerde ara…">
+    <div class="folder-strip">
+      <a class="chip {{ 'active' if not active_folder }}" href="{{ url_for('views.dashboard') }}">TÜMÜ</a>
+      {% for folder in folders %}
+        <span style="display:inline-flex; align-items:center; gap:2px">
+          <a class="chip {{ 'active' if active_folder and active_folder.id == folder.id }}"
+             href="{{ url_for('views.dashboard', folder=folder.id) }}">{{ folder.name }} · {{ folder.models|length }}</a>
+          <form action="{{ url_for('views.delete_folder', folder_id=folder.id) }}" method="post" class="inline-form"
                 onsubmit="return confirm('Klasör silinsin mi? İçindeki modeller silinmez.')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="icon-btn" title="Klasörü sil">✕</button>
+            <button class="icon-btn" title="Klasörü sil" style="font-size:11px">✕</button>
           </form>
-        </li>
-        {% endfor %}
-      </ul>
-      <form action="{{ url_for('views.create_folder') }}" method="post" class="folder-form">
+        </span>
+      {% endfor %}
+      <form action="{{ url_for('views.create_folder') }}" method="post" class="folder-form-inline">
         {{ folder_form.hidden_tag() }}
-        {{ folder_form.name(class="input input-sm", placeholder="Yeni klasör adı") }}
-        <button type="submit" class="btn btn-ghost btn-sm">Ekle</button>
+        {{ folder_form.name(class="input input-sm", placeholder="Yeni klasör") }}
+        <button type="submit" class="chip">+ EKLE</button>
       </form>
-    </aside>
-
-    <section class="model-grid-wrap">
-      {% if models %}
-      <div class="model-grid">
-        {% for model in models %}
-        <article class="card model-card">
-          <a class="model-thumb" href="{{ url_for('views.viewer', model_id=model.id) }}">
-            <model-viewer src="{{ url_for('views.model_file', filename=model.glb_filename) }}"
-                          camera-controls disable-zoom interaction-prompt="none"
-                          shadow-intensity="0.8" loading="lazy"></model-viewer>
-          </a>
-          <div class="model-meta">
-            <a class="model-name" href="{{ url_for('views.viewer', model_id=model.id) }}">{{ model.name }}</a>
-            <p class="model-sub">
-              <span class="badge">{{ model.source_format|upper }}</span>
-              {{ model.file_size_human }} · {{ model.view_count }} görüntülenme
-            </p>
-            <div class="model-actions">
-              <a class="btn btn-ghost btn-sm" href="{{ url_for('views.viewer', model_id=model.id) }}">Görüntüle</a>
-              <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
-                    onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-danger btn-sm">Sil</button>
-              </form>
-            </div>
-          </div>
-        </article>
-        {% endfor %}
-      </div>
-      {% else %}
-      <div class="empty-state">
-        <p>Henüz model yok.</p>
-        <p class="muted">İlk 3D modelinizi yükleyin — birkaç saniye içinde AR linkiniz hazır olur.</p>
-        <button class="btn btn-primary" onclick="document.getElementById('open-upload').click()">Model yükle</button>
-      </div>
-      {% endif %}
-    </section>
+    </div>
   </div>
+
+  {% if models %}
+  <div class="model-grid" id="model-grid">
+    {% for model in models %}
+    <article class="card model-card" data-name="{{ model.name|lower }}">
+      <a class="model-thumb" href="{{ url_for('views.viewer', model_id=model.id) }}">
+        <span class="badge {{ 'badge-ai' if model.source_format == 'ai' }}">{{ 'AI' if model.source_format == 'ai' else model.source_format|upper }}</span>
+        <model-viewer src="{{ url_for('views.model_file', filename=model.glb_filename) }}"
+                      camera-controls disable-zoom interaction-prompt="none"
+                      shadow-intensity="0.9" environment-image="neutral"
+                      loading="lazy"></model-viewer>
+      </a>
+      <div class="model-meta">
+        <a class="model-name" href="{{ url_for('views.viewer', model_id=model.id) }}">{{ model.name }}</a>
+        <p class="model-sub">{{ model.file_size_human }} · {{ model.view_count }} GÖRÜNTÜLENME
+          {% if model.dimensions_human %} · {{ model.dimensions_human }}{% endif %}</p>
+        <div class="model-actions">
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('views.viewer', model_id=model.id) }}">Aç</a>
+          <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
+                onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-sm">Sil</button>
+          </form>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p class="kicker">BOŞ KÜTÜPHANE</p>
+    <h3>İlk modelinizi ekleyin</h3>
+    <p>Bir 3D dosya yükleyin{% if ai_enabled %} ya da yapay zekâya tarif edin{% endif %} —
+      birkaç saniye sonra AR linkiniz hazır.</p>
+    <button class="btn btn-pill" onclick="document.getElementById('open-upload').click()">Model yükle <span class="arr">↗</span></button>
+  </div>
+  {% endif %}
 </div>
 
-<!-- Upload modal -->
+<!-- ====================== UPLOAD MODAL ====================== -->
 <div class="modal" id="upload-modal" hidden>
   <div class="modal-backdrop" data-close></div>
   <div class="modal-box card">
@@ -83,28 +107,110 @@
 
     <div id="upload-form-area">
       <div class="dropzone" id="dropzone">
-        <p><strong>Dosyayı buraya sürükleyin</strong> ya da tıklayıp seçin</p>
-        <p class="muted">{{ allowed_extensions|map('upper')|join(', ') }} · maks. 100 MB</p>
+        <p><strong>Dosyayı buraya bırakın</strong> ya da tıklayıp seçin</p>
+        <p class="dz-formats">{{ allowed_extensions|map('upper')|join(' · ') }} — MAKS. 100 MB</p>
+        <p class="dz-file" id="dz-file" hidden></p>
         <input type="file" id="file-input" accept=".{{ allowed_extensions|join(',.') }}" hidden>
       </div>
-      <div class="field" style="margin-top:14px">
-        <label for="upload-folder">Klasör (isteğe bağlı)</label>
-        <select id="upload-folder" class="input">
-          <option value="">— Klasörsüz —</option>
-          {% for folder in folders %}
-          <option value="{{ folder.id }}" {{ 'selected' if active_folder and active_folder.id == folder.id }}>{{ folder.name }}</option>
-          {% endfor %}
-        </select>
+
+      <div class="opt-grid">
+        <div class="field full">
+          <label for="up-name">Model adı (isteğe bağlı)</label>
+          <input type="text" id="up-name" class="input" placeholder="Boş bırakılırsa dosya adı kullanılır">
+        </div>
+        <div class="field">
+          <label for="up-folder">Klasör</label>
+          <select id="up-folder" class="input">
+            <option value="">— Klasörsüz —</option>
+            {% for folder in folders %}
+            <option value="{{ folder.id }}" {{ 'selected' if active_folder and active_folder.id == folder.id }}>{{ folder.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="up-size">Hedef boyut — metre</label>
+          <input type="number" id="up-size" class="input" min="0.01" max="50" step="0.01"
+                 placeholder="örn. 0.45">
+          <p class="field-hint">AR'da en uzun kenarın gerçek boyutu.</p>
+        </div>
+        <div class="field full">
+          <label class="opt-toggle" style="margin-bottom:8px">
+            <input type="checkbox" id="up-color-on"> Tek renk uygula (dokular kaldırılır — STL için idealdir)
+          </label>
+          <input type="color" id="up-color" class="input" value="#a78ef0" hidden>
+        </div>
       </div>
+      <button class="btn btn-pill btn-block" id="upload-start" disabled>Yükle ve dönüştür <span class="arr">↗</span></button>
     </div>
 
     <div id="upload-progress-area" hidden>
-      <p id="upload-status">Yükleniyor…</p>
+      <p class="progress-status" id="upload-status">Yükleniyor…</p>
       <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
-      <p class="muted" id="upload-detail"></p>
+      <p class="progress-detail" id="upload-detail"></p>
     </div>
   </div>
 </div>
+
+{% if ai_enabled %}
+<!-- ====================== AI MODAL ====================== -->
+<div class="modal" id="ai-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box card">
+    <div class="modal-head">
+      <h2>◆ AI ile 3D üret</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+
+    <div id="ai-form-area">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
+        <div class="tabbar">
+          <button type="button" class="active" data-tab="text">METİNDEN</button>
+          <button type="button" data-tab="image">GÖRSELDEN</button>
+        </div>
+        <span class="ai-quota">BUGÜN KALAN: <strong id="ai-quota">{{ ai_remaining }}</strong></span>
+      </div>
+
+      <div id="ai-tab-text">
+        <div class="field">
+          <label for="ai-prompt">Ne üretelim?</label>
+          <textarea id="ai-prompt" class="input" rows="3"
+            placeholder="örn. el yapımı seramik vazo, mat bej sırlı, organik form"></textarea>
+        </div>
+        <div class="field">
+          <label for="ai-style">Stil</label>
+          <select id="ai-style" class="input">
+            <option value="realistic">Gerçekçi</option>
+            <option value="sculpture">Heykelsi</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="ai-tab-image" hidden>
+        <div class="dropzone" id="ai-dropzone">
+          <p><strong>Ürün fotoğrafını bırakın</strong> ya da tıklayıp seçin</p>
+          <p class="dz-formats">PNG · JPEG · WEBP — TEK NESNE, SADE ARKA PLAN</p>
+          <p class="dz-file" id="ai-dz-file" hidden></p>
+          <input type="file" id="ai-image-input" accept="image/png,image/jpeg,image/webp" hidden>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label for="ai-img-name">Model adı (isteğe bağlı)</label>
+          <input type="text" id="ai-img-name" class="input" placeholder="örn. Vitra Lavabo X">
+        </div>
+      </div>
+
+      <button class="btn btn-lilac btn-block" id="ai-start">Üretimi başlat <span class="arr">↗</span></button>
+      <p class="field-hint" style="margin-top:10px">Üretim genellikle 2–5 dakika sürer;
+        bu pencereyi kapatmayın. Bittiğinde model otomatik açılır.</p>
+    </div>
+
+    <div id="ai-progress-area" hidden>
+      <p class="progress-status" id="ai-status">Üretim başlatılıyor…</p>
+      <div class="progress"><div class="progress-bar" id="ai-progress-bar"></div></div>
+      <p class="progress-detail" id="ai-detail"></p>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}

@@ -1,48 +1,247 @@
 {% extends "base.html" %}
-{% block title %}3D modellerinizi AR'da görüntüleyin{% endblock %}
+{% block title %}3D modelleriniz, gerçek dünyada{% endblock %}
 {% block content %}
+
+<!-- HERO -->
 <section class="hero">
-  <div class="container">
-    <h1>3D modellerinizi<br><span class="accent">artırılmış gerçeklikte</span> paylaşın</h1>
-    <p class="hero-sub">
-      OBJ, STL, FBX, GLB veya glTF dosyanızı yükleyin — saniyeler içinde
-      telefonunuzla gerçek dünyaya yerleştirebileceğiniz bir AR linki ve QR kodu alın.
-    </p>
-    <div class="hero-actions">
-      {% if current_user.is_authenticated %}
-        <a class="btn btn-primary btn-lg" href="{{ url_for('views.dashboard') }}">Modellerime git</a>
-      {% else %}
-        <a class="btn btn-primary btn-lg" href="{{ url_for('auth.register') }}">Ücretsiz başla</a>
-        <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Giriş yap</a>
-      {% endif %}
+  <div class="container hero-grid">
+    <div>
+      <p class="kicker">TARAYICIDA ARTIRILMIŞ GERÇEKLİK</p>
+      <h1>3D modelleriniz.<br><span class="hl">Gerçek dünyada.</span><br>Uygulamasız.</h1>
+      <p class="hero-sub">
+        OBJ, STL, FBX, GLB veya glTF dosyanızı bırakın — ya da yapay zekâya
+        tarif edin. Saniyeler içinde telefonla odanıza yerleştirebileceğiniz
+        bir AR linki ve QR kodu alın.
+      </p>
+      <div class="hero-actions">
+        {% if current_user.is_authenticated %}
+          <a class="btn btn-pill btn-lg" href="{{ url_for('views.dashboard') }}">Stüdyoya git <span class="arr">↗</span></a>
+        {% else %}
+          <a class="btn btn-pill btn-lg" href="{{ url_for('auth.register') }}">Ücretsiz başla <span class="arr">↗</span></a>
+          <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Giriş yap</a>
+        {% endif %}
+      </div>
+      <p class="hero-note">KURULUM YOK — KART YOK — QR OKUT, AR'DA GÖR</p>
+    </div>
+    <div class="hero-stage reveal">
+      <span class="stage-tag">CANLI 3D — SÜRÜKLEYİN</span>
+      <model-viewer src="{{ url_for('static', filename='models/demo.glb') }}"
+                    camera-controls auto-rotate auto-rotate-delay="800"
+                    rotation-per-second="24deg" shadow-intensity="1.1"
+                    environment-image="neutral" exposure="1.05"
+                    interaction-prompt="none" alt="Demo 3D model"></model-viewer>
+      <span class="stage-hint">WEBGL · MODEL-VIEWER</span>
     </div>
   </div>
 </section>
 
-<section class="container features">
-  <div class="feature">
-    <div class="feature-icon">⬆</div>
-    <h3>Yükle</h3>
-    <p>OBJ, STL, FBX, GLB ve glTF desteklenir. Dosyanız otomatik olarak web ve AR uyumlu GLB formatına dönüştürülür.</p>
+<!-- FORMAT MARQUEE -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    {% for _ in range(2) %}
+    <span>OBJ → GLB</span><span>STL → GLB</span><span>FBX → GLB</span>
+    <span>GLTF → GLB</span><span>GLB → USDZ</span><span>TEXT → 3D</span><span>IMAGE → 3D</span>
+    {% endfor %}
   </div>
-  <div class="feature">
-    <div class="feature-icon">▣</div>
-    <h3>QR ile paylaş</h3>
-    <p>Her model için otomatik QR kodu üretilir. Telefonla okutun, model anında tarayıcıda açılır — uygulama gerekmez.</p>
-  </div>
-  <div class="feature">
-    <div class="feature-icon">◈</div>
-    <h3>AR'da görüntüle</h3>
-    <p>Android'de Scene Viewer, iPhone'da Quick Look ile modeli gerçek boyutunda odanıza yerleştirin.</p>
+</div>
+
+<!-- PIPELINE (dark) -->
+<section class="band-dark on-dark" id="pipeline">
+  <div class="container">
+    <p class="kicker">DÖNÜŞÜM HATTI</p>
+    <h2>Biz dönüştürüyoruz.<br>Siz sadece paylaşıyorsunuz.</h2>
+    <p class="lead">Her yükleme arka planda bir dönüşüm hattından geçer: format
+      normalizasyonu, geometri analizi, iOS için USDZ üretimi ve paylaşılabilir QR kodu.</p>
+    <div class="tri-grid">
+      <article class="step-card reveal">
+        <p class="step-num">ADIM — 01</p>
+        <h3>Normalize et</h3>
+        <p>FBX2glTF, obj2gltf ve trimesh ile her format web'in ortak dili olan
+          binary GLB'ye çevrilir. Malzemeler ve dokular korunur.</p>
+        <div class="step-art"></div>
+      </article>
+      <article class="step-card reveal">
+        <p class="step-num">ADIM — 02</p>
+        <h3>Analiz et &amp; özelleştir</h3>
+        <p>Vertex, üçgen ve gerçek dünya boyutları çıkarılır. Hedef boyut ve
+          renk tercihlerinizi dönüşüm sırasında uygularız.</p>
+        <div class="step-art"></div>
+      </article>
+      <article class="step-card reveal">
+        <p class="step-num">ADIM — 03</p>
+        <h3>AR'a hazırla</h3>
+        <p>Android için Scene Viewer, iPhone için Blender'la üretilen USDZ.
+          QR kodunuz hazır — okutan herkes modeli odasında görür.</p>
+        <div class="step-art"></div>
+      </article>
+    </div>
   </div>
 </section>
 
-<section class="container how">
-  <h2>Nasıl çalışır?</h2>
-  <ol class="steps">
-    <li><strong>Hesap oluşturun</strong> ve panele girin.</li>
-    <li><strong>3D dosyanızı sürükleyip bırakın</strong> — dönüşüm arka planda otomatik yapılır.</li>
-    <li><strong>Linki veya QR kodu paylaşın</strong>; açan herkes modeli 3D ve AR olarak görür.</li>
-  </ol>
+<!-- FEATURES -->
+<section class="section">
+  <div class="container">
+    <p class="kicker">PLATFORM</p>
+    <h2>Tek yükleme.<br>Uçtan uca 3D altyapısı.</h2>
+    <div class="feature-grid">
+      <article class="feature reveal">
+        <div class="feature-ico">⬆</div>
+        <h3>Akıllı yükleme</h3>
+        <p>Sürükle-bırak, gerçek zamanlı ilerleme ve arka plan dönüşüm kuyruğu.
+          İsim, klasör, hedef boyut ve renk — hepsi yükleme anında.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-ico">◆</div>
+        <h3>AI ile üret</h3>
+        <p>Modeliniz yok mu? Metinle tarif edin ya da tek bir fotoğraf verin;
+          Meshy destekli üretim dakikalar içinde dokulu GLB çıkarır.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-ico">▣</div>
+        <h3>QR ile paylaş</h3>
+        <p>Her model tahmin edilemez bir linke ve otomatik QR koduna sahip.
+          Okutan, uygulama kurmadan tarayıcıda görüntüler.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-ico">⟲</div>
+        <h3>Stüdyo görüntüleyici</h3>
+        <p>Ortam ışığı ön ayarları, pozlama kontrolü, gerçek boyut etiketleri
+          ve tek tuş ekran görüntüsü ile profesyonel sunum.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-ico">⤢</div>
+        <h3>Gerçek ölçek AR</h3>
+        <p>Hedef boyutu santimetreyle belirleyin; ürün müşterinizin masasında
+          gerçek boyutunda dursun. WebXR + Scene Viewer + Quick Look.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-ico">▤</div>
+        <h3>Düzenle &amp; yönet</h3>
+        <p>Yükledikten sonra da yeniden boyutlandırın, renklendirin, klasörleyin.
+          İstatistikler ve görüntülenme sayıları stüdyoda.</p>
+      </article>
+    </div>
+  </div>
 </section>
+
+<!-- AI BAND -->
+<section class="band-lilac" id="ai">
+  <div class="container ai-grid">
+    <div>
+      <p class="kicker">YAPAY ZEKÂ STÜDYOSU</p>
+      <h2>Yazın ya da fotoğraflayın.<br>3D'si bizden.</h2>
+      <p style="color:rgba(22,20,15,.7); max-width:480px">
+        “Eskitilmiş deri koltuk” yazın ya da ürününüzün tek bir fotoğrafını
+        yükleyin. Önizleme → rafine etme → dokulandırma aşamalarını canlı izleyin;
+        çıktı otomatik olarak AR'a hazır kütüphanenize düşer.
+      </p>
+      {% if current_user.is_authenticated %}
+        <a class="btn btn-pill" href="{{ url_for('views.dashboard') }}#ai">AI ile üret <span class="arr">↗</span></a>
+      {% else %}
+        <a class="btn btn-pill" href="{{ url_for('auth.register') }}">AI ile üret <span class="arr">↗</span></a>
+      {% endif %}
+    </div>
+    <div class="ai-demo reveal">
+      <p class="term">
+        <span class="p">prompt&gt;</span> el yapımı seramik vazo, mat sırlı<br>
+        <span class="p">meshy&gt;</span> önizleme oluşturuluyor… <span class="ok">✓</span><br>
+        <span class="p">meshy&gt;</span> geometri rafine ediliyor… <span class="ok">✓</span><br>
+        <span class="p">meshy&gt;</span> PBR dokular işleniyor…
+      </p>
+      <div class="ai-bar"><i></i></div>
+      <p class="term"><span class="ok">→ vazo.glb</span> — 14.2k üçgen · 2048px doku · AR hazır</p>
+    </div>
+  </div>
+</section>
+
+<!-- STEPS -->
+<section class="section">
+  <div class="container">
+    <p class="kicker">DAKİKALAR İÇİNDE</p>
+    <h2>Hesaptan AR linkine,<br>dört adım.</h2>
+    <div class="quad-grid">
+      <article class="mini-card reveal">
+        <p class="step-num">01</p>
+        <h4>Hesap açın</h4>
+        <p>E-posta yeter. Kart bilgisi yok, kurulum yok.</p>
+      </article>
+      <article class="mini-card reveal">
+        <p class="step-num">02</p>
+        <h4>Yükleyin / üretin</h4>
+        <p>Dosya sürükleyin ya da AI stüdyosuna tarif edin.</p>
+      </article>
+      <article class="mini-card reveal">
+        <p class="step-num">03</p>
+        <h4>Özelleştirin</h4>
+        <p>Gerçek dünya boyutu, renk, klasör, isim — tek panelden.</p>
+      </article>
+      <article class="mini-card reveal">
+        <p class="step-num">04</p>
+        <h4>QR'ı paylaşın</h4>
+        <p>Okutan herkes modeli kendi mekânında, gerçek ölçekte görür.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section" style="padding-top: 0">
+  <div class="container">
+    <p class="kicker">SIK SORULANLAR</p>
+    <h2>Aklınızdakiler.</h2>
+    <div class="faq">
+      <details>
+        <summary>İzleyenlerin uygulama kurması gerekiyor mu?</summary>
+        <p class="faq-body">Hayır. Link veya QR kod tarayıcıda açılır; AR moduna geçiş
+          Android'de Scene Viewer, iPhone'da Quick Look ile sistem seviyesinde yapılır.</p>
+      </details>
+      <details>
+        <summary>Hangi formatları yükleyebilirim?</summary>
+        <p class="faq-body">OBJ, STL, FBX, GLB ve glTF. Hepsi otomatik olarak web standardı
+          binary GLB'ye, iOS için ek olarak USDZ'ye dönüştürülür.</p>
+      </details>
+      <details>
+        <summary>AI üretim nasıl çalışıyor?</summary>
+        <p class="faq-body">Metin ya da görsel girdinizi Meshy'nin üretim modeline iletiyoruz.
+          Önizleme geometrisi onaylandıktan sonra rafine edilip PBR dokularla kaplanır ve
+          kütüphanenize standart bir model olarak eklenir. Günlük üretim kotanız panelde görünür.</p>
+      </details>
+      <details>
+        <summary>Model AR'da gerçek boyutunda mı görünür?</summary>
+        <p class="faq-body">Evet. GLB metre ölçeğinde tutulur; yükleme sırasında ya da sonradan
+          “hedef boyut” girerek modelin gerçek dünyadaki en uzun kenarını belirleyebilirsiniz.</p>
+      </details>
+      <details>
+        <summary>Modellerim herkese açık mı?</summary>
+        <p class="faq-body">Modeller listelenmez; yalnızca tahmin edilemez UUID linkini veya QR
+          kodunu paylaştığınız kişiler erişebilir. Silmek tek tıktır, dosyalar da silinir.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="container">
+  <div class="cta-panel reveal">
+    <div class="cta-ink on-dark">
+      <p class="kicker">BAŞLAYIN</p>
+      <h2>İlk modeliniz, ilk QR kodunuz — iki dakika.</h2>
+      <p class="lead" style="margin-bottom: 28px">Ücretsiz hesap açın, bir dosya bırakın
+        ya da yapay zekâya tarif edin.</p>
+      {% if current_user.is_authenticated %}
+        <a class="btn btn-lilac btn-lg" href="{{ url_for('views.dashboard') }}">Stüdyoya git <span class="arr">↗</span></a>
+      {% else %}
+        <a class="btn btn-lilac btn-lg" href="{{ url_for('auth.register') }}">Hesap oluştur <span class="arr">↗</span></a>
+      {% endif %}
+    </div>
+    <div class="cta-lilac">
+      <div class="ghost-frame">QR OKUT → TARAYICI → AR</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<script src="{{ url_for('static', filename='js/reveal.js') }}"></script>
 {% endblock %}

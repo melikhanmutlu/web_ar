@@ -3,7 +3,9 @@
 {% block content %}
 <div class="container auth-page">
   <div class="card auth-card">
-    <h1>Hesap oluştur</h1>
+    <p class="kicker">ÜCRETSİZ BAŞLAYIN</p>
+    <h1>Hesap oluşturun</h1>
+    <p class="auth-lead">İki dakika içinde ilk AR linkiniz hazır olur.</p>
     <form method="post" novalidate>
       {{ form.hidden_tag() }}
       <div class="field">
@@ -26,7 +28,7 @@
         {{ form.confirm(class="input", autocomplete="new-password") }}
         {% for err in form.confirm.errors %}<p class="field-error">{{ err }}</p>{% endfor %}
       </div>
-      <button type="submit" class="btn btn-primary btn-block">Kayıt ol</button>
+      <button type="submit" class="btn btn-pill btn-block">Kayıt ol <span class="arr">↗</span></button>
     </form>
     <p class="auth-alt">Zaten hesabınız var mı? <a href="{{ url_for('auth.login') }}">Giriş yapın</a></p>
   </div>

@@ -75,6 +75,43 @@ def inspect_glb(path: Path) -> dict:
         return {"vertices": None, "faces": None, "dimensions": None}
 
 
+def apply_customizations(glb_path: Path, color: str | None = None,
+                         target_size: float | None = None) -> None:
+    """Rewrite a GLB applying user customisations.
+
+    target_size — scale uniformly so the largest bounding-box dimension
+    equals this many metres (drives real-world AR size).
+    color — hex base colour; replaces all materials, so it is only applied
+    when the user explicitly asks (e.g. colourless STL prints).
+    """
+    if not color and not target_size:
+        return
+    try:
+        scene = trimesh.load(str(glb_path), force="scene")
+        if target_size and scene.extents is not None:
+            current = float(max(scene.extents))
+            if current > 0:
+                factor = float(target_size) / current
+                scene.apply_transform(np.diag([factor, factor, factor, 1.0]))
+        if color:
+            rgba = _hex_to_rgba(color)
+            material = trimesh.visual.material.PBRMaterial(
+                baseColorFactor=rgba, metallicFactor=0.1, roughnessFactor=0.65,
+            )
+            for geom in scene.geometry.values():
+                geom.visual = trimesh.visual.TextureVisuals(material=material)
+        glb_path.write_bytes(scene.export(file_type="glb"))
+    except Exception as e:
+        raise ConversionError(f"Özelleştirme uygulanamadı: {e}") from e
+
+
+def _hex_to_rgba(color: str) -> list[float]:
+    value = color.lstrip("#")
+    if len(value) != 6:
+        raise ConversionError(f"Geçersiz renk: {color}")
+    return [int(value[i:i + 2], 16) / 255.0 for i in (0, 2, 4)] + [1.0]
+
+
 def export_usdz(glb_path: Path, usdz_path: Path, tools_dir: Path) -> bool:
     """Export USDZ for iOS Quick Look via Blender. Returns False on any
     failure — USDZ is an enhancement, not a requirement."""

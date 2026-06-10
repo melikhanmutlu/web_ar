@@ -100,3 +100,102 @@ def test_reject_unknown_extension(client):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 400
+
+
+def test_upload_with_customizations(client):
+    register_and_login(client)
+    resp = client.post(
+        "/api/upload",
+        data={
+            "file": (io.BytesIO(make_stl_bytes()), "parca.stl"),
+            "name": "Özel Parça",
+            "target_size": "1.5",
+            "color": "#ff8800",
+        },
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 202, resp.get_json()
+    status = client.get(f"/api/jobs/{resp.get_json()['job_id']}").get_json()
+    assert status["status"] == "completed", status
+
+    page = client.get(f"/m/{status['model_id']}")
+    assert "Özel Parça".encode() in page.data
+    # largest dimension scaled to 1.5 m
+    assert b"1.50 m" in page.data
+
+
+def test_model_edit_resize(client):
+    register_and_login(client)
+    resp = client.post(
+        "/api/upload",
+        data={"file": (io.BytesIO(make_stl_bytes()), "kutu2.stl")},
+        content_type="multipart/form-data",
+    )
+    model_id = client.get(f"/api/jobs/{resp.get_json()['job_id']}").get_json()["model_id"]
+
+    patch = client.patch(
+        f"/api/models/{model_id}",
+        json={"name": "Yeniden", "target_size": 2.0, "color": "#112233"},
+    )
+    body = patch.get_json()
+    assert patch.status_code == 200, body
+    assert body["name"] == "Yeniden"
+    assert abs(max(body["dimensions"].values()) - 2.0) < 0.01
+
+
+def test_ai_endpoints_disabled_without_key(client):
+    register_and_login(client)
+    assert client.get("/api/ai/status").get_json() == {"enabled": False, "remaining": 0}
+    resp = client.post("/api/ai/text", json={"prompt": "bir vazo"})
+    assert resp.status_code == 503
+
+
+def test_ai_text_flow_mocked(client, app, monkeypatch):
+    register_and_login(client)
+    app.config["MESHY_API_KEY"] = "test-key"
+
+    from webar import ai as ai_mod
+
+    calls = {"n": 0}
+
+    def fake_post(path, payload):
+        return "task-refine" if payload.get("mode") == "refine" else "task-preview"
+
+    def fake_get_task(path, task_id):
+        calls["n"] += 1
+        if task_id == "task-preview":
+            return {"status": "SUCCEEDED", "progress": 100}
+        if calls["n"] < 3:
+            return {"status": "IN_PROGRESS", "progress": 50}
+        return {"status": "SUCCEEDED", "progress": 100,
+                "model_urls": {"glb": "https://example.com/out.glb"}}
+
+    glb_bytes = bytes(
+        __import__("trimesh").creation.box(extents=(0.1, 0.1, 0.1))
+        .scene().export(file_type="glb")
+    )
+
+    class FakeResp:
+        status_code = 200
+        def raise_for_status(self): pass
+        def iter_content(self, chunk_size): yield glb_bytes
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    monkeypatch.setattr(ai_mod, "_post", fake_post)
+    monkeypatch.setattr(ai_mod, "_get_task", fake_get_task)
+    monkeypatch.setattr(ai_mod.requests, "get", lambda *a, **k: FakeResp())
+
+    resp = client.post("/api/ai/text", json={"prompt": "test vazo"})
+    assert resp.status_code == 202, resp.get_json()
+    job_id = resp.get_json()["job_id"]
+
+    # poll until ready (preview -> refine -> ready)
+    for _ in range(6):
+        state = client.get(f"/api/ai/jobs/{job_id}").get_json()
+        if state["status"] == "ready":
+            break
+    assert state["status"] == "ready", state
+    assert client.get(f"/m/{state['model_id']}").status_code == 200
+
+    app.config["MESHY_API_KEY"] = ""

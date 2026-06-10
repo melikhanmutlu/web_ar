@@ -2,8 +2,9 @@
 {% block title %}Hata{% endblock %}
 {% block content %}
 <div class="container error-page">
+  <p class="kicker" style="justify-content:center">HATA</p>
   <h1>{{ code }}</h1>
   <p>{{ message }}</p>
-  <a class="btn btn-primary" href="{{ url_for('views.index') }}">Ana sayfaya dön</a>
+  <a class="btn btn-pill" href="{{ url_for('views.index') }}">Ana sayfaya dön <span class="arr">↗</span></a>
 </div>
 {% endblock %}

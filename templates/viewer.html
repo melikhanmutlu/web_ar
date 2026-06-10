@@ -5,54 +5,136 @@
 <meta property="og:description" content="Bu 3D modeli tarayıcında ve artırılmış gerçeklikte görüntüle.">
 {% endblock %}
 {% block content %}
-<div class="container viewer-page">
-  <div class="viewer-layout">
-    <div class="viewer-stage card">
+
+<!-- ============ STAGE (dark, immersive) ============ -->
+<div class="viewer-shell on-dark">
+  <div class="container">
+    <div class="viewer-topbar">
+      <div>
+        <p class="kicker" style="margin-bottom:6px">3D GÖRÜNTÜLEYİCİ</p>
+        <h1>{{ model.name }}</h1>
+      </div>
+      <p class="meta">{{ model.created_at.strftime('%d.%m.%Y') }} · {{ model.view_count }} GÖRÜNTÜLENME ·
+        <span class="badge {{ 'badge-ai' if model.source_format == 'ai' }}">{{ 'AI ÜRETİMİ' if model.source_format == 'ai' else model.source_format|upper }}</span></p>
+    </div>
+  </div>
+  <div class="container viewer-stage-wrap">
+    <div class="viewer-stage" id="stage">
       <model-viewer id="mv"
         src="{{ url_for('views.model_file', filename=model.glb_filename) }}"
         {% if model.usdz_filename %}ios-src="{{ url_for('views.model_file', filename=model.usdz_filename) }}"{% endif %}
         alt="{{ model.name }}"
         ar ar-modes="webxr scene-viewer quick-look"
-        camera-controls auto-rotate
-        shadow-intensity="1" environment-image="neutral"
-        touch-action="pan-y">
-        <button slot="ar-button" class="btn btn-primary ar-button">📱 AR'da görüntüle</button>
+        camera-controls
+        shadow-intensity="1" environment-image="neutral" exposure="1"
+        interaction-prompt="none" touch-action="pan-y">
+        <button slot="ar-button" class="btn btn-lilac ar-button">◆ AR'da görüntüle</button>
         <div slot="progress-bar" class="mv-progress"><div class="mv-progress-bar"></div></div>
       </model-viewer>
+
+      <div class="stage-controls">
+        <div class="ctl-group">
+          <button class="ctl" id="ctl-rotate" title="Otomatik döndür">⟳ DÖNDÜR</button>
+          <button class="ctl" id="ctl-dims" title="Gerçek boyut etiketleri">⤢ BOYUTLAR</button>
+        </div>
+        <div class="ctl-group">
+          <button class="ctl" id="ctl-env" title="Ortam ışığı">☼ STÜDYO</button>
+          <button class="ctl" id="ctl-bg" title="Arka plan">◐ ZEMİN</button>
+        </div>
+        <div class="ctl-group">
+          <button class="ctl" id="ctl-shot" title="PNG ekran görüntüsü">✦ GÖRÜNTÜ AL</button>
+          <button class="ctl" id="ctl-fs" title="Tam ekran">⛶ TAM EKRAN</button>
+        </div>
+        <div class="ctl-slider">
+          <label for="ctl-exposure">POZ</label>
+          <input type="range" id="ctl-exposure" min="0.3" max="2" step="0.05" value="1">
+        </div>
+      </div>
     </div>
+  </div>
+</div>
 
-    <aside class="viewer-panel">
-      <h1 class="viewer-title">{{ model.name }}</h1>
-      <p class="muted">{{ model.created_at.strftime('%d.%m.%Y') }} · {{ model.view_count }} görüntülenme</p>
-
-      <dl class="spec-list">
-        <div><dt>Kaynak format</dt><dd><span class="badge">{{ model.source_format|upper }}</span></dd></div>
-        <div><dt>Dosya boyutu</dt><dd>{{ model.file_size_human }}</dd></div>
-        {% if model.vertices %}<div><dt>Vertex</dt><dd>{{ '{:,}'.format(model.vertices).replace(',', '.') }}</dd></div>{% endif %}
-        {% if model.faces %}<div><dt>Üçgen</dt><dd>{{ '{:,}'.format(model.faces).replace(',', '.') }}</dd></div>{% endif %}
-        {% if model.dimensions_human %}<div><dt>Boyutlar</dt><dd>{{ model.dimensions_human }}</dd></div>{% endif %}
-        <div><dt>iOS AR (USDZ)</dt><dd>{{ '✓ hazır' if model.usdz_filename else '— GLB ile sınırlı' }}</dd></div>
-      </dl>
-
-      <div class="viewer-actions">
-        <button class="btn btn-primary btn-block" id="show-qr">QR kod ile paylaş</button>
-        <button class="btn btn-ghost btn-block" id="copy-link" data-url="{{ share_url }}">Linki kopyala</button>
-        <a class="btn btn-ghost btn-block" download="{{ model.name }}.glb"
-           href="{{ url_for('views.model_file', filename=model.glb_filename) }}">GLB indir</a>
-        {% if is_owner %}
-        <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
-              onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-danger btn-block">Modeli sil</button>
-        </form>
-        {% endif %}
+<!-- ============ INFO / ACTIONS ============ -->
+<div class="container viewer-info">
+  <div class="viewer-grid">
+    <div>
+      <div class="card spec-card">
+        <h2>Teknik özellikler</h2>
+        <dl class="spec-list">
+          <div><dt>Kaynak</dt><dd>{{ 'AI üretimi (Meshy)' if model.source_format == 'ai' else '.' + model.source_format }} → GLB</dd></div>
+          <div><dt>Dosya boyutu</dt><dd>{{ model.file_size_human }}</dd></div>
+          {% if model.vertices %}<div><dt>Vertex</dt><dd>{{ '{:,}'.format(model.vertices).replace(',', '.') }}</dd></div>{% endif %}
+          {% if model.faces %}<div><dt>Üçgen</dt><dd>{{ '{:,}'.format(model.faces).replace(',', '.') }}</dd></div>{% endif %}
+          {% if model.dimensions_human %}<div><dt>Gerçek boyutlar</dt><dd id="spec-dims">{{ model.dimensions_human }}</dd></div>{% endif %}
+          <div><dt>iOS AR (USDZ)</dt><dd>{{ '✓ hazır' if model.usdz_filename else '— üretilmedi' }}</dd></div>
+          <div><dt>Android AR</dt><dd>✓ Scene Viewer</dd></div>
+        </dl>
       </div>
 
-      <details class="embed-box">
-        <summary>Siteme göm</summary>
-        <textarea class="input" rows="3" readonly onclick="this.select()">&lt;iframe src="{{ share_url }}/embed" width="640" height="480" frameborder="0" allow="xr-spatial-tracking"&gt;&lt;/iframe&gt;</textarea>
-      </details>
-    </aside>
+      {% if is_owner %}
+      <div class="card owner-panel">
+        <h2>Modeli düzenle</h2>
+        <div class="owner-grid">
+          <div class="field full">
+            <label for="ed-name">Model adı</label>
+            <input type="text" id="ed-name" class="input" value="{{ model.name }}">
+          </div>
+          <div class="field">
+            <label for="ed-folder">Klasör</label>
+            <select id="ed-folder" class="input">
+              <option value="">— Klasörsüz —</option>
+              {% for folder in folders %}
+              <option value="{{ folder.id }}" {{ 'selected' if model.folder_id == folder.id }}>{{ folder.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label for="ed-size">Hedef boyut — metre</label>
+            <input type="number" id="ed-size" class="input" min="0.01" max="50" step="0.01"
+                   placeholder="örn. 0.45"
+                   value="{{ '%.2f'|format(model.dimensions.values()|max) if model.dimensions else '' }}">
+            <p class="field-hint">Geometriyi kalıcı olarak ölçekler; AR boyutunu belirler.</p>
+          </div>
+          <div class="field full">
+            <label class="opt-toggle" style="margin-bottom:8px">
+              <input type="checkbox" id="ed-color-on"> Tek renk uygula (dokular kaldırılır)
+            </label>
+            <input type="color" id="ed-color" class="input" value="#a78ef0" hidden>
+          </div>
+        </div>
+        <div class="owner-foot">
+          <button class="btn btn-pill" id="ed-save">Kaydet <span class="arr">↗</span></button>
+          <span class="field-hint" id="ed-status"></span>
+          <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
+                onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Modeli sil</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <div class="card action-card">
+        <p class="kicker" style="margin-bottom:8px">PAYLAŞ</p>
+        <button class="btn btn-pill btn-block" id="show-qr">▣ QR kod ile paylaş</button>
+        <button class="btn btn-ghost btn-block" id="copy-link" data-url="{{ share_url }}">Linki kopyala</button>
+        <hr class="divider">
+        <p class="kicker" style="margin-bottom:8px">İNDİR</p>
+        <a class="btn btn-ghost btn-block" download="{{ model.name }}.glb"
+           href="{{ url_for('views.model_file', filename=model.glb_filename) }}">GLB indir — web/Android</a>
+        {% if model.usdz_filename %}
+        <a class="btn btn-ghost btn-block" download="{{ model.name }}.usdz"
+           href="{{ url_for('views.model_file', filename=model.usdz_filename) }}">USDZ indir — iOS</a>
+        {% endif %}
+        <hr class="divider">
+        <details class="embed-box">
+          <summary class="kicker" style="cursor:pointer; margin-bottom:8px">SİTENE GÖM</summary>
+          <textarea class="input" rows="3" readonly onclick="this.select()">&lt;iframe src="{{ share_url }}/embed" width="640" height="480" frameborder="0" allow="xr-spatial-tracking"&gt;&lt;/iframe&gt;</textarea>
+        </details>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -69,13 +151,14 @@
     {% else %}
       <p class="muted">QR kod üretilemedi; linki kopyalayıp paylaşabilirsiniz.</p>
     {% endif %}
-    <p class="muted qr-hint">Kamerayla okutun — model telefonun tarayıcısında açılır,
-      oradan tek dokunuşla AR moduna geçebilirsiniz.</p>
+    <p class="qr-hint">Kamerayla okutun — model tarayıcıda açılır, oradan tek
+      dokunuşla AR moduna geçilir. Uygulama gerekmez.</p>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<script>window.__MODEL__ = { id: {{ model.id|tojson }}, name: {{ model.name|tojson }} };</script>
 <script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
 {% endblock %}

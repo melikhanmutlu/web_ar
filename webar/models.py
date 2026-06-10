@@ -107,6 +107,47 @@ class Model3D(db.Model):
             return None
 
 
+class AIGenerationJob(db.Model):
+    """Tracks a Meshy text/image -> 3D generation.
+
+    No long-lived server thread: the frontend polls /api/ai/jobs/<id> and
+    each poll advances the Meshy state machine (text is two-stage:
+    preview -> refine). Gunicorn multi-worker safe.
+    """
+
+    __tablename__ = "webar_ai_job"
+
+    id = db.Column(db.String(36), primary_key=True, default=new_uuid)
+    user_id = db.Column(db.Integer, db.ForeignKey("webar_user.id"), nullable=False, index=True)
+    kind = db.Column(db.String(10), nullable=False)        # 'text' | 'image'
+    prompt = db.Column(db.Text, nullable=True)
+
+    meshy_preview_id = db.Column(db.String(80), nullable=True)
+    meshy_refine_id = db.Column(db.String(80), nullable=True)
+    meshy_image_id = db.Column(db.String(80), nullable=True)
+    stage = db.Column(db.String(20), nullable=True)        # 'preview' | 'refine' | 'image'
+
+    status = db.Column(db.String(20), nullable=False, default="generating")
+    # generating | ready | failed
+    progress = db.Column(db.Integer, nullable=False, default=0)
+    model_id = db.Column(db.String(36), nullable=True)
+    error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    def to_dict(self) -> dict:
+        return {
+            "job_id": self.id,
+            "kind": self.kind,
+            "status": self.status,
+            "stage": self.stage,
+            "progress": self.progress,
+            "model_id": self.model_id,
+            "error": self.error,
+        }
+
+
 class ConversionJob(db.Model):
     """DB-backed conversion queue.
 

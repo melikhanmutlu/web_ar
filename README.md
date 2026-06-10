@@ -3,9 +3,13 @@
 3D modellerinizi yükleyin, tek linkle paylaşın, telefonla **artırılmış gerçeklikte** görüntüleyin.
 
 - **Desteklenen formatlar:** OBJ, STL, FBX, GLB, glTF → hepsi otomatik olarak GLB'ye dönüştürülür
+- **AI üretim:** Meshy entegrasyonu ile metinden ve görselden 3D model (önizleme → rafine → PBR doku), günlük kota takibi
+- **Yükleme özelleştirme:** isim, klasör, hedef gerçek dünya boyutu (m) ve tek renk — dönüşüm sırasında uygulanır
+- **Model düzenleme:** yükledikten sonra yeniden boyutlandırma / renklendirme (GLB yeniden yazılır, USDZ tazelenir)
 - **AR:** Android'de Scene Viewer, iOS'ta Quick Look (Blender ile otomatik USDZ üretimi)
 - **Paylaşım:** Her model için tahmin edilemez UUID linki + otomatik QR kodu + iframe embed
-- **Arayüz:** `<model-viewer>` tabanlı 3D görüntüleyici, klasörlü model paneli
+- **Stüdyo görüntüleyici:** ortam ışığı ön ayarları, pozlama, gerçek boyut etiketleri, ekran görüntüsü, tam ekran
+- **Arayüz:** krem/antrasit/lavanta editoryal tasarım dili, canlı 3D hero, istatistikli stüdyo paneli
 
 ## Mimari
 
@@ -20,7 +24,8 @@ webar/
   views.py        # sayfalar: panel, görüntüleyici, klasörler, dosya servisi
   api.py          # JSON API: /api/upload, /api/jobs/<id>, /api/models/<id>
   jobs.py         # iş kuyruğu yaşam döngüsü (enqueue + run_conversion_job)
-  conversion.py   # format → GLB dönüşüm hattı + USDZ + istatistik
+  conversion.py   # format → GLB dönüşüm hattı + özelleştirme + USDZ + istatistik
+  ai.py           # Meshy text-to-3D / image-to-3D durum makinesi
   qr.py           # QR kod üretimi
 templates/ static/  # Jinja2 şablonları + framework'süz CSS/JS
 migrations/       # Alembic (flask db upgrade)
@@ -63,6 +68,8 @@ Deploy yapılandırması öncekiyle birebir aynıdır:
 | `JOB_QUEUE` | `true` → dönüşümleri worker süreci yapar (production önerisi) |
 | `USDZ_EXPORT` | iOS için USDZ üretimi (varsayılan açık; Blender yoksa sessizce atlanır) |
 | `PUBLIC_BASE_URL` | QR linkleri için taban URL (Railway'de `RAILWAY_PUBLIC_DOMAIN`'den otomatik) |
+| `MESHY_API_KEY` | Meshy anahtarı — boşsa AI üretim arayüzü gizlenir |
+| `AI_GEN_DAILY_LIMIT` | Kullanıcı başına günlük AI üretim hakkı (varsayılan 10) |
 | `WEB_AR_UPLOAD_DIR` / `WEB_AR_CONVERTED_DIR` / `WEB_AR_QR_DIR` | Kalıcılık için bir Railway volume'üne yönlendirin |
 
 > **Not:** Yüklenen dosyaların deploy'lar arasında kaybolmaması için Railway'de bir

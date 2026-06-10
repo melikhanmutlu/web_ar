@@ -11,7 +11,8 @@ from pathlib import Path
 
 from flask import current_app
 
-from .conversion import ConversionError, convert_to_glb, export_usdz, inspect_glb
+from .conversion import (ConversionError, apply_customizations,
+                         convert_to_glb, export_usdz, inspect_glb)
 from .extensions import db
 from .models import ConversionJob, Model3D, utcnow
 from .qr import generate_qr
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def enqueue_conversion(user_id: int, upload_file, original_name: str,
-                       folder_id: int | None) -> ConversionJob:
+                       folder_id: int | None,
+                       options: dict | None = None) -> ConversionJob:
     """Stage the uploaded file on disk and create a pending job row."""
     job = ConversionJob(user_id=user_id)
     db.session.add(job)
@@ -37,6 +39,7 @@ def enqueue_conversion(user_id: int, upload_file, original_name: str,
         "original_name": original_name,
         "ext": ext,
         "folder_id": folder_id,
+        "options": options or {},
     }
     db.session.commit()
     return job
@@ -62,6 +65,13 @@ def run_conversion_job(job: ConversionJob) -> None:
         glb_path = Path(config["CONVERTED_DIR"]) / glb_name
         convert_to_glb(staged_path, glb_path, config["TOOLS_DIR"])
 
+        options = payload.get("options") or {}
+        apply_customizations(
+            glb_path,
+            color=options.get("color"),
+            target_size=options.get("target_size"),
+        )
+
         stats = inspect_glb(glb_path)
 
         usdz_name = None
@@ -73,11 +83,12 @@ def run_conversion_job(job: ConversionJob) -> None:
         qr_name = generate_qr(model_id)
 
         original = payload.get("original_name") or staged_path.name
+        custom_name = (options.get("name") or "").strip()
         model = Model3D(
             id=model_id,
             user_id=job.user_id,
             folder_id=payload.get("folder_id"),
-            name=Path(original).stem[:255] or "Model",
+            name=(custom_name or Path(original).stem)[:255] or "Model",
             source_format=payload.get("ext", staged_path.suffix.lstrip(".")),
             glb_filename=glb_name,
             usdz_filename=usdz_name,

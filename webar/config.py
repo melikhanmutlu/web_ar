@@ -57,6 +57,13 @@ class Config:
     # iOS Quick Look needs USDZ; export is best-effort via Blender when present.
     USDZ_EXPORT = _env_bool("USDZ_EXPORT", "true")
 
+    # AI 3D generation (Meshy) — server-side only, the key never reaches
+    # clients. Generation costs credits, hence the per-user daily quota.
+    MESHY_API_KEY = os.getenv("MESHY_API_KEY", "")
+    MESHY_API_BASE = os.getenv("MESHY_API_BASE", "https://api.meshy.ai/openapi")
+    MESHY_AI_MODEL = os.getenv("MESHY_AI_MODEL", "meshy-5")
+    AI_GEN_DAILY_LIMIT = int(os.getenv("AI_GEN_DAILY_LIMIT", 10))
+
     # gunicorn/flask db upgrade handles schema in production; local boot can
     # bootstrap the schema itself unless this is set.
     SKIP_DB_BOOTSTRAP = _env_bool("SKIP_DB_BOOTSTRAP")

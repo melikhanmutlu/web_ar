@@ -2,8 +2,9 @@
 {% block title %}Bulunamadı{% endblock %}
 {% block content %}
 <div class="container error-page">
+  <p class="kicker" style="justify-content:center">HATA</p>
   <h1>404</h1>
   <p>Aradığınız sayfa ya da model bulunamadı.</p>
-  <a class="btn btn-primary" href="{{ url_for('views.index') }}">Ana sayfaya dön</a>
+  <a class="btn btn-pill" href="{{ url_for('views.index') }}">Ana sayfaya dön <span class="arr">↗</span></a>
 </div>
 {% endblock %}

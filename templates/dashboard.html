@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Modellerim{% endblock %}
+{% block content %}
+<div class="container dashboard">
+  <div class="dash-header">
+    <h1>{% if active_folder %}{{ active_folder.name }}{% else %}Modellerim{% endif %}</h1>
+    <button class="btn btn-primary" id="open-upload">+ Model yükle</button>
+  </div>
+
+  <div class="dash-layout">
+    <aside class="sidebar">
+      <h2 class="sidebar-title">Klasörler</h2>
+      <ul class="folder-list">
+        <li class="{{ 'active' if not active_folder }}">
+          <a href="{{ url_for('views.dashboard') }}">Tüm modeller</a>
+        </li>
+        {% for folder in folders %}
+        <li class="{{ 'active' if active_folder and active_folder.id == folder.id }}">
+          <a href="{{ url_for('views.dashboard', folder=folder.id) }}">{{ folder.name }}
+            <span class="count">{{ folder.models|length }}</span></a>
+          <form action="{{ url_for('views.delete_folder', folder_id=folder.id) }}" method="post"
+                onsubmit="return confirm('Klasör silinsin mi? İçindeki modeller silinmez.')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="icon-btn" title="Klasörü sil">✕</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      <form action="{{ url_for('views.create_folder') }}" method="post" class="folder-form">
+        {{ folder_form.hidden_tag() }}
+        {{ folder_form.name(class="input input-sm", placeholder="Yeni klasör adı") }}
+        <button type="submit" class="btn btn-ghost btn-sm">Ekle</button>
+      </form>
+    </aside>
+
+    <section class="model-grid-wrap">
+      {% if models %}
+      <div class="model-grid">
+        {% for model in models %}
+        <article class="card model-card">
+          <a class="model-thumb" href="{{ url_for('views.viewer', model_id=model.id) }}">
+            <model-viewer src="{{ url_for('views.model_file', filename=model.glb_filename) }}"
+                          camera-controls disable-zoom interaction-prompt="none"
+                          shadow-intensity="0.8" loading="lazy"></model-viewer>
+          </a>
+          <div class="model-meta">
+            <a class="model-name" href="{{ url_for('views.viewer', model_id=model.id) }}">{{ model.name }}</a>
+            <p class="model-sub">
+              <span class="badge">{{ model.source_format|upper }}</span>
+              {{ model.file_size_human }} · {{ model.view_count }} görüntülenme
+            </p>
+            <div class="model-actions">
+              <a class="btn btn-ghost btn-sm" href="{{ url_for('views.viewer', model_id=model.id) }}">Görüntüle</a>
+              <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
+                    onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm">Sil</button>
+              </form>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>Henüz model yok.</p>
+        <p class="muted">İlk 3D modelinizi yükleyin — birkaç saniye içinde AR linkiniz hazır olur.</p>
+        <button class="btn btn-primary" onclick="document.getElementById('open-upload').click()">Model yükle</button>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</div>
+
+<!-- Upload modal -->
+<div class="modal" id="upload-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box card">
+    <div class="modal-head">
+      <h2>Model yükle</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+
+    <div id="upload-form-area">
+      <div class="dropzone" id="dropzone">
+        <p><strong>Dosyayı buraya sürükleyin</strong> ya da tıklayıp seçin</p>
+        <p class="muted">{{ allowed_extensions|map('upper')|join(', ') }} · maks. 100 MB</p>
+        <input type="file" id="file-input" accept=".{{ allowed_extensions|join(',.') }}" hidden>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label for="upload-folder">Klasör (isteğe bağlı)</label>
+        <select id="upload-folder" class="input">
+          <option value="">— Klasörsüz —</option>
+          {% for folder in folders %}
+          <option value="{{ folder.id }}" {{ 'selected' if active_folder and active_folder.id == folder.id }}>{{ folder.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div id="upload-progress-area" hidden>
+      <p id="upload-status">Yükleniyor…</p>
+      <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+      <p class="muted" id="upload-detail"></p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

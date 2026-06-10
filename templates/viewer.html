@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ model.name }}{% endblock %}
+{% block head %}
+<meta property="og:title" content="{{ model.name }} · WebAR">
+<meta property="og:description" content="Bu 3D modeli tarayıcında ve artırılmış gerçeklikte görüntüle.">
+{% endblock %}
+{% block content %}
+<div class="container viewer-page">
+  <div class="viewer-layout">
+    <div class="viewer-stage card">
+      <model-viewer id="mv"
+        src="{{ url_for('views.model_file', filename=model.glb_filename) }}"
+        {% if model.usdz_filename %}ios-src="{{ url_for('views.model_file', filename=model.usdz_filename) }}"{% endif %}
+        alt="{{ model.name }}"
+        ar ar-modes="webxr scene-viewer quick-look"
+        camera-controls auto-rotate
+        shadow-intensity="1" environment-image="neutral"
+        touch-action="pan-y">
+        <button slot="ar-button" class="btn btn-primary ar-button">📱 AR'da görüntüle</button>
+        <div slot="progress-bar" class="mv-progress"><div class="mv-progress-bar"></div></div>
+      </model-viewer>
+    </div>
+
+    <aside class="viewer-panel">
+      <h1 class="viewer-title">{{ model.name }}</h1>
+      <p class="muted">{{ model.created_at.strftime('%d.%m.%Y') }} · {{ model.view_count }} görüntülenme</p>
+
+      <dl class="spec-list">
+        <div><dt>Kaynak format</dt><dd><span class="badge">{{ model.source_format|upper }}</span></dd></div>
+        <div><dt>Dosya boyutu</dt><dd>{{ model.file_size_human }}</dd></div>
+        {% if model.vertices %}<div><dt>Vertex</dt><dd>{{ '{:,}'.format(model.vertices).replace(',', '.') }}</dd></div>{% endif %}
+        {% if model.faces %}<div><dt>Üçgen</dt><dd>{{ '{:,}'.format(model.faces).replace(',', '.') }}</dd></div>{% endif %}
+        {% if model.dimensions_human %}<div><dt>Boyutlar</dt><dd>{{ model.dimensions_human }}</dd></div>{% endif %}
+        <div><dt>iOS AR (USDZ)</dt><dd>{{ '✓ hazır' if model.usdz_filename else '— GLB ile sınırlı' }}</dd></div>
+      </dl>
+
+      <div class="viewer-actions">
+        <button class="btn btn-primary btn-block" id="show-qr">QR kod ile paylaş</button>
+        <button class="btn btn-ghost btn-block" id="copy-link" data-url="{{ share_url }}">Linki kopyala</button>
+        <a class="btn btn-ghost btn-block" download="{{ model.name }}.glb"
+           href="{{ url_for('views.model_file', filename=model.glb_filename) }}">GLB indir</a>
+        {% if is_owner %}
+        <form action="{{ url_for('views.delete_model', model_id=model.id) }}" method="post"
+              onsubmit="return confirm('“{{ model.name }}” kalıcı olarak silinsin mi?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger btn-block">Modeli sil</button>
+        </form>
+        {% endif %}
+      </div>
+
+      <details class="embed-box">
+        <summary>Siteme göm</summary>
+        <textarea class="input" rows="3" readonly onclick="this.select()">&lt;iframe src="{{ share_url }}/embed" width="640" height="480" frameborder="0" allow="xr-spatial-tracking"&gt;&lt;/iframe&gt;</textarea>
+      </details>
+    </aside>
+  </div>
+</div>
+
+<!-- QR modal -->
+<div class="modal" id="qr-modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box card qr-box">
+    <div class="modal-head">
+      <h2>Telefonla okutun</h2>
+      <button class="icon-btn" data-close>✕</button>
+    </div>
+    {% if model.qr_filename %}
+      <img class="qr-img" src="{{ url_for('views.qr_file', filename=model.qr_filename) }}" alt="QR kod">
+    {% else %}
+      <p class="muted">QR kod üretilemedi; linki kopyalayıp paylaşabilirsiniz.</p>
+    {% endif %}
+    <p class="muted qr-hint">Kamerayla okutun — model telefonun tarayıcısında açılır,
+      oradan tek dokunuşla AR moduna geçebilirsiniz.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+<script src="{{ url_for('static', filename='js/viewer.js') }}"></script>
+{% endblock %}

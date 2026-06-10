@@ -1,34 +1,34 @@
-"""Background conversion worker (academic_ar pattern).
+"""Background conversion worker.
 
-Polls the ConversionJob table and runs pending jobs through the same
-pipeline /upload_model uses inline. Started as a separate process next to
-gunicorn (see nixpacks.toml); enable queueing on the web side with
-JOB_QUEUE=true, otherwise the web process keeps converting inline and this
-worker simply idles.
+Polls the ConversionJob table for pending rows and runs them through the
+same pipeline the upload endpoint uses inline. Started as a separate process
+next to gunicorn by the Railway start command (nixpacks.toml); enable
+queueing on the web side with JOB_QUEUE=true, otherwise the web process
+converts inline and this worker simply idles.
 
-On PostgreSQL, jobs are claimed with FOR UPDATE SKIP LOCKED so multiple
-workers never grab the same job. SQLite (local dev) falls back to a plain
-query — run a single worker there.
+On PostgreSQL pending jobs are claimed with FOR UPDATE SKIP LOCKED so
+multiple workers never grab the same job; SQLite (local dev) falls back to a
+plain query — run a single worker there.
 """
 
 import logging
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app import app, db, run_conversion_job
-from models import ConversionJob
+from webar.models import ConversionJob
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - worker - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger("worker")
 
 POLL_INTERVAL = float(os.environ.get("WORKER_POLL_INTERVAL", "2"))
-# Jobs stuck in 'processing' longer than this are assumed orphaned
-# (worker crashed mid-job) and put back to pending.
+# Jobs stuck in 'processing' longer than this are assumed orphaned (worker
+# crashed mid-job) and are put back to pending.
 STALE_PROCESSING_MINUTES = int(os.environ.get("WORKER_STALE_MINUTES", "30"))
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def claim_next_job():
@@ -41,20 +41,16 @@ def claim_next_job():
         query = query.with_for_update(skip_locked=True)
     job = query.first()
     if job is None:
-        db.session.rollback()  # release any FOR UPDATE transaction
+        db.session.rollback()  # release the FOR UPDATE transaction
         return None
     job.status = "processing"
-    job.started_at = datetime.utcnow()
+    job.started_at = _utcnow()
     db.session.commit()
-    # run_conversion_job re-sets status/attempts itself; hand it a job that
-    # looks pending again so its transitions stay uniform.
-    job.status = "pending"
     return job
 
 
 def requeue_stale_jobs():
-    """Put orphaned 'processing' jobs (crashed worker) back to pending."""
-    cutoff = datetime.utcnow() - timedelta(minutes=STALE_PROCESSING_MINUTES)
+    cutoff = _utcnow() - timedelta(minutes=STALE_PROCESSING_MINUTES)
     stale = ConversionJob.query.filter(
         ConversionJob.status == "processing",
         ConversionJob.started_at < cutoff,
@@ -68,8 +64,7 @@ def requeue_stale_jobs():
 
 def main():
     logger.info(
-        f"Conversion worker started (poll {POLL_INTERVAL}s, "
-        f"db {db.engine.dialect.name})"
+        f"Conversion worker started (poll {POLL_INTERVAL}s, db {db.engine.dialect.name})"
     )
     last_stale_sweep = 0.0
     while True:

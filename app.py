@@ -3440,8 +3440,8 @@ def save_modifications():
         success = modify_glb(current_model_path, temp_output, modifications)
 
         if success and os.path.exists(temp_output):
-            # Replace current model.glb with modified version
-            shutil.move(temp_output, current_model_path)
+            # Replace current model.glb with modified version (atomic on same volume)
+            os.replace(temp_output, current_model_path)
             logger.info(
                 f"[save_modifications] Successfully replaced model.glb with modified version"
             )
@@ -3653,8 +3653,8 @@ def slice_model():
         success = bool(slice_result.get("success"))
 
         if success and os.path.exists(temp_output):
-            # Replace original with sliced version
-            shutil.move(temp_output, input_path)
+            # Replace original with sliced version (atomic on same volume)
+            os.replace(temp_output, input_path)
             logger.info(
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )

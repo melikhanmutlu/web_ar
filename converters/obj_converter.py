@@ -10,7 +10,7 @@ import numpy as np
 import platform
 import shutil
 from typing import Optional, List
-from .base_converter import BaseConverter
+from .base_converter import BaseConverter, hex_to_linear_rgb
 
 
 # Inline utility functions (replacing deleted utils/)
@@ -285,18 +285,16 @@ class OBJConverter(BaseConverter):
 
                     # Apply color (if needed)
                     if needs_color:
-                        # Convert hex color to RGB
-                        hex_color = color.lstrip("#")
-                        if len(hex_color) != 6:
-                            raise ValueError(f"Invalid hex color: {color}")
-
-                        r = int(hex_color[0:2], 16)
-                        g = int(hex_color[2:4], 16)
-                        b = int(hex_color[4:6], 16)
+                        # sRGB picker value → linear (glTF baseColorFactor/COLOR_0
+                        # are linear; without this iOS AR shows the color washed out)
+                        lr, lg, lb = hex_to_linear_rgb(color)
+                        r = int(round(lr * 255))
+                        g = int(round(lg * 255))
+                        b = int(round(lb * 255))
 
                         # Create PBR material with the specified color
                         material = trimesh.visual.material.PBRMaterial(
-                            baseColorFactor=[r / 255.0, g / 255.0, b / 255.0, 1.0],
+                            baseColorFactor=[lr, lg, lb, 1.0],
                             metallicFactor=0.1,
                             roughnessFactor=0.9,
                         )

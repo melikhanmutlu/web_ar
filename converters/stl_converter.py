@@ -6,7 +6,12 @@ import os
 import logging
 import trimesh
 import numpy as np
-from .base_converter import BaseConverter
+from .base_converter import BaseConverter, hex_to_linear_rgb
+
+# Complexity guards: reject meshes that would exhaust memory during processing.
+# Overridable via environment for bigger deployments.
+MAX_MESH_FACES = int(os.environ.get("MAX_MESH_FACES", 2_000_000))
+MAX_MESH_VERTICES = int(os.environ.get("MAX_MESH_VERTICES", 2_000_000))
 
 
 # Inline utility functions (replacing deleted utils/)
@@ -145,6 +150,17 @@ class STLConverter(BaseConverter):
                 f"Flattened scene: {len(flattened_meshes)} geometries merged into single mesh"
             )
 
+            # Complexity guard — fail fast with a clear message instead of OOM
+            n_faces = len(mesh.faces)
+            n_verts = len(mesh.vertices)
+            if n_faces > MAX_MESH_FACES or n_verts > MAX_MESH_VERTICES:
+                self.handle_error(
+                    f"Model too complex: {n_faces:,} faces / {n_verts:,} vertices "
+                    f"(limits: {MAX_MESH_FACES:,} faces, {MAX_MESH_VERTICES:,} vertices). "
+                    "Please decimate the mesh and re-upload."
+                )
+                return False
+
             # Apply basis correction once (Z-up -> Y-up) directly to vertices
             basis_correction = trimesh.transformations.rotation_matrix(
                 angle=np.radians(-90), direction=[1, 0, 0]
@@ -194,14 +210,12 @@ class STLConverter(BaseConverter):
             if color:
                 try:
                     self.log_operation(f"Applying color: {color}")
-                    # Convert hex color to RGB (0-255 range)
-                    hex_color = color.lstrip("#")
-                    if len(hex_color) != 6:
-                        raise ValueError(f"Invalid hex color: {color}")
-
-                    r = int(hex_color[0:2], 16)
-                    g = int(hex_color[2:4], 16)
-                    b = int(hex_color[4:6], 16)
+                    # Color picker gives sRGB; glTF COLOR_0 vertex data is linear.
+                    # Convert so renderers (and especially iOS AR) show the picked color.
+                    lr, lg, lb = hex_to_linear_rgb(color)
+                    r = int(round(lr * 255))
+                    g = int(round(lg * 255))
+                    b = int(round(lb * 255))
 
                     # Apply vertex colors only (no TextureVisuals, no phantom UV data)
                     if isinstance(mesh, trimesh.Scene):
@@ -236,8 +250,9 @@ class STLConverter(BaseConverter):
                     "No color specified - applying default gray using vertex colors"
                 )
                 try:
-                    # Default light gray in RGB(255 scale): [204, 204, 204] = 0.8*255
-                    default_r, default_g, default_b = 204, 204, 204
+                    # Default light gray sRGB #cccccc, stored as linear (glTF COLOR_0
+                    # expects linear values): linear(0.8) ≈ 0.604 → 154
+                    default_r, default_g, default_b = 154, 154, 154
 
                     if isinstance(mesh, trimesh.Scene):
                         for geom in mesh.geometry.values():

@@ -125,7 +125,8 @@ def optimize_glb(glb_path: str, timeout: int = 300) -> bool:
         return False
 
     try:
-        shutil.move(tmp_out, glb_path)
+        # Atomic swap: viewer requests never see a half-written GLB
+        os.replace(tmp_out, glb_path)
     except Exception as e:
         logger.warning(f"Could not replace GLB with optimized file: {e}")
         _safe_remove(tmp_out)

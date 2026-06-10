@@ -7,6 +7,29 @@ import os
 import logging
 from typing import Optional, Dict
 
+
+def srgb_to_linear_channel(c: float) -> float:
+    """Convert one sRGB channel (0-1) to linear (0-1).
+
+    Color pickers produce sRGB values, but glTF baseColorFactor and COLOR_0
+    vertex attributes are linear. Writing sRGB values straight into those slots
+    makes colors render washed-out/wrong, most visibly in iOS Quick Look (USDZ).
+    """
+    if c <= 0.04045:
+        return c / 12.92
+    return ((c + 0.055) / 1.055) ** 2.4
+
+
+def hex_to_linear_rgb(hex_color: str) -> tuple:
+    """Parse '#RRGGBB' (sRGB) into a (r, g, b) tuple of linear floats 0-1."""
+    h = (hex_color or "").lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"Invalid hex color: {hex_color}")
+    return tuple(
+        srgb_to_linear_channel(int(h[i : i + 2], 16) / 255.0) for i in (0, 2, 4)
+    )
+
+
 class BaseConverter:
     def __init__(self):
         self.model_id: str = None

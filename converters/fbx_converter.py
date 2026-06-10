@@ -10,7 +10,7 @@ import tempfile
 import numpy as np
 import platform
 from pathlib import Path
-from .base_converter import BaseConverter
+from .base_converter import BaseConverter, hex_to_linear_rgb
 from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
 
 
@@ -102,16 +102,13 @@ class FBXConverter(BaseConverter):
             if not color_str:
                 return mesh
 
-            # Convert hex color to RGB (0-255 range)
-            hex_color = color_str.lstrip("#")
-            if len(hex_color) != 6:
-                raise ValueError(f"Invalid hex color: {color_str}")
+            # sRGB picker value → linear (glTF baseColorFactor/COLOR_0 are linear)
+            lr, lg, lb = hex_to_linear_rgb(color_str)
+            r = int(round(lr * 255))
+            g = int(round(lg * 255))
+            b = int(round(lb * 255))
 
-            r = int(hex_color[0:2], 16)
-            g = int(hex_color[2:4], 16)
-            b = int(hex_color[4:6], 16)
-
-            self.log_operation(f"Applying color RGB({r}, {g}, {b}) to mesh")
+            self.log_operation(f"Applying color linear RGB({r}, {g}, {b}) to mesh")
 
             # Remove existing textures if requested
             if self.remove_textures:
@@ -122,7 +119,7 @@ class FBXConverter(BaseConverter):
 
             # Create PBR material with the specified color
             material = trimesh.visual.material.PBRMaterial(
-                baseColorFactor=[r / 255.0, g / 255.0, b / 255.0, 1.0],
+                baseColorFactor=[lr, lg, lb, 1.0],
                 metallicFactor=0.1,
                 roughnessFactor=0.9,
             )

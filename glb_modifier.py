@@ -94,29 +94,17 @@ def apply_material_modifications(gltf, material_mods):
         
         pbr = material.pbrMetallicRoughness
         name = material.name or f"Material_{i}"
-        name_l = name.lower()
-        alpha_mode = (material.alphaMode or "OPAQUE")
-        # Detect foliage strictly by name or pre-set alpha modes
-        is_transparent_like = alpha_mode in ("BLEND", "MASK") or any(k in name_l for k in ["leaf", "leaves", "foliage", "db2x2"]) 
-        
-        # Foliage-safe defaults (do BEFORE applying user knobs)
-        if is_transparent_like:
-            try:
-                # Ensure visibility-friendly defaults
-                if pbr.baseColorFactor is None:
-                    pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
-                pbr.metallicFactor = 0.0
-                pbr.roughnessFactor = 1.0
-                # Transparency and double sided to ensure leaves render both sides
-                material.alphaMode = "BLEND"
-                material.doubleSided = True
-                logger.info(f"Foliage-safe defaults applied to {name}: alphaMode=BLEND, doubleSided=True, metallic=0, roughness=1")
-            except Exception as e:
-                logger.warning(f"Failed to apply foliage defaults on {name}: {e}")
-        
+        # MASK cutouts (foliage from the FBX pipeline) keep their alpha setup —
+        # user knobs must not clobber them into invisibility. BLEND materials
+        # stay editable so an opacity change can be reverted to 1.0.
+        is_transparent_like = (material.alphaMode or "OPAQUE") == "MASK"
+        # A baseColorFactor multiplies the texture, so a solid color would
+        # tint/darken existing artwork instead of "coloring" the model.
+        has_texture = pbr.baseColorTexture is not None
+
         # Always set doubleSided to True for all materials
         material.doubleSided = True
-        
+
         # Apply base color with opacity
         if 'color' in material_mods and material_mods['color'] and not is_transparent_like:
             try:
@@ -128,15 +116,26 @@ def apply_material_modifications(gltf, material_mods):
                     color_rgb = hex_to_rgb(raw_color)
                 # Get opacity value (default 1.0)
                 opacity = float(material_mods.get('opacity', 1.0))
-                # Set baseColorFactor (RGBA)
-                pbr.baseColorFactor = list(color_rgb) + [opacity]
-                logger.info(f"Applied color {raw_color} with opacity {opacity} to material {i}")
-                
-                # Set alpha mode based on opacity
+
+                if has_texture:
+                    # Preserve the texture's colors; only honor an explicit
+                    # opacity change via the factor's alpha component.
+                    if opacity < 1.0:
+                        base = pbr.baseColorFactor or [1.0, 1.0, 1.0, 1.0]
+                        pbr.baseColorFactor = [base[0], base[1], base[2], opacity]
+                        logger.info(f"Applied opacity {opacity} to textured material {i} (color skipped)")
+                    else:
+                        logger.info(f"Skipped color for textured material {i} ({name})")
+                else:
+                    # Set baseColorFactor (RGBA)
+                    pbr.baseColorFactor = list(color_rgb) + [opacity]
+                    logger.info(f"Applied color {raw_color} with opacity {opacity} to material {i}")
+
+                # Set alpha mode based on opacity; never downgrade MASK cutouts
                 if opacity < 1.0:
                     material.alphaMode = 'BLEND'
                     logger.info(f"Set alphaMode to BLEND for material {i} (opacity < 1.0)")
-                else:
+                elif material.alphaMode == 'BLEND':
                     material.alphaMode = 'OPAQUE'
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")

@@ -41,6 +41,36 @@ def is_valid_extension(filename, extensions):
 logger = logging.getLogger(__name__)
 
 
+def _ensure_assimp_library_path():
+    """Make libassimp discoverable before pyassimp is imported.
+
+    pyassimp resolves the shared library via LD_LIBRARY_PATH; on nix-based
+    deploys (Railway/nixpacks) libassimp lives under /nix/store or the nix
+    profile, which is not on the default search path.
+    """
+    import sys
+    import glob
+
+    if "pyassimp" in sys.modules:
+        return
+    candidates = []
+    for pattern in (
+        "/root/.nix-profile/lib/libassimp.so*",
+        "/nix/var/nix/profiles/default/lib/libassimp.so*",
+        "/nix/store/*/lib/libassimp.so*",
+    ):
+        candidates = glob.glob(pattern)
+        if candidates:
+            break
+    if not candidates:
+        return
+    lib_dir = os.path.dirname(candidates[0])
+    current = os.environ.get("LD_LIBRARY_PATH", "")
+    if lib_dir not in current.split(":"):
+        os.environ["LD_LIBRARY_PATH"] = f"{current}:{lib_dir}" if current else lib_dir
+        logger.info(f"Added assimp library directory to LD_LIBRARY_PATH: {lib_dir}")
+
+
 class FBXConverter(BaseConverter):
     """Converter for FBX files to GLB format using FBX2glTF."""
 
@@ -149,6 +179,7 @@ class FBXConverter(BaseConverter):
             original_dimensions = None
             try:
                 # Attempt to load pyassimp and the underlying library
+                _ensure_assimp_library_path()
                 import pyassimp
                 from pyassimp import postprocess
 

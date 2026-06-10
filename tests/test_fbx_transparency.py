@@ -116,6 +116,33 @@ class TestFixMaterialTransparency:
         assert mat.alphaMode == "MASK"
         assert mat.alphaCutoff == 0.5
 
+    def test_unset_metallic_on_textured_material_is_zeroed(self):
+        """glTF defaults metallicFactor to 1.0; textured FBX materials must not
+        render fully metallic or the texture washes out into env reflection."""
+        gltf = _textured_gltf(OPAQUE_PNG)
+        gltf.materials[0].pbrMetallicRoughness.metallicFactor = None
+        fix_material_transparency(gltf)
+        pbr = gltf.materials[0].pbrMetallicRoughness
+        assert pbr.metallicFactor == 0.0
+
+    def test_glossy_roughness_on_textured_material_is_raised(self):
+        gltf = _textured_gltf(CUTOUT_PNG, alpha_mode="BLEND")
+        pbr = gltf.materials[0].pbrMetallicRoughness
+        pbr.metallicFactor = 1.0
+        pbr.roughnessFactor = 0.2
+        fix_material_transparency(gltf)
+        assert pbr.metallicFactor == 0.0
+        assert pbr.roughnessFactor == 0.9
+
+    def test_moderate_pbr_factors_are_untouched(self):
+        gltf = _textured_gltf(OPAQUE_PNG)
+        pbr = gltf.materials[0].pbrMetallicRoughness
+        pbr.metallicFactor = 0.1
+        pbr.roughnessFactor = 0.7
+        fix_material_transparency(gltf)
+        assert pbr.metallicFactor == 0.1
+        assert pbr.roughnessFactor == 0.7
+
     def test_idempotent(self):
         gltf = _textured_gltf(CUTOUT_PNG, factor_alpha=0.0, alpha_mode="OPAQUE")
         fix_material_transparency(gltf)

@@ -136,6 +136,13 @@ def fix_material_transparency(gltf, log=None):
 
     The fix is driven by what the base-color texture actually contains, not by
     material names. Returns True if any material was modified.
+
+    Also normalizes metallic/roughness on textured materials: glTF defaults
+    metallicFactor to 1.0 when omitted, so an FBX2glTF material that leaves it
+    unset renders fully metallic — the texture is replaced by grey environment
+    reflection and the model washes out. Traditional FBX (lambert/phong)
+    materials have no metalness concept, so when there is no
+    metallicRoughnessTexture the factor is dialect noise, not artist intent.
     """
     log = log or (lambda msg, level="INFO": None)
     changed = False
@@ -143,6 +150,19 @@ def fix_material_transparency(gltf, log=None):
         pbr = mat.pbrMetallicRoughness
         if pbr is None:
             continue
+
+        if pbr.baseColorTexture is not None and pbr.metallicRoughnessTexture is None:
+            metallic = pbr.metallicFactor if pbr.metallicFactor is not None else 1.0
+            roughness = pbr.roughnessFactor if pbr.roughnessFactor is not None else 1.0
+            if metallic > 0.2 or roughness < 0.5:
+                pbr.metallicFactor = 0.0 if metallic > 0.2 else metallic
+                pbr.roughnessFactor = 0.9 if roughness < 0.5 else roughness
+                changed = True
+                log(
+                    f"Normalized PBR factors on textured material '{mat.name}': "
+                    f"metallic {metallic:.2f} → {pbr.metallicFactor:.2f}, "
+                    f"roughness {roughness:.2f} → {pbr.roughnessFactor:.2f}"
+                )
         factor = pbr.baseColorFactor
         factor_alpha = factor[3] if factor and len(factor) == 4 else 1.0
 

@@ -566,6 +566,47 @@
                 }
             }, 200);
 
+            // Shows success UI then redirects to the viewer
+            function finishUpload(message, viewerUrl) {
+                isUploading = false;
+                uploadResult.className = 'upload-result success';
+                uploadResult.style.display = 'block';
+
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
+                statusText.textContent = 'Upload completed';
+
+                setTimeout(() => {
+                    uploadResult.innerHTML = `<div>${message}</div>`;
+                    setTimeout(() => {
+                        window.location.href = viewerUrl;
+                    }, 1000);
+                }, 500);
+            }
+
+            // Queue mode: poll the job status endpoint until done
+            function pollUploadJob(jobId) {
+                statusText.textContent = 'Converting...';
+                const poll = setInterval(() => {
+                    fetch(`/api/upload-jobs/${jobId}`)
+                        .then(r => r.json())
+                        .then(job => {
+                            if (job.status === 'completed' && job.viewer_url) {
+                                clearInterval(poll);
+                                finishUpload('Model converted successfully', job.viewer_url);
+                            } else if (job.status === 'failed') {
+                                clearInterval(poll);
+                                isUploading = false;
+                                progressBar.classList.add('error');
+                                uploadResult.className = 'upload-result error';
+                                uploadResult.style.display = 'block';
+                                uploadResult.innerHTML = `<div class="av-text-error">${job.error || 'Conversion failed'}</div>`;
+                            }
+                        })
+                        .catch(() => { /* transient network error; keep polling */ });
+                }, 2000);
+            }
+
             // Upload file
             fetch('/upload_model', {
                 method: 'POST',
@@ -573,22 +614,12 @@
             })
             .then(response => response.json())
             .then(response => {
-                isUploading = false;
-                if (response.success) {
-                    uploadResult.className = 'upload-result success';
-                    uploadResult.style.display = 'block';
-
-                    progressBar.style.width = '100%';
-                    progressText.textContent = '100%';
-                    statusText.textContent = 'Upload completed';
-
-                    setTimeout(() => {
-                        uploadResult.innerHTML = `<div>${response.message}</div>`;
-
-                        setTimeout(() => {
-                            window.location.href = response.viewer_url;
-                        }, 1000);
-                    }, 500);
+                if (response.success && response.viewer_url) {
+                    // Inline mode: conversion already done
+                    finishUpload(response.message, response.viewer_url);
+                } else if (response.success && response.job_id) {
+                    // Queue mode: conversion runs in background worker
+                    pollUploadJob(response.job_id);
                 } else {
                     throw new Error(response.error || 'Upload failed');
                 }

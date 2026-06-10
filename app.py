@@ -26,7 +26,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob, ConversionJob
 from auth import auth
 import re
 import traceback
@@ -1530,54 +1530,187 @@ def upload_model():
             f"[upload_model - {unique_id}] Temporary file saved: {temp_file_path}"
         )
 
-        # Define final output path in unique converted directory
-        converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
-        os.makedirs(converted_dir, exist_ok=True)
-        output_path = os.path.join(converted_dir, "model.glb")
-        logger.info(
-            f"[upload_model - {unique_id}] Defined final output path: {output_path}"
-        )
-
         # Get file extension
         file_extension = os.path.splitext(original_filename)[1].lower()
 
-        # Instantiate appropriate converter
-        converter = None
+        # Stage OBJ companion files (MTL + textures) next to the OBJ
+        mtl_path = None
+        texture_paths = []
         if file_extension == ".obj":
-            converter = OBJConverter()
-            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
-            converter.set_source_unit(request.form.get("sourceUnit", "m"))
-
-            # Handle MTL file for OBJ
             if "mtl" in request.files:
                 mtl_file = request.files["mtl"]
                 if mtl_file and mtl_file.filename:
                     mtl_filename = secure_filename(mtl_file.filename)
                     mtl_path = os.path.join(temp_dir, mtl_filename)
                     mtl_file.save(mtl_path)
-                    converter.set_material_file(mtl_path)
                     logger.info(
                         f"[upload_model - {unique_id}] MTL file saved: {mtl_path}"
                     )
-
-            # Handle texture files for OBJ
             if "textures" in request.files:
-                texture_files = request.files.getlist("textures")
-                for texture_file in texture_files:
+                for texture_file in request.files.getlist("textures"):
                     if texture_file and texture_file.filename:
                         texture_filename = secure_filename(texture_file.filename)
                         texture_path = os.path.join(temp_dir, texture_filename)
                         texture_file.save(texture_path)
-                        converter.add_texture_file(texture_path)
+                        texture_paths.append(texture_path)
                         logger.info(
                             f"[upload_model - {unique_id}] Texture file saved: {texture_path}"
                         )
 
+        # Build job payload and persist the job. The pipeline itself runs either
+        # inline (default) or in worker.py when JOB_QUEUE is enabled.
+        payload = {
+            "unique_id": unique_id,
+            "original_filename": original_filename,
+            "client_filename": file.filename,
+            "temp_dir": temp_dir,
+            "temp_file_path": temp_file_path,
+            "file_extension": file_extension,
+            "mtl_path": mtl_path,
+            "texture_paths": texture_paths,
+            "use_color": use_color,
+            "color": color,
+            "max_dimension": max_dimension,
+            "source_unit": request.form.get("sourceUnit"),
+            "user_id": current_user.id if current_user.is_authenticated else None,
+        }
+        job = ConversionJob(
+            id=unique_id,
+            job_type="upload",
+            status="pending",
+            payload=payload,
+            user_id=payload["user_id"],
+        )
+        db.session.add(job)
+        db.session.commit()
+
+        if JOB_QUEUE_ENABLED:
+            # Worker picks it up; frontend polls the status endpoint.
+            return jsonify(
+                {
+                    "success": True,
+                    "job_id": unique_id,
+                    "status": "pending",
+                    "status_url": url_for("upload_job_status", job_id=unique_id),
+                }
+            ), 202
+
+        # Inline mode: run the exact same pipeline the worker would run
+        run_conversion_job(job, allow_retry=False)
+        if job.status == "completed":
+            return jsonify(
+                {
+                    "success": True,
+                    "job_id": unique_id,
+                    "message": f"Model uploaded and processed successfully{' (scaled to ' + str(round(max_dimension * 100, 1)) + 'cm)' if max_dimension else ''}",
+                    "viewer_url": url_for("view_model", model_id=job.model_id),
+                }
+            )
+        return jsonify(
+            {"error": job.error or "Conversion failed", "job_id": unique_id}
+        ), 500
+
+    except Exception as e:
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as cleanup_error:
+                logger.error(
+                    f"[upload_model] Error cleaning up temp directory {temp_dir} during exception: {cleanup_error}"
+                )
+        logger.error(f"[upload_model] Error in upload_model: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
+JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+
+
+def run_conversion_job(job, allow_retry=True):
+    """Run a ConversionJob through the pipeline with status transitions.
+
+    Failure puts the job back to 'pending' while attempts remain (so the
+    worker retries), or 'failed' otherwise. Inline callers pass
+    allow_retry=False because nothing would re-poll a pending job.
+    """
+    job.status = "processing"
+    job.started_at = datetime.utcnow()
+    job.attempts = (job.attempts or 0) + 1
+    db.session.commit()
+    try:
+        model_id = _run_upload_pipeline(job.payload)
+        job.model_id = model_id
+        job.status = "completed"
+        job.error = None
+        job.finished_at = datetime.utcnow()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        retry = allow_retry and job.attempts < (job.max_attempts or 1)
+        job.status = "pending" if retry else "failed"
+        job.error = str(e)[:2000]
+        job.finished_at = None if retry else datetime.utcnow()
+        db.session.commit()
+        logger.error(
+            f"[conversion_job - {job.id}] attempt {job.attempts} failed "
+            f"({'will retry' if retry else 'giving up'}): {e}"
+        )
+        if not retry:
+            staged_dir = (job.payload or {}).get("temp_dir")
+            if staged_dir and os.path.exists(staged_dir):
+                try:
+                    shutil.rmtree(staged_dir)
+                except Exception as cleanup_error:
+                    logger.error(
+                        f"[conversion_job - {job.id}] staged cleanup failed: {cleanup_error}"
+                    )
+
+
+def _run_upload_pipeline(payload):
+    """The conversion pipeline: converter -> GLB -> optimize -> normalize ->
+    quality pass -> USDZ/thumbnail threads -> UserModel row + initial version.
+
+    Pure function of the payload (no request context) so it can run inline or
+    in worker.py. Returns the model id; raises RuntimeError on failure.
+    """
+    unique_id = payload["unique_id"]
+    original_filename = payload["original_filename"]
+    temp_dir = payload.get("temp_dir")
+    temp_file_path = payload["temp_file_path"]
+    file_extension = payload["file_extension"]
+    use_color = bool(payload.get("use_color"))
+    color = payload.get("color")
+    max_dimension = payload.get("max_dimension")
+    source_unit = payload.get("source_unit")
+    user_id = payload.get("user_id")
+
+    converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
+    os.makedirs(converted_dir, exist_ok=True)
+    output_path = os.path.join(converted_dir, "model.glb")
+    logger.info(
+        f"[upload_model - {unique_id}] Defined final output path: {output_path}"
+    )
+
+    try:
+        # Instantiate appropriate converter
+        converter = None
+        if file_extension == ".obj":
+            converter = OBJConverter()
+            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
+            converter.set_source_unit(source_unit or "m")
+            if payload.get("mtl_path"):
+                converter.set_material_file(payload["mtl_path"])
+            for texture_path in payload.get("texture_paths") or []:
+                converter.add_texture_file(texture_path)
         elif file_extension == ".stl":
             converter = STLConverter()
             # STL is unitless — let the user declare the source unit (mm|cm|m),
             # defaulting to cm for backward compatibility.
-            converter.set_source_unit(request.form.get("sourceUnit", "cm"))
+            converter.set_source_unit(source_unit or "cm")
         elif file_extension == ".fbx":
             converter = FBXConverter()
         elif file_extension in (".glb", ".gltf"):
@@ -1610,9 +1743,7 @@ def upload_model():
                 )
                 conversion_success = False
         elif not converter:
-            if temp_dir:
-                shutil.rmtree(temp_dir)
-            return jsonify({"error": "Unsupported file format"}), 400
+            raise RuntimeError(f"Unsupported file format: {file_extension}")
         else:
             # Set max dimension if specified (max_dimension is in meters)
             if max_dimension is not None:
@@ -1633,9 +1764,10 @@ def upload_model():
             logger.error(
                 f"[upload_model - {unique_id}] Conversion failed or output file missing for {temp_file_path}"
             )
-            if temp_dir:
-                shutil.rmtree(temp_dir)
-            return jsonify({"error": "Conversion failed"}), 500
+            errors = getattr(converter, "errors", None) if converter else None
+            raise RuntimeError(
+                "Conversion failed" + (f": {errors[-1]}" if errors else "")
+            )
         else:
             logger.info(
                 f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}"
@@ -1693,11 +1825,7 @@ def upload_model():
             logger.error(
                 f"[upload_model - {unique_id}] CRITICAL: Output file {output_path} does not exist before saving to DB!"
             )
-            if temp_dir:
-                shutil.rmtree(temp_dir)
-            return jsonify(
-                {"error": "Internal server error: Processed file missing"}
-            ), 500
+            raise RuntimeError("Processed file missing")
 
         if final_file_size == 0:
             logger.warning(
@@ -1913,7 +2041,7 @@ def upload_model():
         # user_id is optional - can be None if user is not logged in
         model = UserModel(
             id=unique_id,  # Use the same ID as the directory
-            user_id=current_user.id if current_user.is_authenticated else None,
+            user_id=user_id,
             filename=output_path,  # Store the full path to the GLB file
             usdz_filename=None,  # USDZ conversion runs async, will be updated when complete
             file_size=final_file_size,  # Use the checked size
@@ -1927,7 +2055,7 @@ def upload_model():
         db.session.add(model)
         db.session.commit()
         logger.info(
-            f"[upload_model - {unique_id}] Model info saved to database. User: {'logged in' if current_user.is_authenticated else 'anonymous'}"
+            f"[upload_model - {unique_id}] Model info saved to database. User: {user_id if user_id is not None else 'anonymous'}"
         )
 
         # Create initial version entry
@@ -1936,7 +2064,7 @@ def upload_model():
                 model_id=unique_id,
                 operation_type="upload",
                 operation_details={
-                    "original_filename": file.filename,
+                    "original_filename": payload.get("client_filename", original_filename),
                     "file_type": file_extension,
                     "max_dimension": max_dimension,
                 },
@@ -1964,31 +2092,28 @@ def upload_model():
                 f"[upload_model - {unique_id}] Error starting thumbnail generation thread: {e}"
             )
 
-        # Generate QR code (using the same unique_id)
-        # qr_code_filename = generate_qr_code(unique_id)
-        # logger.info(f"QR code generated: {qr_code_filename}")
-        # Consider generating QR on demand or storing path in DB
-
-        return jsonify(
-            {
-                "success": True,
-                "message": f"Model uploaded and processed successfully{' (scaled to ' + str(round(max_dimension * 100, 1)) + 'cm)' if max_dimension else ''}",
-                "viewer_url": url_for("view_model", model_id=unique_id),
-            }
-        )
+        return unique_id
 
     except Exception as e:
-        # Ensure temporary directory cleanup on any exception
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir)
-            except Exception as cleanup_error:
-                logger.error(
-                    f"[upload_model] Error cleaning up temp directory {temp_dir} during exception: {cleanup_error}"
-                )
-        logger.error(f"[upload_model] Error in upload_model: {str(e)}")
+        # Staged files are NOT deleted here — a retrying worker needs them.
+        # run_conversion_job cleans up when it gives up for good.
+        logger.error(f"[upload_model - {unique_id}] Pipeline error: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+        raise
+
+
+@app.route("/api/upload-jobs/<job_id>", methods=["GET"])
+def upload_job_status(job_id):
+    """Poll a conversion job. Job ids are unguessable UUIDs; status is safe to
+    expose without auth (mirrors the AI generation status endpoint)."""
+    job = ConversionJob.query.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    data = job.to_dict()
+    data["success"] = True
+    if job.status == "completed" and job.model_id:
+        data["viewer_url"] = url_for("view_model", model_id=job.model_id)
+    return jsonify(data)
 
 
 @app.route("/convert", methods=["POST"])

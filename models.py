@@ -324,3 +324,39 @@ class AIGenerationJob(db.Model):
             'model_id': self.model_id,
             'error': self.error,
         }
+
+
+class ConversionJob(db.Model):
+    """DB-backed conversion job queue (academic_ar pattern).
+
+    The upload request stages files + creates a row; worker.py polls and runs
+    the conversion pipeline out of the request cycle. When JOB_QUEUE is off
+    the same row is processed inline in the request (status flows the same),
+    so the frontend polling contract is identical in both modes.
+    """
+    id = db.Column(db.String(36), primary_key=True)  # job UUID == future model id
+    job_type = db.Column(db.String(20), nullable=False, default='upload')
+    status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+    # pending | processing | completed | failed
+
+    payload = db.Column(db.JSON, nullable=True)      # staged paths + options
+    model_id = db.Column(db.String(36), nullable=True)  # UserModel.id when done
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    error = db.Column(db.Text, nullable=True)
+
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    max_attempts = db.Column(db.Integer, nullable=False, default=2)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    started_at = db.Column(db.DateTime, nullable=True)
+    finished_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'job_id': self.id,
+            'job_type': self.job_type,
+            'status': self.status,
+            'model_id': self.model_id,
+            'error': self.error,
+            'attempts': self.attempts,
+        }

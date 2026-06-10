@@ -39,6 +39,7 @@ from slugify import slugify
 import trimesh
 from converters import OBJConverter, FBXConverter, STLConverter
 from converters.glb_optimizer import optimize_glb
+from converters.glb_quality import finalize_glb
 import numpy as np
 from glb_modifier import modify_glb, normalize_model_to_center
 from mesh_slicer import slice_mesh, get_mesh_bounds
@@ -1663,6 +1664,18 @@ def upload_model():
                 exc_info=True,
             )
             # Continue even if normalization fails
+
+        # GLB quality pass: embed stray external textures, guarantee PBR
+        # materials, validate (warn-only — never blocks a viewable upload)
+        try:
+            quality_search_dirs = [converted_dir]
+            if temp_dir:
+                quality_search_dirs.append(temp_dir)
+            quality_warnings = finalize_glb(output_path, search_dirs=quality_search_dirs)
+            for w in quality_warnings:
+                logger.warning(f"[upload_model - {unique_id}] GLB quality: {w}")
+        except Exception as e:
+            logger.warning(f"[upload_model - {unique_id}] GLB quality pass skipped: {e}")
 
         # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
         # Start USDZ conversion in background thread to not block upload response
@@ -4031,6 +4044,14 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         g.save(output_path)
     except Exception as e:
         logger.warning(f"[register_glb] normalize skipped: {e}")
+
+    # GLB quality pass (warn-only): embedded textures + PBR guarantee + validation
+    try:
+        for w in finalize_glb(output_path, search_dirs=[converted_dir,
+                                                        os.path.dirname(glb_path)]):
+            logger.warning(f"[register_glb] GLB quality: {w}")
+    except Exception as e:
+        logger.warning(f"[register_glb] GLB quality pass skipped: {e}")
 
     # Dimensions / bounds (mirror upload_model GLB branch)
     model_bounds = None

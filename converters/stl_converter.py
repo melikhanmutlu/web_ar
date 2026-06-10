@@ -174,7 +174,7 @@ class STLConverter(BaseConverter):
             unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 0.01)
             mesh.apply_scale(unit_scale)
             self.log_operation(
-                f"Applied {self.source_unit}→m unit conversion: scale {unit_scale}"
+                f"Applied {self.source_unit}->m unit conversion: scale {unit_scale}"
             )
 
             # Get model dimensions (now in meters, consistent with GLB standard)

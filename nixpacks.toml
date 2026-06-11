@@ -11,4 +11,4 @@ cmds = [
 ]
 
 [start]
-cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(dirname \"$(find /nix/store -name 'libassimp.so*' | head -n 1)\") && (FLASK_APP=app.py SKIP_DB_BOOTSTRAP=1 /opt/venv/bin/flask db upgrade || echo 'db upgrade skipped (stamp-on-boot will handle legacy DBs)') && (/opt/venv/bin/python worker.py &) && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gthread --threads 8 --timeout 120 --log-level info"
+cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(dirname \"$(find /nix/store -name 'libassimp.so*' | head -n 1)\") && (/opt/venv/bin/python scripts/heal_alembic.py || true) && (FLASK_APP=app.py SKIP_DB_BOOTSTRAP=1 /opt/venv/bin/flask db upgrade || echo 'db upgrade skipped (stamp-on-boot will handle legacy DBs)') && (/opt/venv/bin/python worker.py &) && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gthread --threads 8 --timeout 120 --log-level info"

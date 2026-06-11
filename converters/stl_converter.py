@@ -55,9 +55,9 @@ class STLConverter(BaseConverter):
         self.source_unit = "cm"
 
     def set_source_unit(self, unit: str) -> None:
-        """Set the assumed source unit of the STL file (mm | cm | m)."""
+        """Set the assumed source unit of the STL file (auto | mm | cm | m)."""
         unit = (unit or "").strip().lower()
-        if unit in self._UNIT_TO_METERS:
+        if unit == "auto" or unit in self._UNIT_TO_METERS:
             self.source_unit = unit
             self.log_operation(f"STL source unit set to '{unit}'")
         else:
@@ -170,8 +170,18 @@ class STLConverter(BaseConverter):
 
             # STL files are unitless; GLB standard requires meters. Convert from the
             # user-declared source unit (default cm) so the model appears at the correct
-            # real-world scale in model-viewer and AR.
-            unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 0.01)
+            # real-world scale in model-viewer and AR. 'auto' measures the raw
+            # extents and picks the most plausible unit.
+            if self.source_unit == "auto":
+                raw_max = float(max(mesh.extents)) if len(mesh.extents) else 0.0
+                detected, unit_scale = self.auto_detect_unit(raw_max)
+                self.source_unit = detected
+                self.log_operation(
+                    f"Auto-detected STL source unit: '{detected}' "
+                    f"(raw max extent {raw_max:.3f} -> {raw_max * unit_scale:.3f} m)"
+                )
+            else:
+                unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 0.01)
             mesh.apply_scale(unit_scale)
             self.log_operation(
                 f"Applied {self.source_unit}->m unit conversion: scale {unit_scale}"

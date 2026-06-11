@@ -1505,6 +1505,13 @@ void main() {
                             posBtn.classList.add('active');
                             posBtn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
                         }
+
+                        // Reset the camera to the default framing: the clip-plane
+                        // preview is computed in the default view, so slicing from
+                        // a rotated camera produced confusing results.
+                        modelViewer.cameraOrbit = '36deg 70deg auto';
+                        modelViewer.fieldOfView = '24deg';
+                        modelViewer.cameraTarget = 'auto auto auto';
                     }
 
                     updateAxisPlane(axis);
@@ -2856,6 +2863,11 @@ void main() {
             // v4.x, so the preview silently did nothing.
             modelViewer.scale = s + ' ' + s + ' ' + s;
             modelViewer.orientation = rz + 'deg ' + rx + 'deg ' + ry + 'deg';
+
+            // model-viewer renders on demand and doesn't always flag these
+            // property changes dirty — without this nudge the change only
+            // shows up on the next user interaction (click/drag).
+            forceModelViewerRefresh();
         }
 
         // Transform editor initialization (called AFTER DOM restructuring)

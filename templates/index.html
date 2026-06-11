@@ -98,6 +98,7 @@
                         <p class="av-card-desc">STL/OBJ files are unitless — choose how to interpret the source size.</p>
                     </div>
                     <select id="sourceUnit" name="sourceUnit" class="av-select">
+                        <option value="auto" selected>Auto-detect (recommended)</option>
                         <option value="mm">Millimeters (mm)</option>
                         <option value="cm">Centimeters (cm)</option>
                         <option value="m">Meters (m)</option>
@@ -423,13 +424,14 @@
                 }
 
                 // Source-unit selector is only meaningful for unitless STL/OBJ files.
-                // Default differs by type: STL historically cm→m, OBJ historically as-is (m).
+                // Default to auto-detect: the server measures the raw extents and
+                // picks the most plausible unit; the user can still override.
                 const sourceUnitSection = document.getElementById('sourceUnitSection');
                 const sourceUnitSelect = document.getElementById('sourceUnit');
                 const unitlessType = (fileExtension === '.stl' || fileExtension === '.obj');
                 sourceUnitSection?.classList.toggle('hidden', !unitlessType);
                 if (sourceUnitSelect && unitlessType) {
-                    sourceUnitSelect.value = (fileExtension === '.stl') ? 'cm' : 'm';
+                    sourceUnitSelect.value = 'auto';
                 }
             }
         }

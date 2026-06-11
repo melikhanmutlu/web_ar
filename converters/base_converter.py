@@ -168,6 +168,30 @@ class BaseConverter:
         self.max_dimension = max_dimension_meters
         self.log_operation(f"Maximum dimension set to {max_dimension_meters:.4f} m ({max_dimension_meters * 100:.2f} cm)")
 
+    @staticmethod
+    def auto_detect_unit(max_extent: float):
+        """
+        Guess the source unit of a unitless mesh (OBJ/STL) from its raw extent.
+
+        Picks the unit that lands the object in a plausible real-world size
+        (5 cm - 5 m). Preference order m > cm > mm, so a model that is
+        plausible as metres stays untouched. Falls back to the nearest
+        sensible interpretation when nothing fits.
+
+        Returns:
+            (unit, scale_to_meters): e.g. ("cm", 0.01)
+        """
+        candidates = (("m", 1.0), ("cm", 0.01), ("mm", 0.001))
+        if max_extent and max_extent > 0:
+            for unit, k in candidates:
+                if 0.05 <= max_extent * k <= 5.0:
+                    return unit, k
+            # Nothing plausible: huge numbers are almost certainly mm,
+            # tiny ones are best left as metres.
+            if max_extent * 0.001 > 5.0:
+                return "mm", 0.001
+        return "m", 1.0
+
     def calculate_scale_factor(self, dimensions: Dict[str, float]) -> float:
         """
         Calculate scale factor based on maximum dimension.

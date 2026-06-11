@@ -69,13 +69,14 @@ class OBJConverter(BaseConverter):
         self.mtl_file: Optional[str] = None
 
     def set_source_unit(self, unit: str) -> None:
-        """Set the assumed source unit of the OBJ file (mm | cm | m).
+        """Set the assumed source unit of the OBJ file (auto | mm | cm | m).
 
-        Default 'm' means no scaling (obj2gltf output is treated as metres),
-        preserving the original behaviour.
+        'auto' measures the raw extents after conversion and picks the most
+        plausible unit (see BaseConverter.auto_detect_unit). Default 'm'
+        means no scaling, preserving the original behaviour.
         """
         unit = (unit or "").strip().lower()
-        if unit in self._UNIT_TO_METERS:
+        if unit == "auto" or unit in self._UNIT_TO_METERS:
             self.source_unit = unit
             self.log_operation(f"OBJ source unit set to '{unit}'")
         else:
@@ -211,7 +212,8 @@ class OBJConverter(BaseConverter):
             needs_color = color and not (self.mtl_file or self.texture_files)
             needs_scaling = False
             # Unit conversion is needed whenever the user picked a non-metre source unit.
-            needs_unit_scale = self.source_unit != "m"
+            # 'auto' is resolved below once the raw extents are known.
+            needs_unit_scale = self.source_unit not in ("m", "auto")
             unit_scale = self._UNIT_TO_METERS.get(self.source_unit, 1.0)
 
             # Check if scaling is needed
@@ -225,6 +227,15 @@ class OBJConverter(BaseConverter):
 
                 dimensions = {"x": extents[0], "y": extents[1], "z": extents[2]}
                 self.log_operation(f"Model dimensions: {dimensions}")
+
+                if self.source_unit == "auto":
+                    detected, unit_scale = self.auto_detect_unit(float(max(extents)))
+                    self.source_unit = detected
+                    needs_unit_scale = unit_scale != 1.0
+                    self.log_operation(
+                        f"Auto-detected OBJ source unit: '{detected}' "
+                        f"(raw max extent {float(max(extents)):.3f} -> {float(max(extents)) * unit_scale:.3f} m)"
+                    )
 
                 # Only scale if max_dimension was explicitly set by user
                 if self.max_dimension > 0:

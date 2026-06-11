@@ -41,6 +41,179 @@ def is_valid_extension(filename, extensions):
 logger = logging.getLogger(__name__)
 
 
+def _ensure_assimp_library_path():
+    """Make libassimp discoverable before pyassimp is imported.
+
+    pyassimp resolves the shared library via LD_LIBRARY_PATH; on nix-based
+    deploys (Railway/nixpacks) libassimp lives under /nix/store or the nix
+    profile, which is not on the default search path.
+    """
+    import sys
+    import glob
+
+    if "pyassimp" in sys.modules:
+        return
+    candidates = []
+    for pattern in (
+        "/root/.nix-profile/lib/libassimp.so*",
+        "/nix/var/nix/profiles/default/lib/libassimp.so*",
+        "/nix/store/*/lib/libassimp.so*",
+    ):
+        candidates = glob.glob(pattern)
+        if candidates:
+            break
+    if not candidates:
+        return
+    lib_dir = os.path.dirname(candidates[0])
+    current = os.environ.get("LD_LIBRARY_PATH", "")
+    if lib_dir not in current.split(":"):
+        os.environ["LD_LIBRARY_PATH"] = f"{current}:{lib_dir}" if current else lib_dir
+        logger.info(f"Added assimp library directory to LD_LIBRARY_PATH: {lib_dir}")
+
+
+def _gltf_image_bytes(gltf, image_index):
+    """Return the raw bytes of a glTF image (data URI or buffer view), or None."""
+    import base64
+
+    if image_index is None or not gltf.images or image_index >= len(gltf.images):
+        return None
+    img = gltf.images[image_index]
+    if img.uri and img.uri.startswith("data:"):
+        try:
+            return base64.b64decode(img.uri.split(",", 1)[1])
+        except Exception:
+            return None
+    if img.bufferView is not None:
+        blob = gltf.binary_blob()
+        if not blob:
+            return None
+        bv = gltf.bufferViews[img.bufferView]
+        offset = bv.byteOffset if bv.byteOffset else 0
+        return blob[offset : offset + bv.byteLength]
+    return None
+
+
+def _analyze_alpha_channel(image_bytes):
+    """Inspect an encoded image's alpha channel.
+
+    Returns (has_transparency, mostly_binary):
+    - has_transparency: any meaningfully transparent pixel exists
+    - mostly_binary: alpha is essentially on/off (foliage cutout) rather than
+      gradual (glass/fades), so MASK renders it better than BLEND
+    """
+    from PIL import Image as PILImage
+    import io
+
+    pil = PILImage.open(io.BytesIO(image_bytes))
+    if pil.mode not in ("RGBA", "LA", "PA") and "transparency" not in pil.info:
+        return False, False
+    alpha = pil.convert("RGBA").getchannel("A")
+    lo, _ = alpha.getextrema()
+    if lo >= 250:
+        return False, False
+    hist = alpha.histogram()
+    total = sum(hist) or 1
+    partial = sum(hist[16:240])  # neither fully transparent nor fully opaque
+    # Foliage cutouts are dominated by fully-transparent/fully-opaque texels;
+    # partial alpha appears only on antialiased edges (typically 5-15%). Truly
+    # gradual textures (glass, fades) have large smooth partial regions. MASK
+    # must win for cutouts: BLEND disables depth sorting, so dense foliage
+    # blends against the background instead of the leaves behind it and the
+    # whole canopy washes out.
+    return True, (partial / total) < 0.25
+
+
+def fix_material_transparency(gltf, log=None):
+    """Alpha-correctness pass for FBX-derived materials.
+
+    FBX exporters and FBX2glTF disagree about opacity semantics, which shows up
+    in two broken ways:
+    1. Cutout textures (foliage) arrive with alphaMode=OPAQUE, so the texture's
+       alpha channel is ignored and leaves render as solid quads.
+    2. A bogus FBX TransparencyFactor arrives as baseColorFactor alpha < 1
+       (often 0). Harmless while OPAQUE (spec says alpha is ignored), but fatal
+       if anything later switches the material to BLEND — the mesh disappears.
+
+    The fix is driven by what the base-color texture actually contains, not by
+    material names. Returns True if any material was modified.
+
+    Also normalizes metallic/roughness on textured materials: glTF defaults
+    metallicFactor to 1.0 when omitted, so an FBX2glTF material that leaves it
+    unset renders fully metallic — the texture is replaced by grey environment
+    reflection and the model washes out. Traditional FBX (lambert/phong)
+    materials have no metalness concept, so when there is no
+    metallicRoughnessTexture the factor is dialect noise, not artist intent.
+    """
+    log = log or (lambda msg, level="INFO": None)
+    changed = False
+    for mat in gltf.materials or []:
+        pbr = mat.pbrMetallicRoughness
+        if pbr is None:
+            continue
+
+        if pbr.baseColorTexture is not None and pbr.metallicRoughnessTexture is None:
+            metallic = pbr.metallicFactor if pbr.metallicFactor is not None else 1.0
+            roughness = pbr.roughnessFactor if pbr.roughnessFactor is not None else 1.0
+            if metallic > 0.2 or roughness < 0.5:
+                pbr.metallicFactor = 0.0 if metallic > 0.2 else metallic
+                pbr.roughnessFactor = 0.9 if roughness < 0.5 else roughness
+                changed = True
+                log(
+                    f"Normalized PBR factors on textured material '{mat.name}': "
+                    f"metallic {metallic:.2f} → {pbr.metallicFactor:.2f}, "
+                    f"roughness {roughness:.2f} → {pbr.roughnessFactor:.2f}"
+                )
+        factor = pbr.baseColorFactor
+        factor_alpha = factor[3] if factor and len(factor) == 4 else 1.0
+
+        has_alpha = mostly_binary = False
+        if pbr.baseColorTexture is not None and gltf.textures:
+            tex_idx = pbr.baseColorTexture.index
+            if tex_idx is not None and tex_idx < len(gltf.textures):
+                data = _gltf_image_bytes(gltf, gltf.textures[tex_idx].source)
+                if data:
+                    try:
+                        has_alpha, mostly_binary = _analyze_alpha_channel(data)
+                    except Exception as exc:
+                        log(f"Alpha analysis failed for material '{mat.name}': {exc}", "WARNING")
+
+        if has_alpha:
+            # Binary cutouts (foliage) must use MASK even when FBX2glTF already
+            # marked them BLEND: BLEND disables depth sorting, so dense leaves
+            # blend against the background and the canopy washes out.
+            target = "MASK" if mostly_binary else "BLEND"
+            if mat.alphaMode != target and mat.alphaMode != "MASK":
+                mat.alphaMode = target
+                if target == "MASK":
+                    mat.alphaCutoff = 0.5
+                changed = True
+            if mat.doubleSided is not True:
+                mat.doubleSided = True
+                changed = True
+            if factor_alpha < 1.0:
+                # Let the texture drive transparency; a stray <1 factor alpha
+                # would dim the whole surface.
+                pbr.baseColorFactor = [factor[0], factor[1], factor[2], 1.0]
+                changed = True
+            log(
+                f"Transparency fix → material '{mat.name}': "
+                f"alphaMode={mat.alphaMode}, doubleSided=True"
+            )
+        elif factor_alpha < 1.0:
+            mode = mat.alphaMode or "OPAQUE"
+            if mode == "OPAQUE" or (mode == "BLEND" and factor_alpha < 0.05):
+                # FBX opacity import bug: clamp instead of going translucent.
+                pbr.baseColorFactor = [factor[0], factor[1], factor[2], 1.0]
+                if mode == "BLEND":
+                    mat.alphaMode = "OPAQUE"
+                changed = True
+                log(
+                    f"Clamped bogus baseColorFactor alpha {factor_alpha:.3f} → 1.0 "
+                    f"on material '{mat.name}' (no texture alpha)"
+                )
+    return changed
+
+
 class FBXConverter(BaseConverter):
     """Converter for FBX files to GLB format using FBX2glTF."""
 
@@ -149,6 +322,7 @@ class FBXConverter(BaseConverter):
             original_dimensions = None
             try:
                 # Attempt to load pyassimp and the underlying library
+                _ensure_assimp_library_path()
                 import pyassimp
                 from pyassimp import postprocess
 
@@ -261,14 +435,14 @@ class FBXConverter(BaseConverter):
                                 self.log_operation(
                                     f"Material '{mat_name}' Texture: {tex_file}"
                                 )
-                            elif mat_name == "DB2X2_L02" and extracted_texture_paths:
-                                # Special case for Tree model if property is missing but we have extracted textures
-                                # Usually the first extracted texture for this material
+                            elif len(extracted_texture_paths) == 1 and len(scene.materials) == 1:
+                                # Single material + single embedded texture but no
+                                # property linking them: the pairing is unambiguous.
                                 self._fbx_material_textures[mat_name] = list(
                                     extracted_texture_paths.values()
                                 )[0]
                                 self.log_operation(
-                                    f"Assigned extracted texture to known material '{mat_name}'"
+                                    f"Assigned sole extracted texture to material '{mat_name}'"
                                 )
 
                     # Try different pyassimp API approaches
@@ -470,6 +644,12 @@ class FBXConverter(BaseConverter):
                             "WARNING",
                         )
 
+                    # --pbr-metallic-roughness forces FBX2glTF to emit core glTF
+                    # metallic-roughness materials (with baseColorTexture) instead
+                    # of the default KHR_materials_pbrSpecularGlossiness extension.
+                    # Modern model-viewer / three.js dropped spec-gloss support, so
+                    # without this flag FBX textures are written into an extension
+                    # the viewer ignores and the model renders untextured.
                     cmd = [
                         str(self.fbx2gltf_path),
                         "-i",
@@ -477,6 +657,7 @@ class FBXConverter(BaseConverter):
                         "-o",
                         str(output_path),
                         "--binary",
+                        "--pbr-metallic-roughness",
                     ]
 
                     self.log_operation(f"Running command: {' '.join(cmd)}")
@@ -486,11 +667,32 @@ class FBXConverter(BaseConverter):
                         text=True,
                         check=False,
                         stdin=subprocess.DEVNULL,  # Don't wait for input
+                        cwd=os.path.dirname(input_path) or None,
                         timeout=300,
                     )  # 5 minute timeout
 
+                    # FBX2glTF sometimes writes the GLB under a variant of the
+                    # requested name (e.g. appending the input stem or "_out").
+                    # Adopt the first matching candidate before declaring failure.
+                    if not os.path.exists(output_path):
+                        out_dir = Path(os.path.dirname(output_path))
+                        out_stem = Path(output_path).stem
+                        in_stem = Path(input_path).stem
+                        candidates = [
+                            p
+                            for p in sorted(out_dir.glob("*.glb"))
+                            if p.stem.startswith(out_stem) or p.stem.startswith(in_stem)
+                        ]
+                        if candidates:
+                            import shutil
+
+                            shutil.move(str(candidates[0]), output_path)
+                            self.log_operation(
+                                f"Adopted FBX2glTF output {candidates[0].name} as model.glb"
+                            )
+
                     # Check conversion result
-                    if result.returncode != 0:
+                    if result.returncode != 0 or not os.path.exists(output_path):
                         error_msg = f"FBX2glTF conversion failed (exit code {result.returncode})\n"
                         error_msg += f"STDERR: {result.stderr}\n"
                         error_msg += f"STDOUT: {result.stdout}"
@@ -498,6 +700,13 @@ class FBXConverter(BaseConverter):
                         return False
 
                     self.log_operation(f"FBX2glTF output: {result.stdout}")
+
+                    # Rescue: FBX2glTF occasionally emits a GLB with degenerate
+                    # (zero-extent) geometry. Rebuild from the original FBX data
+                    # read via pyassimp instead of publishing an empty model.
+                    if self._rescue_zero_geometry(output_path, color, original_dimensions):
+                        self.update_status("COMPLETED")
+                        return True
 
                     # Post-processing: Only if color or scaling needed
                     # IMPORTANT: Use pygltflib for post-processing to preserve animations
@@ -617,9 +826,20 @@ class FBXConverter(BaseConverter):
                                     f"Applied scale {scale_factor:.4f}x using pygltflib"
                                 )
 
-                            # Apply color using glb_modifier (preserves animations)
-                            if color:
-                                hex_color = color.lstrip("#")
+                            # Apply color using glb_modifier (preserves animations).
+                            # Skip when the GLB carries baseColorTextures: the
+                            # factor multiplies the texture, so a solid color
+                            # would tint/darken the original artwork.
+                            has_textures = any(
+                                mat.pbrMetallicRoughness
+                                and mat.pbrMetallicRoughness.baseColorTexture is not None
+                                for mat in (gltf.materials or [])
+                            )
+                            if color and has_textures:
+                                self.log_operation(
+                                    f"Skipping color {color}: GLB already has baseColorTextures"
+                                )
+                            elif color:
                                 material_mods = {
                                     "color": color,
                                     "metalness": 0.1,
@@ -661,356 +881,22 @@ class FBXConverter(BaseConverter):
                             import traceback
 
                             self.log_operation(f"Traceback: {traceback.format_exc()}")
-                            # If model has animations, don't fall back to trimesh - it will destroy animations
-                            if has_animations:
-                                self.log_operation(
-                                    "Model has animations - skipping trimesh fallback to preserve them"
-                                )
-                                self.update_status("COMPLETED")
-                                return True
-
-                    # Trimesh fallback - ONLY for models WITHOUT animations
-                    # Check if scaling is needed (fallback for non-FBX or if original_dimensions failed)
-                    if not has_animations and os.path.exists(output_path):
-                        try:
-                            # Quick check for dimensions without full reload
-                            temp_mesh = trimesh.load(output_path)
-                            if isinstance(temp_mesh, trimesh.Scene):
-                                # For Scene, combine all vertices for accurate bounds
-                                all_vertices = []
-                                for geom in temp_mesh.geometry.values():
-                                    if isinstance(geom, trimesh.Trimesh):
-                                        all_vertices.append(geom.vertices)
-
-                                if all_vertices:
-                                    combined_vertices = np.vstack(all_vertices)
-                                    min_bounds = combined_vertices.min(axis=0)
-                                    max_bounds = combined_vertices.max(axis=0)
-                                    extents = max_bounds - min_bounds
-                                else:
-                                    bounds = temp_mesh.bounds
-                                    extents = bounds[1] - bounds[0]
-                            else:
-                                extents = temp_mesh.extents
-
-                            dimensions = {
-                                "x": extents[0],
-                                "y": extents[1],
-                                "z": extents[2],
-                            }
-                            scale_factor = super().calculate_scale_factor(dimensions)
-
-                            # Always apply scaling if max_dimension is set (standardize for AR)
-                            if self.max_dimension > 0 and scale_factor != 1.0:
-                                needs_processing = True
-                                self.log_operation(
-                                    f"Post-processing needed: scaling (factor: {scale_factor})"
-                                )
-
-                            del temp_mesh  # Free memory
-
-                        except Exception as e:
+                            # Keep the raw FBX2glTF output: a correctly textured
+                            # model at the wrong scale beats the old trimesh
+                            # concatenate fallback, which destroyed per-material
+                            # textures (and animations).
                             self.log_operation(
-                                f"Warning: Could not check dimensions: {str(e)}",
-                                "WARNING",
+                                "Keeping unmodified FBX2glTF GLB to preserve textures/animations"
                             )
-
-                    # Only reload and re-export if necessary - SKIP if model has animations
-                    if (
-                        needs_processing
-                        and not has_animations
-                        and os.path.exists(output_path)
-                    ):
-                        try:
-                            scene_or_mesh = trimesh.load(output_path)
-                            self.log_operation(
-                                f"Loaded GLB for post-processing (no animations, using trimesh)"
-                            )
-
-                            # NEW APPROACH: Work with Scene directly to preserve textures
-                            if isinstance(scene_or_mesh, trimesh.Scene):
-                                self.log_operation("Processing Scene from FBX2glTF")
-
-                                # Check if scene has valid geometry (not all zeros)
-                                has_valid_geometry = False
-                                for name, geom in scene_or_mesh.geometry.items():
-                                    if (
-                                        isinstance(geom, trimesh.Trimesh)
-                                        and geom.bounds is not None
-                                    ):
-                                        extents = geom.bounds[1] - geom.bounds[0]
-                                        if np.any(extents > 0):
-                                            has_valid_geometry = True
-                                            break
-
-                                if not has_valid_geometry:
-                                    self.log_operation(
-                                        "WARNING: FBX2glTF GLB has zero geometry - using original FBX data"
-                                    )
-                                    # Use original FBX vertices instead
-                                    if (
-                                        hasattr(self, "_fbx_vertices")
-                                        and self._fbx_vertices is not None
-                                    ):
-                                        if (
-                                            hasattr(self, "_fbx_faces")
-                                            and self._fbx_faces is not None
-                                        ):
-                                            mesh = trimesh.Trimesh(
-                                                vertices=self._fbx_vertices,
-                                                faces=self._fbx_faces,
-                                            )
-                                            self.log_operation(
-                                                f"Created mesh from original FBX: {len(mesh.vertices)} vertices"
-                                            )
-
-                                            # Apply scaling
-                                            if (
-                                                original_dimensions
-                                                and self.max_dimension > 0
-                                            ):
-                                                max_dim_m = original_dimensions["max"]
-                                                max_allowed_m = self.max_dimension
-                                                scale_factor = max_allowed_m / max_dim_m
-                                                self.log_operation(
-                                                    f"Applying scale factor {scale_factor:.4f}"
-                                                )
-                                                mesh.apply_scale(scale_factor)
-
-                                                extents = (
-                                                    mesh.bounds[1] - mesh.bounds[0]
-                                                )
-                                                self.log_operation(
-                                                    f"Mesh extents after scaling: {extents}"
-                                                )
-
-                                            # Apply color if needed
-                                            if color:
-                                                self.apply_color(mesh, color)
-
-                                            # Export
-                                            self.log_operation(
-                                                f"Exporting mesh to: {output_path}"
-                                            )
-                                            if os.path.exists(output_path):
-                                                os.remove(output_path)
-                                            mesh.export(output_path, file_type="glb")
-
-                                            if os.path.exists(output_path):
-                                                file_size = os.path.getsize(output_path)
-                                                self.log_operation(
-                                                    f"Mesh exported: {file_size} bytes"
-                                                )
-
-                                            self.update_status("COMPLETED")
-                                            return True
-
-                                # If scene has valid geometry, scale it
+                            try:
+                                self._embed_external_textures(output_path, input_path)
+                            except Exception as tex_error:
                                 self.log_operation(
-                                    "Scene has valid geometry - applying scaling"
+                                    f"Warning: Could not embed textures: {tex_error}",
+                                    "WARNING",
                                 )
-                                if original_dimensions and self.max_dimension > 0:
-                                    max_dim_m = original_dimensions["max"]
-                                    max_allowed_m = self.max_dimension
-                                    scale_factor = max_allowed_m / max_dim_m
-                                    self.log_operation(
-                                        f"Applying scale factor {scale_factor:.4f} to all scene geometries"
-                                    )
-
-                                    for name, geom in scene_or_mesh.geometry.items():
-                                        if isinstance(geom, trimesh.Trimesh):
-                                            geom.apply_scale(scale_factor)
-                                            self.log_operation(
-                                                f"Scaled geometry '{name}': {len(geom.vertices)} vertices"
-                                            )
-                                            # Log bounds after scaling
-                                            if geom.bounds is not None:
-                                                extents = (
-                                                    geom.bounds[1] - geom.bounds[0]
-                                                )
-                                                self.log_operation(
-                                                    f"  Extents after scaling: {extents}"
-                                                )
-
-                                # Apply color if requested
-                                if color:
-                                    self.log_operation(
-                                        "Removing textures and applying solid color to all geometries"
-                                    )
-                                    # Convert hex to RGB
-                                    hex_color = color.lstrip("#")
-                                    r = int(hex_color[0:2], 16)
-                                    g = int(hex_color[2:4], 16)
-                                    b = int(hex_color[4:6], 16)
-
-                                    material = trimesh.visual.material.PBRMaterial(
-                                        baseColorFactor=[
-                                            r / 255.0,
-                                            g / 255.0,
-                                            b / 255.0,
-                                            1.0,
-                                        ],
-                                        metallicFactor=0.1,
-                                        roughnessFactor=0.9,
-                                    )
-
-                                    for name, geom in scene_or_mesh.geometry.items():
-                                        if isinstance(geom, trimesh.Trimesh):
-                                            geom.visual = trimesh.visual.TextureVisuals(
-                                                material=material
-                                            )
-                                            vertex_colors = np.tile(
-                                                [r, g, b, 255], (len(geom.vertices), 1)
-                                            )
-                                            geom.visual.vertex_colors = (
-                                                vertex_colors.astype(np.uint8)
-                                            )
-
-                                    self.log_operation(
-                                        f"Applied color RGB({r}, {g}, {b}) to all geometries"
-                                    )
-
-                                # Export: Concatenate to single mesh (best compromise)
-                                # Note: This may affect texture quality but preserves geometry
-                                self.log_operation(
-                                    "Concatenating scene to single mesh for export"
-                                )
-                                try:
-                                    # Concatenate all geometries into single mesh
-                                    mesh = scene_or_mesh.dump(concatenate=True)
-                                    self.log_operation(
-                                        f"Concatenated mesh: {len(mesh.vertices)} vertices"
-                                    )
-
-                                    # Verify mesh has correct size
-                                    if mesh.bounds is not None:
-                                        extents = mesh.bounds[1] - mesh.bounds[0]
-                                        self.log_operation(
-                                            f"Final mesh extents: {extents}"
-                                        )
-
-                                    # Export concatenated mesh
-                                    self.log_operation(
-                                        f"Exporting mesh to: {output_path}"
-                                    )
-                                    if os.path.exists(output_path):
-                                        os.remove(output_path)
-                                    mesh.export(output_path, file_type="glb")
-
-                                    # Verify export
-                                    if os.path.exists(output_path):
-                                        file_size = os.path.getsize(output_path)
-                                        self.log_operation(
-                                            f"Mesh exported successfully: {file_size} bytes"
-                                        )
-                                    else:
-                                        self.log_operation(
-                                            "ERROR: Mesh export failed!", "ERROR"
-                                        )
-                                        return False
-
-                                    self.update_status("COMPLETED")
-                                    return True
-
-                                except Exception as export_error:
-                                    self.log_operation(
-                                        f"ERROR exporting mesh: {export_error}", "ERROR"
-                                    )
-                                    import traceback
-
-                                    self.log_operation(
-                                        f"Traceback: {traceback.format_exc()}"
-                                    )
-                                    return False
-
-                            else:
-                                # Single mesh (not scene)
-                                self.log_operation("Processing single mesh")
-                                mesh = scene_or_mesh
-
-                                # Check if mesh has valid vertices
-                                if len(mesh.vertices) == 0 and hasattr(
-                                    self, "_fbx_vertices"
-                                ):
-                                    self.log_operation(
-                                        "WARNING: Mesh has zero vertices, using original FBX data"
-                                    )
-                                    if (
-                                        self._fbx_vertices is not None
-                                        and hasattr(self, "_fbx_faces")
-                                        and self._fbx_faces is not None
-                                    ):
-                                        mesh = trimesh.Trimesh(
-                                            vertices=self._fbx_vertices,
-                                            faces=self._fbx_faces,
-                                        )
-                                        self.log_operation(
-                                            f"Created mesh from original FBX ({len(mesh.vertices)} vertices)"
-                                        )
-
-                                # Apply scaling to single mesh
-                                if original_dimensions and self.max_dimension > 0:
-                                    max_dim_m = original_dimensions["max"]
-                                    max_allowed_m = self.max_dimension
-                                    scale_factor = max_allowed_m / max_dim_m
-                                    self.log_operation(
-                                        f"Applying scale factor from original FBX: {scale_factor:.4f}"
-                                    )
-
-                                    bounds_before = mesh.bounds
-                                    if bounds_before is not None:
-                                        extents_before = (
-                                            bounds_before[1] - bounds_before[0]
-                                        )
-                                        self.log_operation(
-                                            f"Bounds before scaling: {bounds_before}"
-                                        )
-                                        self.log_operation(
-                                            f"Extents before scaling: {extents_before}"
-                                        )
-                                    else:
-                                        self.log_operation(
-                                            "Bounds before scaling: None"
-                                        )
-                                        extents_before = None
-
-                                    mesh.apply_scale(scale_factor)
-
-                                    bounds_after = mesh.bounds
-                                    if bounds_after is not None:
-                                        extents_after = (
-                                            bounds_after[1] - bounds_after[0]
-                                        )
-                                        self.log_operation(
-                                            f"Bounds after scaling: {bounds_after}"
-                                        )
-                                        self.log_operation(
-                                            f"Extents after scaling: {extents_after}"
-                                        )
-                                    else:
-                                        self.log_operation("Bounds after scaling: None")
-
-                                # Apply color if needed (for single mesh)
-                                if color:
-                                    self.apply_color(mesh, color)
-
-                                # Export single mesh
-                                self.log_operation(
-                                    f"Exporting single mesh to: {output_path}"
-                                )
-                                if os.path.exists(output_path):
-                                    os.remove(output_path)
-                                mesh.export(output_path, file_type="glb")
-                                self.log_operation(f"Single mesh exported successfully")
-                                self.update_status("COMPLETED")
-                                return True
-
-                        except Exception as e:
-                            self.handle_error(f"Error post-processing GLB: {str(e)}")
-                            import traceback
-
-                            self.log_operation(f"Traceback: {traceback.format_exc()}")
-                            return False
+                            self.update_status("COMPLETED")
+                            return True
 
                     # Verify output file exists
                     if not os.path.exists(output_path):
@@ -1039,6 +925,51 @@ class FBXConverter(BaseConverter):
 
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
+
+    def _rescue_zero_geometry(self, output_path: str, color, original_dimensions) -> bool:
+        """Rebuild the GLB from pyassimp-read FBX data when FBX2glTF emitted
+        degenerate (zero-extent) geometry. Returns True if a rescue happened.
+        """
+        try:
+            scene_or_mesh = trimesh.load(output_path)
+            if isinstance(scene_or_mesh, trimesh.Scene):
+                bounds = scene_or_mesh.bounds
+            else:
+                bounds = scene_or_mesh.bounds
+            if bounds is not None:
+                extents = bounds[1] - bounds[0]
+                if np.any(extents > 1e-9):
+                    return False  # geometry is fine
+            del scene_or_mesh
+        except Exception as e:
+            self.log_operation(f"Warning: zero-geometry check failed: {e}", "WARNING")
+            return False
+
+        if getattr(self, "_fbx_vertices", None) is None or getattr(self, "_fbx_faces", None) is None:
+            self.log_operation(
+                "WARNING: FBX2glTF GLB has zero geometry and no pyassimp data to rescue from",
+                "WARNING",
+            )
+            return False
+
+        self.log_operation(
+            "WARNING: FBX2glTF GLB has zero geometry - rebuilding from original FBX data"
+        )
+        mesh = trimesh.Trimesh(vertices=self._fbx_vertices, faces=self._fbx_faces)
+        if original_dimensions and self.max_dimension > 0 and original_dimensions["max"] > 0:
+            scale_factor = self.max_dimension / original_dimensions["max"]
+            mesh.apply_scale(scale_factor)
+            self.log_operation(f"Applied scale factor {scale_factor:.4f} to rescued mesh")
+        if color:
+            self.apply_color(mesh, color)
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        mesh.export(output_path, file_type="glb")
+        self.log_operation(
+            f"Rescued mesh exported: {len(mesh.vertices)} vertices, "
+            f"{os.path.getsize(output_path)} bytes"
+        )
+        return True
 
     def _embed_external_textures_gltf(self, gltf, fbx_path: str) -> None:
         """Embed external texture files into an already-loaded GLTF object.
@@ -1096,9 +1027,22 @@ class FBXConverter(BaseConverter):
                                     break
 
                             if texture_file:
-                                # Add new image
+                                # Add new image, embedded immediately as a data
+                                # URI — a bare filename URI would leave the GLB
+                                # with a dangling external reference.
+                                with open(texture_file, "rb") as tf:
+                                    tex_bytes = tf.read()
+                                ext = os.path.splitext(texture_file)[1].lower()
+                                mime = {
+                                    ".png": "image/png",
+                                    ".jpg": "image/jpeg",
+                                    ".jpeg": "image/jpeg",
+                                    ".webp": "image/webp",
+                                }.get(ext, "image/png")
                                 img_idx = len(gltf.images) if gltf.images else 0
-                                new_img = Image(uri=os.path.basename(texture_file))
+                                new_img = Image(
+                                    uri=f"data:{mime};base64,{base64.b64encode(tex_bytes).decode('utf-8')}"
+                                )
                                 if gltf.images is None:
                                     gltf.images = []
                                 gltf.images.append(new_img)
@@ -1120,65 +1064,40 @@ class FBXConverter(BaseConverter):
                                     f"  ✅ Recovered texture for material '{mat_name}': {os.path.basename(texture_file)}"
                                 )
 
-            # --- FOLIAGE / TRANSPARENCY FIX ---
-            # Tree leaves (DB2X2_L02) and similar materials often need BLEND mode
-            if gltf.materials:
-                for mat in gltf.materials:
-                    name_lower = mat.name.lower() if mat.name else ""
-                    is_foliage = any(
-                        key in name_lower
-                        for key in [
-                            "leaf",
-                            "leafs",
-                            "foliage",
-                            "branch",
-                            "tree",
-                            "plant",
-                        ]
-                    )
-                    is_special = mat.name == "DB2X2_L02"
+            if gltf.images:
+                # Convert buffer-embedded images to data URIs
+                binary_blob = gltf.binary_blob()
+                for i, img in enumerate(gltf.images):
+                    if binary_blob and img.bufferView is not None:
+                        try:
+                            buffer_view = gltf.bufferViews[img.bufferView]
+                            offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
+                            length = buffer_view.byteLength
 
-                    if is_foliage or is_special:
-                        mat.alphaMode = "BLEND"
-                        mat.doubleSided = True
-                        self.log_operation(
-                            f"Enforced BLEND mode for foliage material '{mat.name}'"
-                        )
+                            image_data = binary_blob[offset : offset + length]
 
-            if not gltf.images:
-                self.log_operation("No images found in GLB to embed")
-                return
-
-            # Convert buffer-embedded images to data URIs
-            binary_blob = gltf.binary_blob()
-            if not binary_blob:
-                return
-
-            for i, img in enumerate(gltf.images):
-                if img.bufferView is not None:
-                    try:
-                        buffer_view = gltf.bufferViews[img.bufferView]
-                        offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
-                        length = buffer_view.byteLength
-
-                        image_data = binary_blob[offset : offset + length]
-
-                        # Determine MIME type
-                        mime_type = "image/png"
-                        if image_data[:4] == b"\x89PNG":
+                            # Determine MIME type
                             mime_type = "image/png"
-                        elif image_data[:2] == b"\xff\xd8":
-                            mime_type = "image/jpeg"
+                            if image_data[:4] == b"\x89PNG":
+                                mime_type = "image/png"
+                            elif image_data[:2] == b"\xff\xd8":
+                                mime_type = "image/jpeg"
 
-                        # Convert to data URI
-                        data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
-                        img.uri = data_uri
-                        img.bufferView = None
-                        self.log_operation(f"Converted image {i} to data URI")
-                    except Exception as e:
-                        self.log_operation(
-                            f"Warning: Could not convert image {i}: {e}", "WARNING"
-                        )
+                            # Convert to data URI
+                            data_uri = f"data:{mime_type};base64,{base64.b64encode(image_data).decode('utf-8')}"
+                            img.uri = data_uri
+                            img.bufferView = None
+                            self.log_operation(f"Converted image {i} to data URI")
+                        except Exception as e:
+                            self.log_operation(
+                                f"Warning: Could not convert image {i}: {e}", "WARNING"
+                            )
+            else:
+                self.log_operation("No images found in GLB to embed")
+
+            # Alpha-correctness pass (cutout → MASK, bogus factor alpha → clamp).
+            # Runs after image conversion so the texture bytes are inspectable.
+            fix_material_transparency(gltf, self.log_operation)
 
         except Exception as e:
             self.log_operation(f"Warning: Could not embed textures: {e}", "WARNING")
@@ -1234,6 +1153,10 @@ class FBXConverter(BaseConverter):
                 self.log_operation(
                     "No images found in GLB - FBX2glTF may have discarded textures"
                 )
+                # Still clamp bogus FBX factor alphas so the model can't go
+                # invisible if anything later switches it to BLEND.
+                if fix_material_transparency(gltf, self.log_operation):
+                    gltf.save(glb_path)
                 return
 
             self.log_operation(
@@ -1404,85 +1327,9 @@ class FBXConverter(BaseConverter):
                                 f"  Created Texture {tex_idx} → Image {img_idx}"
                             )
 
-                    # Generalised transparency fix (replaces the old model-specific
-                    # "DB2X2_L02" hardcode): any material whose base-color texture has an
-                    # alpha channel with transparent pixels (foliage/cutout) — or whose
-                    # baseColorFactor is itself translucent — gets alphaMode=BLEND +
-                    # doubleSided so it renders correctly in model-viewer / AR.
-                    def _image_has_transparency(image_index):
-                        try:
-                            from PIL import Image
-                            import io as _io
-                            import base64 as _b64
-
-                            if image_index is None or image_index >= len(gltf.images):
-                                return False
-                            gimg = gltf.images[image_index]
-                            data = None
-                            if gimg.uri and gimg.uri.startswith("data:"):
-                                data = _b64.b64decode(gimg.uri.split(",", 1)[1])
-                            elif gimg.bufferView is not None:
-                                blob = gltf.binary_blob()
-                                bv = gltf.bufferViews[gimg.bufferView]
-                                off = bv.byteOffset if bv.byteOffset else 0
-                                data = blob[off : off + bv.byteLength]
-                            if not data:
-                                return False
-                            pil = Image.open(_io.BytesIO(data))
-                            if pil.mode not in ("RGBA", "LA", "PA") and (
-                                "transparency" not in pil.info
-                            ):
-                                return False
-                            alpha = pil.convert("RGBA").getchannel("A")
-                            # Any meaningfully transparent pixel => cutout/foliage texture
-                            return alpha.getextrema()[0] < 250
-                        except Exception as _e:
-                            self.log_operation(
-                                f"Alpha detection failed for image {image_index}: {_e}",
-                                "WARNING",
-                            )
-                            return False
-
-                    for mat in (gltf.materials or []):
-                        pbr = mat.pbrMetallicRoughness
-                        factor_translucent = (
-                            pbr is not None
-                            and pbr.baseColorFactor
-                            and len(pbr.baseColorFactor) == 4
-                            and pbr.baseColorFactor[3] < 0.99
-                        )
-                        texture_alpha = False
-                        if pbr is not None and pbr.baseColorTexture is not None:
-                            tex_idx = pbr.baseColorTexture.index
-                            if tex_idx is not None and tex_idx < len(gltf.textures):
-                                texture_alpha = _image_has_transparency(
-                                    gltf.textures[tex_idx].source
-                                )
-
-                        if (factor_translucent or texture_alpha) and mat.alphaMode in (
-                            None,
-                            "OPAQUE",
-                        ):
-                            mat.alphaMode = "BLEND"
-                            mat.doubleSided = True
-                            if pbr is not None:
-                                # Foliage/cutout-safe PBR defaults (non-metallic, rough)
-                                pbr.metallicFactor = 0.0
-                                pbr.roughnessFactor = 1.0
-                                # When the transparency comes from the texture, a stray <1
-                                # factor alpha would dim the whole surface — let the texture
-                                # drive transparency instead.
-                                if texture_alpha and factor_translucent:
-                                    pbr.baseColorFactor = [
-                                        pbr.baseColorFactor[0],
-                                        pbr.baseColorFactor[1],
-                                        pbr.baseColorFactor[2],
-                                        1.0,
-                                    ]
-                            self.log_operation(
-                                f"Transparency fix → material '{mat.name}': "
-                                "alphaMode=BLEND, doubleSided=True"
-                            )
+                    # Alpha-correctness pass (cutout → MASK, semi-transparent →
+                    # BLEND, bogus factor alpha → clamp to opaque).
+                    fix_material_transparency(gltf, self.log_operation)
 
                     # Log mesh-material assignments
                     if gltf.meshes:
@@ -1670,6 +1517,11 @@ class FBXConverter(BaseConverter):
                     self.log_operation(
                         f"Embedded texture {i}: {len(texture_data)} bytes"
                     )
+
+            # Alpha-correctness pass for the no-buffer-images path (the buffer
+            # path above runs it before saving and returns early).
+            if fix_material_transparency(gltf, self.log_operation):
+                modified = True
 
             if modified:
                 self.log_operation("Saving GLB with embedded textures")

@@ -652,11 +652,13 @@ body.selection-mode .model-card { cursor: default; }
     padding: 3.5rem var(--spacing-2xl);
     text-align: center;
     cursor: pointer;
-    transition: border-color 0.2s ease, background 0.2s ease;
+    /* Slow, soft transition into the aurora-tinted hover state */
+    transition: border-color 0.6s ease, background 0.6s ease;
 }
 .dark .av-dropzone { border-color: var(--color-gray-700); }
-.av-dropzone:hover, .av-dropzone.is-dragover { border-color: var(--color-gray-900); background: var(--color-gray-100); }
-.dark .av-dropzone:hover, .dark .av-dropzone.is-dragover { border-color: var(--color-gray-200); background: var(--color-gray-800); }
+/* Soft bluish fill that matches the aurora background tones */
+.av-dropzone:hover, .av-dropzone.is-dragover { border-color: #93c5fd; background: rgba(147, 197, 253, 0.10); }
+.dark .av-dropzone:hover, .dark .av-dropzone.is-dragover { border-color: #60a5fa; background: rgba(96, 165, 250, 0.10); }
 
 .av-dropzone-icon { width: 3rem; height: 3rem; color: var(--color-gray-500); margin: 0 auto var(--spacing-lg); display: block; }
 .av-dropzone-title { font-size: 1.25rem; font-weight: 700; color: var(--color-gray-900); margin: 0 0 var(--spacing-xs); }
@@ -855,9 +857,7 @@ body > .av-flash { margin-top: 5.5rem; }
    Features
    =================================================================== */
 .home-features { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--spacing-lg); margin-top: var(--spacing-3xl); }
-.feature-card { border: 1px solid var(--color-gray-200); padding: var(--spacing-2xl); text-align: center; transition: border-color 0.15s ease, transform 0.2s ease; }
-.dark .feature-card { border-color: var(--color-gray-700); }
-.feature-card:hover { border-color: var(--color-gray-400); transform: translateY(-3px); }
+.feature-card { border: none; padding: var(--spacing-2xl); text-align: center; }
 .feature-icon { width: 1.6rem; height: 1.6rem; color: var(--color-gray-700); margin: 0 auto var(--spacing-md); display: block; }
 .dark .feature-icon { color: var(--color-gray-300); }
 .feature-title { font-size: 0.95rem; font-weight: 700; color: var(--color-gray-900); margin: 0 0 var(--spacing-xs); }

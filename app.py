@@ -3826,6 +3826,12 @@ def save_modifications():
         logger.info(f"[save_modifications] Model ID: {model_id}")
         logger.info(f"[save_modifications] Modifications: {modifications}")
 
+        # This is the viewer's material editor: the user picked the color while
+        # SEEING the texture, so honor it as a tint. (Upload-time color keeps
+        # the protective skip-on-textured behavior in glb_modifier.)
+        if isinstance(modifications.get("material"), dict):
+            modifications["material"]["tint_textures"] = True
+
         # Use current model.glb as base (which may be sliced or modified)
         # This ensures modifications are applied to the current state, not original upload
         model = UserModel.query.get(model_id)

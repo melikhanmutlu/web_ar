@@ -117,7 +117,13 @@ def apply_material_modifications(gltf, material_mods):
                 # Get opacity value (default 1.0)
                 opacity = float(material_mods.get('opacity', 1.0))
 
-                if has_texture:
+                # tint_textures: set by the viewer's material editor, where the
+                # user picks the color while seeing the texture — honor it as a
+                # multiply tint. Without the flag (upload-time color) textures
+                # are protected from being tinted/darkened by a solid color.
+                tint_textures = bool(material_mods.get('tint_textures'))
+
+                if has_texture and not tint_textures:
                     # Preserve the texture's colors; only honor an explicit
                     # opacity change via the factor's alpha component.
                     if opacity < 1.0:
@@ -127,9 +133,13 @@ def apply_material_modifications(gltf, material_mods):
                     else:
                         logger.info(f"Skipped color for textured material {i} ({name})")
                 else:
-                    # Set baseColorFactor (RGBA)
+                    # Set baseColorFactor (RGBA) — on textured materials this
+                    # multiplies (tints) the texture, matching the live preview.
                     pbr.baseColorFactor = list(color_rgb) + [opacity]
-                    logger.info(f"Applied color {raw_color} with opacity {opacity} to material {i}")
+                    logger.info(
+                        f"Applied color {raw_color} with opacity {opacity} to material {i}"
+                        + (" (texture tint)" if has_texture else "")
+                    )
 
                 # Set alpha mode based on opacity; never downgrade MASK cutouts
                 if opacity < 1.0:
@@ -290,11 +300,14 @@ def _ensure_texcoord0(gltf):
     return gltf
 
 
-def apply_texture_modifications(gltf, texture_data_base64):
+def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
     """
     Apply texture to all materials in the GLTF.
     Embeds the image into the GLB binary buffer (not as data URI)
     and generates TEXCOORD_0 if the mesh lacks UV coordinates.
+
+    tint_rgba: explicit [r,g,b,a] tint chosen alongside the texture (viewer
+    editor). Defaults to white so a stale color can't discolor the image.
     """
     if not texture_data_base64:
         logger.info("No texture data provided, skipping texture modification")
@@ -388,18 +401,23 @@ def apply_texture_modifications(gltf, texture_data_base64):
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
-                    # baseColorFactor MULTIPLIES the texture, so any previously
-                    # applied solid color would tint the image (green-tinted
-                    # textures etc.). Uploading a texture is an explicit choice
-                    # to show the image — reset tint to white, keep alpha only.
+                    # baseColorFactor MULTIPLIES the texture. Use the explicit
+                    # tint when one was chosen with the texture; otherwise reset
+                    # to white so a stale color can't discolor the image.
                     prev = material.pbrMetallicRoughness.baseColorFactor
                     alpha = prev[3] if prev and len(prev) == 4 else 1.0
-                    material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, alpha]
+                    if tint_rgba and len(tint_rgba) == 4:
+                        material.pbrMetallicRoughness.baseColorFactor = list(tint_rgba)
+                    else:
+                        material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, alpha]
                     texture_info = TextureInfo()
                     texture_info.index = texture_index
                     texture_info.texCoord = 0
                     material.pbrMetallicRoughness.baseColorTexture = texture_info
-                    logger.info(f"Applied texture to material {i} (tint reset to white, alpha={alpha})")
+                    logger.info(
+                        f"Applied texture to material {i} "
+                        f"(tint={material.pbrMetallicRoughness.baseColorFactor})"
+                    )
 
         logger.info("Texture embedding completed successfully")
         return gltf
@@ -795,11 +813,21 @@ def modify_glb(input_path, output_path, modifications):
         
         # Apply material modifications
         if 'material' in modifications:
-            gltf = apply_material_modifications(gltf, modifications['material'])
-            
-            # Apply texture if provided
-            if 'texture' in modifications['material'] and modifications['material']['texture']:
-                gltf = apply_texture_modifications(gltf, modifications['material']['texture'])
+            mat_mods = modifications['material']
+            gltf = apply_material_modifications(gltf, mat_mods)
+
+            # Apply texture if provided. Pass the user's tint through so the
+            # texture step doesn't clobber an explicitly chosen color.
+            if mat_mods.get('texture'):
+                tint_rgba = None
+                if mat_mods.get('tint_textures') and mat_mods.get('color'):
+                    try:
+                        raw = mat_mods['color']
+                        rgb = tuple(float(c) for c in raw[:3]) if isinstance(raw, (list, tuple)) else hex_to_rgb(raw)
+                        tint_rgba = list(rgb) + [float(mat_mods.get('opacity', 1.0))]
+                    except Exception as te:
+                        logger.warning(f"Could not derive texture tint from color: {te}")
+                gltf = apply_texture_modifications(gltf, mat_mods['texture'], tint_rgba=tint_rgba)
         
         # Apply transform modifications
         if 'transform' in modifications:

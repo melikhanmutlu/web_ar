@@ -243,9 +243,3 @@
     color: #6B7280;
     margin-bottom: 1rem;
 }
-
-@media (prefers-color-scheme: dark) {
-    .selection-instructions {
-        color: #9CA3AF;
-    }
-}

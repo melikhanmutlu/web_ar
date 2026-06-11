@@ -1,9 +1,16 @@
 """
 Mesh Slicer Module
 Handles 3D mesh slicing operations using trimesh.
-Scene-aware: preserves materials, textures, and node hierarchy.
-PBR materials are extracted before slicing and re-injected after,
-so color, metallic, roughness, and textures survive every cut.
+
+Scene-aware: each geometry in the scene is sliced separately (never
+concatenated), so multi-material models keep their per-primitive
+materials. Meshes that carry UVs or vertex/face colors are sliced with
+an attribute-preserving face mask (trimesh's plane cut cannot
+interpolate UVs — it would orphan every texture). Plain meshes get the
+clean geometric plane cut.
+
+A pygltflib material re-injection pass runs ONLY when the exported GLB
+ends up with no materials at all (e.g. vertex-color-only uploads).
 """
 import os
 import struct
@@ -137,6 +144,9 @@ def _inject_materials(sliced_path, mat_data):
     sampler / image arrays with the originals we saved earlier.
     Image binary data is appended to the GLB buffer, and new
     BufferView entries are created so image indices stay consistent.
+
+    Only called when the export produced NO materials — injecting over
+    a multi-material export would clobber per-primitive assignments.
     """
     try:
         gltf = GLTF2().load(sliced_path)
@@ -198,6 +208,15 @@ def _inject_materials(sliced_path, mat_data):
         return False
 
 
+def _exported_material_count(glb_path):
+    """How many materials did the exported GLB end up with?"""
+    try:
+        gltf = GLTF2().load(glb_path)
+        return len(gltf.materials or [])
+    except Exception:
+        return 0
+
+
 # ================================================================== #
 #  Geometry slicing helpers
 # ================================================================== #
@@ -215,13 +234,94 @@ def _normalize_plane(plane_origin, plane_normal, keep_side):
     return plane_origin, plane_normal
 
 
+def _mesh_needs_attribute_preserve(mesh):
+    """
+    True when the mesh carries per-vertex data that a geometric plane
+    cut would destroy: UV coordinates (textures) or vertex/face colors.
+    """
+    vis = getattr(mesh, 'visual', None)
+    if isinstance(vis, trimesh.visual.TextureVisuals):
+        uv = getattr(vis, 'uv', None)
+        if uv is not None and len(uv) == len(mesh.vertices):
+            return True
+    if isinstance(vis, trimesh.visual.ColorVisuals) and getattr(vis, 'kind', None) in ('vertex', 'face'):
+        return True
+    return False
+
+
+def _facemask_slice(mesh, plane_origin, plane_normal):
+    """
+    Keep only faces whose vertices all lie on the kept side. No new
+    vertices are created, so UVs, vertex colors, and material refs are
+    carried over EXACTLY. The cut edge follows triangle boundaries
+    (slightly stepped on low-poly meshes) — the price of keeping
+    textures intact.
+    """
+    vertices = mesh.vertices
+    distances = np.dot(vertices - plane_origin, plane_normal)
+    keep_mask = distances >= -1e-6
+
+    face_mask = np.all(keep_mask[mesh.faces], axis=1)
+    if not np.any(face_mask):
+        return None
+
+    new_faces = mesh.faces[face_mask]
+    used_idx = np.unique(new_faces.flatten())
+    vertex_map = np.full(len(vertices), -1, dtype=np.intp)
+    vertex_map[used_idx] = np.arange(len(used_idx))
+    remapped_faces = vertex_map[new_faces]
+
+    result = trimesh.Trimesh(
+        vertices=vertices[used_idx],
+        faces=remapped_faces,
+        process=False,
+    )
+
+    vis = getattr(mesh, 'visual', None)
+    try:
+        if isinstance(vis, trimesh.visual.TextureVisuals):
+            uv = getattr(vis, 'uv', None)
+            uv_subset = uv[used_idx] if (uv is not None and len(uv) == len(vertices)) else None
+            result.visual = trimesh.visual.TextureVisuals(
+                uv=uv_subset,
+                material=getattr(vis, 'material', None),
+            )
+        elif isinstance(vis, trimesh.visual.ColorVisuals):
+            if vis.kind == 'vertex':
+                result.visual = trimesh.visual.ColorVisuals(
+                    result, vertex_colors=vis.vertex_colors[used_idx]
+                )
+            elif vis.kind == 'face':
+                result.visual = trimesh.visual.ColorVisuals(
+                    result, face_colors=vis.face_colors[face_mask]
+                )
+    except Exception as ve:
+        logger.warning(f"Could not copy visual attributes: {ve}")
+
+    return result
+
+
 def _slice_single_mesh(mesh, plane_origin, plane_normal):
     """
     Slice a single Trimesh object.
-    Tries trimesh.slice_plane first, falls back to manual face-mask.
+
+    Textured / colored meshes use the attribute-preserving face mask
+    (trimesh's plane cut creates new vertices with no UV/color, which
+    is what used to wreck materials after Apply). Plain meshes get the
+    clean capped plane cut.
     Returns sliced mesh or None if result is empty.
     """
-    # --- Primary: trimesh built-in, capped (needs shapely for cap triangulation) ---
+    vis = getattr(mesh, 'visual', None)
+
+    if _mesh_needs_attribute_preserve(mesh):
+        try:
+            sliced = _facemask_slice(mesh, plane_origin, plane_normal)
+            if sliced is not None and len(sliced.vertices) > 0:
+                return sliced
+        except Exception as e:
+            logger.warning(f"Attribute-preserving slice failed ({e}); trying plane cut")
+
+    # --- Clean geometric cut, capped (needs shapely for cap triangulation) ---
     try:
         sliced = mesh.slice_plane(
             plane_origin=plane_origin,
@@ -229,13 +329,12 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
             cap=True,
         )
         if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
+            _reattach_material(sliced, vis)
             return sliced
     except Exception as e:
         logger.warning(f"slice_plane(cap=True) failed ({e}), trying cap=False")
 
-    # --- Secondary: proper geometric cut WITHOUT a cap (open cross-section).
-    # Still cuts straddling faces correctly (new vertices on the plane), so the
-    # result keeps its real 3D shape instead of collapsing to a flat shell. ---
+    # --- Same cut without a cap (open cross-section) ---
     try:
         sliced = mesh.slice_plane(
             plane_origin=plane_origin,
@@ -243,53 +342,121 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
             cap=False,
         )
         if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
+            _reattach_material(sliced, vis)
             return sliced
     except Exception as e:
         logger.warning(f"slice_plane(cap=False) failed ({e}), using face-mask fallback")
 
-    # --- Last resort: crude per-face mask (no face cutting; may look flat).
-    # Only reached if trimesh slicing is entirely unavailable. ---
+    # --- Last resort for plain meshes too ---
     try:
-        vertices = mesh.vertices
-        distances = np.dot(vertices - plane_origin, plane_normal)
-        keep_mask = distances >= -1e-6
-
-        face_mask = np.all(keep_mask[mesh.faces], axis=1)
-        if not np.any(face_mask):
-            return None
-
-        new_faces = mesh.faces[face_mask]
-        used_idx = np.unique(new_faces.flatten())
-        vertex_map = np.full(len(vertices), -1, dtype=np.intp)
-        vertex_map[used_idx] = np.arange(len(used_idx))
-        remapped_faces = vertex_map[new_faces]
-
-        result = trimesh.Trimesh(
-            vertices=vertices[used_idx],
-            faces=remapped_faces,
-            process=False,
-        )
-
-        # Carry over UV + material reference (trimesh-level)
-        if hasattr(mesh, 'visual') and mesh.visual is not None:
-            try:
-                vis = mesh.visual
-                if hasattr(vis, 'uv') and vis.uv is not None and len(vis.uv) == len(vertices):
-                    result.visual = trimesh.visual.TextureVisuals(
-                        uv=vis.uv[used_idx],
-                        material=getattr(vis, 'material', None),
-                    )
-                elif hasattr(vis, 'material'):
-                    result.visual = trimesh.visual.TextureVisuals(
-                        material=vis.material,
-                    )
-            except Exception as ve:
-                logger.warning(f"Could not copy visual: {ve}")
-
-        return result
+        return _facemask_slice(mesh, plane_origin, plane_normal)
     except Exception as e:
         logger.error(f"Fallback slicing failed: {e}")
         return None
+
+
+def _reattach_material(sliced, vis):
+    """slice_plane drops the visual; put the material reference back."""
+    try:
+        if isinstance(vis, trimesh.visual.TextureVisuals) and getattr(vis, 'material', None) is not None:
+            sliced.visual = trimesh.visual.TextureVisuals(material=vis.material)
+    except Exception as e:
+        logger.warning(f"Could not reattach material: {e}")
+
+
+def _iter_world_meshes(loaded):
+    """
+    Yield (name, mesh) pairs with node transforms baked in, WITHOUT
+    concatenating the scene — concatenation collapses every geometry
+    into one primitive and loses per-geometry materials.
+    """
+    if isinstance(loaded, trimesh.Trimesh):
+        yield 'mesh_0', loaded.copy()
+        return
+
+    seen = set()
+    for node_name in loaded.graph.nodes_geometry:
+        transform, geom_name = loaded.graph[node_name]
+        geom = loaded.geometry.get(geom_name)
+        if not isinstance(geom, trimesh.Trimesh):
+            continue
+        m = geom.copy()
+        if transform is not None:
+            m.apply_transform(transform)
+        # Unique node name per instance
+        name = node_name if node_name not in seen else f"{node_name}_{len(seen)}"
+        seen.add(name)
+        yield name, m
+
+
+def _slice_core(input_path, output_path, planes):
+    """
+    Shared pipeline for single- and multi-plane slicing.
+
+    1. pygltflib  → snapshot PBR materials (used only if export loses them)
+    2. trimesh    → slice each scene geometry separately, preserving visuals
+    3. pygltflib  → re-inject materials ONLY if the export has none
+
+    Returns: {'success': bool, 'degenerate': bool, 'extents': list|None}
+    """
+    mat_data = _extract_material_data(input_path)
+
+    loaded = trimesh.load(input_path, force=None)
+    if not isinstance(loaded, (trimesh.Scene, trimesh.Trimesh)):
+        logger.error(f"Unexpected type from trimesh.load: {type(loaded)}")
+        return {"success": False, "degenerate": False, "extents": None}
+
+    normalized = [
+        _normalize_plane(
+            p.get("plane_origin"), p.get("plane_normal"), p.get("keep_side", "positive")
+        )
+        for p in planes
+    ]
+
+    out_scene = trimesh.Scene()
+    total_in, total_kept = 0, 0
+    for name, mesh in _iter_world_meshes(loaded):
+        total_in += 1
+        current = mesh
+        for origin, normal in normalized:
+            current = _slice_single_mesh(current, origin, normal)
+            if current is None or len(current.vertices) == 0:
+                current = None
+                break
+        if current is not None and len(current.faces) > 0:
+            out_scene.add_geometry(current, node_name=name)
+            total_kept += 1
+
+    if total_kept == 0:
+        logger.error("Slicing removed every geometry — empty result")
+        return {"success": False, "degenerate": False, "extents": None}
+
+    bounds = out_scene.bounds
+    extents = (bounds[1] - bounds[0]) if bounds is not None else None
+    degenerate = bool(extents is not None and np.any(extents < 1e-4))
+    logger.info(
+        f"Sliced {total_kept}/{total_in} geometries, "
+        f"extents={extents.tolist() if extents is not None else None}, degenerate={degenerate}"
+    )
+
+    out_scene.export(output_path, file_type='glb')
+
+    if not (os.path.exists(output_path) and os.path.getsize(output_path) > 0):
+        logger.error("Output file missing or empty after export")
+        return {"success": False, "degenerate": False, "extents": None}
+
+    # Re-inject ONLY when the trimesh export carries no materials at all;
+    # otherwise we would overwrite correct per-primitive assignments.
+    if mat_data and _exported_material_count(output_path) == 0:
+        logger.info("Export has no materials — re-injecting originals")
+        _inject_materials(output_path, mat_data)
+
+    logger.info(f"Exported sliced model: {os.path.getsize(output_path)} bytes")
+    return {
+        "success": True,
+        "degenerate": degenerate,
+        "extents": [float(e) for e in extents] if extents is not None else None,
+    }
 
 
 # ================================================================== #
@@ -299,12 +466,6 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
 def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='positive'):
     """
     Slice a GLB mesh with a plane and keep one side.
-
-    Pipeline:
-      1. pygltflib  → extract PBR materials & textures from original
-      2. trimesh    → slice geometry (scene-aware)
-      3. pygltflib  → re-inject original materials into sliced GLB
-
     Safe to call multiple times on the same model.
 
     Args:
@@ -319,63 +480,12 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
     """
     try:
         logger.info(f"Loading mesh from {input_path}")
-        plane_origin, plane_normal = _normalize_plane(plane_origin, plane_normal, keep_side)
-        logger.info(f"Plane origin={plane_origin}, normal={plane_normal}, keep={keep_side}")
-
-        # ── Step 1: Save original PBR materials ──
-        mat_data = _extract_material_data(input_path)
-
-        # ── Step 2: Slice geometry with trimesh ──
-        loaded = trimesh.load(input_path, force=None)
-
-        if isinstance(loaded, (trimesh.Scene, trimesh.Trimesh)):
-            # dump(concatenate=True) applies all node transforms → world-space coords
-            # This fixes FBX-derived GLBs where root node has a rotation transform
-            if isinstance(loaded, trimesh.Scene):
-                logger.info(f"Scene with {len(loaded.geometry)} geometries — dumping to world space")
-                combined = loaded.dump(concatenate=True)
-            else:
-                logger.info(f"Single mesh: {len(loaded.vertices)} verts")
-                combined = loaded
-
-            if combined is None or len(getattr(combined, 'vertices', [])) == 0:
-                logger.error("Mesh is empty after loading")
-                return False
-
-            sliced = _slice_single_mesh(combined, plane_origin, plane_normal)
-            if sliced is None or len(sliced.vertices) == 0:
-                logger.error("Slicing resulted in empty mesh")
-                return False
-
-            # Guard: check for degenerate (near-flat) result
-            sliced_bounds = sliced.bounds  # (2, 3) array
-            sliced_extents = sliced_bounds[1] - sliced_bounds[0]
-            logger.info(
-                f"Sliced mesh: {len(sliced.vertices)} verts, "
-                f"extents=[{sliced_extents[0]:.6f}, {sliced_extents[1]:.6f}, {sliced_extents[2]:.6f}]"
-            )
-            if np.any(sliced_extents < 1e-6):
-                logger.warning(
-                    f"Sliced mesh is near-degenerate on at least one axis "
-                    f"(extents={sliced_extents.tolist()}). Result may look flat."
-                )
-
-            sliced.export(output_path, file_type='glb')
-
-        else:
-            logger.error(f"Unexpected type from trimesh.load: {type(loaded)}")
-            return False
-
-        # ── Step 3: Re-inject original PBR materials ──
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            if mat_data:
-                _inject_materials(output_path, mat_data)
-            logger.info(f"Exported sliced model: {os.path.getsize(output_path)} bytes")
-            return True
-        else:
-            logger.error("Output file missing or empty after export")
-            return False
-
+        result = _slice_core(input_path, output_path, [{
+            "plane_origin": plane_origin,
+            "plane_normal": plane_normal,
+            "keep_side": keep_side,
+        }])
+        return result["success"]
     except Exception as e:
         logger.error(f"slice_mesh error: {e}", exc_info=True)
         return False
@@ -384,10 +494,6 @@ def slice_mesh(input_path, output_path, plane_origin, plane_normal, keep_side='p
 def slice_mesh_multi(input_path, output_path, planes):
     """
     Slice a GLB mesh with several planes in ONE pass (atomic multi-axis slice).
-
-    Loads the mesh once, applies each plane sequentially in-memory, then exports
-    once and re-injects the original PBR materials. This is the atomic equivalent
-    of calling slice_mesh() repeatedly, but produces a single output/version.
 
     Args:
         input_path:  Path to input GLB
@@ -401,64 +507,7 @@ def slice_mesh_multi(input_path, output_path, planes):
     try:
         if not planes:
             return {"success": False, "degenerate": False, "extents": None}
-
-        # ── Step 1: Save original PBR materials ──
-        mat_data = _extract_material_data(input_path)
-
-        # ── Step 2: Load mesh once, apply every plane sequentially ──
-        loaded = trimesh.load(input_path, force=None)
-        if isinstance(loaded, trimesh.Scene):
-            logger.info(
-                f"[multi] Scene with {len(loaded.geometry)} geometries — dumping to world space"
-            )
-            combined = loaded.dump(concatenate=True)
-        elif isinstance(loaded, trimesh.Trimesh):
-            combined = loaded
-        else:
-            logger.error(f"[multi] Unexpected type from trimesh.load: {type(loaded)}")
-            return {"success": False, "degenerate": False, "extents": None}
-
-        if combined is None or len(getattr(combined, "vertices", [])) == 0:
-            logger.error("[multi] Mesh is empty after loading")
-            return {"success": False, "degenerate": False, "extents": None}
-
-        current = combined
-        for i, plane in enumerate(planes):
-            origin, normal = _normalize_plane(
-                plane.get("plane_origin"),
-                plane.get("plane_normal"),
-                plane.get("keep_side", "positive"),
-            )
-            logger.info(f"[multi] plane {i}: origin={origin}, normal={normal}")
-            sliced = _slice_single_mesh(current, origin, normal)
-            if sliced is None or len(sliced.vertices) == 0:
-                logger.error(f"[multi] Slicing resulted in empty mesh at plane {i}")
-                return {"success": False, "degenerate": False, "extents": None}
-            current = sliced
-
-        # ── Degenerate (near-flat) detection ──
-        extents = (current.bounds[1] - current.bounds[0])
-        degenerate = bool(np.any(extents < 1e-4))
-        logger.info(
-            f"[multi] Final sliced mesh: {len(current.vertices)} verts, "
-            f"extents={extents.tolist()}, degenerate={degenerate}"
-        )
-
-        current.export(output_path, file_type="glb")
-
-        # ── Step 3: Re-inject original PBR materials ──
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-            if mat_data:
-                _inject_materials(output_path, mat_data)
-            logger.info(f"[multi] Exported sliced model: {os.path.getsize(output_path)} bytes")
-            return {
-                "success": True,
-                "degenerate": degenerate,
-                "extents": [float(e) for e in extents],
-            }
-        logger.error("[multi] Output file missing or empty after export")
-        return {"success": False, "degenerate": False, "extents": None}
-
+        return _slice_core(input_path, output_path, planes)
     except Exception as e:
         logger.error(f"slice_mesh_multi error: {e}", exc_info=True)
         return {"success": False, "degenerate": False, "extents": None}

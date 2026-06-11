@@ -7,34 +7,16 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
-    <!-- Apply theme before paint to avoid a flash -->
     <script>
-        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-            document.documentElement.classList.add('dark');
-        }
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
     </script>
 </head>
 <body>
-    <!-- Header -->
-    <header class="top-header">
-        <div class="brand-shell">
-            <a href="/" class="brand-mark">arvision</a>
-        </div>
-        <nav class="top-actions" aria-label="Primary">
-            <a href="/" class="showcase-nav-link is-active">home</a>
-            {% if current_user.is_authenticated %}
-            <a href="{{ url_for('my_models') }}" class="showcase-nav-link">my models</a>
-            <a href="{{ url_for('auth.logout') }}" class="showcase-nav-link">log out</a>
-            {% else %}
-            <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link">register</a>
-            <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link login-pill">login</a>
-            {% endif %}
-            <button id="darkModeToggle" class="av-icon-btn" type="button" title="Toggle theme" aria-label="Toggle theme">
-                <i data-lucide="moon" class="theme-moon"></i>
-                <i data-lucide="sun" class="theme-sun"></i>
-            </button>
-        </nav>
-    </header>
+    <!-- Aurora animated background (pure-CSS port of Aceternity aurora) -->
+    <div class="aurora-bg" aria-hidden="true"></div>
+
+    {% include "_site_header.html" %}
 
     <main class="home-main">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -148,8 +130,23 @@
                         <span class="progress-label" id="uploadStatusText">Uploading...</span>
                         <span class="progress-percentage" id="progressText">0%</span>
                     </div>
+                    <p class="progress-detail" id="uploadStatusDetail">Preparing upload...</p>
                     <div class="progress-bar-container">
                         <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="progress-meta" aria-label="Upload details">
+                        <div class="progress-chip">
+                            <span>File</span>
+                            <strong id="progressFileName">-</strong>
+                        </div>
+                        <div class="progress-chip">
+                            <span>Stage</span>
+                            <strong id="progressStage">Queued</strong>
+                        </div>
+                        <div class="progress-chip">
+                            <span>Elapsed</span>
+                            <strong id="progressElapsed">0s</strong>
+                        </div>
                     </div>
                 </div>
                 <div id="uploadResult" class="upload-result" style="display: none;"></div>
@@ -250,18 +247,9 @@
         <p class="tagline-line">for: <span class="tagline-main">Your Models</span><span class="tagline-cursor"></span></p>
     </div>
 
-    <!-- Theme toggle + icons -->
     <script>
-        function toggleDarkMode() {
-            if (document.documentElement.classList.contains('dark')) {
-                document.documentElement.classList.remove('dark');
-                localStorage.theme = 'light';
-            } else {
-                document.documentElement.classList.add('dark');
-                localStorage.theme = 'dark';
-            }
-        }
-        document.getElementById('darkModeToggle')?.addEventListener('click', toggleDarkMode);
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
         if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
     </script>
 
@@ -481,6 +469,17 @@
             e.stopPropagation();
         }
 
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+        }
+
         // Handle form submission
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -538,43 +537,54 @@
             const progressBar = document.getElementById('progressBar');
             const progressText = document.getElementById('progressText');
             const statusText = document.getElementById('uploadStatusText');
+            const statusDetail = document.getElementById('uploadStatusDetail');
+            const progressFileName = document.getElementById('progressFileName');
+            const progressStage = document.getElementById('progressStage');
+            const progressElapsed = document.getElementById('progressElapsed');
             const uploadStatus = document.getElementById('uploadStatus');
             const uploadResult = document.getElementById('uploadResult');
 
             progressBar.style.width = '0%';
+            progressBar.classList.remove('error');
             progressText.textContent = '0%';
+            statusText.textContent = 'Preparing upload';
+            statusDetail.textContent = `Validating ${file.name} and staging conversion options.`;
+            progressFileName.textContent = file.name;
+            progressStage.textContent = 'Preparing';
+            progressElapsed.textContent = '0s';
             uploadStatus.classList.remove('hidden');
             uploadStatus.style.display = 'block';
             uploadResult.style.display = 'none';
 
-            let isUploading = true;
-            let progress = 0;
+            let currentProgress = 0;
+            const startedAt = Date.now();
+            const elapsedTimer = setInterval(() => {
+                progressElapsed.textContent = `${Math.max(1, Math.round((Date.now() - startedAt) / 1000))}s`;
+            }, 1000);
 
-            // Simulated progress
-            const progressInterval = setInterval(() => {
-                if (!isUploading) {
-                    clearInterval(progressInterval);
-                    return;
-                }
+            const stageText = {
+                pending: 'Queued',
+                processing: 'Converting',
+                completed: 'Complete',
+                failed: 'Failed'
+            };
 
-                if (progress < 90) {
-                    progress += Math.random() * 10;
-                    progress = Math.min(progress, 90);
-                    progressBar.style.width = progress + '%';
-                    progressText.textContent = Math.round(progress) + '%';
-                    statusText.textContent = 'Uploading and converting...';
-                }
-            }, 200);
+            function setProgress(percent, label, detail, stage) {
+                currentProgress = Math.max(currentProgress, Math.min(100, percent));
+                progressBar.style.width = currentProgress + '%';
+                progressText.textContent = Math.round(currentProgress) + '%';
+                if (label) statusText.textContent = label;
+                if (detail) statusDetail.textContent = detail;
+                if (stage) progressStage.textContent = stage;
+            }
 
             // Shows success UI then redirects to the viewer
             function finishUpload(message, viewerUrl) {
-                isUploading = false;
+                clearInterval(elapsedTimer);
                 uploadResult.className = 'upload-result success';
                 uploadResult.style.display = 'block';
 
-                progressBar.style.width = '100%';
-                progressText.textContent = '100%';
-                statusText.textContent = 'Upload completed';
+                setProgress(100, 'Upload completed', 'Model is ready. Opening the viewer now.', 'Ready');
 
                 setTimeout(() => {
                     uploadResult.innerHTML = `<div>${message}</div>`;
@@ -586,21 +596,35 @@
 
             // Queue mode: poll the job status endpoint until done
             function pollUploadJob(jobId) {
-                statusText.textContent = 'Converting...';
+                setProgress(Math.max(currentProgress, 45), 'Conversion queued', 'Waiting for the conversion worker to pick up the model.', 'Queued');
                 const poll = setInterval(() => {
                     fetch(`/api/upload-jobs/${jobId}`)
                         .then(r => r.json())
                         .then(job => {
+                            if (!job.success) return;
+                            const jobProgress = typeof job.progress === 'number' ? job.progress : null;
+                            const nextProgress = jobProgress !== null ? jobProgress : (job.status === 'processing' ? 72 : currentProgress);
+                            const stage = job.stage || stageText[job.status] || job.status || 'Processing';
+                            const attempts = job.attempts ? ` Attempt ${job.attempts}.` : '';
+
                             if (job.status === 'completed' && job.viewer_url) {
                                 clearInterval(poll);
                                 finishUpload('Model converted successfully', job.viewer_url);
                             } else if (job.status === 'failed') {
                                 clearInterval(poll);
-                                isUploading = false;
+                                clearInterval(elapsedTimer);
                                 progressBar.classList.add('error');
                                 uploadResult.className = 'upload-result error';
                                 uploadResult.style.display = 'block';
+                                setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
                                 uploadResult.innerHTML = `<div class="av-text-error">${job.error || 'Conversion failed'}</div>`;
+                            } else {
+                                setProgress(
+                                    Math.min(nextProgress, 96),
+                                    stage,
+                                    `${job.detail || 'Processing model geometry, materials, and viewer assets.'}${attempts}`,
+                                    stage
+                                );
                             }
                         })
                         .catch(() => { /* transient network error; keep polling */ });
@@ -608,29 +632,47 @@
             }
 
             // Upload file
-            fetch('/upload_model', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(response => {
-                if (response.success && response.viewer_url) {
-                    // Inline mode: conversion already done
-                    finishUpload(response.message, response.viewer_url);
-                } else if (response.success && response.job_id) {
-                    // Queue mode: conversion runs in background worker
-                    pollUploadJob(response.job_id);
-                } else {
-                    throw new Error(response.error || 'Upload failed');
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload_model');
+            xhr.upload.addEventListener('progress', (event) => {
+                if (!event.lengthComputable) {
+                    setProgress(18, 'Uploading model', 'Sending file to the local server.', 'Uploading');
+                    return;
                 }
-            })
-            .catch(error => {
-                isUploading = false;
+                const uploadPercent = Math.round((event.loaded / event.total) * 38);
+                setProgress(uploadPercent, 'Uploading model', `${formatBytes(event.loaded)} of ${formatBytes(event.total)} transferred.`, 'Uploading');
+            });
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState !== XMLHttpRequest.DONE) return;
+                try {
+                    const response = JSON.parse(xhr.responseText || '{}');
+                    if (xhr.status >= 200 && xhr.status < 300 && response.success && response.viewer_url) {
+                        setProgress(96, 'Finalizing model', 'Conversion finished; preparing the viewer route.', 'Finalizing');
+                        finishUpload(response.message, response.viewer_url);
+                    } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.job_id) {
+                        pollUploadJob(response.job_id);
+                    } else {
+                        throw new Error(response.error || 'Upload failed');
+                    }
+                } catch (error) {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${error.message}</div>`;
+                }
+            };
+            xhr.onerror = () => {
+                clearInterval(elapsedTimer);
                 progressBar.classList.add('error');
                 uploadResult.className = 'upload-result error';
                 uploadResult.style.display = 'block';
-                uploadResult.innerHTML = `<div class="av-text-error">${error.message}</div>`;
-            });
+                setProgress(currentProgress, 'Network error', 'Could not reach the local upload endpoint.', 'Failed');
+                uploadResult.innerHTML = '<div class="av-text-error">Network error while uploading.</div>';
+            };
+            setProgress(4, 'Preparing upload', 'Packaging selected file, materials, textures, and options.', 'Preparing');
+            xhr.send(formData);
         });
 
         // Limit Model Size toggle

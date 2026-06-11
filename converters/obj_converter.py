@@ -49,15 +49,21 @@ class OBJConverter(BaseConverter):
         self.supported_extensions = {".obj"}
         self.source_unit = "m"
 
-        # Resolve npx from PATH first (works on every OS / install location);
-        # fall back to the common Windows install path, then a bare "npx".
-        self.npx_path = shutil.which("npx")
-        if not self.npx_path:
-            if platform.system() == "Windows":
-                default_win = r"C:\Program Files\nodejs\npx.cmd"
-                self.npx_path = default_win if os.path.exists(default_win) else "npx"
-            else:
-                self.npx_path = "npx"
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_obj2gltf = os.path.join(
+            project_dir, "node_modules", "obj2gltf", "bin", "obj2gltf.js"
+        )
+        if os.path.exists(local_obj2gltf):
+            self.obj2gltf_cmd = ["node", local_obj2gltf]
+        else:
+            npx_path = shutil.which("npx.cmd") or shutil.which("npx")
+            if not npx_path:
+                if platform.system() == "Windows":
+                    default_win = r"C:\Program Files\nodejs\npx.cmd"
+                    npx_path = default_win if os.path.exists(default_win) else "npx"
+                else:
+                    npx_path = "npx"
+            self.obj2gltf_cmd = [npx_path, "obj2gltf"]
 
         self.texture_files: List[str] = []
         self.mtl_file: Optional[str] = None
@@ -158,8 +164,7 @@ class OBJConverter(BaseConverter):
 
             # Prepare obj2gltf command
             cmd = [
-                self.npx_path,
-                "obj2gltf",
+                *self.obj2gltf_cmd,
                 "-i",
                 input_path,
                 "-o",

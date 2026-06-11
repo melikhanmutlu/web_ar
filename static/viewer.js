@@ -1,19 +1,14 @@
 document.addEventListener('DOMContentLoaded', function() {
     const modelViewer = document.querySelector('model-viewer');
 
-    // Dark mode toggle
     function toggleDarkMode() {
-        document.documentElement.classList.toggle('dark');
-        localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
     }
     window.toggleDarkMode = toggleDarkMode;
 
-    // Set initial dark mode
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.classList.add('dark');
-    } else {
-        document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.remove('dark');
+    localStorage.theme = 'light';
 
     // QR Code functions
     function showQRCode() {

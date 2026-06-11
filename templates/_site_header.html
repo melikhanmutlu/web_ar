@@ -1,0 +1,15 @@
+<header class="top-header">
+    <div class="brand-shell">
+        <a href="{{ url_for('index') }}" class="brand-mark">arvision</a>
+    </div>
+    <nav class="top-actions" aria-label="Primary">
+        <a href="{{ url_for('index') }}" class="showcase-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}">home</a>
+        {% if current_user.is_authenticated %}
+        <a href="{{ url_for('my_models') }}" class="showcase-nav-link {% if request.endpoint == 'my_models' %}is-active{% endif %}">my models</a>
+        <a href="{{ url_for('auth.logout') }}" class="showcase-nav-link">log out</a>
+        {% else %}
+        <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.register' %}is-active{% endif %}">register</a>
+        <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link login-pill {% if request.endpoint == 'auth.login' %}is-active{% endif %}">login</a>
+        {% endif %}
+    </nav>
+</header>

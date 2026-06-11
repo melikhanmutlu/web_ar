@@ -89,6 +89,9 @@ class UserModel(db.Model):
     # User-editable display name (separate from file path)
     display_name = db.Column(db.String(255), nullable=True)
 
+    # Soft delete: set when moved to trash, files stay on disk until purge
+    deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)
     view_count = db.Column(db.Integer, default=0)

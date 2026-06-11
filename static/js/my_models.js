@@ -34,17 +34,20 @@ window.toggleSelectMode = function() {
 function updateSelectionUI() {
     const count = selectedModels.size;
     const deleteBtn = document.getElementById('deleteSelectedBtn');
+    const moveBtn = document.getElementById('moveSelectedBtn');
     const selectionCount = document.getElementById('selectionCount');
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
-    
+
     // Update count badge
     selectionCount.textContent = `${count} selected`;
-    
-    // Show/hide delete button
+
+    // Show/hide bulk action buttons
     if (count > 0) {
         deleteBtn.classList.remove('hidden');
+        moveBtn?.classList.remove('hidden');
     } else {
         deleteBtn.classList.add('hidden');
+        moveBtn?.classList.add('hidden');
     }
     
     // Update select all checkbox
@@ -122,7 +125,7 @@ window.clearSelection = function() {
 
 // Model Management Functions
 async function deleteModel(modelId) {
-    const confirmed = confirm('Are you sure you want to delete this model?');
+    const confirmed = confirm('Move this model to trash? You can restore it later from the Trash section.');
     if (!confirmed) return;
 
     try {
@@ -134,11 +137,42 @@ async function deleteModel(modelId) {
         });
 
         if (response.ok) {
-            displayToast('Model deleted successfully', 'success');
+            displayToast('Model moved to trash', 'success');
             location.reload();
         } else {
             throw new Error('Failed to delete model');
         }
+    } catch (error) {
+        console.error('Error:', error);
+        displayToast('Failed to move model to trash', 'error');
+    }
+}
+
+async function restoreModel(modelId) {
+    try {
+        const response = await fetch(`/restore_model/${modelId}`, { method: 'POST' });
+        if (!response.ok) throw new Error('Restore failed');
+        displayToast('Model restored', 'success');
+        location.reload();
+    } catch (error) {
+        console.error('Error:', error);
+        displayToast('Failed to restore model', 'error');
+    }
+}
+
+async function deleteForever(modelId) {
+    const confirmed = confirm('Permanently delete this model? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch(`/delete_model/${modelId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ permanent: true })
+        });
+        if (!response.ok) throw new Error('Delete failed');
+        document.querySelector(`.trash-row[data-model-id="${modelId}"]`)?.remove();
+        displayToast('Model permanently deleted', 'success');
     } catch (error) {
         console.error('Error:', error);
         displayToast('Failed to delete model', 'error');
@@ -148,7 +182,7 @@ async function deleteModel(modelId) {
 async function deleteSelectedModels() {
     if (selectedModels.size === 0) return;
 
-    const confirmed = confirm(`Are you sure you want to delete ${selectedModels.size} selected model(s)?`);
+    const confirmed = confirm(`Move ${selectedModels.size} selected model(s) to trash?`);
     if (!confirmed) return;
 
     let successCount = 0;
@@ -318,13 +352,53 @@ function createFolder(event) {
 
 // Model Movement Functions
 let selectedModelId = null;
+let bulkMoveMode = false;
 
 function showMoveToFolderModal(modelId) {
     selectedModelId = modelId;
+    bulkMoveMode = false;
     document.getElementById('moveToFolderModal').style.display = 'block';
 }
 
+function showBulkMoveModal() {
+    if (selectedModels.size === 0) {
+        displayToast('Select at least one model first', 'warning');
+        return;
+    }
+    selectedModelId = null;
+    bulkMoveMode = true;
+    document.getElementById('moveToFolderModal').style.display = 'block';
+}
+
+function moveSelectedToFolder(folderId) {
+    fetch('/move_selected_models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model_ids: Array.from(selectedModels),
+            folder_id: folderId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to move models');
+        hideMoveToFolderModal();
+        displayToast(`Moved ${selectedModels.size} model(s)`, 'success');
+        setTimeout(() => location.reload(), 600);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        displayToast(error.message || 'Failed to move models', 'error');
+    });
+}
+
 function moveModelToFolder(modelIdOrFolderId, folderId = null) {
+    // Bulk mode: the modal option passes only the target folder id (or null=root)
+    if (bulkMoveMode && folderId === null) {
+        moveSelectedToFolder(modelIdOrFolderId);
+        return;
+    }
+
     // If only one parameter is provided, it's the folder ID (modal case)
     const targetFolderId = folderId !== null ? folderId : modelIdOrFolderId;
     const targetModelId = folderId !== null ? modelIdOrFolderId : selectedModelId;
@@ -374,49 +448,87 @@ function moveModelToFolder(modelIdOrFolderId, folderId = null) {
 function hideMoveToFolderModal() {
     document.getElementById('moveToFolderModal').style.display = 'none';
     selectedModelId = null;
+    bulkMoveMode = false;
 }
 
-function showMoveSelectedModal() {
-    if (selectedModels.size === 0) {
-        displayToast('Please select at least one model to move', 'warning');
-        return;
+// ── Inline rename (model display_name / folder name) ──
+function inlineRename(h3, onSave) {
+    if (!h3 || h3.querySelector('input')) return;
+    const oldName = h3.textContent.trim();
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldName;
+    input.className = 'rename-input';
+    input.addEventListener('click', e => e.stopPropagation());
+    h3.textContent = '';
+    h3.appendChild(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    function finish(save) {
+        if (done) return;
+        done = true;
+        const value = input.value.trim();
+        h3.textContent = (save && value) ? value : oldName;
+        if (save && value && value !== oldName) onSave(value, () => { h3.textContent = oldName; });
     }
-    document.getElementById('moveSelectedModal').classList.remove('hidden');
-}
-
-function hideMoveSelectedModal() {
-    document.getElementById('moveSelectedModal').classList.add('hidden');
-}
-
-function moveSelectedModels() {
-    const targetFolderId = document.getElementById('targetFolderId').value;
-    
-    fetch('/move_selected_models', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model_ids: Array.from(selectedModels),
-            folder_id: targetFolderId || null
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            hideMoveSelectedModal();
-            displayToast('Models moved successfully', 'success');
-            setTimeout(() => {
-                location.reload();
-            }, 1000);
-        } else {
-            throw new Error(data.error || 'Failed to move models');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        displayToast(error.message || 'Failed to move models', 'error');
+    input.addEventListener('keydown', e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') finish(false);
     });
+    input.addEventListener('blur', () => finish(true));
+}
+
+function startRenameModel(modelId) {
+    const h3 = document.querySelector(`.model-name[data-model-id="${modelId}"]`);
+    inlineRename(h3, (value, revert) => {
+        fetch(`/api/models/${modelId}/metadata`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ display_name: value })
+        })
+        .then(r => {
+            if (!r.ok) throw new Error('Rename failed');
+            displayToast('Model renamed', 'success');
+        })
+        .catch(() => { revert(); displayToast('Failed to rename model', 'error'); });
+    });
+}
+
+function startRenameFolder(folderId) {
+    const h3 = document.querySelector(`.folder-name[data-folder-id="${folderId}"]`);
+    inlineRename(h3, (value, revert) => {
+        fetch(`/rename_folder/${folderId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: value })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.error || 'Rename failed');
+            displayToast('Folder renamed', 'success');
+        })
+        .catch(err => { revert(); displayToast(err.message || 'Failed to rename folder', 'error'); });
+    });
+}
+
+// ── Copy share link ──
+function copyModelLink(modelId) {
+    const url = `${location.origin}/view/${modelId}`;
+    navigator.clipboard.writeText(url)
+        .then(() => displayToast('Link copied to clipboard', 'success'))
+        .catch(() => {
+            // Fallback for non-secure contexts
+            const ta = document.createElement('textarea');
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+            displayToast('Link copied to clipboard', 'success');
+        });
 }
 
 // Navigation Functions
@@ -473,12 +585,7 @@ function handleDrop(event) {
 // Utility Functions
 function displayToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = `fixed bottom-4 right-4 p-4 rounded-lg shadow-lg ${
-        type === 'error' ? 'bg-red-500' : 
-        type === 'success' ? 'bg-green-500' : 
-        type === 'warning' ? 'bg-yellow-500' : 
-        'bg-blue-500'
-    } text-white z-50`;
+    toast.className = `library-toast library-toast--${type}`;
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(() => {
@@ -499,14 +606,8 @@ function updateDeleteButtonVisibility() {
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // Form Listeners
-    const createFolderForm = document.getElementById('createFolderForm');
-    if (createFolderForm) {
-        createFolderForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            createFolder(event);
-        });
-    }
+    // Note: createFolderForm submits via its inline onsubmit="createFolder(event)";
+    // a second submit listener here would double-POST and create duplicate folders.
 
     // Folder Checkbox Listeners
     const folderCheckboxes = document.querySelectorAll('.folder-checkbox');
@@ -532,14 +633,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Initialize model checkboxes
-    document.querySelectorAll('.model-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', function(e) {
-            const modelId = this.dataset.modelId;
-            const card = this.closest('.model-card');
-            toggleModelSelection(e, modelId, card);
-        });
-    });
+    // Note: .model-checkbox selection is handled by its inline onclick only;
+    // adding a change listener here would double-toggle and cancel the selection.
 
     // Initialize color picker checkbox
     const colorPickerCheckbox = document.getElementById('useColor');
@@ -558,68 +653,149 @@ document.addEventListener('DOMContentLoaded', function() {
 // Search functionality
 const modelSearch = document.getElementById('modelSearch');
 const sortFilter = document.getElementById('sortFilter');
-const modelsGrid = document.querySelector('.grid');
+const modelsGrid = document.getElementById('modelsGrid');
+
+// ── Batched rendering: show cards in chunks to keep first paint light ──
+const BATCH_SIZE = 24;
+let visibleCount = BATCH_SIZE;
+
+function applyBatch() {
+    if (!modelsGrid) return;
+    const cards = Array.from(modelsGrid.querySelectorAll('.model-card'));
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const searching = modelSearch && modelSearch.value.trim() !== '';
+    if (searching) {
+        loadMoreBtn?.classList.add('hidden');
+        return; // filterModels controls visibility while searching
+    }
+    cards.forEach((card, i) => {
+        card.style.display = i < visibleCount ? '' : 'none';
+    });
+    loadMoreBtn?.classList.toggle('hidden', visibleCount >= cards.length);
+}
+
+function revealNextBatch() {
+    visibleCount += BATCH_SIZE;
+    applyBatch();
+}
 
 function filterModels() {
-    const searchTerm = modelSearch.value.toLowerCase();
-    const modelCards = document.querySelectorAll('.grid > div');
+    if (!modelSearch) return;
+    const searchTerm = modelSearch.value.trim().toLowerCase();
 
-    modelCards.forEach(card => {
-        const modelName = card.querySelector('h3').textContent.toLowerCase();
-        if (modelName.includes(searchTerm)) {
-            card.style.display = '';
+    if (modelsGrid) {
+        if (searchTerm === '') {
+            applyBatch(); // restore batched view
         } else {
-            card.style.display = 'none';
+            modelsGrid.querySelectorAll('.model-card').forEach(card => {
+                const modelName = (card.querySelector('h3')?.textContent || '').toLowerCase();
+                card.style.display = modelName.includes(searchTerm) ? '' : 'none';
+            });
+            document.getElementById('loadMoreBtn')?.classList.add('hidden');
         }
+    }
+
+    // Folders are searchable too
+    document.querySelectorAll('.library-folder').forEach(card => {
+        const folderName = (card.querySelector('h3')?.textContent || '').toLowerCase();
+        card.style.display = (searchTerm === '' || folderName.includes(searchTerm)) ? '' : 'none';
     });
 }
 
 function sortModels() {
-    const modelCards = Array.from(document.querySelectorAll('.grid > div'));
+    if (!sortFilter || !modelsGrid) return;
+    const modelCards = Array.from(modelsGrid.querySelectorAll('.model-card'));
     const sortValue = sortFilter.value;
 
+    // Sort on data attributes (raw timestamp / byte count) rather than the
+    // formatted display text, which is locale-dependent and unit-suffixed.
     modelCards.sort((a, b) => {
-        const aName = a.querySelector('h3').textContent;
-        const bName = b.querySelector('h3').textContent;
-        const aDate = a.querySelector('.upload-date').textContent;
-        const bDate = b.querySelector('.upload-date').textContent;
-        const aSize = a.querySelector('.file-size').textContent;
-        const bSize = b.querySelector('.file-size').textContent;
-
         switch (sortValue) {
-            case 'name':
+            case 'name': {
+                const aName = a.querySelector('h3')?.textContent || '';
+                const bName = b.querySelector('h3')?.textContent || '';
                 return aName.localeCompare(bName);
+            }
             case 'newest':
-                return new Date(bDate) - new Date(aDate);
+                return parseFloat(b.dataset.uploadTs || 0) - parseFloat(a.dataset.uploadTs || 0);
             case 'oldest':
-                return new Date(aDate) - new Date(bDate);
+                return parseFloat(a.dataset.uploadTs || 0) - parseFloat(b.dataset.uploadTs || 0);
             case 'size':
-                return parseFloat(bSize) - parseFloat(aSize);
+                return parseFloat(b.dataset.sizeBytes || 0) - parseFloat(a.dataset.sizeBytes || 0);
             default:
                 return 0;
         }
     });
 
-    const parent = document.querySelector('.grid');
-    modelCards.forEach(card => parent.appendChild(card));
+    modelCards.forEach(card => modelsGrid.appendChild(card));
+    applyBatch(); // card order changed; re-apply which ones are visible
 }
 
-modelSearch.addEventListener('input', filterModels);
-sortFilter.addEventListener('change', sortModels);
-
-// Initialize drag and drop when document is ready
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize drag events for model cards
-    document.querySelectorAll('.model-card').forEach(card => {
-        card.setAttribute('draggable', 'true');
-        card.addEventListener('dragstart', handleDragStart);
-        card.addEventListener('dragend', handleDragEnd);
-    });
-
-    // Initialize drop events for folder cards
-    document.querySelectorAll('.folder-card').forEach(folder => {
-        folder.addEventListener('dragover', handleDragOver);
-        folder.addEventListener('dragleave', handleDragLeave);
-        folder.addEventListener('drop', handleDrop);
-    });
+modelSearch?.addEventListener('input', filterModels);
+sortFilter?.addEventListener('change', () => {
+    localStorage.setItem('myModelsSort', sortFilter.value);
+    sortModels();
 });
+
+// Restore persisted sort + initial batch on load
+document.addEventListener('DOMContentLoaded', () => {
+    const savedSort = localStorage.getItem('myModelsSort');
+    if (savedSort && sortFilter && [...sortFilter.options].some(o => o.value === savedSort)) {
+        sortFilter.value = savedSort;
+        sortModels();
+    } else {
+        applyBatch();
+    }
+});
+
+// ── Hover 3D preview: swap the screenshot for a live <model-viewer> ──
+// Only on devices with real hover (skip touch); only one viewer alive at a time.
+(function initHoverPreview() {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+
+    let scriptInjected = false;
+    let activeViewer = null;
+
+    function ensureModelViewerScript() {
+        if (scriptInjected || customElements.get('model-viewer')) { scriptInjected = true; return; }
+        scriptInjected = true;
+        const s = document.createElement('script');
+        s.type = 'module';
+        s.src = 'https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js';
+        document.head.appendChild(s);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.library-preview[data-glb]').forEach(box => {
+            let timer = null;
+
+            box.addEventListener('mouseenter', () => {
+                if (document.body.classList.contains('selection-mode')) return;
+                ensureModelViewerScript();
+                timer = setTimeout(() => {
+                    if (activeViewer) activeViewer.remove();
+                    const mv = document.createElement('model-viewer');
+                    mv.src = box.dataset.glb;
+                    mv.setAttribute('auto-rotate', '');
+                    mv.setAttribute('disable-zoom', '');
+                    mv.setAttribute('interaction-prompt', 'none');
+                    mv.className = 'hover-preview';
+                    box.appendChild(mv);
+                    activeViewer = mv;
+                }, 350);
+            });
+
+            box.addEventListener('mouseleave', () => {
+                clearTimeout(timer);
+                if (activeViewer && activeViewer.parentElement === box) {
+                    activeViewer.remove();
+                    activeViewer = null;
+                }
+            });
+        });
+    });
+})();
+
+// Drag & drop handlers are wired via inline attributes in the template
+// (ondragstart/ondragend on cards, ondragover/ondragleave/ondrop on folders).
+// Registering them again here would fire each drop twice (double POST/toast).

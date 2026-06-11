@@ -337,11 +337,7 @@
         [data-lucide] { width: 1rem; height: 1rem; }
 
         @media (max-width: 1024px) {
-            #rightSidebar { width: 280px; max-width: 280px; }
-        }
-
-        @media (max-width: 768px) {
-            /* Mobile-first responsive layout */
+            /* Mobile + tablet layout (matches JS isMobile() <= 1024) */
             .viewer-shell { display: flex; flex-direction: column; }
 
             /* Header: fixed top, full width, compact */
@@ -373,8 +369,8 @@
 
             .top-actions { gap: 0.3rem; }
 
-            /* Hide navigation on mobile */
-            .showcase-nav, .showcase-nav-link, .color-picker-container, .portfolio-tagline { display: none !important; }
+            /* Hide decorative-only nav on mobile; keep real action links visible */
+            .showcase-nav, .color-picker-container, .portfolio-tagline { display: none !important; }
 
             /* Viewer stage: account for header and toolbar */
             .viewer-stage {
@@ -388,29 +384,30 @@
             /* Mobile edit FAB: hidden, use toolbar instead */
             #mobileEditFab { display: none; }
 
-            /* Info sidebar: full-screen slide-out modal on mobile */
+            /* Info card becomes a full-height right drawer. Visibility is driven
+               solely by .info-hidden (toggled by the bottom toolbar info button);
+               override the desktop translateY(-50%) !important so it sits flush. */
             .showcase-sidebar {
                 position: fixed !important;
                 top: 0 !important;
                 right: 0 !important;
                 bottom: 0 !important;
                 left: auto !important;
-                width: min(85vw, 24rem) !important;
-                max-width: min(85vw, 24rem) !important;
-                height: 100vh;
-                max-height: 100vh;
-                transform: translateX(calc(100% + var(--spacing-lg)));
+                width: min(88vw, 24rem) !important;
+                max-width: min(88vw, 24rem) !important;
+                height: 100vh !important;
+                max-height: 100vh !important;
+                transform: none !important;
                 border: none;
                 border-left: 1px solid var(--color-gray-700);
                 z-index: 45;
                 border-radius: 0;
                 box-shadow: -4px 0 16px rgba(0,0,0,0.2);
+                transition: transform 0.24s ease, opacity 0.2s ease !important;
             }
             .dark .showcase-sidebar { box-shadow: -4px 0 16px rgba(0,0,0,0.4); }
-
-            body.mobile-sidebar-open .showcase-sidebar {
-                transform: translateX(0);
-            }
+            /* Closed drawer: slide off-screen to the right (visibility from base rule) */
+            #rightSidebar.info-hidden { transform: translateX(100%) !important; }
 
             body.mobile-sidebar-open #mobileSidebarBackdrop {
                 opacity: 1;
@@ -465,16 +462,37 @@
                 width: 1.2rem;
                 height: 1.2rem;
             }
+
+            /* Tools panel: bottom sheet docked above the bottom toolbar */
+            #toolsPanel {
+                top: auto;
+                right: 0;
+                left: 0;
+                bottom: 3.75rem;
+                transform: none;
+                width: 100%;
+                max-width: 100%;
+                max-height: 60vh;
+                border-left: none;
+                border-right: none;
+                border-bottom: none;
+                box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+            }
         }
 
         @media (max-width: 640px) {
             /* Extra small screens */
-            .brand-mark { font-size: 1.3rem; }
+            .brand-mark { font-size: 1.25rem; }
 
             .top-header {
                 padding: var(--spacing-xs) var(--spacing-sm);
                 height: 3rem;
             }
+
+            /* Compact header links so home / my models / log out fit one line */
+            .top-actions { gap: 0.15rem; }
+            .showcase-nav-link { font-size: 0.78rem; padding: 0.2rem 0.3rem; }
+            .login-pill { padding: 0.2rem 0.5rem; }
 
             .viewer-stage {
                 top: 3rem;
@@ -498,6 +516,9 @@
             .tb-btn {
                 flex: 1;
             }
+
+            /* Dock the tools sheet flush above the 3rem toolbar */
+            #toolsPanel { bottom: 3rem; max-height: 55vh; }
         }
 
         .slicer-slider { -webkit-appearance: none; appearance: none; height: 0.375rem; }
@@ -577,7 +598,6 @@
             const arModal = document.querySelector('#arModal');
             const closeArModal = document.querySelector('#closeArModal');
             const showQrFromAr = document.querySelector('#showQrFromAr');
-            const darkModeToggle = document.querySelector('#darkModeToggle');
             const screenshotButton = document.getElementById('screenshotButton');
             const modelInfoButton = document.querySelector('#modelInfoButton');
             const modelInfoModal = document.querySelector('#modelInfoModal');
@@ -777,24 +797,13 @@
                 }
             });
 
-            // Dark mode functionality
             function toggleDarkMode() {
-                if (document.documentElement.classList.contains('dark')) {
-                    document.documentElement.classList.remove('dark');
-                    localStorage.theme = 'light';
-                    setViewerBackgroundColor('#FFFFFF');
-                    colorPicker.value = '#FFFFFF';
-                    hexInput.value = '#FFFFFF';
-                } else {
-                    document.documentElement.classList.add('dark');
-                    localStorage.theme = 'dark';
-                    setViewerBackgroundColor('#1F2937');
-                    colorPicker.value = '#1F2937';
-                    hexInput.value = '#1F2937';
-                }
+                document.documentElement.classList.remove('dark');
+                localStorage.theme = 'light';
+                setViewerBackgroundColor('#FFFFFF');
+                colorPicker.value = '#FFFFFF';
+                hexInput.value = '#FFFFFF';
             }
-
-            darkModeToggle?.addEventListener('click', toggleDarkMode);
 
             // Panel Toggling logic
             window.togglePanel = function(panelId) {
@@ -824,17 +833,11 @@
                 }
             };
 
-            // Initialize dark mode from localStorage
-            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-                setViewerBackgroundColor('#1F2937');
-                colorPicker.value = '#1F2937';
-                hexInput.value = '#1F2937';
-            } else {
-                setViewerBackgroundColor('#FFFFFF');
-                colorPicker.value = '#FFFFFF';
-                hexInput.value = '#FFFFFF';
-            }
+            document.documentElement.classList.remove('dark');
+            localStorage.theme = 'light';
+            setViewerBackgroundColor('#FFFFFF');
+            colorPicker.value = '#FFFFFF';
+            hexInput.value = '#FFFFFF';
 
             // Screenshot functionality
             screenshotButton?.addEventListener('click', async () => {
@@ -1682,19 +1685,15 @@ void main() {
         <div class="brand-shell">
             <a href="/" class="brand-mark hover:opacity-80 transition-opacity">arvision</a>
         </div>
-        <div class="top-actions">
-            <nav class="showcase-nav hidden xl:flex" aria-label="Viewer navigation">
-                <a href="/" class="is-active">home</a>
-                <a href="#materialPanel">features</a>
-                <a href="#annotationsPanel">about us</a>
-                <a href="#saveChangesWrapper">contact</a>
-            </nav>
+        <nav class="top-actions" aria-label="Viewer navigation">
+            <a href="/" class="showcase-nav-link">home</a>
             {% if current_user.is_authenticated %}
             <a href="/my_models" class="showcase-nav-link">my models</a>
+            <a href="{{ url_for('auth.logout') }}" class="showcase-nav-link">log out</a>
             {% else %}
             <a href="{{ url_for('auth.login') }}" class="showcase-nav-link login-pill">login</a>
             {% endif %}
-        </div>
+        </nav>
     </div>
 
     <!-- QR Modal -->
@@ -2154,10 +2153,6 @@ void main() {
             <button id="downloadButton" class="tb-btn" title="Download"><i data-lucide="download"></i></button>
             <button id="screenshotButton" class="tb-btn" title="Screenshot"><i data-lucide="camera"></i></button>
             <button id="fullscreenButton" class="tb-btn" title="Fullscreen"><i data-lucide="maximize-2"></i></button>
-            <button id="darkModeToggle" class="tb-btn" title="Toggle Dark Mode">
-                <i data-lucide="moon" class="dark-icon-moon"></i>
-                <i data-lucide="sun" class="dark-icon-sun" style="display:none;"></i>
-            </button>
         </div>
 
         <!-- Model Info Modal -->
@@ -3401,15 +3396,19 @@ void main() {
             if (isHidden) openInfo(); else closeInfo();
         });
 
-        // Dark mode icon swap
-        const _dmToggle = document.getElementById('darkModeToggle');
-        function _syncDarkIcon() {
-            const isDark = document.documentElement.classList.contains('dark');
-            _dmToggle?.querySelector('.dark-icon-moon') && (_dmToggle.querySelector('.dark-icon-moon').style.display = isDark ? 'none' : '');
-            _dmToggle?.querySelector('.dark-icon-sun') && (_dmToggle.querySelector('.dark-icon-sun').style.display = isDark ? '' : 'none');
-        }
-        _syncDarkIcon();
-        _dmToggle?.addEventListener('click', () => setTimeout(_syncDarkIcon, 50));
+        // On mobile/tablet (<=1024) the info card is a drawer; start it closed so it
+        // doesn't cover the model. Desktop keeps it open as a floating card.
+        (function initInfoDrawer() {
+            const mq = () => window.innerWidth <= 1024;
+            if (mq()) closeInfo();
+            window.addEventListener('resize', () => {
+                const sidebar = document.getElementById('rightSidebar');
+                if (mq() && sidebar && !sidebar.classList.contains('info-hidden')) closeInfo();
+            });
+        })();
+
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
 
         lucide.createIcons();
 

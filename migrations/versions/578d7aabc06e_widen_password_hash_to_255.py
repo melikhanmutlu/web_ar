@@ -21,20 +21,20 @@ depends_on = None
 
 
 def upgrade():
-    op.alter_column(
-        'user',
-        'password_hash',
-        existing_type=sa.String(length=128),
-        type_=sa.String(length=255),
-        existing_nullable=True,
-    )
+    with op.batch_alter_table('user', schema=None) as batch_op:
+        batch_op.alter_column(
+            'password_hash',
+            existing_type=sa.String(length=128),
+            type_=sa.String(length=255),
+            existing_nullable=True,
+        )
 
 
 def downgrade():
-    op.alter_column(
-        'user',
-        'password_hash',
-        existing_type=sa.String(length=255),
-        type_=sa.String(length=128),
-        existing_nullable=True,
-    )
+    with op.batch_alter_table('user', schema=None) as batch_op:
+        batch_op.alter_column(
+            'password_hash',
+            existing_type=sa.String(length=255),
+            type_=sa.String(length=128),
+            existing_nullable=True,
+        )

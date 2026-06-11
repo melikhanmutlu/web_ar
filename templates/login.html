@@ -1,64 +1,50 @@
 {% extends "base.html" %}
 
-{% block title %}Login - ARVision{% endblock %}
+{% block title %}Login - arvision{% endblock %}
 
 {% block content %}
-<div class="flex min-h-screen items-center justify-center pt-16 px-4 sm:px-6 lg:px-8">
-    <div class="w-full max-w-md space-y-8">
-        <div class="bg-white dark:bg-gray-800 shadow-xl rounded-2xl px-8 py-8">
-            <div class="text-center mb-8">
-                <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Welcome Back</h2>
-                <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Sign in to your account to continue</p>
-            </div>
-            
-            <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-6">
-                <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Username or Email</label>
-                    {{ form.username(class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:text-white") }}
-                    {% if form.username.errors %}
-                        {% for error in form.username.errors %}
-                            <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
-                    {{ form.password(class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary dark:text-white") }}
-                    {% if form.password.errors %}
-                        {% for error in form.password.errors %}
-                            <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-
-                <div class="flex items-center">
-                    {{ form.remember(class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded") }}
-                    <label for="remember" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">Remember me</label>
-                </div>
-
-                <div>
-                    {{ form.submit(class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary") }}
-                </div>
-            </form>
-
-            <div class="mt-6">
-                <div class="relative">
-                    <div class="absolute inset-0 flex items-center">
-                        <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
-                    </div>
-                    <div class="relative flex justify-center text-sm">
-                        <span class="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">Don't have an account?</span>
-                    </div>
-                </div>
-
-                <div class="mt-6">
-                    <a href="{{ url_for('auth.register') }}" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-secondary hover:bg-secondary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-secondary">
-                        Create Account
-                    </a>
-                </div>
-            </div>
+<div class="aurora-bg aurora-bg--static" aria-hidden="true"></div>
+<main class="auth-main">
+    <section class="auth-shell">
+        <div class="auth-copy">
+            <p class="home-kicker">Welcome back</p>
+            <h1 class="home-title">Continue building your AR model library.</h1>
+            <p class="auth-lede">Sign in to keep conversions, saved views, and generated models connected to your account.</p>
         </div>
-    </div>
-</div>
+
+        <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}" class="auth-form av-stack">
+            <div>
+                <label for="username" class="auth-label">Username or Email</label>
+                {{ form.username(class="av-input auth-input", autocomplete="username", placeholder="you@example.com") }}
+                {% if form.username.errors %}
+                    {% for error in form.username.errors %}
+                        <p class="auth-error">{{ error }}</p>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <div>
+                <label for="password" class="auth-label">Password</label>
+                {{ form.password(class="av-input auth-input", autocomplete="current-password", placeholder="Your password") }}
+                {% if form.password.errors %}
+                    {% for error in form.password.errors %}
+                        <p class="auth-error">{{ error }}</p>
+                    {% endfor %}
+                {% endif %}
+            </div>
+
+            <label class="auth-check">
+                {{ form.remember() }}
+                <span>Remember me</span>
+            </label>
+
+            <button type="submit" class="btn-primary">Login</button>
+
+            <p class="auth-alt">
+                New here?
+                <a href="{{ url_for('auth.register', next=request.args.get('next')) }}">Create an account</a>
+            </p>
+        </form>
+    </section>
+</main>
 {% endblock %}

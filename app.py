@@ -34,6 +34,7 @@ import uuid
 from flask_migrate import Migrate
 from config import *
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 import qrcode
 from slugify import slugify
 import trimesh
@@ -86,14 +87,14 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["CONVERTED_FOLDER"] = CONVERTED_FOLDER
 app.config["TEMP_FOLDER"] = TEMP_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB limit
-app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx"}
+app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx", "glb", "gltf"}
 
 # Constants
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "converted")
 TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
 QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_codes")
-ALLOWED_EXTENSIONS = {"obj", "stl", "fbx"}
+ALLOWED_EXTENSIONS = {"obj", "stl", "fbx", "glb", "gltf"}
 MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit
 
 # Initialize extensions
@@ -940,13 +941,22 @@ def check_node_installed():
 def ensure_obj2gltf_installed():
     """Ensure obj2gltf is installed globally."""
     try:
-        # Platform-aware npx path
-        import platform
+        project_dir = os.path.dirname(os.path.abspath(__file__))
+        local_obj2gltf = os.path.join(
+            project_dir, "node_modules", "obj2gltf", "bin", "obj2gltf.js"
+        )
 
-        if platform.system() == "Windows":
-            npx_path = r"C:\Program Files\nodejs\npx.cmd"
-        else:
-            npx_path = shutil.which("npx") or "npx"
+        if os.path.exists(local_obj2gltf):
+            result = subprocess.run(
+                ["node", local_obj2gltf, "--version"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                app.logger.info(f"obj2gltf is installed locally: {result.stdout.strip()}")
+                return True
+
+        npx_path = shutil.which("npx.cmd") or shutil.which("npx") or "npx"
 
         # Check if obj2gltf is installed
         result = subprocess.run(
@@ -957,8 +967,9 @@ def ensure_obj2gltf_installed():
             return True
         else:
             app.logger.info("Installing obj2gltf globally...")
+            npm_path = shutil.which("npm.cmd") or shutil.which("npm") or "npm"
             install_result = subprocess.run(
-                ["npm", "install", "-g", "obj2gltf"], capture_output=True, text=True
+                [npm_path, "install", "-g", "obj2gltf"], capture_output=True, text=True
             )
             if install_result.returncode == 0:
                 app.logger.info("obj2gltf installed successfully")
@@ -1633,20 +1644,21 @@ def upload_model():
                 }
             ), 202
 
-        # Inline mode: run the exact same pipeline the worker would run
-        run_conversion_job(job, allow_retry=False)
-        if job.status == "completed":
-            return jsonify(
-                {
-                    "success": True,
-                    "job_id": unique_id,
-                    "message": f"Model uploaded and processed successfully{' (scaled to ' + str(round(max_dimension * 100, 1)) + 'cm)' if max_dimension else ''}",
-                    "viewer_url": url_for("view_model", model_id=job.model_id),
-                }
-            )
+        def run_local_job(job_id):
+            with app.app_context():
+                queued_job = ConversionJob.query.get(job_id)
+                if queued_job:
+                    run_conversion_job(queued_job, allow_retry=False)
+
+        threading.Thread(target=run_local_job, args=(unique_id,), daemon=True).start()
         return jsonify(
-            {"error": job.error or "Conversion failed", "job_id": unique_id}
-        ), 500
+            {
+                "success": True,
+                "job_id": unique_id,
+                "status": "pending",
+                "status_url": url_for("upload_job_status", job_id=unique_id),
+            }
+        ), 202
 
     except Exception as e:
         if temp_dir and os.path.exists(temp_dir):
@@ -1668,6 +1680,19 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
 )
 
 
+def update_conversion_progress(job, *, progress=None, stage=None, detail=None):
+    payload = dict(job.payload or {})
+    if progress is not None:
+        payload["progress"] = int(max(0, min(100, progress)))
+    if stage is not None:
+        payload["stage"] = stage
+    if detail is not None:
+        payload["detail"] = detail
+    job.payload = payload
+    flag_modified(job, "payload")
+    db.session.commit()
+
+
 def run_conversion_job(job, allow_retry=True):
     """Run a ConversionJob through the pipeline with status transitions.
 
@@ -1679,13 +1704,30 @@ def run_conversion_job(job, allow_retry=True):
     job.started_at = datetime.utcnow()
     job.attempts = (job.attempts or 0) + 1
     db.session.commit()
+    update_conversion_progress(
+        job,
+        progress=45,
+        stage="Starting conversion",
+        detail="The model has been received and the converter is starting.",
+    )
     try:
-        model_id = _run_upload_pipeline(job.payload)
+        model_id = _run_upload_pipeline(
+            job.payload,
+            progress_callback=lambda progress, stage, detail: update_conversion_progress(
+                job, progress=progress, stage=stage, detail=detail
+            ),
+        )
         job.model_id = model_id
         job.status = "completed"
         job.error = None
         job.finished_at = datetime.utcnow()
         db.session.commit()
+        update_conversion_progress(
+            job,
+            progress=100,
+            stage="Ready",
+            detail="The model is ready for the viewer.",
+        )
     except Exception as e:
         db.session.rollback()
         retry = allow_retry and job.attempts < (job.max_attempts or 1)
@@ -1693,6 +1735,12 @@ def run_conversion_job(job, allow_retry=True):
         job.error = str(e)[:2000]
         job.finished_at = None if retry else datetime.utcnow()
         db.session.commit()
+        update_conversion_progress(
+            job,
+            progress=35 if retry else 100,
+            stage="Retrying" if retry else "Failed",
+            detail=str(e)[:240],
+        )
         logger.error(
             f"[conversion_job - {job.id}] attempt {job.attempts} failed "
             f"({'will retry' if retry else 'giving up'}): {e}"
@@ -1708,7 +1756,7 @@ def run_conversion_job(job, allow_retry=True):
                     )
 
 
-def _run_upload_pipeline(payload):
+def _run_upload_pipeline(payload, progress_callback=None):
     """The conversion pipeline: converter -> GLB -> optimize -> normalize ->
     quality pass -> USDZ/thumbnail threads -> UserModel row + initial version.
 
@@ -1733,7 +1781,12 @@ def _run_upload_pipeline(payload):
         f"[upload_model - {unique_id}] Defined final output path: {output_path}"
     )
 
+    def report(progress, stage, detail):
+        if progress_callback:
+            progress_callback(progress, stage, detail)
+
     try:
+        report(48, "Reading source", f"Inspecting {original_filename} and selected conversion options.")
         # Instantiate appropriate converter
         converter = None
         if file_extension == ".obj":
@@ -1758,6 +1811,7 @@ def _run_upload_pipeline(payload):
         # Handle GLB/GLTF directly (no converter needed)
         if file_extension in (".glb", ".gltf"):
             try:
+                report(56, "Preparing GLB", "Copying or repacking the uploaded glTF asset.")
                 if file_extension == ".glb":
                     # GLB is already binary glTF - just copy it
                     shutil.copy2(temp_file_path, output_path)
@@ -1788,6 +1842,7 @@ def _run_upload_pipeline(payload):
                 converter.set_max_dimension(max_dimension)
 
             # Perform conversion
+            report(58, "Converting geometry", f"Running {type(converter).__name__} and building the GLB file.")
             logger.info(
                 f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}"
             )
@@ -1817,6 +1872,7 @@ def _run_upload_pipeline(payload):
             and max_dimension is not None
             and os.path.exists(output_path)
         ):
+            report(68, "Scaling model", "Applying the requested maximum dimension limit.")
             logger.info(
                 f"[upload_model - {unique_id}] Applying size limit to GLB: {max_dimension}m to {output_path}"
             )
@@ -1846,6 +1902,7 @@ def _run_upload_pipeline(payload):
 
         # Optional, fail-safe GLB compression (no-op unless GLB_OPTIMIZE=true)
         try:
+            report(72, "Optimizing GLB", "Checking compression and viewer compatibility.")
             optimize_glb(output_path)
         except Exception as e:
             logger.warning(
@@ -1874,6 +1931,7 @@ def _run_upload_pipeline(payload):
 
         # Normalize model to center origin for consistent pivot behavior
         try:
+            report(78, "Normalizing pivot", "Centering the model for predictable rotation and viewing.")
             logger.info(
                 f"[upload_model - {unique_id}] Normalizing model to center origin"
             )
@@ -1891,6 +1949,7 @@ def _run_upload_pipeline(payload):
         # GLB quality pass: embed stray external textures, guarantee PBR
         # materials, validate (warn-only — never blocks a viewable upload)
         try:
+            report(84, "Checking materials", "Embedding textures and validating material settings.")
             quality_search_dirs = [converted_dir]
             if temp_dir:
                 quality_search_dirs.append(temp_dir)
@@ -1904,6 +1963,7 @@ def _run_upload_pipeline(payload):
         # Start USDZ conversion in background thread to not block upload response
         usdz_output_path = os.path.join(converted_dir, "model.usdz")
         try:
+            report(88, "Preparing AR assets", "Starting background USDZ generation for iOS AR.")
             logger.info(
                 f"[upload_model - {unique_id}] Starting ASYNC USDZ conversion in background"
             )
@@ -1936,6 +1996,7 @@ def _run_upload_pipeline(payload):
 
         # Calculate model dimensions for database
         model_bounds = None
+        report(91, "Measuring model", "Calculating dimensions for the model details panel.")
 
         # For FBX, try to use original dimensions from converter
         # BUT if scaling was applied, we need to scale the dimensions too!
@@ -2077,6 +2138,7 @@ def _run_upload_pipeline(payload):
 
         # Create model record in database using the unique_id
         # user_id is optional - can be None if user is not logged in
+        report(94, "Saving model", "Writing model metadata and version history.")
         model = UserModel(
             id=unique_id,  # Use the same ID as the directory
             user_id=user_id,
@@ -2116,6 +2178,7 @@ def _run_upload_pipeline(payload):
 
         # Generate thumbnail in background thread
         try:
+            report(97, "Creating preview", "Starting background thumbnail generation.")
             thumb_thread = threading.Thread(
                 target=generate_thumbnail_async,
                 args=(unique_id, output_path, color if use_color else None),
@@ -2149,6 +2212,11 @@ def upload_job_status(job_id):
         return jsonify({"success": False, "error": "Job not found"}), 404
     data = job.to_dict()
     data["success"] = True
+    payload = job.payload or {}
+    data["progress"] = payload.get("progress")
+    data["stage"] = payload.get("stage")
+    data["detail"] = payload.get("detail")
+    data["filename"] = payload.get("client_filename") or payload.get("original_filename")
     if job.status == "completed" and job.model_id:
         data["viewer_url"] = url_for("view_model", model_id=job.model_id)
     return jsonify(data)
@@ -2225,6 +2293,11 @@ def view_model(model_id):
     model = UserModel.query.get(model_id)
     if not model:
         flash("Model not found", "error")
+        return redirect(url_for("index"))
+
+    # Trashed models are not viewable until restored
+    if model.deleted_at is not None:
+        flash("This model is in the trash. Restore it from My Models to view it.", "error")
         return redirect(url_for("index"))
 
     # Increment view count
@@ -2412,7 +2485,9 @@ def view_model(model_id):
     if model.user_id:
         owner_models = (
             UserModel.query.filter(
-                UserModel.user_id == model.user_id, UserModel.id != model_id
+                UserModel.user_id == model.user_id,
+                UserModel.id != model_id,
+                UserModel.deleted_at.is_(None),
             )
             .order_by(UserModel.upload_date.desc())
             .limit(9)
@@ -2920,28 +2995,79 @@ def serve_thumbnail(unique_id):
         return "Error generating thumbnail", 500
 
 
+TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
+STORAGE_QUOTA_BYTES = int(os.getenv("STORAGE_QUOTA_MB", 5120)) * 1024 * 1024
+
+
+def _purge_expired_trash(user_id):
+    """Permanently delete this user's trashed models older than retention."""
+    from datetime import timedelta
+
+    cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
+    expired = UserModel.query.filter(
+        UserModel.user_id == user_id, UserModel.deleted_at < cutoff
+    ).all()
+    for model in expired:
+        for base in (app.config["CONVERTED_FOLDER"], app.config["UPLOAD_FOLDER"]):
+            d = os.path.join(base, str(model.id))
+            if os.path.exists(d):
+                shutil.rmtree(d, ignore_errors=True)
+        db.session.delete(model)
+    if expired:
+        db.session.commit()
+        app.logger.info(f"Purged {len(expired)} expired trash models for user {user_id}")
+
+
 @app.route("/my_models")
 @app.route("/my_models/<folder_id>")
 @login_required
 def my_models(folder_id=None):
     try:
+        _purge_expired_trash(current_user.id)
+
+        live = UserModel.deleted_at.is_(None)
         if folder_id:
             current_folder = Folder.query.get_or_404(folder_id)
             if current_folder.user_id != current_user.id:
                 abort(403)
             folders = Folder.query.filter_by(parent_id=folder_id, user_id=current_user.id).all()
-            models = UserModel.query.filter_by(folder_id=folder_id, user_id=current_user.id).all()
+            models = UserModel.query.filter(
+                UserModel.folder_id == folder_id, UserModel.user_id == current_user.id, live
+            ).all()
         else:
             current_folder = None
             folders = Folder.query.filter_by(parent_id=None, user_id=current_user.id).all()
-            models = UserModel.query.filter_by(folder_id=None, user_id=current_user.id).all()
+            models = UserModel.query.filter(
+                UserModel.folder_id.is_(None), UserModel.user_id == current_user.id, live
+            ).all()
 
-        # Get model counts for each folder
+        # Per-folder live model counts + up to 4 thumbnail ids for the cover collage
         folder_model_counts = {}
+        folder_previews = {}
         for folder in folders:
-            folder_model_counts[folder.id] = UserModel.query.filter_by(
-                folder_id=folder.id
-            ).count()
+            folder_q = UserModel.query.filter(UserModel.folder_id == folder.id, live)
+            folder_model_counts[folder.id] = folder_q.count()
+            folder_previews[folder.id] = [
+                m.id for m in folder_q.order_by(UserModel.upload_date.desc()).limit(4).all()
+            ]
+
+        # Trash (all folders) — shown only on the root view
+        trash_models = []
+        if not folder_id:
+            trash_models = (
+                UserModel.query.filter(
+                    UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
+                )
+                .order_by(UserModel.deleted_at.desc())
+                .all()
+            )
+
+        # Storage usage across all of the user's models (incl. trash — still on disk)
+        storage_used = (
+            db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+            .filter(UserModel.user_id == current_user.id)
+            .scalar()
+        )
 
         return render_template(
             "my_models.html",
@@ -2949,6 +3075,11 @@ def my_models(folder_id=None):
             models=models,
             current_folder=current_folder,
             folder_model_counts=folder_model_counts,
+            folder_previews=folder_previews,
+            trash_models=trash_models,
+            trash_retention_days=TRASH_RETENTION_DAYS,
+            storage_used=storage_used,
+            storage_quota=STORAGE_QUOTA_BYTES,
         )
     except Exception as e:
         app.logger.error(f"Error in my_models: {str(e)}")
@@ -3129,7 +3260,23 @@ def delete_model(model_id):
 
         logger.info(f"Found model: ID={model.id}")
 
-        # Delete the files
+        # Soft delete by default; permanent only when explicitly requested
+        # (from the trash UI) or when the model is already in the trash.
+        data = request.get_json(silent=True) or {}
+        permanent = bool(data.get("permanent")) or model.deleted_at is not None
+
+        if not permanent:
+            try:
+                model.deleted_at = datetime.utcnow()
+                session.commit()
+                logger.info(f"Moved model {model_id} to trash")
+                return jsonify({"success": True, "trashed": True}), 200
+            except Exception as e:
+                session.rollback()
+                logger.error(f"Database error trashing model {model_id}: {str(e)}")
+                return jsonify({"error": "Database error"}), 500
+
+        # Permanent delete: remove files then the row
         try:
             # Delete files in converted folder
             converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], str(model_id))
@@ -3398,6 +3545,59 @@ def move_model():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/restore_model/<string:model_id>", methods=["POST"])
+@login_required
+def restore_model(model_id):
+    """Bring a model back from the trash."""
+    try:
+        model = UserModel.query.get_or_404(model_id)
+        if model.user_id != current_user.id:
+            return jsonify({"error": "Unauthorized"}), 403
+        if model.deleted_at is None:
+            return jsonify({"success": True, "message": "Model is not in trash"}), 200
+        model.deleted_at = None
+        # Its folder may have been deleted while the model sat in trash
+        if model.folder_id and not Folder.query.get(model.folder_id):
+            model.folder_id = None
+        db.session.commit()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error restoring model {model_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/rename_folder/<int:folder_id>", methods=["POST"])
+@login_required
+def rename_folder(folder_id):
+    try:
+        folder = Folder.query.get_or_404(folder_id)
+        if folder.user_id != current_user.id:
+            return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+        data = request.get_json(silent=True) or {}
+        new_name = (data.get("name") or "").strip()[:100]
+        if not new_name:
+            return jsonify({"success": False, "error": "Folder name is required"}), 400
+
+        duplicate = Folder.query.filter(
+            Folder.name == new_name,
+            Folder.parent_id == folder.parent_id,
+            Folder.user_id == current_user.id,
+            Folder.id != folder.id,
+        ).first()
+        if duplicate:
+            return jsonify({"success": False, "error": "A folder with this name already exists"}), 409
+
+        folder.name = new_name
+        db.session.commit()
+        return jsonify({"success": True, "name": folder.name}), 200
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error renaming folder {folder_id}: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/move_selected_models", methods=["POST"])
 @login_required
 def move_selected_models():
@@ -3408,6 +3608,9 @@ def move_selected_models():
 
         if not model_ids:
             return jsonify({"success": False, "error": "No models selected"}), 400
+
+        # JS sends folder_id as a string; Integer column needs int (or None)
+        folder_id = int(folder_id) if folder_id else None
 
         # Verify folder exists and belongs to user if folder_id is provided
         if folder_id:

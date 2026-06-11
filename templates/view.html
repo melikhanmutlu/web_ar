@@ -1843,15 +1843,15 @@ void main() {
                         <div style="display:flex;gap:0.5rem;">
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">W</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.x) }}</div>
+                                <div id="sideDimW" style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.x) }}</div>
                             </div>
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">H</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.y) }}</div>
+                                <div id="sideDimH" style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.y) }}</div>
                             </div>
                             <div style="flex:1;text-align:center;background:var(--color-gray-800);padding:0.35rem 0.2rem;border:1px solid var(--color-gray-700);">
                                 <div style="font-size:0.6rem;color:var(--color-gray-500);text-transform:uppercase;">D</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.z) }}</div>
+                                <div id="sideDimD" style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ "%.1f"|format(model_dimensions.z) }}</div>
                             </div>
                         </div>
                     </div>
@@ -1951,6 +1951,10 @@ void main() {
                         <button onclick="document.getElementById('textureUpload').click()" class="tp-btn-full">Upload Texture</button>
                         <div id="texturePreview" class="hidden" style="margin-top:0.35rem;">
                             <img id="texturePreviewImg" style="width:100%;height:3.5rem;object-fit:cover;border:1px solid var(--color-gray-700);">
+                            <p id="textureUvNote" class="hidden" style="margin:0.3rem 0 0;font-size:0.68rem;line-height:1.4;color:#fbbf24;">
+                                This model has no UV map, so the live preview is approximate.
+                                Click Save Changes — proper texture coordinates are generated automatically.
+                            </p>
                             <button onclick="removeTexture()" class="tp-btn-full" style="margin-top:0.25rem;color:var(--color-gray-400);">Remove Texture</button>
                         </div>
                     </div>
@@ -2687,13 +2691,52 @@ void main() {
 
                     const texture = await modelViewer.createTexture(url);
                     forEachMaterial(mat => {
+                        // glTF multiplies the texture by baseColorFactor, so any
+                        // applied color would tint the image — reset to white
+                        // (keep current alpha) so the texture shows true colors.
+                        const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                        mat.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, cf[3]]);
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
+                    });
+                    // Sync color pickers with the reset tint
+                    if (matColor) matColor.value = '#ffffff';
+                    if (matColorHex) matColorHex.value = '#FFFFFF';
+
+                    // Models without a UV map can't preview a texture correctly
+                    // (the whole surface samples one texel). Saving generates
+                    // proper UVs server-side — tell the user instead of looking broken.
+                    checkModelHasUVs().then(hasUVs => {
+                        const note = document.getElementById('textureUvNote');
+                        if (note) note.classList.toggle('hidden', hasUVs !== false);
                     });
                 } catch (err) {
                     console.error('Texture upload error:', err);
                     alert('Failed to apply texture.');
                 }
             });
+
+            // Parse the GLB's JSON chunk (from HTTP cache) to see if any
+            // primitive carries TEXCOORD_0. Returns true/false, or null on error.
+            let _uvCheckCache = null;
+            async function checkModelHasUVs() {
+                if (_uvCheckCache !== null) return _uvCheckCache;
+                try {
+                    const resp = await fetch(modelViewer.src, { cache: 'force-cache' });
+                    const buf = await resp.arrayBuffer();
+                    const dv = new DataView(buf);
+                    if (dv.getUint32(0, true) !== 0x46546C67) return (_uvCheckCache = null); // not glTF
+                    const jsonLen = dv.getUint32(12, true);
+                    const jsonText = new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen));
+                    const json = JSON.parse(jsonText);
+                    _uvCheckCache = (json.meshes || []).some(m =>
+                        (m.primitives || []).some(p => p.attributes && 'TEXCOORD_0' in p.attributes)
+                    );
+                    return _uvCheckCache;
+                } catch (e) {
+                    console.warn('UV check failed:', e);
+                    return (_uvCheckCache = null);
+                }
+            }
 
             // Remove texture (global function for onclick)
             window.removeTexture = function() {
@@ -2745,6 +2788,15 @@ void main() {
                         if (dimWidth) dimWidth.textContent = parseFloat(d.width).toFixed(2) + ' cm';
                         if (dimHeight) dimHeight.textContent = parseFloat(d.height).toFixed(2) + ' cm';
                         if (dimDepth) dimDepth.textContent = parseFloat(d.depth).toFixed(2) + ' cm';
+                        // Keep the info sidebar in sync: it renders DB bounds which
+                        // go stale after transform/slice saves — the GLB file
+                        // (this endpoint) is the source of truth for both displays.
+                        const sw = document.getElementById('sideDimW');
+                        const sh = document.getElementById('sideDimH');
+                        const sd = document.getElementById('sideDimD');
+                        if (sw) sw.textContent = parseFloat(d.width).toFixed(1);
+                        if (sh) sh.textContent = parseFloat(d.height).toFixed(1);
+                        if (sd) sd.textContent = parseFloat(d.depth).toFixed(1);
                     }
                 })
                 .catch(() => {});
@@ -2798,21 +2850,12 @@ void main() {
             const ry = parseFloat(rotateYSlider?.value || 0);
             const rz = parseFloat(rotateZSlider?.value || 0);
 
-            // NOTE: model-viewer has no `scale`/`orientation` attributes — transform is
-            // applied directly to the underlying THREE.js scene below.
-            const scene = modelViewer.model?.scene;
-            if (scene?.scale?.setScalar) {
-                scene.scale.setScalar(s);
-            }
-            if (scene?.rotation?.set) {
-                scene.rotation.set(
-                    rx * Math.PI / 180,
-                    ry * Math.PI / 180,
-                    rz * Math.PI / 180
-                );
-            }
-
-            forceModelViewerRefresh();
+            // model-viewer's public scene-graph API (v1.1+): `scale` and
+            // `orientation` ("roll pitch yaw" = Z X Y in degrees). The old code
+            // poked modelViewer.model.scene — that internal isn't exposed in
+            // v4.x, so the preview silently did nothing.
+            modelViewer.scale = s + ' ' + s + ' ' + s;
+            modelViewer.orientation = rz + 'deg ' + rx + 'deg ' + ry + 'deg';
         }
 
         // Transform editor initialization (called AFTER DOM restructuring)
@@ -2832,6 +2875,9 @@ void main() {
                 if (scaleInput) scaleInput.value = val.toFixed(1);
                 applyTransform();
             });
+            // Re-frame the camera once the user releases the slider so large
+            // scale-ups don't overflow the viewport (not during drag — jittery).
+            scaleSlider?.addEventListener('change', () => modelViewer?.updateFraming?.());
 
             scaleInput?.addEventListener('input', (e) => {
                 let val = parseFloat(e.target.value);
@@ -2840,6 +2886,7 @@ void main() {
                 if (scaleSlider) scaleSlider.value = val;
                 applyTransform();
             });
+            scaleInput?.addEventListener('change', () => modelViewer?.updateFraming?.());
 
             rotateXSlider?.addEventListener('input', (e) => {
                 if (rotateXValue) rotateXValue.textContent = e.target.value + '\u00B0';

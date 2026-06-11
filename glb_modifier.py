@@ -388,15 +388,18 @@ def apply_texture_modifications(gltf, texture_data_base64):
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
                 if material.pbrMetallicRoughness:
-                    # Keep existing baseColorFactor (user's chosen color tint)
-                    # Only set to white if it was never explicitly set
-                    if material.pbrMetallicRoughness.baseColorFactor is None:
-                        material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+                    # baseColorFactor MULTIPLIES the texture, so any previously
+                    # applied solid color would tint the image (green-tinted
+                    # textures etc.). Uploading a texture is an explicit choice
+                    # to show the image — reset tint to white, keep alpha only.
+                    prev = material.pbrMetallicRoughness.baseColorFactor
+                    alpha = prev[3] if prev and len(prev) == 4 else 1.0
+                    material.pbrMetallicRoughness.baseColorFactor = [1.0, 1.0, 1.0, alpha]
                     texture_info = TextureInfo()
                     texture_info.index = texture_index
                     texture_info.texCoord = 0
                     material.pbrMetallicRoughness.baseColorTexture = texture_info
-                    logger.info(f"Applied texture to material {i} (tint={material.pbrMetallicRoughness.baseColorFactor})")
+                    logger.info(f"Applied texture to material {i} (tint reset to white, alpha={alpha})")
 
         logger.info("Texture embedding completed successfully")
         return gltf

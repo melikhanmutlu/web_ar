@@ -394,15 +394,16 @@ a { color: inherit; }
     linear-gradient(135deg, transparent 0 48%, var(--color-gray-200) 48% 52%, transparent 52%),
     var(--color-gray-100);
 }
+/* Card body: title on top, action icons below, then date/time/size meta */
 .library-model-body {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--spacing-md);
-    padding: var(--spacing-lg);
+    gap: 0.4rem;
+    padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
 }
 .library-model h3 {
-    max-width: 12rem;
+    max-width: 100%;
     color: var(--color-gray-900);
     font-size: 0.98rem;
     font-weight: 800;
@@ -413,15 +414,22 @@ a { color: inherit; }
 .library-model-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem 0.65rem;
-    margin: 0.25rem 0 0;
+    align-items: center;
+    gap: 0.35rem 0;
+    margin: 0;
     color: var(--color-gray-500);
     font-size: 0.75rem;
+}
+.library-model-meta span + span::before {
+    content: "·";
+    margin: 0 0.45rem;
+    color: var(--color-gray-300);
 }
 .library-card-actions {
     display: flex;
     flex-shrink: 0;
     gap: 0.25rem;
+    margin-left: -0.45rem; /* optically align first icon with the title */
 }
 .library-icon-btn {
     display: inline-flex;
@@ -518,22 +526,57 @@ body.selection-mode .model-card { cursor: default; }
     cursor: pointer;
 }
 .folder-option:hover { background: var(--color-gray-100); border-color: var(--color-gray-400); }
-/* ── Storage usage bar ── */
+/* ── Storage quota card ── */
 .library-storage {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-md);
+    border: 1px solid var(--color-gray-200);
+    background: var(--color-white);
+    padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
 }
+.storage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+.storage-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-gray-500);
+}
+.storage-title i { width: 0.85rem; height: 0.85rem; }
+.storage-pct {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--color-gray-900);
+    font-variant-numeric: tabular-nums;
+}
+.storage-pct--danger { color: var(--error); }
 .storage-track {
-    flex: 1;
     height: 0.45rem;
-    background: var(--color-gray-200);
+    background: var(--color-gray-100);
+    border: 1px solid var(--color-gray-200);
     overflow: hidden;
 }
-.storage-fill { height: 100%; background: var(--color-gray-900); transition: width 0.4s ease; }
+.storage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #93c5fd, #3b82f6);
+    transition: width 0.5s ease;
+}
 .storage-fill--danger { background: var(--error); }
-.storage-label { font-size: 0.75rem; color: var(--color-gray-500); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.storage-caption {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+    font-size: 0.72rem;
+    color: var(--color-gray-500);
+    font-variant-numeric: tabular-nums;
+}
 
 /* ── Folder cover collage ── */
 .library-folder-icon.has-collage { width: 3.5rem; height: 3.5rem; border: 1px solid var(--color-gray-200); overflow: hidden; padding: 0; }
@@ -998,7 +1041,4 @@ body > .av-flash { margin-top: 5.5rem; }
     .av-dropzone-icon { width: 2.4rem; height: 2.4rem; }
     .library-actions > * { flex: 1 1 calc(50% - var(--spacing-sm)); }
     .library-model-grid, .library-folder-grid { grid-template-columns: 1fr; }
-    .library-model-body { flex-direction: column; }
-    .library-card-actions { width: 100%; justify-content: flex-end; }
-    .library-model h3 { max-width: 100%; }
 }

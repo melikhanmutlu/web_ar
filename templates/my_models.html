@@ -39,13 +39,20 @@
 
     {% if storage_quota %}
     {% set used_pct = ((storage_used or 0) / storage_quota * 100) %}
-    <section class="library-storage" title="{{ ((storage_used or 0) / 1048576) | round(1) }} MB of {{ (storage_quota / 1048576) | round(0) | int }} MB used">
+    {% set used_mb = ((storage_used or 0) / 1048576) | round(1) %}
+    {% set quota_gb = (storage_quota / 1073741824) | round(1) %}
+    <section class="library-storage">
+        <div class="storage-head">
+            <span class="storage-title"><i data-lucide="database"></i> Storage</span>
+            <span class="storage-pct {% if used_pct > 90 %}storage-pct--danger{% endif %}">{{ used_pct | round(1) }}%</span>
+        </div>
         <div class="storage-track">
             <div class="storage-fill {% if used_pct > 90 %}storage-fill--danger{% endif %}" style="width: {{ [used_pct, 100] | min | round(2) }}%;"></div>
         </div>
-        <span class="storage-label">
-            {{ ((storage_used or 0) / 1048576) | round(1) }} MB / {{ ((storage_quota / 1073741824) | round(1)) }} GB
-        </span>
+        <div class="storage-caption">
+            <span>{{ used_mb }} MB used</span>
+            <span>{{ quota_gb }} GB total</span>
+        </div>
     </section>
     {% endif %}
 
@@ -174,13 +181,7 @@
                 </div>
 
                 <div class="library-model-body">
-                    <div>
-                        <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
-                        <p class="library-model-meta">
-                            <span class="upload-date">{{ model.upload_date_formatted }}</span>
-                            <span class="file-size">{{ model.file_size_formatted }}</span>
-                        </p>
-                    </div>
+                    <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
                     <div class="library-card-actions">
                         <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-icon-btn" title="View" aria-label="View">
                             <i data-lucide="eye"></i>
@@ -198,6 +199,10 @@
                             <i data-lucide="trash-2"></i>
                         </button>
                     </div>
+                    <p class="library-model-meta">
+                        <span class="upload-date">{{ model.upload_date_formatted }}</span>
+                        <span class="file-size">{{ model.file_size_formatted }}</span>
+                    </p>
                 </div>
             </article>
             {% endfor %}

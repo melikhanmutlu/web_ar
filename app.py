@@ -2996,7 +2996,9 @@ def serve_thumbnail(unique_id):
 
 
 TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
-STORAGE_QUOTA_BYTES = int(os.getenv("STORAGE_QUOTA_MB", 5120)) * 1024 * 1024
+# Per-user storage quota. 1 GB for everyone for now; when paid plans land
+# this becomes a per-plan value (the env var stays as the global default).
+STORAGE_QUOTA_BYTES = int(os.getenv("STORAGE_QUOTA_MB", 1024)) * 1024 * 1024
 
 
 def _purge_expired_trash(user_id):

@@ -114,3 +114,88 @@ def test_generate_3d_still_rejects_raw_urls(client, logged_in, meshy_configured)
         "image": "https://internal.host/secret.png",
     })
     assert resp.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+#  Concurrent-poll race guards
+# --------------------------------------------------------------------------- #
+
+def _make_text_job(user, stage="preview"):
+    import uuid
+    job = AIGenerationJob(id=str(uuid.uuid4()), user_id=user.id, kind="text",
+                          prompt="vase", stage=stage,
+                          meshy_preview_id="prev-1", status="generating", progress=49)
+    db.session.add(job)
+    db.session.commit()
+    return job
+
+
+def test_claim_stage_is_atomic(client, logged_in):
+    from app import _claim_ai_stage
+    job = _make_text_job(logged_in)
+    assert _claim_ai_stage(job.id, "preview", "refining") is True
+    # a second concurrent poll loses the claim
+    assert _claim_ai_stage(job.id, "preview", "refining") is False
+
+
+def test_refine_started_only_once(client, logged_in, meshy_configured, monkeypatch):
+    """Repeated polls after preview succeeds must not start duplicate
+    refine tasks (duplicate Meshy credits)."""
+    job = _make_text_job(logged_in)
+    calls = {"refine": 0}
+
+    def fake_get_task(kind, task_id):
+        if task_id == "prev-1":
+            return {"status": "SUCCEEDED", "progress": 100,
+                    "model_urls": {}, "thumbnail_url": None, "task_error": None}
+        return {"status": "IN_PROGRESS", "progress": 10,
+                "model_urls": {}, "thumbnail_url": None, "task_error": None}
+
+    def fake_start_refine(preview_id):
+        calls["refine"] += 1
+        return "refine-1"
+
+    monkeypatch.setattr(ai_generator, "get_task", fake_get_task)
+    monkeypatch.setattr(ai_generator, "start_refine", fake_start_refine)
+
+    for _ in range(3):
+        resp = client.get(f"/api/generate-3d/{job.id}/status")
+        assert resp.status_code == 200, resp.get_json()
+
+    assert calls["refine"] == 1
+    db.session.refresh(job)
+    assert job.stage == "refine" and job.meshy_refine_id == "refine-1"
+
+
+def test_finalize_failure_releases_claim(client, logged_in, meshy_configured, monkeypatch):
+    """If the GLB download fails mid-finalize, the stage claim is released
+    so the next poll can retry instead of dead-locking in 'finalizing'."""
+    job = _make_text_job(logged_in, stage="refine")
+    job.meshy_refine_id = "refine-1"
+    db.session.commit()
+
+    monkeypatch.setattr(ai_generator, "get_task",
+                        lambda kind, task_id: {"status": "SUCCEEDED", "progress": 100,
+                                               "model_urls": {"glb": "https://assets.meshy.ai/m.glb"},
+                                               "thumbnail_url": None, "task_error": None})
+
+    def boom(url, dest):
+        raise ai_generator.MeshyError("download blew up")
+
+    monkeypatch.setattr(ai_generator, "download", boom)
+
+    resp = client.get(f"/api/generate-3d/{job.id}/status")
+    assert resp.status_code == 502
+    db.session.refresh(job)
+    assert job.stage == "refine"  # claim released, next poll retries
+    assert job.status == "generating"
+
+
+def test_status_includes_stage(client, logged_in, meshy_configured, monkeypatch):
+    job = _make_text_job(logged_in)
+    monkeypatch.setattr(ai_generator, "get_task",
+                        lambda kind, task_id: {"status": "IN_PROGRESS", "progress": 80,
+                                               "model_urls": {}, "thumbnail_url": None,
+                                               "task_error": None})
+    body = client.get(f"/api/generate-3d/{job.id}/status").get_json()
+    assert body["stage"] == "preview"

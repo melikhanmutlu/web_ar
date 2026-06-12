@@ -323,6 +323,7 @@ class AIGenerationJob(db.Model):
             'job_id': self.id,
             'kind': self.kind,
             'status': self.status,
+            'stage': self.stage,
             'progress': self.progress,
             'model_id': self.model_id,
             'error': self.error,

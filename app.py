@@ -4617,6 +4617,22 @@ def _ai_quota_state(user_id):
     return (count >= limit), count, limit
 
 
+def _claim_ai_stage(job_id, expect_stage, new_stage):
+    """Atomically move a job between stages with UPDATE ... WHERE stage=...
+
+    The state machine is advanced by client polls; two concurrent polls of
+    the same job (multiple tabs/devices) could otherwise both see a finished
+    preview and both call start_refine — burning duplicate Meshy credits —
+    or both finalize and register duplicate models. Exactly one poll wins
+    this claim; the loser just reports current progress.
+    """
+    claimed = AIGenerationJob.query.filter_by(
+        id=job_id, stage=expect_stage
+    ).update({"stage": new_stage}, synchronize_session=False)
+    db.session.commit()
+    return bool(claimed)
+
+
 def _finalize_ai_job(job, task):
     """Download finished GLB (+USDZ), register as model, mark job ready."""
     import ai_generator
@@ -4736,21 +4752,39 @@ def generate_3d_status(job_id):
 
     try:
         if job.kind == "image":
-            t = ai_generator.get_task("image", job.meshy_image_id)
-            job.progress = min(99, t["progress"])
-            if t["status"] == ai_generator.SUCCEEDED:
-                return _finalize_ai_job(job, t)
-            if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                job.status = "failed"
-                job.error = t.get("task_error") or "Generation failed"
+            if job.stage == "image":
+                t = ai_generator.get_task("image", job.meshy_image_id)
+                job.progress = min(99, t["progress"])
+                if t["status"] == ai_generator.SUCCEEDED:
+                    if not _claim_ai_stage(job.id, "image", "finalizing"):
+                        db.session.refresh(job)  # another poll is finalizing
+                    else:
+                        try:
+                            return _finalize_ai_job(job, t)
+                        except Exception:
+                            # let the next poll retry the download/registration
+                            _claim_ai_stage(job.id, "finalizing", "image")
+                            raise
+                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                    job.status = "failed"
+                    job.error = t.get("task_error") or "Generation failed"
         else:
             if job.stage == "preview":
                 t = ai_generator.get_task("text", job.meshy_preview_id)
                 job.progress = min(49, t["progress"] // 2)
                 if t["status"] == ai_generator.SUCCEEDED:
-                    job.meshy_refine_id = ai_generator.start_refine(job.meshy_preview_id)
-                    job.stage = "refine"
-                    job.progress = 50
+                    if not _claim_ai_stage(job.id, "preview", "refining"):
+                        db.session.refresh(job)  # another poll started refine
+                    else:
+                        try:
+                            refine_id = ai_generator.start_refine(job.meshy_preview_id)
+                        except Exception:
+                            # release the claim so the next poll retries
+                            _claim_ai_stage(job.id, "refining", "preview")
+                            raise
+                        job.meshy_refine_id = refine_id
+                        job.stage = "refine"
+                        job.progress = 50
                 elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
                     job.status = "failed"
                     job.error = t.get("task_error") or "Preview failed"
@@ -4758,8 +4792,15 @@ def generate_3d_status(job_id):
                 t = ai_generator.get_task("text", job.meshy_refine_id)
                 job.progress = min(99, 50 + t["progress"] // 2)
                 if t["status"] == ai_generator.SUCCEEDED:
-                    return _finalize_ai_job(job, t)
-                if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                    if not _claim_ai_stage(job.id, "refine", "finalizing"):
+                        db.session.refresh(job)
+                    else:
+                        try:
+                            return _finalize_ai_job(job, t)
+                        except Exception:
+                            _claim_ai_stage(job.id, "finalizing", "refine")
+                            raise
+                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
                     job.status = "failed"
                     job.error = t.get("task_error") or "Texturing failed"
         db.session.commit()

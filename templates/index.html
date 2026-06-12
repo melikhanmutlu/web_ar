@@ -797,6 +797,37 @@
             setProgress(0, 'Failed');
         }
 
+        // Human-readable labels per pipeline stage so the bar never looks
+        // "stuck" at the preview→refine boundary (~49%) while Meshy queues
+        // the texturing task under concurrent load.
+        const STAGE_LABELS = {
+            preview: 'Generating base mesh…',
+            refining: 'Base mesh done — queueing texture stage…',
+            refine: 'Texturing…',
+            finalizing: 'Downloading & saving model…',
+            image: 'Generating 3D model…'
+        };
+
+        // Start a task; if Meshy itself is at its concurrent-task limit
+        // (surfaced as 502 + rate-limit message), retry with backoff
+        // instead of failing — daily-quota 429s are NOT retried.
+        async function startTask(url, body, busyLabel) {
+            for (let attempt = 0; ; attempt++) {
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (d.success) return d;
+                const busy = r.status === 502 && /rate limit|429|try again shortly/i.test(d.error || '');
+                if (!busy || attempt >= 3) throw new Error(d.error || 'Failed to start');
+                const wait = 10 * (attempt + 1);
+                setProgress(2, busyLabel + ' — busy, retrying in ' + wait + 's…');
+                await new Promise(res => setTimeout(res, wait * 1000));
+            }
+        }
+
         // Poll a Meshy image-generation task until it yields image URLs.
         async function pollImageTask(taskId, kind, labelMsg) {
             let tries = 0;
@@ -839,13 +870,8 @@
             bar.classList.remove('error');
             setProgress(2, 'Generating image…');
             try {
-                const r = await fetch('/api/generate-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode: 'text', prompt: p })
-                });
-                const d = await r.json();
-                if (!d.success) throw new Error(d.error || 'Failed to start image generation');
+                const d = await startTask('/api/generate-image',
+                    { mode: 'text', prompt: p }, 'Generating image');
                 const urls = await pollImageTask(d.task_id, d.kind, 'Generating image…');
                 if (!urls.length) throw new Error('No images were generated.');
                 setProgress(100, 'Pick an image');
@@ -888,13 +914,8 @@
             bar.classList.remove('error');
             setProgress(2, 'Transforming image…');
             try {
-                const r = await fetch('/api/generate-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode: 'image', image: originalDataUri, prompt: p })
-                });
-                const d = await r.json();
-                if (!d.success) throw new Error(d.error || 'Failed to start transformation');
+                const d = await startTask('/api/generate-image',
+                    { mode: 'image', image: originalDataUri, prompt: p }, 'Transforming image');
                 const urls = await pollImageTask(d.task_id, d.kind, 'Transforming image…');
                 if (!urls.length) throw new Error('No image was generated.');
                 setProgress(100, 'Image ready');
@@ -936,13 +957,7 @@
             setProgress(2, 'Starting…');
 
             try {
-                const r = await fetch('/api/generate-3d', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const d = await r.json();
-                if (!d.success) throw new Error(d.error || 'Failed to start generation');
+                const d = await startTask('/api/generate-3d', body, 'Starting 3D generation');
                 const jobId = d.job_id;
 
                 let done = false, tries = 0;
@@ -952,7 +967,8 @@
                     const sr = await fetch('/api/generate-3d/' + jobId + '/status');
                     const sd = await sr.json();
                     if (!sd.success) throw new Error(sd.error || 'Status check failed');
-                    setProgress(Math.max(2, sd.progress || 0), 'Generating 3D model…');
+                    setProgress(Math.max(2, sd.progress || 0),
+                        STAGE_LABELS[sd.stage] || 'Generating 3D model…');
                     if (sd.status === 'ready' && sd.viewer_url) {
                         setProgress(100, 'Done');
                         window.location.href = sd.viewer_url;

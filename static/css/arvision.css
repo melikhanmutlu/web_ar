@@ -1042,3 +1042,32 @@ body > .av-flash { margin-top: 5.5rem; }
     .library-actions > * { flex: 1 1 calc(50% - var(--spacing-sm)); }
     .library-model-grid, .library-folder-grid { grid-template-columns: 1fr; }
 }
+
+/* AI image pre-processing (text-to-image / image-to-image) */
+.imgen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.8rem;
+}
+.imgen-item {
+    position: relative;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    padding: 0;
+    background: none;
+    transition: border-color 0.15s, transform 0.15s;
+}
+.imgen-item:hover { transform: translateY(-2px); }
+.imgen-item img { display: block; width: 100%; height: 130px; object-fit: cover; }
+.imgen-item.selected { border-color: #00B2CC; }
+.imgen-item.selected::after {
+    content: "✓";
+    position: absolute; top: 6px; right: 6px;
+    width: 22px; height: 22px; border-radius: 999px;
+    background: #00B2CC; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+}

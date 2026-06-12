@@ -151,3 +151,86 @@ def download(url: str, dest_path: str) -> bool:
         return True
     except requests.RequestException as e:
         raise MeshyError(f"Download failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+#  Image generation (pre-processing before 3D)
+#  Docs: https://docs.meshy.ai/en/api/text-to-image ,
+#        https://docs.meshy.ai/en/api/image-to-image
+# --------------------------------------------------------------------------- #
+_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4"}
+_MAX_IMAGE_DOWNLOAD = 12 * 1024 * 1024  # bytes
+
+
+def _image_model() -> str:
+    return getattr(config, "MESHY_IMAGE_MODEL", "nano-banana-pro")
+
+
+def start_text_to_image(prompt: str, aspect_ratio: str = "1:1") -> str:
+    """Generate reference image(s) from a text prompt. Returns task id."""
+    payload = {
+        "ai_model": _image_model(),
+        "prompt": (prompt or "").strip()[:600],
+        "aspect_ratio": aspect_ratio if aspect_ratio in _ASPECT_RATIOS else "1:1",
+    }
+    data = _post(f"{_base()}/v1/text-to-image", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy text-to-image response: {data}")
+    return task_id
+
+
+def start_image_to_image(image_data_uri: str, prompt: str) -> str:
+    """Transform an uploaded image with a prompt (e.g. remove background,
+    studio product shot). image_data_uri is a base64 data URI. Returns task id."""
+    payload = {
+        "ai_model": _image_model(),
+        "image_url": image_data_uri,
+        "prompt": (prompt or "").strip()[:600],
+    }
+    data = _post(f"{_base()}/v1/image-to-image", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy image-to-image response: {data}")
+    return task_id
+
+
+def get_image_gen_task(kind: str, task_id: str) -> dict:
+    """kind: 't2i' (text-to-image) or 'i2i' (image-to-image)."""
+    path = "text-to-image" if kind == "t2i" else "image-to-image"
+    data = _get(f"{_base()}/v1/{path}/{task_id}")
+    return {
+        "status": data.get("status"),
+        "progress": int(data.get("progress") or 0),
+        "image_urls": data.get("image_urls") or [],
+        "task_error": (data.get("task_error") or {}).get("message"),
+    }
+
+
+def fetch_image_as_data_uri(url: str, max_bytes: int = _MAX_IMAGE_DOWNLOAD) -> str:
+    """Download a generated image and return it as a base64 data URI.
+
+    Meshy output URLs expire, so the chosen image is fetched server-side at
+    3D-generation time. Only URLs resolved from Meshy task lookups are ever
+    passed here — never client-supplied URLs.
+    """
+    import base64
+
+    try:
+        with requests.get(url, stream=True, timeout=120) as r:
+            if r.status_code >= 400:
+                raise MeshyError(f"Image download failed {r.status_code}")
+            mime = (r.headers.get("Content-Type") or "image/png").split(";")[0]
+            if not mime.startswith("image/"):
+                mime = "image/png"
+            chunks, total = [], 0
+            for chunk in r.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > max_bytes:
+                    raise MeshyError("Generated image is too large.")
+                chunks.append(chunk)
+    except requests.RequestException as e:
+        raise MeshyError(f"Image download failed: {e}")
+    return f"data:{mime};base64," + base64.b64encode(b"".join(chunks)).decode()

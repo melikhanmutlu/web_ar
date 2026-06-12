@@ -179,6 +179,20 @@
                     <label class="av-card-title" for="aiPrompt">Prompt</label>
                     <p class="av-card-desc" style="margin:0.15rem 0 0.6rem;">Describe the object you want.</p>
                     <textarea id="aiPrompt" class="av-textarea" rows="3" maxlength="600" placeholder="a red ceramic vase with a glossy finish"></textarea>
+
+                    <!-- Optional pre-step: text -> reference image -> 3D -->
+                    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-top:0.7rem;">
+                        <button type="button" id="visualizeBtn" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.4rem;width:auto;">
+                            <i data-lucide="image-plus" style="width:1rem;height:1rem;"></i>
+                            Visualize first
+                        </button>
+                        <span class="av-card-desc" style="margin:0;">Optional — preview as an image, pick one, then build 3D from it.</span>
+                    </div>
+                    <div id="t2iResults" class="imgen-grid hidden"></div>
+                    <p id="t2iSelectedNote" class="av-card-desc hidden" style="margin-top:0.5rem;">
+                        Image selected — the 3D model will be built from it.
+                        <a href="#" id="t2iClear" style="text-decoration:underline;">Clear selection</a>
+                    </p>
                 </div>
 
                 <div id="genImage" class="av-card hidden">
@@ -188,6 +202,23 @@
                         <p class="av-dropzone-title" style="font-size:1rem;">Drop a photo or click to browse</p>
                         <p class="av-dropzone-hint">PNG or JPG · a single object on a clean background works best.</p>
                         <img id="aiImagePreview" alt="" class="hidden" style="max-height:160px;margin:1rem auto 0;display:block;">
+                    </div>
+
+                    <!-- Optional pre-step: transform the photo before 3D -->
+                    <div id="i2iTools" class="hidden" style="margin-top:0.9rem;">
+                        <label class="av-card-title" for="i2iPrompt" style="font-size:0.9rem;">Transform the image first (optional)</label>
+                        <p class="av-card-desc" style="margin:0.15rem 0 0.5rem;">e.g. “remove the background”, “clean studio product photo on white”.</p>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                            <input id="i2iPrompt" type="text" class="av-input" maxlength="600" style="flex:1;min-width:220px;" placeholder="remove the background, soft studio lighting">
+                            <button type="button" id="transformBtn" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.4rem;width:auto;">
+                                <i data-lucide="wand-2" style="width:1rem;height:1rem;"></i>
+                                Transform
+                            </button>
+                        </div>
+                        <p id="i2iNote" class="av-card-desc hidden" style="margin-top:0.5rem;">
+                            Transformed image will be used for 3D.
+                            <a href="#" id="i2iRevert" style="text-decoration:underline;">Revert to original</a>
+                        </p>
                     </div>
                 </div>
 
@@ -719,6 +750,12 @@
             });
         });
 
+        // Pre-processing selections (Meshy image-gen task references; the
+        // server re-resolves them by task id — raw URLs are never sent)
+        let t2iSelection = null;   // {kind:'t2i', task_id, index}
+        let i2iSelection = null;   // {kind:'i2i', task_id, index}
+        let originalDataUri = null;
+
         // Image selection -> data URI + preview
         const aiImageDrop = document.getElementById('aiImageDrop');
         const aiImage = document.getElementById('ai-image');
@@ -731,8 +768,12 @@
             const reader = new FileReader();
             reader.onload = () => {
                 imageDataUri = reader.result;
+                originalDataUri = reader.result;
+                i2iSelection = null;
+                document.getElementById('i2iNote').classList.add('hidden');
                 aiImagePreview.src = reader.result;
                 aiImagePreview.classList.remove('hidden');
+                document.getElementById('i2iTools').classList.remove('hidden');
             };
             reader.readAsDataURL(f);
         });
@@ -749,16 +790,144 @@
             if (msg) label.textContent = msg;
         }
 
+        function showGenError(message) {
+            bar.classList.add('error');
+            errBox.textContent = message;
+            errBox.classList.remove('hidden');
+            setProgress(0, 'Failed');
+        }
+
+        // Poll a Meshy image-generation task until it yields image URLs.
+        async function pollImageTask(taskId, kind, labelMsg) {
+            let tries = 0;
+            while (tries < 90) {
+                await new Promise(res => setTimeout(res, 2000));
+                tries++;
+                const r = await fetch('/api/generate-image/' + taskId + '/status?kind=' + kind);
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Status check failed');
+                if (d.status === 'ready') return d.image_urls || [];
+                if (d.status === 'failed') throw new Error(d.error || 'Image generation failed');
+                setProgress(Math.max(3, d.progress || 0), labelMsg);
+            }
+            throw new Error('Image generation timed out.');
+        }
+
+        // ---- Text mode pre-step: visualize prompt as image(s), pick one ----
+        const t2iResults = document.getElementById('t2iResults');
+        const t2iNote = document.getElementById('t2iSelectedNote');
+
+        function clearT2iSelection() {
+            t2iSelection = null;
+            t2iNote.classList.add('hidden');
+            t2iResults.querySelectorAll('.imgen-item').forEach(b => b.classList.remove('selected'));
+            genBtn.lastChild.textContent = ' Generate 3D Model';
+        }
+        document.getElementById('t2iClear')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearT2iSelection();
+        });
+
+        document.getElementById('visualizeBtn')?.addEventListener('click', async () => {
+            const p = document.getElementById('aiPrompt').value.trim();
+            if (!p) { alert('Please enter a prompt.'); return; }
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            clearT2iSelection();
+            t2iResults.classList.add('hidden');
+            t2iResults.innerHTML = '';
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Generating image…');
+            try {
+                const r = await fetch('/api/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'text', prompt: p })
+                });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Failed to start image generation');
+                const urls = await pollImageTask(d.task_id, d.kind, 'Generating image…');
+                if (!urls.length) throw new Error('No images were generated.');
+                setProgress(100, 'Pick an image');
+                urls.forEach((u, i) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'imgen-item';
+                    item.innerHTML = '<img src="' + u + '" alt="Generated option ' + (i + 1) + '">';
+                    item.addEventListener('click', () => {
+                        t2iResults.querySelectorAll('.imgen-item').forEach(b => b.classList.remove('selected'));
+                        item.classList.add('selected');
+                        t2iSelection = { kind: d.kind, task_id: d.task_id, index: i };
+                        t2iNote.classList.remove('hidden');
+                        genBtn.lastChild.textContent = ' Generate 3D from selected image';
+                    });
+                    t2iResults.appendChild(item);
+                });
+                t2iResults.classList.remove('hidden');
+            } catch (e) {
+                showGenError(e.message);
+            }
+        });
+
+        // ---- Image mode pre-step: transform the uploaded photo ----
+        const transformBtn = document.getElementById('transformBtn');
+        document.getElementById('i2iRevert')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            i2iSelection = null;
+            document.getElementById('i2iNote').classList.add('hidden');
+            if (originalDataUri) aiImagePreview.src = originalDataUri;
+        });
+
+        transformBtn?.addEventListener('click', async () => {
+            const p = document.getElementById('i2iPrompt').value.trim();
+            if (!originalDataUri) { alert('Please choose an image first.'); return; }
+            if (!p) { alert('Describe how to transform the image.'); return; }
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            transformBtn.disabled = true;
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Transforming image…');
+            try {
+                const r = await fetch('/api/generate-image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: 'image', image: originalDataUri, prompt: p })
+                });
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Failed to start transformation');
+                const urls = await pollImageTask(d.task_id, d.kind, 'Transforming image…');
+                if (!urls.length) throw new Error('No image was generated.');
+                setProgress(100, 'Image ready');
+                aiImagePreview.src = urls[0];
+                i2iSelection = { kind: d.kind, task_id: d.task_id, index: 0 };
+                document.getElementById('i2iNote').classList.remove('hidden');
+            } catch (e) {
+                showGenError(e.message);
+            } finally {
+                transformBtn.disabled = false;
+            }
+        });
+
         genBtn.addEventListener('click', async () => {
             errBox.classList.add('hidden'); errBox.textContent = '';
             const body = { mode: genMode };
             if (genMode === 'text') {
-                const p = document.getElementById('aiPrompt').value.trim();
-                if (!p) { alert('Please enter a prompt.'); return; }
-                body.prompt = p;
+                if (t2iSelection) {
+                    // build 3D from the AI-generated reference image
+                    body.mode = 'image';
+                    body.image_task = t2iSelection;
+                } else {
+                    const p = document.getElementById('aiPrompt').value.trim();
+                    if (!p) { alert('Please enter a prompt.'); return; }
+                    body.prompt = p;
+                }
             } else {
-                if (!imageDataUri) { alert('Please choose an image.'); return; }
-                body.image = imageDataUri;
+                if (i2iSelection) {
+                    body.image_task = i2iSelection;
+                } else {
+                    if (!imageDataUri) { alert('Please choose an image.'); return; }
+                    body.image = imageDataUri;
+                }
             }
 
             genBtn.disabled = true;

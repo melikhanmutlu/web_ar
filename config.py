@@ -68,6 +68,9 @@ ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf'}
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
 MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')
 MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-5')
+# Image generation model for the optional pre-processing step (text-to-image /
+# image-to-image before image-to-3D).
+MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')
 # Per-user daily generation quota (each generation costs Meshy credits = money).
 AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
 

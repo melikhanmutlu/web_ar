@@ -1116,6 +1116,25 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
         logger.error(f"[USDZ Async - {model_id}] Error in background conversion: {e}")
 
 
+def refresh_usdz_after_edit(model_id, glb_path):
+    """Regenerate the iOS USDZ in the background after model.glb is rewritten.
+
+    Quick Look serves the USDZ (ios-src), not the GLB — without this, scale/
+    material/slice edits show up in the viewer and on Android but iPhone AR
+    keeps placing the model at its original size and look.
+    """
+    usdz_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.usdz")
+    try:
+        threading.Thread(
+            target=convert_usdz_async,
+            args=(model_id, glb_path, usdz_path),
+            daemon=True,
+        ).start()
+        logger.info(f"[usdz-refresh - {model_id}] Regeneration thread started")
+    except Exception as e:
+        logger.error(f"[usdz-refresh - {model_id}] Failed to start thread: {e}")
+
+
 def generate_thumbnail_async(model_id, input_glb_path, color=None):
     """
     Background task to generate a thumbnail image for a 3D model.
@@ -3895,6 +3914,10 @@ def save_modifications():
                 f"[save_modifications] Successfully replaced model.glb with modified version"
             )
 
+            # Keep iOS AR in sync: Quick Look uses the USDZ, so it must be
+            # rebuilt from the freshly modified GLB.
+            refresh_usdz_after_edit(model_id, current_model_path)
+
             # Update database dimensions after modifications
             try:
                 mesh = trimesh.load(current_model_path, force="scene")
@@ -4114,6 +4137,9 @@ def slice_model():
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )
 
+            # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
+            refresh_usdz_after_edit(model_id, input_path)
+
             # Update dimensions in database
             try:
                 import trimesh
@@ -4222,6 +4248,11 @@ def restore_model_version(model_id, version_number):
 
         success = restore_version(model_id, version_number)
         if success:
+            # The restored GLB replaced model.glb — rebuild the iOS USDZ too.
+            glb_path = os.path.join(
+                app.config["CONVERTED_FOLDER"], model_id, "model.glb"
+            )
+            refresh_usdz_after_edit(model_id, glb_path)
             return jsonify(
                 {"success": True, "message": f"Restored to version {version_number}"}
             )

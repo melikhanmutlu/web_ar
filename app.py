@@ -3006,6 +3006,7 @@ def serve_thumbnail(unique_id):
             svg_path = os.path.join(
                 app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.svg"
             )
+            os.makedirs(os.path.dirname(svg_path), exist_ok=True)
             with open(svg_path, "w", encoding="utf-8") as f:
                 f.write(svg_content)
 

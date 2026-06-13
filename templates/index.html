@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
     <title>Home — arvision</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
@@ -39,6 +40,7 @@
 
         <div id="panel-upload" class="home-panel">
         <form id="uploadForm" action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="av-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- File Upload -->
             <div>
                 <div id="dropZone" class="av-dropzone">
@@ -379,7 +381,7 @@
             if (e.target.files.length > 0) {
                 const file = e.target.files[0];
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                selectedMtlFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
+                selectedMtlFileName.innerHTML = `Selected: ${escapeHtml(file.name)}<br>(${fileSizeMB} MB)`;
                 selectedMtlFileName.classList.remove('hidden');
                 mtlUploadText.classList.add('hidden');
 
@@ -404,7 +406,7 @@
             if (e.target.files.length > 0) {
                 const files = Array.from(e.target.files);
                 const totalSizeMB = (files.reduce((total, file) => total + file.size, 0) / (1024 * 1024)).toFixed(2);
-                const fileList = files.map(file => file.name).join('<br>');
+                const fileList = files.map(file => escapeHtml(file.name)).join('<br>');
                 selectedTextureFileNames.innerHTML = `Selected ${files.length} file(s):<br>${fileList}<br>Total: ${totalSizeMB} MB`;
                 selectedTextureFileNames.classList.remove('hidden');
                 textureUploadText.classList.add('hidden');
@@ -435,7 +437,7 @@
 
                 // Update the filename display
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                selectedFileName.innerHTML = `Selected: ${file.name}<br>(${fileSizeMB} MB)`;
+                selectedFileName.innerHTML = `Selected: ${escapeHtml(file.name)}<br>(${fileSizeMB} MB)`;
                 selectedFileName.classList.remove('hidden');
 
                 // Enable submit button
@@ -620,7 +622,7 @@
                 setProgress(100, 'Upload completed', 'Model is ready. Opening the viewer now.', 'Ready');
 
                 setTimeout(() => {
-                    uploadResult.innerHTML = `<div>${message}</div>`;
+                    uploadResult.innerHTML = `<div>${escapeHtml(message)}</div>`;
                     setTimeout(() => {
                         window.location.href = viewerUrl;
                     }, 1000);
@@ -650,7 +652,7 @@
                                 uploadResult.className = 'upload-result error';
                                 uploadResult.style.display = 'block';
                                 setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
-                                uploadResult.innerHTML = `<div class="av-text-error">${job.error || 'Conversion failed'}</div>`;
+                                uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Conversion failed')}</div>`;
                             } else {
                                 setProgress(
                                     Math.min(nextProgress, 96),
@@ -667,6 +669,12 @@
             // Upload file
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload_model');
+            // XHR isn't covered by the global fetch CSRF wrapper, so set the
+            // token header here explicitly.
+            (function () {
+                const m = document.querySelector('meta[name="csrf-token"]');
+                if (m) xhr.setRequestHeader('X-CSRFToken', m.getAttribute('content'));
+            })();
             xhr.upload.addEventListener('progress', (event) => {
                 if (!event.lengthComputable) {
                     setProgress(18, 'Uploading model', 'Sending file to the local server.', 'Uploading');
@@ -693,7 +701,7 @@
                     uploadResult.className = 'upload-result error';
                     uploadResult.style.display = 'block';
                     setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
-                    uploadResult.innerHTML = `<div class="av-text-error">${error.message}</div>`;
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(error.message)}</div>`;
                 }
             };
             xhr.onerror = () => {
@@ -879,7 +887,12 @@
                     const item = document.createElement('button');
                     item.type = 'button';
                     item.className = 'imgen-item';
-                    item.innerHTML = '<img src="' + u + '" alt="Generated option ' + (i + 1) + '">';
+                    // Build the image via the DOM so the (server-provided) URL
+                    // can never break out of the attribute into markup.
+                    const imgEl = document.createElement('img');
+                    imgEl.src = u;
+                    imgEl.alt = 'Generated option ' + (i + 1);
+                    item.appendChild(imgEl);
                     item.addEventListener('click', () => {
                         t2iResults.querySelectorAll('.imgen-item').forEach(b => b.classList.remove('selected'));
                         item.classList.add('selected');

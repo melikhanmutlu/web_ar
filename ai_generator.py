@@ -45,6 +45,20 @@ def _ai_model() -> str:
     return getattr(config, "MESHY_AI_MODEL", "meshy-5")
 
 
+def _require_data_uri(image_data_uri: str) -> str:
+    """Enforce that an image passed to Meshy is an inline base64 data URI.
+
+    This is the SSRF guard: never let a raw http(s) URL (which could be
+    client-supplied and point at an internal/metadata host) reach Meshy's
+    server-side fetcher. Callers that legitimately have a remote image must
+    resolve and inline it first (see fetch_image_as_data_uri).
+    """
+    value = (image_data_uri or "").strip()
+    if not value.lower().startswith("data:image/"):
+        raise MeshyError("image must be an inline data:image/* URI, not a URL")
+    return value
+
+
 def _post(url: str, payload: dict) -> dict:
     try:
         r = requests.post(url, json=payload, headers=_headers(), timeout=60)
@@ -53,7 +67,10 @@ def _post(url: str, payload: dict) -> dict:
     if r.status_code == 429:
         raise MeshyError("Meshy rate limit reached (429). Try again shortly.")
     if r.status_code >= 400:
-        raise MeshyError(f"Meshy error {r.status_code}: {r.text[:300]}")
+        # Log the upstream body server-side; never surface it to the client
+        # (it can contain provider internals / request echoes).
+        logger.error("Meshy POST %s -> %s: %s", url, r.status_code, r.text[:300])
+        raise MeshyError(f"Meshy error {r.status_code}")
     return r.json()
 
 
@@ -63,7 +80,8 @@ def _get(url: str) -> dict:
     except requests.RequestException as e:
         raise MeshyError(f"Meshy request failed: {e}")
     if r.status_code >= 400:
-        raise MeshyError(f"Meshy error {r.status_code}: {r.text[:300]}")
+        logger.error("Meshy GET %s -> %s: %s", url, r.status_code, r.text[:300])
+        raise MeshyError(f"Meshy error {r.status_code}")
     return r.json()
 
 
@@ -102,7 +120,8 @@ def start_refine(preview_task_id: str) -> str:
 
 
 def start_image_to_3d(image_data_uri: str) -> str:
-    """Image -> 3D. image_data_uri is a base64 data URI (or public URL)."""
+    """Image -> 3D. image_data_uri MUST be an inline base64 data URI."""
+    image_data_uri = _require_data_uri(image_data_uri)
     payload = {
         "image_url": image_data_uri,
         "ai_model": _ai_model(),
@@ -183,6 +202,7 @@ def start_text_to_image(prompt: str, aspect_ratio: str = "1:1") -> str:
 def start_image_to_image(image_data_uri: str, prompt: str) -> str:
     """Transform an uploaded image with a prompt (e.g. remove background,
     studio product shot). image_data_uri is a base64 data URI. Returns task id."""
+    image_data_uri = _require_data_uri(image_data_uri)
     payload = {
         "ai_model": _image_model(),
         "image_url": image_data_uri,

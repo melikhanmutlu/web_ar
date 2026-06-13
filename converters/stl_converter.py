@@ -306,7 +306,7 @@ class STLConverter(BaseConverter):
             # crash/failure mid-export never leaves a truncated GLB to be served.
             self.log_operation("Exporting to GLB format")
             tmp_output = f"{output_path}.tmp.{os.getpid()}"
-            scene.export(tmp_output)
+            scene.export(tmp_output, file_type="glb")
             os.replace(tmp_output, output_path)
 
             if not os.path.exists(output_path):

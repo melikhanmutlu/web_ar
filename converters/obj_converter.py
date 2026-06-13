@@ -413,7 +413,7 @@ class OBJConverter(BaseConverter):
                     # Save the processed mesh (only once!) atomically: temp +
                     # rename so a failed export can't leave a truncated GLB.
                     tmp_output = f"{output_path}.tmp.{os.getpid()}"
-                    mesh.export(tmp_output)
+                    mesh.export(tmp_output, file_type="glb")
                     os.replace(tmp_output, output_path)
                     self.log_operation("Post-processing completed successfully")
 

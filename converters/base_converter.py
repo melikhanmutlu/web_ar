@@ -30,6 +30,41 @@ def hex_to_linear_rgb(hex_color: str) -> tuple:
     )
 
 
+# Texture extensions we accept from untrusted model files.
+_SAFE_TEXTURE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga"}
+
+
+def safe_texture_ext(format_hint: str) -> str:
+    """Map an untrusted format hint to a safe, known image extension.
+
+    Embedded-texture format hints come straight from the uploaded model and
+    must never be used to build a filename verbatim (path-injection risk).
+    Falls back to '.png' for anything unrecognized.
+    """
+    hint = (format_hint or "").strip().lstrip(".").lower()
+    candidate = f".{hint}" if hint else ".png"
+    return candidate if candidate in _SAFE_TEXTURE_EXTS else ".png"
+
+
+def safe_join_within(base_dir: str, untrusted_name: str) -> Optional[str]:
+    """Join untrusted_name onto base_dir, returning None if it escapes base_dir.
+
+    Strips directory components from untrusted_name (so embedded references like
+    '../../etc/passwd' or absolute paths can only ever resolve to a file inside
+    base_dir) and verifies the realpath stays under base_dir.
+    """
+    if not untrusted_name:
+        return None
+    leaf = os.path.basename(untrusted_name.replace("\\", "/"))
+    if not leaf or leaf in (".", ".."):
+        return None
+    base_real = os.path.realpath(base_dir)
+    candidate = os.path.realpath(os.path.join(base_real, leaf))
+    if candidate != base_real and not candidate.startswith(base_real + os.sep):
+        return None
+    return candidate
+
+
 class BaseConverter:
     def __init__(self):
         self.model_id: str = None

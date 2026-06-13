@@ -1,0 +1,34 @@
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script>
+    // Escape untrusted strings before they go into innerHTML. Available
+    // app-wide so server-authored values (hotspot labels, view names, version
+    // comments) can't inject markup/script.
+    window.escapeHtml = function (value) {
+        if (value === null || value === undefined) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    };
+    // Attach the CSRF token to every same-origin state-changing fetch so
+    // existing fetch() calls across the app stay protected without edits.
+    (function () {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        var token = meta ? meta.getAttribute('content') : '';
+        var _fetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            init = init || {};
+            var method = (init.method || (typeof input !== 'string' && input && input.method) || 'GET').toUpperCase();
+            var url = typeof input === 'string' ? input : (input && input.url) || '';
+            var sameOrigin = !/^https?:\/\//i.test(url) || url.indexOf(window.location.origin) === 0;
+            if (token && sameOrigin && ['POST', 'PUT', 'PATCH', 'DELETE'].indexOf(method) !== -1) {
+                var headers = new Headers(init.headers || (typeof input !== 'string' && input ? input.headers : undefined) || {});
+                if (!headers.has('X-CSRFToken')) headers.set('X-CSRFToken', token);
+                init.headers = headers;
+            }
+            return _fetch(input, init);
+        };
+    })();
+</script>

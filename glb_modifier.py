@@ -11,12 +11,20 @@ from pygltflib import (
     GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo,
     Material, PbrMetallicRoughness,
 )
+import os
 import struct
 import base64
 from PIL import Image
 import io
 
 logger = logging.getLogger(__name__)
+
+# DoS guards for untrusted input.
+# Cap decoded texture bytes and total pixel count so a crafted base64 blob or a
+# "pixel bomb" image can't exhaust memory before the 2048px downscale runs.
+MAX_TEXTURE_BYTES = int(os.environ.get("MAX_TEXTURE_BYTES", 32 * 1024 * 1024))
+# Pillow uses MAX_IMAGE_PIXELS to raise DecompressionBombError; set a sane cap.
+Image.MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", 50_000_000))
 
 
 def hex_to_rgb(hex_color):
@@ -320,11 +328,19 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
         if ',' in texture_data_base64:
             texture_data_base64 = texture_data_base64.split(',')[1]
 
+        # Bound the encoded payload before decoding (base64 inflates ~4:3).
+        if len(texture_data_base64) > MAX_TEXTURE_BYTES * 4 // 3 + 1024:
+            raise ValueError("Texture payload too large")
+
         image_bytes = base64.b64decode(texture_data_base64)
+        if len(image_bytes) > MAX_TEXTURE_BYTES:
+            raise ValueError("Decoded texture too large")
         logger.info(f"Decoded texture image: {len(image_bytes)} bytes")
 
-        # Open image with PIL to optimise
+        # Open image with PIL to optimise. MAX_IMAGE_PIXELS (set at import) makes
+        # PIL raise DecompressionBombError on pixel bombs before allocating.
         img = Image.open(io.BytesIO(image_bytes))
+        img.load()  # force decode now so a bomb fails here, inside the try
         logger.info(f"Image format: {img.format}, size: {img.size}, mode: {img.mode}")
 
         if img.mode in ('RGBA', 'LA', 'P'):

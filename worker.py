@@ -46,22 +46,40 @@ def claim_next_job():
     job.status = "processing"
     job.started_at = datetime.utcnow()
     db.session.commit()
-    # run_conversion_job re-sets status/attempts itself; hand it a job that
-    # looks pending again so its transitions stay uniform.
+    # The DB row is now authoritatively 'processing' (so a crash before
+    # run_conversion_job is recoverable by the stale sweep). run_conversion_job
+    # owns the attempts increment and the terminal status transition; we hand it
+    # an in-memory object that looks pending so those transitions stay uniform
+    # with the inline path. The brief in-memory/DB disagreement is intentional.
     job.status = "pending"
     return job
 
 
 def requeue_stale_jobs():
-    """Put orphaned 'processing' jobs (crashed worker) back to pending."""
+    """Recover orphaned 'processing' jobs (crashed worker).
+
+    run_conversion_job increments and commits `attempts` *before* the pipeline
+    runs, so a hard crash mid-conversion still persists the attempt. We respect
+    max_attempts here: a job that keeps crashing the worker (toxic input) is
+    marked failed instead of being requeued forever (poison-pill protection).
+    """
     cutoff = datetime.utcnow() - timedelta(minutes=STALE_PROCESSING_MINUTES)
     stale = ConversionJob.query.filter(
         ConversionJob.status == "processing",
         ConversionJob.started_at < cutoff,
     ).all()
     for job in stale:
-        logger.warning(f"Requeueing stale job {job.id} (started {job.started_at})")
-        job.status = "pending"
+        if (job.attempts or 0) >= (job.max_attempts or 1):
+            logger.error(
+                f"Stale job {job.id} exhausted attempts "
+                f"({job.attempts}/{job.max_attempts}); marking failed"
+            )
+            job.status = "failed"
+            job.error = "Conversion worker crashed repeatedly on this job."
+            job.finished_at = datetime.utcnow()
+        else:
+            logger.warning(f"Requeueing stale job {job.id} (started {job.started_at})")
+            job.status = "pending"
     if stale:
         db.session.commit()
 

@@ -35,9 +35,27 @@ else:
     FBX2GLTF_PATH = os.path.join(TOOLS_DIR, 'FBX2glTF')
 
 # Flask Configuration
-SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY', 'dev-secret-key-change-in-production')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
+
+# SECRET_KEY signs session cookies and CSRF tokens — a known/default value lets
+# anyone forge sessions and impersonate users. Fail fast in production rather
+# than silently falling back to a public dev key. Production is detected via
+# FLASK_ENV, Railway's injected env, or the presence of a managed DATABASE_URL.
+_SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY')
+_IS_PRODUCTION = (
+    FLASK_ENV == 'production'
+    or bool(os.environ.get('RAILWAY_ENVIRONMENT'))
+    or bool(os.environ.get('DATABASE_URL'))
+)
+if not _SECRET_KEY:
+    if _IS_PRODUCTION:
+        raise RuntimeError(
+            "SECRET_KEY (or WEB_AR_SECRET_KEY) must be set in production. "
+            "Refusing to start with a default signing key."
+        )
+    _SECRET_KEY = 'dev-secret-key-change-in-production'
+SECRET_KEY = _SECRET_KEY
 
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')

@@ -69,9 +69,11 @@ def register():
     
     return render_template('register.html', form=form)
 
-@auth.route('/logout')
+@auth.route('/logout', methods=['POST'])
 @login_required
 def logout():
+    # POST-only so logout can't be triggered cross-site via a GET (e.g. an
+    # <img src=".../logout"> tag) or by link prefetchers. CSRF-protected.
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))

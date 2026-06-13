@@ -5,6 +5,7 @@ from flask import (
     Flask,
     request,
     jsonify,
+    send_file,
     send_from_directory,
     render_template,
     redirect,
@@ -14,6 +15,7 @@ from flask import (
     make_response,
     abort,
 )
+from flask_wtf.csrf import CSRFProtect
 from flask_login import (
     LoginManager,
     login_user,
@@ -57,9 +59,12 @@ app = Flask(__name__)
 app.config.from_object("config")
 
 
-# Add headers to allow all origins
+# Baseline security headers on every response. X-Frame-Options is intentionally
+# omitted because /embed/<id> is designed to be iframed by third parties.
 @app.after_request
 def after_request(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return response
 
 
@@ -89,16 +94,18 @@ app.config["TEMP_FOLDER"] = TEMP_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB limit
 app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx", "glb", "gltf"}
 
-# Constants
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "converted")
-TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
-QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_codes")
-ALLOWED_EXTENSIONS = {"obj", "stl", "fbx", "glb", "gltf"}
-MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit
+# NOTE: UPLOAD_FOLDER/CONVERTED_FOLDER/TEMP_FOLDER/QR_FOLDER and the limits come
+# from config.py via `from config import *`. They are storage-root aware (they
+# respect the Railway volume mount). They are deliberately NOT redefined here to
+# dirname-relative paths — doing so previously made the module globals diverge
+# from app.config and wrote data to the ephemeral container filesystem.
 
 # Initialize extensions
 db.init_app(app)
+# CSRF protection for all state-changing requests. Token is bound to the session
+# (no hard time limit) so long-lived viewer/editor pages don't fail mutations.
+app.config.setdefault("WTF_CSRF_TIME_LIMIT", None)
+csrf = CSRFProtect(app)
 migrate = Migrate(app, db)
 
 # Initialize login manager
@@ -884,9 +891,9 @@ def cleanup_missing_models():
 
         for model in models:
             # Check if the original uploaded file exists
-            if not os.path.exists(model.file_path):
+            if not model.filename or not os.path.exists(model.filename):
                 logger.info(
-                    f"Model {model.id} ({model.original_filename}) file not found at: {model.file_path}"
+                    f"Model {model.id} ({model.original_filename}) file not found at: {model.filename}"
                 )
                 try:
                     # Also try to delete the converted file if it exists
@@ -2254,6 +2261,10 @@ def convert():
         model_id = data["modelId"]
         selected_color = data.get("selectedColor", "#FFFFFF")
 
+        guard = check_model_mutation_allowed(model_id)
+        if guard is not None:
+            return guard
+
         # Find original file in upload subfirectory
         upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], model_id)
         if not os.path.isdir(upload_subdir):
@@ -3143,6 +3154,9 @@ def download_model(model_id):
         session = Session(db.engine)
         model = session.get(UserModel, model_id)
 
+        if model is None:
+            return "Dosya bulunamadı", 404
+
         # Check if user owns this model
         if model.user_id != current_user.id:
             return "Unauthorized", 403
@@ -3167,11 +3181,13 @@ def download_model(model_id):
 def get_model_info_api(model_id):
     session = Session(db.engine)
     model = session.get(UserModel, model_id)
+    if model is None:
+        return jsonify({"error": "Model not found"}), 404
     if model.user_id != current_user.id:
         flash("Bu modele erişim izniniz yok.", "error")
         return redirect(url_for("auth.profile"))
 
-    model_info = get_file_info(model.file_path)
+    model_info = get_file_info(model.filename)
     if model_info is None:
         return jsonify({"error": "Model not found"}), 404
 
@@ -3236,21 +3252,26 @@ def update_model_color():
 @app.route("/temp/<filename>")
 def get_temp_file(filename):
     """Serve temporary files (like QR codes)."""
+    # Reject any attempt to escape the directory (path traversal).
+    if os.path.basename(filename) != filename:
+        logger.warning(f"Unsafe temp filename rejected: {filename}")
+        return "Not Found", 404
     try:
-        temp_path = os.path.join(app.config["CONVERTED_FOLDER"], filename)
-        if os.path.exists(temp_path):
-            return send_file(temp_path)
-        else:
-            logger.error(f"Temp file not found: {temp_path}")
-            return "Dosya bulunamadı", 404
+        return send_from_directory(app.config["CONVERTED_FOLDER"], filename)
+    except FileNotFoundError:
+        logger.error(f"Temp file not found: {filename}")
+        return "Dosya bulunamadı", 404
     except Exception as e:
         logger.error(f"Error serving temp file: {str(e)}")
-        return str(e), 500
+        return "Error serving file", 500
 
 
 @app.route("/qr/<filename>")
 def get_qr_code(filename):
     """Serve QR code files."""
+    if os.path.basename(filename) != filename:
+        logger.warning(f"Unsafe QR filename rejected: {filename}")
+        return "Not Found", 404
     try:
         return send_from_directory(app.config["CONVERTED_FOLDER"], filename)
     except Exception as e:
@@ -3704,9 +3725,16 @@ def check_model_files():
 
 @app.before_request
 def before_request():
-    """Run before each request to ensure database is in sync with files."""
-    if request.endpoint == "my_models":
-        check_model_files()
+    """Per-request hook.
+
+    Previously this ran check_model_files() on every /my_models load — an
+    O(N) full-table scan + filesystem stat that *deleted* model rows (including
+    other users') whenever a directory looked missing. A transient volume mount
+    hiccup could mass-delete models. That destructive sweep has been removed
+    from the request path; check_model_files() remains available for an
+    explicit offline/maintenance job.
+    """
+    return None
 
 
 @app.route("/apply_modifications", methods=["POST"])
@@ -3721,6 +3749,10 @@ def apply_modifications():
             return jsonify(
                 {"success": False, "error": "Missing model_id or modifications"}
             ), 400
+
+        guard = check_model_mutation_allowed(model_id)
+        if guard is not None:
+            return guard
 
         logger.info(f"[apply_modifications] Model ID: {model_id}")
         logger.info(f"[apply_modifications] Modifications: {modifications}")
@@ -3769,6 +3801,13 @@ def apply_modifications():
 @app.route("/download_modified/<model_id>/<filename>")
 def download_modified(model_id, filename):
     """Download modified GLB file"""
+    # Owner guard + reject path traversal in the filename.
+    guard = check_model_mutation_allowed(model_id)
+    if guard is not None:
+        return guard
+    if os.path.basename(filename) != filename:
+        logger.warning(f"[download_modified] Unsafe filename rejected: {filename}")
+        return "Not Found", 404
     try:
         directory = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
         logger.info(f"[download_modified] Serving {filename} from {directory}")
@@ -3791,6 +3830,9 @@ def download_modified(model_id, filename):
 @app.route("/get_model_dimensions/<model_id>")
 def get_model_dimensions(model_id):
     """Get model dimensions in meters"""
+    guard = check_model_mutation_allowed(model_id)
+    if guard is not None:
+        return guard
     try:
         glb_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
 
@@ -3934,10 +3976,18 @@ def save_modifications():
                     "max": round(float(max(dimensions) * 100), 2),
                 }
 
-                # Update database
+                # Update database. UserModel stores dimensions in the `bounds`
+                # JSON-string column as {"extents": [x,y,z], "max": m} (cm) —
+                # this is the shape view_model reads. Writing model.dimensions
+                # (no such column) silently dropped the update.
                 model = UserModel.query.get(model_id)
                 if model:
-                    model.dimensions = new_dims
+                    model.bounds = json.dumps(
+                        {
+                            "extents": [new_dims["x"], new_dims["y"], new_dims["z"]],
+                            "max": new_dims["max"],
+                        }
+                    )
 
                     # Update cumulative scale if scale was applied
                     if (
@@ -4003,6 +4053,9 @@ def save_modifications():
 @app.route("/get_mesh_bounds/<model_id>")
 def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
+    guard = check_model_mutation_allowed(model_id)
+    if guard is not None:
+        return guard
     try:
         from mesh_slicer import get_mesh_bounds as get_bounds
 
@@ -4162,7 +4215,13 @@ def slice_model():
 
                 model = UserModel.query.get(model_id)
                 if model:
-                    model.dimensions = new_dims
+                    # Persist to the `bounds` column in the shape view_model reads.
+                    model.bounds = json.dumps(
+                        {
+                            "extents": [new_dims["x"], new_dims["y"], new_dims["z"]],
+                            "max": new_dims["max"],
+                        }
+                    )
                     db.session.commit()
                     logger.info(f"[slice_model] Updated dimensions: {new_dims}")
 
@@ -4952,6 +5011,6 @@ if __name__ == "__main__":
         app.logger.info("Dependencies initialized successfully")
         # Railway/Heroku için PORT environment variable
         port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", True))
+        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False))
     else:
         app.logger.error("Failed to initialize dependencies")

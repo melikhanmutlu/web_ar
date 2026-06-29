@@ -11,4 +11,7 @@ cmds = [
 ]
 
 [start]
-cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(dirname \"$(find /nix/store -name 'libassimp.so*' | head -n 1)\") && (/opt/venv/bin/python scripts/heal_alembic.py || true) && (FLASK_APP=app.py SKIP_DB_BOOTSTRAP=1 /opt/venv/bin/flask db upgrade || echo 'db upgrade skipped (stamp-on-boot will handle legacy DBs)') && (/opt/venv/bin/python worker.py &) && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gthread --threads 8 --timeout 120 --log-level info"
+# JOB_QUEUE=true routes uploads to worker.py (separate process) so a heavy
+# conversion can't OOM-kill the web worker; the worker is wrapped in a
+# restart loop so it self-heals if a pathological file ever takes it down.
+cmd = "chmod +x /app/tools/FBX2glTF && export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(dirname \"$(find /nix/store -name 'libassimp.so*' | head -n 1)\") && export JOB_QUEUE=true && (/opt/venv/bin/python scripts/heal_alembic.py || true) && (FLASK_APP=app.py SKIP_DB_BOOTSTRAP=1 /opt/venv/bin/flask db upgrade || echo 'db upgrade skipped (stamp-on-boot will handle legacy DBs)') && (while true; do /opt/venv/bin/python worker.py; echo 'worker exited, restarting in 3s'; sleep 3; done &) && /opt/venv/bin/gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --worker-class gthread --threads 8 --timeout 120 --log-level info"

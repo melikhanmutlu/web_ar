@@ -415,6 +415,10 @@ def apply_size_limit(mesh, max_size_meters=0.35):
         )
         return mesh  # Return unmodified if not Scene or Trimesh
 
+    if bounds is None:
+        logger.warning("apply_size_limit: model has no geometry. Skipping scaling.")
+        return mesh
+
     # Calculate current dimensions
     dimensions = bounds[1] - bounds[0]
     # Handle potential NaN or Inf values in dimensions gracefully
@@ -1698,6 +1702,11 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
     "yes",
 )
 
+# A conversion still in "processing" past this many seconds is assumed dead
+# (e.g. its worker was OOM-killed) and is failed by the status endpoint so the
+# UI recovers instead of spinning forever. FBX2glTF itself has a 300s timeout.
+UPLOAD_STALL_SECONDS = int(os.environ.get("UPLOAD_STALL_SECONDS", "360"))
+
 
 def update_conversion_progress(job, *, progress=None, stage=None, detail=None):
     payload = dict(job.payload or {})
@@ -2229,6 +2238,27 @@ def upload_job_status(job_id):
     job = ConversionJob.query.get(job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
+
+    # Inline conversions run in a gunicorn worker thread. If that worker is
+    # OOM-killed mid-conversion (large/complex FBX), the row is orphaned in
+    # "processing" forever and the UI spins at the last percent. There is no
+    # worker.py in inline mode to requeue it, so fail it here once it's clearly
+    # stalled — the frontend already renders job.status == 'failed'.
+    if job.status == "processing":
+        ref = job.started_at or job.created_at
+        if ref and (datetime.utcnow() - ref).total_seconds() > UPLOAD_STALL_SECONDS:
+            job.status = "failed"
+            job.error = (
+                "Conversion stalled — the file may be too large or complex for "
+                "the server to process (it can run out of memory). Try a smaller "
+                "or decimated model."
+            )
+            job.finished_at = datetime.utcnow()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
     data = job.to_dict()
     data["success"] = True
     payload = job.payload or {}
@@ -2364,8 +2394,13 @@ def view_model(model_id):
                 # Prefer scene.bounds which includes node transforms (AABB of entire scene)
                 # This fixes FBX2glTF cases where geometry is at origin but transforms are in nodes
                 bounds = mesh.bounds
-                extents = bounds[1] - bounds[0]
-                app.logger.info(f"Scene extents from scene.bounds (AABB): {extents}")
+                # An empty/degenerate model has bounds=None — don't 500 the viewer.
+                if bounds is None:
+                    app.logger.warning("Model has no geometry; extents default to 0")
+                    extents = np.zeros(3)
+                else:
+                    extents = bounds[1] - bounds[0]
+                    app.logger.info(f"Scene extents from scene.bounds (AABB): {extents}")
 
                 # If bounds also gives zero, try dump(concatenate=True) as fallback
                 if max(extents) <= 0.001:
@@ -3801,10 +3836,12 @@ def get_model_dimensions(model_id):
         mesh = trimesh.load(glb_path, force="scene")
 
         # Get bounding box
-        if isinstance(mesh, trimesh.Scene):
-            bounds = mesh.bounds
-        else:
-            bounds = mesh.bounds
+        bounds = mesh.bounds
+
+        # Empty/degenerate model → report zeros instead of crashing.
+        if bounds is None:
+            return jsonify({"success": True, "dimensions": {
+                "width": 0.0, "height": 0.0, "depth": 0.0, "max": 0.0}})
 
         # Calculate dimensions (in meters, assuming GLB units are meters)
         dimensions = bounds[1] - bounds[0]

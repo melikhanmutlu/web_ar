@@ -5,6 +5,7 @@ FBX format to GLB format conversion operations using FBX2glTF.
 import os
 import subprocess
 import logging
+import contextlib
 import trimesh
 import tempfile
 import numpy as np
@@ -12,6 +13,30 @@ import platform
 from pathlib import Path
 from .base_converter import BaseConverter, hex_to_linear_rgb
 from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
+
+
+@contextlib.contextmanager
+def _pyassimp_scene(pyassimp, path, processing=None):
+    """Load an assimp scene and guarantee release().
+
+    pyassimp builds disagree on whether load() supports the context-manager
+    protocol — several versions (incl. the 4.1.x pinned here) return a plain
+    Scene, so `with pyassimp.load(...) as scene` raises
+    'Scene object does not support the context manager protocol' and the
+    whole FBX dimension/texture/rescue path silently dies. Load explicitly,
+    yield, then always release the native scene so peak memory stays low on
+    large FBX files (which matters: this used to OOM-kill the worker).
+    """
+    scene = (pyassimp.load(path, processing=processing)
+             if processing is not None else pyassimp.load(path))
+    try:
+        yield scene
+    finally:
+        try:
+            pyassimp.release(scene)
+        except Exception:
+            pass
+
 
 
 # Inline utility functions (replacing deleted utils/)
@@ -326,9 +351,11 @@ class FBXConverter(BaseConverter):
                 import pyassimp
                 from pyassimp import postprocess
 
-                # Use context manager (with statement) for pyassimp
-                with pyassimp.load(
-                    input_path, processing=postprocess.aiProcess_Triangulate
+                # pyassimp.load() returns a Scene directly in this version —
+                # manage its lifecycle via our shim (load + guaranteed release).
+                with _pyassimp_scene(
+                    pyassimp, input_path,
+                    processing=postprocess.aiProcess_Triangulate,
                 ) as scene:
                     self.log_operation(
                         f"Scene type: {type(scene)}, has mMeshes: {hasattr(scene, 'mMeshes')}"
@@ -708,6 +735,17 @@ class FBXConverter(BaseConverter):
                         self.update_status("COMPLETED")
                         return True
 
+                    # If neither FBX2glTF nor the pyassimp rescue produced real
+                    # geometry, fail loudly instead of publishing an empty model
+                    # that later 500s the viewer/dimension endpoints.
+                    if not self._glb_has_geometry(output_path):
+                        self.handle_error(
+                            "Conversion produced an empty model — this FBX has no "
+                            "extractable mesh geometry (it may contain only NURBS/"
+                            "curves, cameras, lights, or animation data)."
+                        )
+                        return False
+
                     # Post-processing: Only if color or scaling needed
                     # IMPORTANT: Use pygltflib for post-processing to preserve animations
                     self.log_operation(
@@ -925,6 +963,20 @@ class FBXConverter(BaseConverter):
 
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
+
+    def _glb_has_geometry(self, glb_path: str) -> bool:
+        """True if the GLB has at least one mesh with non-zero extents."""
+        try:
+            obj = trimesh.load(glb_path)
+            bounds = getattr(obj, "bounds", None)
+            if bounds is None:
+                return False
+            extents = bounds[1] - bounds[0]
+            return bool(np.any(extents > 1e-9))
+        except Exception as e:
+            self.log_operation(f"Warning: geometry check failed: {e}", "WARNING")
+            # Be permissive on checker errors — don't fail a possibly-valid model.
+            return True
 
     def _rescue_zero_geometry(self, output_path: str, color, original_dimensions) -> bool:
         """Rebuild the GLB from pyassimp-read FBX data when FBX2glTF emitted

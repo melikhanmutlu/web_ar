@@ -13,6 +13,72 @@ from typing import Optional, List
 from .base_converter import BaseConverter, hex_to_linear_rgb
 
 
+# Material/texture directive keys in OBJ/MTL that reference external files.
+_MTL_FILE_KEYS = (
+    "map_kd", "map_ka", "map_ks", "map_ke", "map_d", "map_bump",
+    "bump", "disp", "decal", "refl", "norm",
+)
+
+
+def _reference_is_unsafe(value: str) -> bool:
+    """True if an OBJ/MTL file reference is absolute or escapes its directory.
+
+    obj2gltf resolves these relative to the OBJ's directory (cwd), so an
+    absolute path or one containing '..' lets a malicious upload read arbitrary
+    server files and embed them into the output GLB. We reject such uploads.
+    """
+    token = (value or "").strip().strip('"').replace("\\", "/")
+    if not token:
+        return False
+    if os.path.isabs(token) or token.startswith("~"):
+        return True
+    return any(part == ".." for part in token.split("/"))
+
+
+def assert_safe_obj_references(obj_path: str) -> None:
+    """Raise ValueError if the OBJ or its MTLs reference files outside their dir."""
+    obj_dir = os.path.dirname(obj_path)
+
+    def _scan(path, line_keys):
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+                for line in fh:
+                    parts = line.strip().split(None, 1)
+                    if len(parts) != 2:
+                        continue
+                    key, val = parts[0].lower(), parts[1]
+                    if key in line_keys:
+                        # texture directives can carry options before the path;
+                        # the filename is the last whitespace-separated token.
+                        candidate = val.split()[-1] if val.split() else val
+                        if _reference_is_unsafe(candidate):
+                            raise ValueError(
+                                f"Unsafe file reference in {os.path.basename(path)}: {candidate}"
+                            )
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    # OBJ -> mtllib references
+    mtl_names = []
+    try:
+        with open(obj_path, "r", encoding="utf-8", errors="ignore") as fh:
+            for line in fh:
+                parts = line.strip().split(None, 1)
+                if len(parts) == 2 and parts[0].lower() == "mtllib":
+                    for name in parts[1].split():
+                        if _reference_is_unsafe(name):
+                            raise ValueError(f"Unsafe mtllib reference: {name}")
+                        mtl_names.append(name)
+    except (OSError, UnicodeDecodeError):
+        return
+
+    # MTL -> texture references
+    for name in mtl_names:
+        mtl_path = os.path.join(obj_dir, os.path.basename(name))
+        if os.path.exists(mtl_path):
+            _scan(mtl_path, _MTL_FILE_KEYS)
+
+
 # Inline utility functions (replacing deleted utils/)
 def ensure_directory(path):
     """Ensure directory exists, create if needed."""
@@ -148,6 +214,11 @@ class OBJConverter(BaseConverter):
             # Get the directory where the OBJ file is located
             obj_dir = os.path.dirname(input_path)
             obj_filename = os.path.basename(input_path)
+
+            # Security: obj2gltf reads MTL/texture paths from the (untrusted)
+            # OBJ relative to cwd; reject absolute/'..' references that could
+            # exfiltrate server files into the output GLB.
+            assert_safe_obj_references(input_path)
 
             # Log MTL and texture files if present
             if self.mtl_file:
@@ -339,8 +410,11 @@ class OBJConverter(BaseConverter):
 
                         self.log_operation(f"Color applied: RGB({r}, {g}, {b})")
 
-                    # Save the processed mesh (only once!)
-                    mesh.export(output_path)
+                    # Save the processed mesh (only once!) atomically: temp +
+                    # rename so a failed export can't leave a truncated GLB.
+                    tmp_output = f"{output_path}.tmp.{os.getpid()}"
+                    mesh.export(tmp_output, file_type="glb")
+                    os.replace(tmp_output, output_path)
                     self.log_operation("Post-processing completed successfully")
 
                 except Exception as e:

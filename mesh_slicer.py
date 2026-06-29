@@ -259,7 +259,12 @@ def _facemask_slice(mesh, plane_origin, plane_normal):
     """
     vertices = mesh.vertices
     distances = np.dot(vertices - plane_origin, plane_normal)
-    keep_mask = distances >= -1e-6
+    # Scale the boundary epsilon to the model size. A fixed 1e-6 is meaningless
+    # for models in millimetres (extents in the thousands) and far too coarse
+    # for tiny models — both cause wrong keep/drop decisions at the cut plane.
+    extent = float(np.linalg.norm(mesh.extents)) if mesh.extents is not None else 1.0
+    eps = 1e-6 * max(extent, 1.0)
+    keep_mask = distances >= -eps
 
     face_mask = np.all(keep_mask[mesh.faces], axis=1)
     if not np.any(face_mask):

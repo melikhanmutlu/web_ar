@@ -11,7 +11,12 @@ import tempfile
 import numpy as np
 import platform
 from pathlib import Path
-from .base_converter import BaseConverter, hex_to_linear_rgb
+from .base_converter import (
+    BaseConverter,
+    hex_to_linear_rgb,
+    safe_texture_ext,
+    safe_join_within,
+)
 from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
 
 
@@ -407,18 +412,22 @@ class FBXConverter(BaseConverter):
 
                         for idx, texture in enumerate(scene.textures):
                             try:
-                                # Get texture data
+                                # Get texture data. The format hint is attacker
+                                # -controlled (it comes from the uploaded FBX),
+                                # so sanitize it to a known image extension
+                                # rather than building a filename from it.
                                 if hasattr(texture, "achFormatHint"):
                                     format_hint = (
-                                        texture.achFormatHint.decode("utf-8")
+                                        texture.achFormatHint.decode("utf-8", "ignore")
                                         if isinstance(texture.achFormatHint, bytes)
                                         else texture.achFormatHint
                                     )
-                                    ext = f".{format_hint}" if format_hint else ".png"
+                                    ext = safe_texture_ext(format_hint)
                                 else:
                                     ext = ".png"
 
-                                # Save texture to file
+                                # Save texture to file. The index is ours (not
+                                # from the file), so this name is fully trusted.
                                 texture_filename = f"texture_{idx}{ext}"
                                 texture_path = os.path.join(
                                     texture_dir, texture_filename
@@ -659,12 +668,16 @@ class FBXConverter(BaseConverter):
                     # First convert FBX to GLB using FBX2glTF
                     # Use -i and -o parameters (based on working project)
                     # NOTE: Draco compression disabled - it corrupts textures and geometry
-                    # Ensure FBX2glTF has execute permissions
+                    # Ensure FBX2glTF has execute permissions. Only chmod when
+                    # it's actually missing the bit — doing it on every request
+                    # is wasteful and normalizes flipping a binary executable at
+                    # request time.
                     try:
-                        os.chmod(self.fbx2gltf_path, 0o755)
-                        self.log_operation(
-                            f"Set execute permissions for {self.fbx2gltf_path}"
-                        )
+                        if not os.access(self.fbx2gltf_path, os.X_OK):
+                            os.chmod(self.fbx2gltf_path, 0o755)
+                            self.log_operation(
+                                f"Set execute permissions for {self.fbx2gltf_path}"
+                            )
                     except Exception as pe:
                         self.log_operation(
                             f"Warning: Could not set execute permissions: {pe}",
@@ -1057,24 +1070,21 @@ class FBXConverter(BaseConverter):
                             has_texture = True
 
                         if not has_texture:
-                            # Find the texture file
+                            # Find the texture file. tex_source comes from the
+                            # uploaded FBX's material data and may be absolute or
+                            # contain '..'; constrain every candidate to stay
+                            # within the upload dirs (no arbitrary file read).
                             texture_file = None
                             search_paths = [
-                                os.path.abspath(tex_source)
-                                if os.path.isabs(tex_source)
-                                else os.path.join(fbx_dir, tex_source),
-                                os.path.join(fbx_dir, os.path.basename(tex_source)),
-                                os.path.join(
-                                    fbx_dir, "textures", os.path.basename(tex_source)
+                                safe_join_within(fbx_dir, tex_source),
+                                safe_join_within(
+                                    os.path.join(fbx_dir, "textures"), tex_source
                                 ),
-                                os.path.join(
-                                    os.path.dirname(fbx_path),
-                                    os.path.basename(tex_source),
-                                ),
+                                safe_join_within(os.path.dirname(fbx_path), tex_source),
                             ]
 
                             for path in search_paths:
-                                if os.path.exists(path):
+                                if path and os.path.exists(path):
                                     texture_file = path
                                     break
 

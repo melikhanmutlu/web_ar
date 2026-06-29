@@ -8,8 +8,24 @@ import shutil
 import logging
 from datetime import datetime
 from models import db, ModelVersion, UserModel
+from config import CONVERTED_FOLDER
 
 logger = logging.getLogger(__name__)
+
+# Reject absurdly large meshes before loading them into memory (DoS guard).
+MAX_VERTICES = int(os.environ.get("MAX_MODEL_VERTICES", 5_000_000))
+
+
+def _model_dir(model_id):
+    """Storage-root aware path to a model's directory (respects the volume)."""
+    return os.path.join(CONVERTED_FOLDER, model_id)
+
+
+def _atomic_copy(src, dst):
+    """Copy src over dst atomically (temp file + os.replace on same dir)."""
+    tmp = f"{dst}.tmp.{os.getpid()}"
+    shutil.copy2(src, tmp)
+    os.replace(tmp, dst)
 
 
 def create_version(model_id, operation_type, operation_details=None, comment=None):
@@ -36,25 +52,35 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
         version_number = (last_version.version_number + 1) if last_version else 1
         
         # Copy current model file to version storage
-        current_file = os.path.join('converted', model_id, 'model.glb')
-        version_file = os.path.join('converted', model_id, f'version_{version_number}.glb')
-        
+        current_file = os.path.join(_model_dir(model_id), 'model.glb')
+        version_file = os.path.join(_model_dir(model_id), f'version_{version_number}.glb')
+
         if os.path.exists(current_file):
             shutil.copy2(current_file, version_file)
             file_size = os.path.getsize(version_file)
         else:
             logger.error(f"Current model file not found: {current_file}")
             return None
-        
+
         # Get model metadata
         import trimesh
         mesh = trimesh.load(current_file, force='mesh')
-        
+
         if isinstance(mesh, trimesh.Scene):
             meshes = list(mesh.geometry.values())
             if meshes:
                 mesh = trimesh.util.concatenate(meshes)
-        
+
+        if not hasattr(mesh, 'vertices'):
+            logger.error(f"Model {model_id} produced no mesh; skipping version metadata")
+            return None
+        if len(mesh.vertices) > MAX_VERTICES:
+            logger.error(
+                f"Model {model_id} mesh too large "
+                f"({len(mesh.vertices)} > {MAX_VERTICES} verts); skipping version"
+            )
+            return None
+
         bounds = mesh.bounds
         dimensions = bounds[1] - bounds[0]
         
@@ -122,22 +148,24 @@ def restore_version(model_id, version_number):
         
         # Create a new version before restoring (to preserve current state)
         create_version(model_id, 'restore', {'restored_from': version_number}, f'Restored from version {version_number}')
-        
-        # Copy version file to current model
-        current_file = os.path.join('converted', model_id, 'model.glb')
-        shutil.copy2(version.filename, current_file)
-        
+
+        # Copy version file to current model atomically (temp + rename), so a
+        # failure mid-copy never leaves a truncated model.glb being served.
+        current_file = os.path.join(_model_dir(model_id), 'model.glb')
+        _atomic_copy(version.filename, current_file)
+
         # Update model metadata
         model = UserModel.query.get(model_id)
         if model and version.dimensions:
             model.original_dimensions = version.dimensions
             db.session.commit()
-        
+
         logger.info(f"Restored model {model_id} to version {version_number}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to restore version {version_number} for model {model_id}: {e}", exc_info=True)
+        db.session.rollback()
         return False
 
 
@@ -158,14 +186,18 @@ def delete_version(model_id, version_number):
             logger.error(f"Version {version_number} not found for model {model_id}")
             return False
         
-        # Delete version file
-        if os.path.exists(version.filename):
-            os.remove(version.filename)
-        
-        # Delete database entry
+        # Commit the DB deletion first; only remove the file once the row is
+        # gone. Removing the file first risks losing data if the commit fails.
+        version_file = version.filename
         db.session.delete(version)
         db.session.commit()
-        
+
+        if version_file and os.path.exists(version_file):
+            try:
+                os.remove(version_file)
+            except OSError as file_err:
+                logger.warning(f"Version row deleted but file remains {version_file}: {file_err}")
+
         logger.info(f"Deleted version {version_number} for model {model_id}")
         return True
         

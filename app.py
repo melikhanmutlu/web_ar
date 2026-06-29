@@ -1809,6 +1809,15 @@ def _run_upload_pipeline(payload, progress_callback=None):
     source_unit = payload.get("source_unit")
     user_id = payload.get("user_id")
 
+    # Staged source must still exist. Requeued/stale jobs (e.g. picked up
+    # after a redeploy) often point at a temp file that was already cleaned
+    # up; fail fast and clearly instead of cascading into assimp "Could not
+    # import file!" and an FBX2glTF cwd FileNotFoundError.
+    if not temp_file_path or not os.path.exists(temp_file_path):
+        raise RuntimeError(
+            "Source file is no longer available — please re-upload the model."
+        )
+
     converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     os.makedirs(converted_dir, exist_ok=True)
     output_path = os.path.join(converted_dir, "model.glb")

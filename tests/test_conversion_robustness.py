@@ -86,3 +86,19 @@ def test_viewer_does_not_500_on_empty_model(client):
     finally:
         import shutil
         shutil.rmtree(model_dir, ignore_errors=True)
+
+
+def test_pipeline_fails_clearly_when_source_missing():
+    """A requeued job whose staged temp file was cleaned up must fail with a
+    clear message, not cascade into assimp/FBX2glTF crashes."""
+    from app import _run_upload_pipeline
+    import pytest
+
+    payload = {
+        "unique_id": "gone-" + uuid.uuid4().hex[:8],
+        "original_filename": "ghost.fbx",
+        "temp_file_path": "/app/data/temp/does-not-exist/ghost.fbx",
+        "file_extension": "fbx",
+    }
+    with pytest.raises(RuntimeError, match="no longer available"):
+        _run_upload_pipeline(payload)

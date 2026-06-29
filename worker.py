@@ -69,7 +69,16 @@ def requeue_stale_jobs():
         ConversionJob.started_at < cutoff,
     ).all()
     for job in stale:
-        if (job.attempts or 0) >= (job.max_attempts or 1):
+        staged = (job.payload or {}).get("temp_file_path")
+        if staged and not os.path.exists(staged):
+            # The staged source is gone (e.g. cleaned up before a redeploy);
+            # retrying can only fail. Fail it directly instead of reprocessing
+            # doomed jobs on every restart (which floods the logs).
+            logger.warning(f"Stale job {job.id} source missing; marking failed")
+            job.status = "failed"
+            job.error = "Source file is no longer available — please re-upload the model."
+            job.finished_at = datetime.utcnow()
+        elif (job.attempts or 0) >= (job.max_attempts or 1):
             logger.error(
                 f"Stale job {job.id} exhausted attempts "
                 f"({job.attempts}/{job.max_attempts}); marking failed"

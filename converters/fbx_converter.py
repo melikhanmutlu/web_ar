@@ -701,13 +701,18 @@ class FBXConverter(BaseConverter):
                     ]
 
                     self.log_operation(f"Running command: {' '.join(cmd)}")
+                    # Only set cwd to the input's directory if it still exists —
+                    # a missing dir makes subprocess.run raise FileNotFoundError
+                    # (confusing) instead of letting FBX2glTF report cleanly.
+                    input_dir = os.path.dirname(input_path)
+                    run_cwd = input_dir if input_dir and os.path.isdir(input_dir) else None
                     result = subprocess.run(
                         cmd,
                         capture_output=True,
                         text=True,
                         check=False,
                         stdin=subprocess.DEVNULL,  # Don't wait for input
-                        cwd=os.path.dirname(input_path) or None,
+                        cwd=run_cwd,
                         timeout=300,
                     )  # 5 minute timeout
 

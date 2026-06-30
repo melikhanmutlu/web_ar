@@ -180,7 +180,12 @@ def fix_material_transparency(gltf, log=None):
         if pbr is None:
             continue
 
-        if pbr.baseColorTexture is not None and pbr.metallicRoughnessTexture is None:
+        # Any base-color-textured material: kill the metallic sheen. metallicFactor
+        # multiplies the metallic-roughness texture's metal channel, so forcing it
+        # to 0 removes the unwanted golden/chrome look even when FBX2glTF emitted an
+        # MR texture (e.g. Sperm_Wet at ~0.4 metallic). Traditional FBX (lambert/
+        # phong) has no real metalness, so this is dialect noise, not artist intent.
+        if pbr.baseColorTexture is not None:
             metallic = pbr.metallicFactor if pbr.metallicFactor is not None else 1.0
             roughness = pbr.roughnessFactor if pbr.roughnessFactor is not None else 1.0
             if metallic > 0.2 or roughness < 0.5:

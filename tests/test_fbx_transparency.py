@@ -184,3 +184,22 @@ class TestApplyMaterialModifications:
         gltf.materials[0].alphaMode = "BLEND"
         apply_material_modifications(gltf, {"color": "#00FF00", "opacity": 1.0})
         assert gltf.materials[0].alphaMode == "OPAQUE"
+
+
+    def test_metallic_zeroed_even_with_mr_texture(self):
+        """Sperm_Wet regression: a textured material that ALSO has a
+        metallic-roughness texture must still have its metallic sheen removed
+        (golden look). Previously the MR-texture guard skipped it."""
+        from pygltflib import TextureInfo
+
+        gltf = _textured_gltf(OPAQUE_PNG, name="Sperm_Wet")
+        pbr = gltf.materials[0].pbrMetallicRoughness
+        pbr.metallicFactor = 1.0
+        pbr.roughnessFactor = 0.14
+        # give it an MR texture (reuse the existing base-color texture index)
+        pbr.metallicRoughnessTexture = TextureInfo(index=pbr.baseColorTexture.index)
+
+        changed = fix_material_transparency(gltf)
+        assert changed is True
+        assert pbr.metallicFactor == 0.0
+        assert pbr.roughnessFactor == 0.9

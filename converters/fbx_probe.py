@@ -20,10 +20,14 @@ import subprocess
 import sys
 import tempfile
 
-# Default address-space cap for the child. Tunable via FBX_PROBE_MEM_MB.
-# High enough for imports + a normal FBX parse, low enough to fail before a
-# pathological file exhausts a typical container. Lower it on small dynos.
-DEFAULT_MEM_MB = int(os.environ.get("FBX_PROBE_MEM_MB", "1536"))
+# Optional RLIMIT_AS cap for the child, in MB. Default 0 = disabled.
+# RLIMIT_AS limits *virtual* address space; numpy + the dynamic linker reserve
+# multiple GB of virtual space at rest, so a low cap (e.g. 1536) makes even
+# `import numpy` fail with "libz.so.1: cannot open shared object file" and the
+# probe never runs. Process isolation is the real OOM containment: a runaway
+# parse is OOM-killed as the child (the memory hog), and the web worker
+# survives. Only set this to a *generous* value (>=4096) if you want a hard cap.
+DEFAULT_MEM_MB = int(os.environ.get("FBX_PROBE_MEM_MB", "0"))
 DEFAULT_TIMEOUT = int(os.environ.get("FBX_PROBE_TIMEOUT", "90"))
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -201,13 +205,16 @@ def run_isolated(input_path, mem_mb=None, timeout=None):
 def _main():
     input_path, work_dir, out_json = sys.argv[1], sys.argv[2], sys.argv[3]
     mem_mb = int(os.environ.get("FBX_PROBE_MEM_MB", str(DEFAULT_MEM_MB)))
-    try:
-        import resource
+    if mem_mb > 0:
+        # Opt-in hard cap. Off by default — a low virtual-AS limit breaks
+        # numpy's import; process isolation already contains OOM.
+        try:
+            import resource
 
-        cap = mem_mb * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
-    except Exception:
-        pass  # RLIMIT_AS unsupported here; isolation alone still contains OOM
+            cap = mem_mb * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+        except Exception:
+            pass
     try:
         manifest = probe_fbx(input_path, work_dir)
         with open(out_json, "w") as fh:

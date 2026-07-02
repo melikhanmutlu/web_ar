@@ -1,0 +1,82 @@
+{% extends "admin/base.html" %}
+{% from "admin/_pagination.html" import pager %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}conversion jobs — arvision admin{% endblock %}
+{% block page_title %}conversion jobs{% endblock %}
+
+{% block topbar_actions %}
+<button type="button" class="admin-btn"
+        data-action-url="{{ url_for('admin.requeue_stale') }}"
+        data-confirm="Requeue jobs stuck in processing for over {{ stale_minutes }} minutes? Jobs with missing source files or exhausted attempts are marked failed instead."
+        title="Recover jobs orphaned by a crashed worker">
+    requeue stale
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="admin-pills">
+    <a href="{{ url_for('admin.jobs') }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
+    {% for s in ('pending', 'processing', 'completed', 'failed') %}
+    <a href="{{ url_for('admin.jobs', status=s) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
+        {{ s }} <span class="count">{{ counts.get(s, 0) }}</span>
+    </a>
+    {% endfor %}
+</div>
+
+<div class="admin-table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>job</th>
+                <th>type</th>
+                <th>status</th>
+                <th class="num">attempts</th>
+                <th>owner</th>
+                <th>created</th>
+                <th>finished</th>
+                <th>error</th>
+                <th class="actions">actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for username, job in page.items %}
+            <tr>
+                <td class="muted" title="{{ job.id }}">{{ job.id[:8] }}…</td>
+                <td class="muted">{{ job.job_type }}</td>
+                <td>{{ badge(job.status) }}</td>
+                <td class="num">{{ job.attempts }}/{{ job.max_attempts }}</td>
+                <td>
+                    {% if job.user_id %}
+                    <a href="{{ url_for('admin.user_detail', user_id=job.user_id) }}">{{ username }}</a>
+                    {% else %}<span class="muted">anonymous</span>{% endif %}
+                </td>
+                <td class="muted">{{ job.created_at.strftime('%m-%d %H:%M') if job.created_at else '—' }}</td>
+                <td class="muted">{{ job.finished_at.strftime('%m-%d %H:%M') if job.finished_at else '—' }}</td>
+                <td>
+                    {% if job.error %}
+                    <details class="admin-error-details">
+                        <summary>{{ job.error | truncate(60) }}</summary>
+                        <pre>{{ job.error }}</pre>
+                    </details>
+                    {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                <td class="actions">
+                    {% if job.status == 'failed' %}
+                    <button type="button" class="admin-icon-btn" title="retry (works while the staged source file still exists)"
+                            data-action-url="{{ url_for('admin.retry_job', job_id=job.id) }}"><i data-lucide="rotate-cw"></i></button>
+                    {% endif %}
+                    <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete job record"
+                            data-action-url="{{ url_for('admin.delete_job', job_id=job.id) }}"
+                            data-confirm="Delete this job record?"><i data-lucide="x"></i></button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="muted">no jobs found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ pager(page, 'admin.jobs') }}
+{% endblock %}

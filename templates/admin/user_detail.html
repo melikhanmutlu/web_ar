@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}{{ user.username }} — arvision admin{% endblock %}
+{% block page_title %}user · {{ user.username }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('admin.users') }}" class="admin-btn">← all users</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">account</h2>
+        <dl class="admin-dl">
+            <div><dt>id</dt><dd>{{ user.id }}</dd></div>
+            <div><dt>username</dt><dd>{{ user.username }}</dd></div>
+            <div><dt>email</dt><dd>{{ user.email }}</dd></div>
+            <div><dt>joined</dt><dd>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '—' }}</dd></div>
+            <div><dt>status</dt>
+                <dd>
+                    {% if user.is_admin %}{{ badge('admin') }}{% endif %}
+                    {% if user.is_active_flag %}<span class="status-badge">active</span>{% else %}{{ badge('inactive') }}{% endif %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">usage</h2>
+        <dl class="admin-dl">
+            <div><dt>models</dt><dd>{{ model_count }}</dd></div>
+            <div><dt>storage</dt><dd>{{ (storage_bytes or 0) | filesizeformat }}</dd></div>
+            <div><dt>ai generations (24h)</dt><dd>{{ ai_used_24h }} / {{ ai_limit }}</dd></div>
+            <div><dt>ai generations (total)</dt><dd>{{ ai_total }}</dd></div>
+            <div><dt>likes given</dt><dd>{{ likes }}</dd></div>
+            <div><dt>models saved</dt><dd>{{ saves }}</dd></div>
+        </dl>
+    </div>
+</div>
+
+{% if user.id != current_user.id %}
+<div class="admin-card">
+    <h2 class="admin-card-title">actions</h2>
+    <div class="admin-actions-row">
+        <button type="button" class="admin-btn"
+                data-action-url="{{ url_for('admin.toggle_admin', user_id=user.id) }}"
+                data-confirm="{% if user.is_admin %}Remove admin rights from {{ user.username }}?{% else %}Grant admin rights to {{ user.username }}? They will have full access to this panel.{% endif %}">
+            {% if user.is_admin %}revoke admin{% else %}make admin{% endif %}
+        </button>
+        <button type="button" class="admin-btn"
+                data-action-url="{{ url_for('admin.toggle_active', user_id=user.id) }}"
+                data-confirm="{% if user.is_active_flag %}Deactivate {{ user.username }}? They will be logged out and unable to log in.{% else %}Reactivate {{ user.username }}?{% endif %}">
+            {% if user.is_active_flag %}deactivate{% else %}reactivate{% endif %}
+        </button>
+        <button type="button" class="admin-btn"
+                data-action-url="{{ url_for('admin.reset_password', user_id=user.id) }}"
+                data-confirm="Reset {{ user.username }}'s password? A temporary password will be shown once."
+                data-show-password>
+            reset password
+        </button>
+        <button type="button" class="admin-btn admin-btn--danger"
+                data-action-url="{{ url_for('admin.delete_user', user_id=user.id) }}"
+                data-confirm="Permanently delete {{ user.username }} and ALL of their models, files and folders? This cannot be undone."
+                data-confirm-typed="{{ user.username }}"
+                data-redirect="{{ url_for('admin.users') }}">
+            delete user
+        </button>
+    </div>
+</div>
+{% endif %}
+
+<div class="admin-card">
+    <h2 class="admin-card-title">
+        models
+        <a href="{{ url_for('admin.models', user=user.id, status='all') }}" class="count">view all {{ model_count }}</a>
+    </h2>
+    <div class="admin-table-wrap" style="border:none;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>name</th>
+                    <th>type</th>
+                    <th class="num">size</th>
+                    <th class="num">views</th>
+                    <th>uploaded</th>
+                    <th>status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in models %}
+                <tr>
+                    <td class="admin-row-title">
+                        <a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener">{{ model.display_name or model.original_filename }}</a>
+                    </td>
+                    <td class="muted">{{ model.file_type }}</td>
+                    <td class="num">{{ model.file_size_formatted }}</td>
+                    <td class="num">{{ model.view_count or 0 }}</td>
+                    <td class="muted">{{ model.upload_date_formatted }}</td>
+                    <td>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="muted">no models</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

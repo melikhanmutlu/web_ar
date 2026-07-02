@@ -1,0 +1,108 @@
+{% extends "admin/base.html" %}
+{% from "admin/_pagination.html" import pager %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}ai generations — arvision admin{% endblock %}
+{% block page_title %}ai generations{% endblock %}
+
+{% block content %}
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">usage — last 24 hours (limit {{ ai_limit }}/day)</h2>
+        <ul class="admin-activity">
+            {% for username, count in usage_24h %}
+            <li>
+                <span class="title">{{ username }}</span>
+                <span class="meta {% if count >= ai_limit %}admin-health-warn{% endif %}">{{ count }} / {{ ai_limit }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no generations in the last 24 hours</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">totals</h2>
+        <dl class="admin-dl">
+            {% for s in ('generating', 'ready', 'failed') %}
+            <div><dt>{{ s }}</dt><dd>{{ counts.get(s, 0) }}</dd></div>
+            {% endfor %}
+        </dl>
+    </div>
+</div>
+
+<div class="admin-filters">
+    <div class="admin-pills">
+        <a href="{{ url_for('admin.ai_jobs', kind=kind or None) }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
+        {% for s in ('generating', 'ready', 'failed') %}
+        <a href="{{ url_for('admin.ai_jobs', status=s, kind=kind or None) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
+            {{ s }} <span class="count">{{ counts.get(s, 0) }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    <div class="admin-pills">
+        <a href="{{ url_for('admin.ai_jobs', status=status or None) }}" class="admin-pill {% if not kind %}is-active{% endif %}">any kind</a>
+        {% for k in ('text', 'image') %}
+        <a href="{{ url_for('admin.ai_jobs', kind=k, status=status or None) }}" class="admin-pill {% if kind == k %}is-active{% endif %}">{{ k }}</a>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="admin-table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>job</th>
+                <th>user</th>
+                <th>kind</th>
+                <th>prompt</th>
+                <th>stage</th>
+                <th>status</th>
+                <th class="num">progress</th>
+                <th>model</th>
+                <th>created</th>
+                <th class="actions">actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for username, job in page.items %}
+            <tr>
+                <td class="muted" title="{{ job.id }}">{{ job.id[:8] }}…</td>
+                <td>
+                    {% if job.user_id %}
+                    <a href="{{ url_for('admin.user_detail', user_id=job.user_id) }}">{{ username }}</a>
+                    {% else %}<span class="muted">anonymous</span>{% endif %}
+                </td>
+                <td class="muted">{{ job.kind }}</td>
+                <td class="admin-row-title" title="{{ job.prompt or '' }}">{{ (job.prompt or '—') | truncate(60) }}</td>
+                <td class="muted">{{ job.stage or '—' }}</td>
+                <td>
+                    {{ badge(job.status) }}
+                    {% if job.error %}
+                    <details class="admin-error-details">
+                        <summary>error</summary>
+                        <pre>{{ job.error }}</pre>
+                    </details>
+                    {% endif %}
+                </td>
+                <td class="num">{{ job.progress or 0 }}%</td>
+                <td>
+                    {% if job.model_id %}
+                    <a href="{{ url_for('view_model', model_id=job.model_id) }}" target="_blank" rel="noopener">view</a>
+                    {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                <td class="muted">{{ job.created_at.strftime('%m-%d %H:%M') if job.created_at else '—' }}</td>
+                <td class="actions">
+                    <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete job record"
+                            data-action-url="{{ url_for('admin.delete_ai_job', job_id=job.id) }}"
+                            data-confirm="Delete this AI job record? (The generated model, if any, is not affected.)"><i data-lucide="x"></i></button>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" class="muted">no ai jobs found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ pager(page, 'admin.ai_jobs') }}
+{% endblock %}

@@ -30,6 +30,9 @@ import subprocess
 import threading
 from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob, ConversionJob
 from auth import auth
+from admin import admin_bp
+from model_cleanup import purge_model_completely
+from site_settings import get_setting, setting_bool, setting_int
 import re
 import traceback
 import uuid
@@ -116,7 +119,11 @@ login_manager.login_view = "auth.login"
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    if user is not None and not user.is_active:
+        # Deactivated accounts lose their live sessions on the next request.
+        return None
+    return user
 
 
 # Rate limiting — keyed by user id when logged in, client IP otherwise.
@@ -176,6 +183,8 @@ def check_model_mutation_allowed(model_id, require_exists=True):
 
 # Register blueprints
 app.register_blueprint(auth)
+app.register_blueprint(admin_bp)
+limiter.limit("120 per minute")(admin_bp)
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
@@ -255,6 +264,45 @@ if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in ("1", "true", "yes"):
                     logger.info("Alembic: stamped bootstrapped DB at head")
             except Exception as e:
                 logger.warning(f"Alembic stamp skipped: {e}")
+
+
+import click
+
+
+@app.cli.command("make-admin")
+@click.argument("email")
+def make_admin_command(email):
+    """Grant admin panel access to the user with the given email."""
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        click.echo(f"No user found with email {email}")
+        raise SystemExit(1)
+    user.is_admin = True
+    db.session.commit()
+    click.echo(f"{user.username} <{user.email}> is now an admin")
+
+
+# Promote ADMIN_EMAILS (comma-separated) on boot — idempotent, covers deploys
+# where a shell isn't handy. Wrapped defensively: on a legacy DB the is_admin
+# column may not exist until `flask db upgrade` has run.
+_admin_emails = [
+    e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+]
+if _admin_emails and os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
+    "1",
+    "true",
+    "yes",
+):
+    with app.app_context():
+        try:
+            for _user in User.query.filter(User.email.in_(_admin_emails)).all():
+                if not _user.is_admin:
+                    _user.is_admin = True
+                    logger.info(f"ADMIN_EMAILS: promoted {_user.email} to admin")
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.warning(f"ADMIN_EMAILS promotion skipped: {e}")
 
 
 def allowed_file(filename):
@@ -1364,6 +1412,16 @@ def get_usdz_status(model_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _check_upload_size_limit():
+    """Admin-configurable upload cap (max_upload_mb setting). The env-derived
+    MAX_CONTENT_LENGTH stays the hard ceiling enforced by Werkzeug; this only
+    lowers the effective limit at runtime. Returns a response tuple or None."""
+    max_mb = setting_int("max_upload_mb", 0)
+    if max_mb and request.content_length and request.content_length > max_mb * 1024 * 1024:
+        return jsonify({"error": f"File exceeds the {max_mb} MB upload limit"}), 413
+    return None
+
+
 @app.route("/upload", methods=["POST"])
 @limiter.limit("30 per hour")
 def upload_file():
@@ -1371,6 +1429,10 @@ def upload_file():
     Kept for backward compatibility with existing tests."""
     try:
         logger.info("Starting upload process")
+
+        size_guard = _check_upload_size_limit()
+        if size_guard is not None:
+            return size_guard
 
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
@@ -1545,6 +1607,10 @@ def upload_progress():
 @limiter.limit("30 per hour")
 def upload_model():
     """Upload and convert 3D model. Works with or without login."""
+    size_guard = _check_upload_size_limit()
+    if size_guard is not None:
+        return size_guard
+
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -3363,28 +3429,10 @@ def delete_model(model_id):
                 logger.error(f"Database error trashing model {model_id}: {str(e)}")
                 return jsonify({"error": "Database error"}), 500
 
-        # Permanent delete: remove files then the row
+        # Permanent delete: files + engagement rows + model row (shared helper;
+        # file errors are logged and tolerated inside purge_model_completely)
         try:
-            # Delete files in converted folder
-            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], str(model_id))
-            if os.path.exists(converted_dir):
-                shutil.rmtree(converted_dir)
-                logger.info(f"Deleted converted directory: {converted_dir}")
-
-            # Delete files in uploads folder
-            upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], str(model_id))
-            if os.path.exists(upload_dir):
-                shutil.rmtree(upload_dir)
-                logger.info(f"Deleted upload directory: {upload_dir}")
-
-        except Exception as e:
-            logger.error(f"Error deleting files for model {model_id}: {str(e)}")
-            logger.error(traceback.format_exc())
-            # Continue to delete from database even if file deletion fails
-
-        # Delete from database
-        try:
-            session.delete(model)
+            purge_model_completely(session, model)
             session.commit()
             logger.info(f"Deleted model {model_id} from database")
             return jsonify({"success": True}), 200
@@ -3418,20 +3466,7 @@ def delete_all_models():
         # Delete files for each model
         for model in models:
             try:
-                # Delete files in converted folder
-                converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
-                if os.path.exists(converted_dir):
-                    shutil.rmtree(converted_dir)
-                    logger.info(f"Deleted converted directory: {converted_dir}")
-
-                # Delete files in uploads folder
-                upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
-                if os.path.exists(upload_dir):
-                    shutil.rmtree(upload_dir)
-                    logger.info(f"Deleted upload directory: {upload_dir}")
-
-                # Delete from database
-                session.delete(model)
+                purge_model_completely(session, model)
                 deleted_count += 1
 
             except Exception as e:
@@ -3478,20 +3513,7 @@ def delete_selected_models():
             return jsonify({"success": False, "message": "No valid models found"})
 
         for model in models:
-            # Delete the model files
-            model_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
-            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
-
-            try:
-                if os.path.exists(model_dir):
-                    shutil.rmtree(model_dir)
-                if os.path.exists(converted_dir):
-                    shutil.rmtree(converted_dir)
-            except Exception as e:
-                app.logger.error(f"Error deleting files for model {model.id}: {e}")
-
-            # Delete from database
-            db.session.delete(model)
+            purge_model_completely(db.session, model)
 
         db.session.commit()
         return jsonify(
@@ -3778,8 +3800,26 @@ def before_request():
     hiccup could mass-delete models. That destructive sweep has been removed
     from the request path; check_model_files() remains available for an
     explicit offline/maintenance job.
+
+    Now enforces the admin-controlled maintenance mode: admins and the
+    admin/login/static paths stay reachable, everything else gets a 503.
     """
+    if setting_bool("maintenance_mode", False):
+        exempt = request.path.startswith(
+            ("/admin", "/login", "/logout", "/static", "/favicon.ico")
+        )
+        is_admin = current_user.is_authenticated and getattr(
+            current_user, "is_admin", False
+        )
+        if not exempt and not is_admin:
+            return render_template("maintenance.html"), 503
     return None
+
+
+@app.context_processor
+def inject_announcement():
+    """Admin-set announcement banner, rendered by base.html on every page."""
+    return {"announcement_text": get_setting("announcement_text", "") or ""}
 
 
 @app.route("/apply_modifications", methods=["POST"])
@@ -4746,7 +4786,8 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
 def _ai_quota_state(user_id):
     from datetime import timedelta
     since = datetime.utcnow() - timedelta(days=1)
-    limit = app.config.get("AI_GEN_DAILY_LIMIT", 10)
+    # Admin-editable override; falls back to the env default when unset.
+    limit = setting_int("ai_daily_limit", app.config.get("AI_GEN_DAILY_LIMIT", 10))
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,

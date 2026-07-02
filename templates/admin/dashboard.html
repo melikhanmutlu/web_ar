@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}dashboard — arvision admin{% endblock %}
+{% block page_title %}dashboard{% endblock %}
+
+{% block content %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.users }}</div>
+        <div class="kpi-label">users</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.active_models }}</div>
+        <div class="kpi-label">active models</div>
+        <div class="kpi-sub">{{ stats.trashed_models }} in trash</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.storage_bytes | filesizeformat }}</div>
+        <div class="kpi-label">storage used</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.views }}</div>
+        <div class="kpi-label">total views</div>
+        <div class="kpi-sub">{{ stats.downloads }} downloads · {{ stats.shares }} shares</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.ai_ready }}</div>
+        <div class="kpi-label">ai models generated</div>
+        <div class="kpi-sub">{{ stats.ai_failed }} failed</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.queue_pending }}</div>
+        <div class="kpi-label">queued conversions</div>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">registrations — last 30 days</h2>
+        <div class="admin-chart" data-points='{{ charts.registrations | tojson }}'></div>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">uploads — last 30 days</h2>
+        <div class="admin-chart" data-points='{{ charts.uploads | tojson }}'></div>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">system health</h2>
+        <dl class="admin-dl">
+            <div>
+                <dt>conversion queue</dt>
+                <dd>{{ stats.queue_pending }} pending</dd>
+            </div>
+            <div>
+                <dt>failed jobs (24h)</dt>
+                <dd class="{% if health.failed_jobs_24h %}admin-health-warn{% else %}admin-health-ok{% endif %}">{{ health.failed_jobs_24h }}</dd>
+            </div>
+            <div>
+                <dt>stale processing jobs</dt>
+                <dd class="{% if health.stale_jobs %}admin-health-warn{% else %}admin-health-ok{% endif %}">
+                    {{ health.stale_jobs }}{% if health.stale_jobs %} — worker may be down{% endif %}
+                </dd>
+            </div>
+            {% if health.disk_total %}
+            <div>
+                <dt>disk</dt>
+                <dd>{{ health.disk_free | filesizeformat }} free of {{ health.disk_total | filesizeformat }} ({{ health.disk_used_pct }}% used)</dd>
+            </div>
+            {% endif %}
+        </dl>
+        {% if health.disk_used_pct is not none %}
+        <div class="storage-track" style="margin-top:0.75rem;">
+            <div class="storage-fill" style="width: {{ health.disk_used_pct }}%;"></div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">recent uploads <a href="{{ url_for('admin.models') }}" class="count">view all</a></h2>
+        <ul class="admin-activity">
+            {% for model in recent.uploads %}
+            <li>
+                <span class="title">
+                    <a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener">{{ model.display_name or model.original_filename }}</a>
+                </span>
+                <span class="meta">{{ model.file_type }} · {{ model.upload_date_formatted }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no uploads yet</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">newest users <a href="{{ url_for('admin.users') }}" class="count">view all</a></h2>
+        <ul class="admin-activity">
+            {% for user in recent.users %}
+            <li>
+                <span class="title"><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></span>
+                <span class="meta">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '' }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no users yet</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">recent ai generations <a href="{{ url_for('admin.ai_jobs') }}" class="count">view all</a></h2>
+        <ul class="admin-activity">
+            {% for job in recent.ai_jobs %}
+            <li>
+                <span class="title">{{ (job.prompt or job.kind) | truncate(48) }}</span>
+                <span class="meta">{{ badge(job.status) }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no ai generations yet</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

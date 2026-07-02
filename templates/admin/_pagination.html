@@ -1,0 +1,14 @@
+{% macro pager(page, endpoint) %}
+{% if page.pages > 1 %}
+<nav class="admin-pager" aria-label="Pagination">
+    {% set args = request.args.to_dict() %}
+    {% if page.has_prev %}
+    <a class="admin-pager-btn" href="{{ url_for(endpoint, **dict(args, page=page.page - 1)) }}">prev</a>
+    {% endif %}
+    <span class="admin-pager-info">page {{ page.page }} / {{ page.pages }} · {{ page.total }} total</span>
+    {% if page.has_next %}
+    <a class="admin-pager-btn" href="{{ url_for(endpoint, **dict(args, page=page.page + 1)) }}">next</a>
+    {% endif %}
+</nav>
+{% endif %}
+{% endmacro %}

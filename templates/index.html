@@ -1002,5 +1002,10 @@
         });
     })();
     </script>
+    {% if announcement_text %}
+    <div role="status" style="position:fixed;bottom:0;left:0;right:0;z-index:60;background:#111111;color:#ffffff;text-align:center;font-size:0.85rem;padding:0.5rem 1rem;border-top:1px solid #333333;">
+        {{ announcement_text }}
+    </div>
+    {% endif %}
 </body>
 </html>

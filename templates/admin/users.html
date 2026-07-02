@@ -1,0 +1,55 @@
+{% extends "admin/base.html" %}
+{% from "admin/_pagination.html" import pager %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}users — arvision admin{% endblock %}
+{% block page_title %}users{% endblock %}
+
+{% block content %}
+<form method="GET" action="{{ url_for('admin.users') }}" class="admin-filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search username or email…" class="av-input">
+    <select name="sort" class="av-select">
+        <option value="newest" {% if sort == 'newest' %}selected{% endif %}>newest first</option>
+        <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>oldest first</option>
+        <option value="models" {% if sort == 'models' %}selected{% endif %}>most models</option>
+        <option value="storage" {% if sort == 'storage' %}selected{% endif %}>most storage</option>
+    </select>
+    <button type="submit" class="admin-filter-submit">filter</button>
+</form>
+
+<div class="admin-table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>id</th>
+                <th>username</th>
+                <th>email</th>
+                <th>joined</th>
+                <th class="num">models</th>
+                <th class="num">storage</th>
+                <th>flags</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user, model_count, storage_bytes in page.items %}
+            <tr>
+                <td class="muted">{{ user.id }}</td>
+                <td><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></td>
+                <td>{{ user.email }}</td>
+                <td class="muted">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</td>
+                <td class="num">{{ model_count or 0 }}</td>
+                <td class="num">{{ (storage_bytes or 0) | filesizeformat }}</td>
+                <td>
+                    {% if user.is_admin %}{{ badge('admin') }}{% endif %}
+                    {% if not user.is_active_flag %}{{ badge('inactive') }}{% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="muted">no users found</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ pager(page, 'admin.users') }}
+{% endblock %}

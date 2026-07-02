@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    <title>{% block title %}admin — arvision{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="admin-body">
+<div class="admin-shell">
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="admin-brand">
+            <a href="{{ url_for('admin.dashboard') }}" class="admin-brand-mark">arvision</a>
+            <span class="admin-brand-tag">admin</span>
+        </div>
+        <nav class="admin-nav" aria-label="Admin">
+            <div class="admin-nav-group">
+                <span class="admin-nav-label">overview</span>
+                <a href="{{ url_for('admin.dashboard') }}" class="admin-nav-link {% if request.endpoint == 'admin.dashboard' %}is-active{% endif %}">
+                    <i data-lucide="layout-dashboard"></i><span>dashboard</span>
+                </a>
+                <a href="{{ url_for('admin.analytics') }}" class="admin-nav-link {% if request.endpoint == 'admin.analytics' %}is-active{% endif %}">
+                    <i data-lucide="bar-chart-2"></i><span>analytics</span>
+                </a>
+            </div>
+            <div class="admin-nav-group">
+                <span class="admin-nav-label">content</span>
+                <a href="{{ url_for('admin.models') }}" class="admin-nav-link {% if request.endpoint == 'admin.models' %}is-active{% endif %}">
+                    <i data-lucide="box"></i><span>models</span>
+                </a>
+                <a href="{{ url_for('admin.jobs') }}" class="admin-nav-link {% if request.endpoint == 'admin.jobs' %}is-active{% endif %}">
+                    <i data-lucide="refresh-cw"></i><span>conversion jobs</span>
+                </a>
+                <a href="{{ url_for('admin.ai_jobs') }}" class="admin-nav-link {% if request.endpoint == 'admin.ai_jobs' %}is-active{% endif %}">
+                    <i data-lucide="zap"></i><span>ai generations</span>
+                </a>
+            </div>
+            <div class="admin-nav-group">
+                <span class="admin-nav-label">people</span>
+                <a href="{{ url_for('admin.users') }}" class="admin-nav-link {% if request.endpoint in ('admin.users', 'admin.user_detail') %}is-active{% endif %}">
+                    <i data-lucide="users"></i><span>users</span>
+                </a>
+            </div>
+            <div class="admin-nav-group">
+                <span class="admin-nav-label">system</span>
+                <a href="{{ url_for('admin.settings') }}" class="admin-nav-link {% if request.endpoint == 'admin.settings' %}is-active{% endif %}">
+                    <i data-lucide="settings"></i><span>settings</span>
+                </a>
+            </div>
+        </nav>
+        <div class="admin-sidebar-footer">
+            <a href="{{ url_for('index') }}" class="admin-nav-link">
+                <i data-lucide="arrow-left"></i><span>back to site</span>
+            </a>
+            <span class="admin-sidebar-user" title="{{ current_user.username }}">{{ current_user.username }}</span>
+        </div>
+    </aside>
+    <main class="admin-main">
+        <header class="admin-topbar">
+            <button type="button" class="admin-menu-toggle" id="adminMenuToggle" aria-label="Toggle menu">
+                <i data-lucide="menu"></i>
+            </button>
+            <h1 class="admin-page-title">{% block page_title %}{% endblock %}</h1>
+            <div class="admin-topbar-actions">{% block topbar_actions %}{% endblock %}</div>
+        </header>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="av-alert {% if category == 'error' %}av-alert--error{% endif %}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <div class="admin-content">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+</div>
+
+<!-- Shared confirmation modal (driven by admin.js via data-* attributes) -->
+<div id="adminConfirmModal" class="modal">
+    <div class="modal-content library-modal">
+        <div class="modal-header">
+            <h2 id="adminConfirmTitle">confirm</h2>
+            <button type="button" class="library-icon-btn" data-confirm-cancel aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <p id="adminConfirmText" class="admin-confirm-text"></p>
+            <input type="text" id="adminConfirmInput" class="av-input" style="display:none;" autocomplete="off">
+            <div id="adminConfirmResult" class="admin-confirm-result" style="display:none;">
+                <p class="admin-confirm-result-label">temporary password (shown once):</p>
+                <input type="text" id="adminConfirmResultValue" class="av-input" readonly onclick="this.select()">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="library-btn" data-confirm-cancel>cancel</button>
+            <button type="button" class="btn-primary admin-modal-confirm" id="adminConfirmOk">confirm</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+<script>if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();</script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

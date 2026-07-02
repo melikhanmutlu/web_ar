@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 from models import User, db
+from site_settings import setting_bool
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
 
@@ -44,8 +45,11 @@ def login():
         if user is None or not user.check_password(form.password.data):
             flash('Invalid username/email or password', 'error')
             return redirect(url_for('auth.login'))
-        
-        login_user(user, remember=form.remember.data)
+
+        if not login_user(user, remember=form.remember.data):
+            # login_user refuses inactive (admin-deactivated) accounts
+            flash('This account has been deactivated.', 'error')
+            return redirect(url_for('auth.login'))
         next_page = request.args.get('next')
         if not next_page or urlparse(next_page).netloc != '':
             next_page = url_for('index')
@@ -57,7 +61,11 @@ def login():
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    
+
+    if not setting_bool('registration_enabled', True):
+        flash('Registration is currently disabled.', 'error')
+        return redirect(url_for('auth.login'))
+
     form = RegistrationForm(request.form)
     if request.method == 'POST' and form.validate():
         user = User(username=form.username.data, email=form.email.data)

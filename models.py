@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+import sqlalchemy as sa
 
 db = SQLAlchemy()
 
@@ -11,8 +12,17 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # Column stays named is_active in the DB; the attribute is renamed so the
+    # is_active property below can satisfy Flask-Login's interface.
+    is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
     models = db.relationship('UserModel', backref='user', lazy=True)
     folders = db.relationship('Folder', backref='user', lazy=True)
+
+    @property
+    def is_active(self):
+        # Flask-Login: login_user() refuses inactive users automatically.
+        return bool(self.is_active_flag)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -328,6 +338,18 @@ class AIGenerationJob(db.Model):
             'model_id': self.model_id,
             'error': self.error,
         }
+
+
+class SiteSetting(db.Model):
+    """Admin-editable runtime settings (key/value). Values are stored as
+    strings; typed access goes through site_settings.py, which falls back to
+    the env-derived config defaults when a key is absent."""
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<SiteSetting {self.key}>'
 
 
 class ConversionJob(db.Model):

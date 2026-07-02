@@ -6,6 +6,9 @@
         <a href="{{ url_for('index') }}" class="showcase-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}">home</a>
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('my_models') }}" class="showcase-nav-link {% if request.endpoint == 'my_models' %}is-active{% endif %}">my models</a>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('admin.dashboard') }}" class="showcase-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">admin</a>
+        {% endif %}
         <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;padding:0;font:inherit;">log out</button>

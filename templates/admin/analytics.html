@@ -51,7 +51,7 @@
             {% for model in top[key] %}
             <li>
                 <span class="title">
-                    <a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener">{{ model.display_name or model.original_filename }}</a>
+                    <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
                 </span>
                 <span class="meta">{{ model[attr] or 0 }}</span>
             </li>

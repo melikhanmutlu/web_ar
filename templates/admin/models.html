@@ -34,66 +34,83 @@
     <button type="submit" class="admin-filter-submit">filter</button>
 </form>
 
-<div class="admin-table-wrap">
-    <table class="admin-table">
-        <thead>
-            <tr>
-                <th></th>
-                <th>name</th>
-                <th>owner</th>
-                <th>type</th>
-                <th class="num">size</th>
-                <th class="num">views</th>
-                <th class="num">downloads</th>
-                <th>uploaded</th>
-                <th>status</th>
-                <th class="actions">actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for username, model in page.items %}
-            <tr>
-                <td>
-                    <img class="admin-thumb" src="{{ url_for('serve_thumbnail', unique_id=model.id) }}" alt=""
-                         loading="lazy"
-                         onerror="this.outerHTML='<div class=&quot;admin-thumb-fallback&quot;><i data-lucide=&quot;box&quot;></i></div>'; if (window.lucide) lucide.createIcons();">
-                </td>
-                <td class="admin-row-title" title="{{ model.display_name or model.original_filename }}">
-                    {{ model.display_name or model.original_filename }}
-                    <div class="muted" style="font-weight:400;font-size:0.7rem;">{{ model.id }}</div>
-                </td>
-                <td>
-                    {% if model.user_id %}
-                    <a href="{{ url_for('admin.user_detail', user_id=model.user_id) }}">{{ username }}</a>
-                    {% else %}
-                    <span class="muted">anonymous</span>
-                    {% endif %}
-                </td>
-                <td class="muted">{{ model.file_type }}</td>
-                <td class="num">{{ model.file_size_formatted }}</td>
-                <td class="num">{{ model.view_count or 0 }}</td>
-                <td class="num">{{ model.download_count or 0 }}</td>
-                <td class="muted">{{ model.upload_date_formatted }}</td>
-                <td>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</td>
-                <td class="actions">
-                    <a class="admin-icon-btn" href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer"><i data-lucide="eye"></i></a>
-                    {% if model.deleted_at %}
-                    <button type="button" class="admin-icon-btn" title="restore"
-                            data-action-url="{{ url_for('admin.restore_model', model_id=model.id) }}"><i data-lucide="undo-2"></i></button>
-                    {% else %}
-                    <button type="button" class="admin-icon-btn" title="move to trash"
-                            data-action-url="{{ url_for('admin.trash_model', model_id=model.id) }}"><i data-lucide="trash-2"></i></button>
-                    {% endif %}
-                    <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete permanently"
-                            data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
-                            data-confirm="Permanently delete this model and its files? This cannot be undone."><i data-lucide="x"></i></button>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="10" class="muted">no models found</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="admin-bulk-scope">
+    <div class="admin-bulk-bar" data-bulk-bar>
+        <span data-bulk-count>0 selected</span>
+        <button type="button" class="admin-btn"
+                data-bulk-action="{{ url_for('admin.bulk_trash_models') }}"
+                data-bulk-confirm="Move {n} selected model(s) to trash?">trash</button>
+        <button type="button" class="admin-btn"
+                data-bulk-action="{{ url_for('admin.bulk_restore_models') }}"
+                data-bulk-confirm="Restore {n} selected model(s) from trash?">restore</button>
+        <button type="button" class="admin-btn admin-btn--danger"
+                data-bulk-action="{{ url_for('admin.bulk_purge_models') }}"
+                data-bulk-confirm="Permanently delete {n} selected model(s) and their files? This cannot be undone."
+                data-bulk-confirm-typed="DELETE">delete</button>
+    </div>
+    <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="select-col"><input type="checkbox" data-select-all aria-label="select all"></th>
+                    <th></th>
+                    <th>name</th>
+                    <th>owner</th>
+                    <th>type</th>
+                    <th class="num">size</th>
+                    <th class="num">views</th>
+                    <th class="num">downloads</th>
+                    <th>uploaded</th>
+                    <th>status</th>
+                    <th class="actions">actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for username, model in page.items %}
+                <tr>
+                    <td class="select-col"><input type="checkbox" data-row-select value="{{ model.id }}" aria-label="select model"></td>
+                    <td>
+                        <img class="admin-thumb" src="{{ url_for('serve_thumbnail', unique_id=model.id) }}" alt=""
+                             loading="lazy"
+                             onerror="this.outerHTML='<div class=&quot;admin-thumb-fallback&quot;><i data-lucide=&quot;box&quot;></i></div>'; if (window.lucide) lucide.createIcons();">
+                    </td>
+                    <td class="admin-row-title" title="{{ model.display_name or model.original_filename }}">
+                        <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
+                        <div class="muted" style="font-weight:400;font-size:0.7rem;">{{ model.id }}</div>
+                    </td>
+                    <td>
+                        {% if model.user_id %}
+                        <a href="{{ url_for('admin.user_detail', user_id=model.user_id) }}">{{ username }}</a>
+                        {% else %}
+                        <span class="muted">anonymous</span>
+                        {% endif %}
+                    </td>
+                    <td class="muted">{{ model.file_type }}</td>
+                    <td class="num">{{ model.file_size_formatted }}</td>
+                    <td class="num">{{ model.view_count or 0 }}</td>
+                    <td class="num">{{ model.download_count or 0 }}</td>
+                    <td class="muted">{{ model.upload_date_formatted }}</td>
+                    <td>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</td>
+                    <td class="actions">
+                        <a class="admin-icon-btn" href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer"><i data-lucide="eye"></i></a>
+                        {% if model.deleted_at %}
+                        <button type="button" class="admin-icon-btn" title="restore"
+                                data-action-url="{{ url_for('admin.restore_model', model_id=model.id) }}"><i data-lucide="undo-2"></i></button>
+                        {% else %}
+                        <button type="button" class="admin-icon-btn" title="move to trash"
+                                data-action-url="{{ url_for('admin.trash_model', model_id=model.id) }}"><i data-lucide="trash-2"></i></button>
+                        {% endif %}
+                        <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete permanently"
+                                data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
+                                data-confirm="Permanently delete this model and its files? This cannot be undone."><i data-lucide="x"></i></button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="11" class="muted">no models found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 {{ pager(page, 'admin.models') }}

@@ -1,0 +1,137 @@
+{% extends "admin/base.html" %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}{{ model.display_name or model.original_filename }} — arvision admin{% endblock %}
+{% block page_title %}model · {{ model.display_name or model.original_filename }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('admin.models') }}" class="admin-btn">← all models</a>
+<a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" class="admin-btn">open viewer</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-actions-row">
+    {% if model.deleted_at %}
+    <button type="button" class="admin-btn" data-action-url="{{ url_for('admin.restore_model', model_id=model.id) }}">restore</button>
+    {% else %}
+    <button type="button" class="admin-btn" data-action-url="{{ url_for('admin.trash_model', model_id=model.id) }}">move to trash</button>
+    {% endif %}
+    <button type="button" class="admin-btn admin-btn--danger"
+            data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
+            data-confirm="Permanently delete this model and all its files, versions, hotspots and camera views? This cannot be undone."
+            data-redirect="{{ url_for('admin.models') }}">
+        delete permanently
+    </button>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">overview</h2>
+        <dl class="admin-dl">
+            <div><dt>id</dt><dd>{{ model.id }}</dd></div>
+            <div><dt>owner</dt>
+                <dd>
+                    {% if model.user_id %}<a href="{{ url_for('admin.user_detail', user_id=model.user_id) }}">{{ model.user.username }}</a>
+                    {% else %}anonymous{% endif %}
+                </dd>
+            </div>
+            <div><dt>folder</dt><dd>{% if model.folder %}{{ model.folder.full_path | map(attribute='name') | join(' / ') }}{% else %}—{% endif %}</dd></div>
+            <div><dt>type</dt><dd>{{ model.file_type }}</dd></div>
+            <div><dt>file size</dt><dd>{{ model.file_size_formatted }}</dd></div>
+            <div><dt>version storage</dt><dd>{{ version_bytes | filesizeformat }} ({{ versions | length }} versions)</dd></div>
+            <div><dt>uploaded</dt><dd>{{ model.upload_date_formatted }}</dd></div>
+            <div><dt>status</dt><dd>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</dd></div>
+            <div><dt>usdz (ios ar)</dt><dd>{% if model.usdz_filename %}yes{% else %}no{% endif %}</dd></div>
+            <div><dt>qr code</dt><dd>{% if model.qr_code %}yes{% else %}no{% endif %}</dd></div>
+        </dl>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">engagement &amp; mesh data</h2>
+        <dl class="admin-dl">
+            <div><dt>views</dt><dd>{{ model.view_count or 0 }}</dd></div>
+            <div><dt>downloads</dt><dd>{{ model.download_count or 0 }}</dd></div>
+            <div><dt>shares</dt><dd>{{ model.share_count or 0 }}</dd></div>
+            <div><dt>likes</dt><dd>{{ likes }}</dd></div>
+            <div><dt>saves</dt><dd>{{ saves }}</dd></div>
+            <div><dt>vertices</dt><dd>{{ model.vertices or '—' }}</dd></div>
+            <div><dt>faces</dt><dd>{{ model.faces or '—' }}</dd></div>
+            <div><dt>watertight</dt><dd>{% if model.is_watertight is none %}—{% elif model.is_watertight %}yes{% else %}no{% endif %}</dd></div>
+            <div><dt>cumulative scale</dt><dd>{{ model.cumulative_scale or 1.0 }}×</dd></div>
+        </dl>
+    </div>
+</div>
+
+<div class="admin-card">
+    <h2 class="admin-card-title">versions <span class="count">{{ versions | length }}</span></h2>
+    <div class="admin-table-wrap" style="border:none;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="num">#</th>
+                    <th>operation</th>
+                    <th class="num">size</th>
+                    <th>created</th>
+                    <th>comment</th>
+                    <th class="actions">actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in versions %}
+                <tr>
+                    <td class="num">{{ v.version_number }}</td>
+                    <td class="muted">{{ v.operation_type }}</td>
+                    <td class="num">{{ v.file_size_formatted }}</td>
+                    <td class="muted">{{ v.created_at_formatted }}</td>
+                    <td class="muted">{{ v.comment or '—' }}</td>
+                    <td class="actions">
+                        <a class="admin-icon-btn" href="{{ url_for('download_version', model_id=model.id, version_number=v.version_number) }}" title="download"><i data-lucide="download"></i></a>
+                        <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete version"
+                                data-action-url="{{ url_for('admin.delete_model_version_admin', model_id=model.id, version_number=v.version_number) }}"
+                                data-confirm="Delete version {{ v.version_number }}? This cannot be undone."><i data-lucide="x"></i></button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="muted">no versions</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">hotspots <span class="count">{{ hotspots | length }}</span></h2>
+        <ul class="admin-activity">
+            {% for h in hotspots %}
+            <li>
+                <span class="title" title="{{ h.description or '' }}">{{ h.title }}</span>
+                <span class="meta">
+                    <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete hotspot"
+                            data-action-url="{{ url_for('admin.delete_model_hotspot', model_id=model.id, hotspot_id=h.hotspot_id) }}"
+                            data-confirm="Delete hotspot &quot;{{ h.title }}&quot;?"><i data-lucide="x"></i></button>
+                </span>
+            </li>
+            {% else %}
+            <li><span class="muted">no hotspots</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">camera views <span class="count">{{ camera_views | length }}</span></h2>
+        <ul class="admin-activity">
+            {% for v in camera_views %}
+            <li>
+                <span class="title">{{ v.name }}</span>
+                <span class="meta">
+                    <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete camera view"
+                            data-action-url="{{ url_for('admin.delete_model_camera_view', model_id=model.id, view_id=v.id) }}"
+                            data-confirm="Delete camera view &quot;{{ v.name }}&quot;?"><i data-lucide="x"></i></button>
+                </span>
+            </li>
+            {% else %}
+            <li><span class="muted">no camera views</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

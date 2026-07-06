@@ -10,6 +10,16 @@
  *   data-confirm-typed="value"     additionally require typing `value`
  *   data-show-password             display response.temp_password instead of reloading
  *   data-redirect="/admin/..."     navigate there on success instead of reloading
+ *
+ * Bulk actions: wrap a checkbox table + its action bar in one
+ * `.admin-bulk-scope` container.
+ *   <input data-select-all>                     header "select all" checkbox
+ *   <input data-row-select value="{{ id }}">    one per row
+ *   [data-bulk-bar]                              bar shown when 1+ selected
+ *   [data-bulk-count]                            text node updated with the count
+ *   [data-bulk-action="/admin/..."]              button: POSTs {ids: [...]}
+ *   [data-bulk-confirm="Do X to {n} items?"]      {n} is replaced with the count
+ *   [data-bulk-confirm-typed="DELETE"]            optional typed confirmation
  */
 
 (function () {
@@ -25,8 +35,13 @@
         setTimeout(() => toast.remove(), 3000);
     }
 
-    async function adminPost(url) {
-        const response = await fetch(url, { method: 'POST' });
+    async function adminPost(url, body) {
+        const init = { method: 'POST' };
+        if (body !== undefined) {
+            init.headers = { 'Content-Type': 'application/json' };
+            init.body = JSON.stringify(body);
+        }
+        const response = await fetch(url, init);
         let data = {};
         try {
             data = await response.json();
@@ -89,9 +104,9 @@
         });
     }
 
-    async function runAction(url, showPassword, redirect) {
+    async function runAction(url, showPassword, redirect, body) {
         try {
-            const data = await adminPost(url);
+            const data = await adminPost(url, body);
             if (showPassword && data.temp_password) {
                 // Keep the modal open and surface the one-time password.
                 confirmText.textContent = 'password reset successfully.';
@@ -114,9 +129,9 @@
     if (confirmOk) {
         confirmOk.addEventListener('click', () => {
             if (!pending) return;
-            const { url, showPassword, redirect } = pending;
+            const { url, showPassword, redirect, body } = pending;
             confirmOk.disabled = true;
-            runAction(url, showPassword, redirect);
+            runAction(url, showPassword, redirect, body);
         });
     }
 
@@ -134,6 +149,54 @@
         } else {
             runAction(url, showPassword, redirect);
         }
+    });
+
+    // ------------------------------------------------------------------
+    // Bulk selection + bulk actions
+    // ------------------------------------------------------------------
+    function updateBulkBar(scope) {
+        const bar = scope.querySelector('[data-bulk-bar]');
+        if (!bar) return;
+        const checked = scope.querySelectorAll('[data-row-select]:checked').length;
+        bar.style.display = checked > 0 ? 'flex' : 'none';
+        const countEl = bar.querySelector('[data-bulk-count]');
+        if (countEl) countEl.textContent = `${checked} selected`;
+    }
+
+    document.querySelectorAll('.admin-bulk-scope').forEach((scope) => {
+        const selectAll = scope.querySelector('[data-select-all]');
+        if (selectAll) {
+            selectAll.addEventListener('change', () => {
+                scope.querySelectorAll('[data-row-select]').forEach((cb) => {
+                    cb.checked = selectAll.checked;
+                });
+                updateBulkBar(scope);
+            });
+        }
+        scope.querySelectorAll('[data-row-select]').forEach((cb) => {
+            cb.addEventListener('change', () => {
+                if (!cb.checked && selectAll) selectAll.checked = false;
+                updateBulkBar(scope);
+            });
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-bulk-action]');
+        if (!button) return;
+        e.preventDefault();
+        const scope = button.closest('.admin-bulk-scope');
+        if (!scope) return;
+        const ids = Array.from(scope.querySelectorAll('[data-row-select]:checked')).map(
+            (cb) => cb.value
+        );
+        if (!ids.length) return;
+
+        const url = button.getAttribute('data-bulk-action');
+        const template = button.getAttribute('data-bulk-confirm') || 'Apply this to {n} selected item(s)?';
+        const message = template.replace('{n}', ids.length);
+        const typed = button.getAttribute('data-bulk-confirm-typed');
+        openModal({ url, message, typed, body: { ids } });
     });
 
     // ------------------------------------------------------------------

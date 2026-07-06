@@ -90,7 +90,7 @@
                 {% for model in models %}
                 <tr>
                     <td class="admin-row-title">
-                        <a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener">{{ model.display_name or model.original_filename }}</a>
+                        <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
                     </td>
                     <td class="muted">{{ model.file_type }}</td>
                     <td class="num">{{ model.file_size_formatted }}</td>

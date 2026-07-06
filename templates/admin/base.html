@@ -48,6 +48,9 @@
             </div>
             <div class="admin-nav-group">
                 <span class="admin-nav-label">system</span>
+                <a href="{{ url_for('admin.audit_log') }}" class="admin-nav-link {% if request.endpoint == 'admin.audit_log' %}is-active{% endif %}">
+                    <i data-lucide="history"></i><span>audit log</span>
+                </a>
                 <a href="{{ url_for('admin.settings') }}" class="admin-nav-link {% if request.endpoint == 'admin.settings' %}is-active{% endif %}">
                     <i data-lucide="settings"></i><span>settings</span>
                 </a>

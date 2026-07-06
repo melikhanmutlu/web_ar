@@ -33,9 +33,12 @@ from sqlalchemy import func, or_
 
 from model_cleanup import purge_model_completely
 from models import (
+    AdminAuditLog,
     AIGenerationJob,
+    CameraView,
     ConversionJob,
     Folder,
+    ModelHotspot,
     ModelLike,
     ModelSave,
     ModelVersion,
@@ -44,6 +47,7 @@ from models import (
     db,
 )
 from site_settings import get_setting, set_setting, setting_bool, setting_int
+from version_manager import delete_version
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,23 @@ def admin_required(f):
         return f(*args, **kwargs)
 
     return wrapper
+
+
+def log_action(action, target_type=None, target_id=None, detail=None):
+    """Record an admin action. Adds to the pending session — the caller's
+    existing db.session.commit() picks it up, keeping the log entry and the
+    mutation it describes atomic. For routes with no other commit (e.g. a
+    settings save that persists through SiteSetting's own commits), the
+    caller must commit explicitly after calling this."""
+    db.session.add(
+        AdminAuditLog(
+            actor_id=current_user.id,
+            action=action,
+            target_type=target_type,
+            target_id=str(target_id) if target_id is not None else None,
+            detail=detail,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +354,7 @@ def toggle_admin(user_id):
         ), 400
     user = User.query.get_or_404(user_id)
     user.is_admin = not user.is_admin
+    log_action("user.toggle_admin", "user", user.id, {"is_admin": user.is_admin})
     db.session.commit()
     logger.info(
         f"admin: {current_user.username} set is_admin={user.is_admin} on {user.username}"
@@ -349,6 +371,7 @@ def toggle_active(user_id):
         ), 400
     user = User.query.get_or_404(user_id)
     user.is_active_flag = not user.is_active_flag
+    log_action("user.toggle_active", "user", user.id, {"is_active": user.is_active_flag})
     db.session.commit()
     logger.info(
         f"admin: {current_user.username} set is_active={user.is_active_flag} on {user.username}"
@@ -362,10 +385,43 @@ def reset_password(user_id):
     user = User.query.get_or_404(user_id)
     temp_password = secrets.token_urlsafe(9)
     user.set_password(temp_password)
+    log_action("user.reset_password", "user", user.id)
     db.session.commit()
     logger.info(f"admin: {current_user.username} reset password for {user.username}")
     # Shown once in the response; there is no mail infrastructure to send it.
     return jsonify({"success": True, "temp_password": temp_password})
+
+
+def _delete_user_and_content(user):
+    """Cascade-delete a user: their models (+ files), engagement they left on
+    other users' models, their jobs, and their folders. Caller commits."""
+    models = UserModel.query.filter_by(user_id=user.id).all()
+    for model in models:
+        purge_model_completely(db.session, model)
+    # Flush the pending model deletes before folders go (folder_id FK).
+    db.session.flush()
+    # Job rows only soft-reference models (no FK), so plain deletes suffice.
+    ModelLike.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    ModelSave.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    AIGenerationJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    ConversionJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    Folder.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    db.session.delete(user)
+    return len(models)
+
+
+def _parse_bulk_ids(cast=str):
+    """Read {"ids": [...]} from the JSON body, casting/filtering each entry."""
+    raw = (request.get_json(silent=True) or {}).get("ids", [])
+    if not isinstance(raw, list):
+        return []
+    ids = []
+    for item in raw:
+        try:
+            ids.append(cast(item))
+        except (TypeError, ValueError):
+            continue
+    return ids
 
 
 @admin_bp.route("/users/<int:user_id>/delete", methods=["POST"])
@@ -378,23 +434,11 @@ def delete_user(user_id):
     user = User.query.get_or_404(user_id)
     username = user.username
     try:
-        models = UserModel.query.filter_by(user_id=user.id).all()
-        for model in models:
-            purge_model_completely(db.session, model)
-        # Flush the pending model deletes before folders go (folder_id FK).
-        db.session.flush()
-        # Engagement the user left on other people's models, then their jobs
-        # and folders. Job rows only soft-reference models, so plain deletes.
-        ModelLike.query.filter_by(user_id=user.id).delete(synchronize_session=False)
-        ModelSave.query.filter_by(user_id=user.id).delete(synchronize_session=False)
-        AIGenerationJob.query.filter_by(user_id=user.id).delete(
-            synchronize_session=False
+        model_count = _delete_user_and_content(user)
+        log_action(
+            "user.delete", "user", user_id,
+            {"username": username, "models_purged": model_count},
         )
-        ConversionJob.query.filter_by(user_id=user.id).delete(
-            synchronize_session=False
-        )
-        Folder.query.filter_by(user_id=user.id).delete(synchronize_session=False)
-        db.session.delete(user)
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -402,9 +446,45 @@ def delete_user(user_id):
         return jsonify({"success": False, "error": "Delete failed"}), 500
     logger.info(
         f"admin: {current_user.username} deleted user {username} "
-        f"({len(models)} models purged)"
+        f"({model_count} models purged)"
     )
     return jsonify({"success": True})
+
+
+@admin_bp.route("/users/bulk-deactivate", methods=["POST"])
+@admin_required
+def bulk_deactivate_users():
+    ids = [i for i in _parse_bulk_ids(int) if i != current_user.id]
+    if not ids:
+        return jsonify({"success": False, "error": "No valid users selected"}), 400
+    users = User.query.filter(User.id.in_(ids)).all()
+    for user in users:
+        user.is_active_flag = False
+    log_action(
+        "user.bulk_deactivate", detail={"count": len(users), "ids": [u.id for u in users]}
+    )
+    db.session.commit()
+    return jsonify({"success": True, "count": len(users)})
+
+
+@admin_bp.route("/users/bulk-delete", methods=["POST"])
+@admin_required
+def bulk_delete_users():
+    ids = [i for i in _parse_bulk_ids(int) if i != current_user.id]
+    if not ids:
+        return jsonify({"success": False, "error": "No valid users selected"}), 400
+    users = User.query.filter(User.id.in_(ids)).all()
+    usernames = [u.username for u in users]
+    try:
+        for user in users:
+            _delete_user_and_content(user)
+        log_action("user.bulk_delete", detail={"count": len(users), "usernames": usernames})
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"admin: bulk delete users failed: {e}")
+        return jsonify({"success": False, "error": "Bulk delete failed"}), 500
+    return jsonify({"success": True, "count": len(users)})
 
 
 # ---------------------------------------------------------------------------
@@ -485,11 +565,85 @@ def models():
     )
 
 
+@admin_bp.route("/models/<model_id>")
+@admin_required
+def model_detail(model_id):
+    model = UserModel.query.get_or_404(model_id)
+
+    versions = (
+        ModelVersion.query.filter_by(model_id=model_id)
+        .order_by(ModelVersion.version_number.desc())
+        .all()
+    )
+    hotspots = (
+        ModelHotspot.query.filter_by(model_id=model_id)
+        .order_by(ModelHotspot.created_at)
+        .all()
+    )
+    camera_views = (
+        CameraView.query.filter_by(model_id=model_id)
+        .order_by(CameraView.created_at)
+        .all()
+    )
+
+    return render_template(
+        "admin/model_detail.html",
+        model=model,
+        versions=versions,
+        version_bytes=sum(v.file_size or 0 for v in versions),
+        hotspots=hotspots,
+        camera_views=camera_views,
+        likes=ModelLike.query.filter_by(model_id=model_id).count(),
+        saves=ModelSave.query.filter_by(model_id=model_id).count(),
+    )
+
+
+@admin_bp.route("/models/<model_id>/hotspots/<hotspot_id>/delete", methods=["POST"])
+@admin_required
+def delete_model_hotspot(model_id, hotspot_id):
+    hotspot = ModelHotspot.query.filter_by(
+        model_id=model_id, hotspot_id=hotspot_id
+    ).first_or_404()
+    log_action(
+        "hotspot.delete", "model", model_id,
+        {"hotspot_id": hotspot_id, "title": hotspot.title},
+    )
+    db.session.delete(hotspot)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.route("/models/<model_id>/camera-views/<int:view_id>/delete", methods=["POST"])
+@admin_required
+def delete_model_camera_view(model_id, view_id):
+    view = CameraView.query.filter_by(id=view_id, model_id=model_id).first_or_404()
+    log_action(
+        "camera_view.delete", "model", model_id,
+        {"view_id": view_id, "name": view.name},
+    )
+    db.session.delete(view)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.route("/models/<model_id>/versions/<int:version_number>/delete", methods=["POST"])
+@admin_required
+def delete_model_version_admin(model_id, version_number):
+    # delete_version() manages its own transaction (models.py's version_manager);
+    # only log once it's confirmed the row/file actually went away.
+    if not delete_version(model_id, version_number):
+        return jsonify({"success": False, "error": "Version not found or delete failed"}), 404
+    log_action("version.delete", "model", model_id, {"version_number": version_number})
+    db.session.commit()
+    return jsonify({"success": True})
+
+
 @admin_bp.route("/models/<model_id>/trash", methods=["POST"])
 @admin_required
 def trash_model(model_id):
     model = UserModel.query.get_or_404(model_id)
     model.deleted_at = datetime.utcnow()
+    log_action("model.trash", "model", model_id)
     db.session.commit()
     return jsonify({"success": True})
 
@@ -499,6 +653,7 @@ def trash_model(model_id):
 def restore_model(model_id):
     model = UserModel.query.get_or_404(model_id)
     model.deleted_at = None
+    log_action("model.restore", "model", model_id)
     db.session.commit()
     return jsonify({"success": True})
 
@@ -508,6 +663,7 @@ def restore_model(model_id):
 def purge_model(model_id):
     model = UserModel.query.get_or_404(model_id)
     try:
+        log_action("model.purge", "model", model_id)
         purge_model_completely(db.session, model)
         db.session.commit()
     except Exception as e:
@@ -516,6 +672,54 @@ def purge_model(model_id):
         return jsonify({"success": False, "error": "Purge failed"}), 500
     logger.info(f"admin: {current_user.username} purged model {model_id}")
     return jsonify({"success": True})
+
+
+@admin_bp.route("/models/bulk-trash", methods=["POST"])
+@admin_required
+def bulk_trash_models():
+    ids = _parse_bulk_ids(str)
+    if not ids:
+        return jsonify({"success": False, "error": "No valid models selected"}), 400
+    models = UserModel.query.filter(UserModel.id.in_(ids)).all()
+    for model in models:
+        model.deleted_at = datetime.utcnow()
+    log_action("model.bulk_trash", detail={"count": len(models), "ids": [m.id for m in models]})
+    db.session.commit()
+    return jsonify({"success": True, "count": len(models)})
+
+
+@admin_bp.route("/models/bulk-restore", methods=["POST"])
+@admin_required
+def bulk_restore_models():
+    ids = _parse_bulk_ids(str)
+    if not ids:
+        return jsonify({"success": False, "error": "No valid models selected"}), 400
+    models = UserModel.query.filter(UserModel.id.in_(ids)).all()
+    for model in models:
+        model.deleted_at = None
+    log_action("model.bulk_restore", detail={"count": len(models), "ids": [m.id for m in models]})
+    db.session.commit()
+    return jsonify({"success": True, "count": len(models)})
+
+
+@admin_bp.route("/models/bulk-purge", methods=["POST"])
+@admin_required
+def bulk_purge_models():
+    ids = _parse_bulk_ids(str)
+    if not ids:
+        return jsonify({"success": False, "error": "No valid models selected"}), 400
+    models = UserModel.query.filter(UserModel.id.in_(ids)).all()
+    count = len(models)
+    try:
+        for model in models:
+            purge_model_completely(db.session, model)
+        log_action("model.bulk_purge", detail={"count": count, "ids": ids})
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"admin: bulk purge models failed: {e}")
+        return jsonify({"success": False, "error": "Bulk purge failed"}), 500
+    return jsonify({"success": True, "count": count})
 
 
 # ---------------------------------------------------------------------------
@@ -562,6 +766,7 @@ def retry_job(job_id):
     job.finished_at = None
     # The worker refuses jobs that already exhausted attempts; grant one more.
     job.max_attempts = max((job.attempts or 0) + 1, job.max_attempts or 1)
+    log_action("job.retry", "job", job_id)
     db.session.commit()
     logger.info(f"admin: {current_user.username} requeued failed job {job_id}")
     return jsonify({"success": True})
@@ -594,6 +799,7 @@ def requeue_stale():
             job.status = "pending"
             requeued += 1
     if stale:
+        log_action("job.requeue_stale", detail={"requeued": requeued, "failed": failed})
         db.session.commit()
     return jsonify({"success": True, "requeued": requeued, "failed": failed})
 
@@ -602,6 +808,7 @@ def requeue_stale():
 @admin_required
 def delete_job(job_id):
     job = ConversionJob.query.get_or_404(job_id)
+    log_action("job.delete", "job", job_id)
     db.session.delete(job)
     db.session.commit()
     return jsonify({"success": True})
@@ -660,6 +867,7 @@ def ai_jobs():
 @admin_required
 def delete_ai_job(job_id):
     job = AIGenerationJob.query.get_or_404(job_id)
+    log_action("ai_job.delete", "ai_job", job_id)
     db.session.delete(job)
     db.session.commit()
     return jsonify({"success": True})
@@ -774,6 +982,12 @@ def settings():
                 flash("Storage quota must be between 0 (unlimited) and 1,000,000 MB.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
             set_setting("storage_quota_mb", str(quota_mb))
+
+        # set_setting() commits per-key already; the log entry needs its own
+        # commit since nothing else in this branch does one.
+        form_detail = {k: v for k, v in request.form.items() if k != "csrf_token"}
+        log_action("settings.update", "setting", tab, form_detail)
+        db.session.commit()
         flash("Settings saved. Changes take effect within a minute.", "success")
         return redirect(url_for("admin.settings", tab=tab))
 
@@ -788,4 +1002,41 @@ def settings():
     }
     return render_template(
         "admin/settings.html", tab=tab, tabs=SETTINGS_TABS, values=values, ceiling=ceiling
+    )
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+
+@admin_bp.route("/audit-log")
+@admin_required
+def audit_log():
+    q = (request.args.get("q") or "").strip()
+    action = (request.args.get("action") or "").strip()
+
+    query = (
+        db.session.query(User.username, AdminAuditLog)
+        .select_from(AdminAuditLog)
+        .outerjoin(User, AdminAuditLog.actor_id == User.id)
+    )
+
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(User.username.ilike(like), AdminAuditLog.target_id.ilike(like))
+        )
+    if action:
+        query = query.filter(AdminAuditLog.action == action)
+
+    query = query.order_by(AdminAuditLog.created_at.desc())
+
+    actions = sorted(
+        row[0] for row in db.session.query(AdminAuditLog.action).distinct().all()
+    )
+
+    page = paginate(query, _page_arg())
+    return render_template(
+        "admin/audit_log.html", page=page, q=q, action=action, actions=actions
     )

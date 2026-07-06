@@ -372,6 +372,24 @@ class SiteSetting(db.Model):
         return f'<SiteSetting {self.key}>'
 
 
+class AdminAuditLog(db.Model):
+    """Records every mutating action taken through the admin panel: who
+    (actor_id), what (action, a short dotted string like 'user.delete'),
+    on what (target_type/target_id), and any extra context (detail)."""
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action = db.Column(db.String(64), nullable=False, index=True)
+    target_type = db.Column(db.String(32), nullable=True)
+    target_id = db.Column(db.String(64), nullable=True)
+    detail = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    actor = db.relationship('User')
+
+    def __repr__(self):
+        return f'<AdminAuditLog {self.action} by {self.actor_id}>'
+
+
 class ConversionJob(db.Model):
     """DB-backed conversion job queue (academic_ar pattern).
 

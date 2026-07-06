@@ -24,6 +24,7 @@ ADMIN_GET_PAGES = [
     "/admin/ai-jobs",
     "/admin/analytics",
     "/admin/settings",
+    "/admin/audit-log",
 ]
 
 

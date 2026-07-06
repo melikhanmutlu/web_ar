@@ -17,38 +17,56 @@
     <button type="submit" class="admin-filter-submit">filter</button>
 </form>
 
-<div class="admin-table-wrap">
-    <table class="admin-table">
-        <thead>
-            <tr>
-                <th>id</th>
-                <th>username</th>
-                <th>email</th>
-                <th>joined</th>
-                <th class="num">models</th>
-                <th class="num">storage</th>
-                <th>flags</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for user, model_count, storage_bytes in page.items %}
-            <tr>
-                <td class="muted">{{ user.id }}</td>
-                <td><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></td>
-                <td>{{ user.email }}</td>
-                <td class="muted">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</td>
-                <td class="num">{{ model_count or 0 }}</td>
-                <td class="num">{{ (storage_bytes or 0) | filesizeformat }}</td>
-                <td>
-                    {% if user.is_admin %}{{ badge('admin') }}{% endif %}
-                    {% if not user.is_active_flag %}{{ badge('inactive') }}{% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="7" class="muted">no users found</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<div class="admin-bulk-scope">
+    <div class="admin-bulk-bar" data-bulk-bar>
+        <span data-bulk-count>0 selected</span>
+        <button type="button" class="admin-btn"
+                data-bulk-action="{{ url_for('admin.bulk_deactivate_users') }}"
+                data-bulk-confirm="Deactivate {n} selected user(s)?">deactivate</button>
+        <button type="button" class="admin-btn admin-btn--danger"
+                data-bulk-action="{{ url_for('admin.bulk_delete_users') }}"
+                data-bulk-confirm="Permanently delete {n} selected user(s) and all their models? This cannot be undone."
+                data-bulk-confirm-typed="DELETE">delete</button>
+    </div>
+    <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th class="select-col"><input type="checkbox" data-select-all aria-label="select all"></th>
+                    <th>id</th>
+                    <th>username</th>
+                    <th>email</th>
+                    <th>joined</th>
+                    <th class="num">models</th>
+                    <th class="num">storage</th>
+                    <th>flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user, model_count, storage_bytes in page.items %}
+                <tr>
+                    <td class="select-col">
+                        {% if user.id != current_user.id %}
+                        <input type="checkbox" data-row-select value="{{ user.id }}" aria-label="select {{ user.username }}">
+                        {% endif %}
+                    </td>
+                    <td class="muted">{{ user.id }}</td>
+                    <td><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></td>
+                    <td>{{ user.email }}</td>
+                    <td class="muted">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '—' }}</td>
+                    <td class="num">{{ model_count or 0 }}</td>
+                    <td class="num">{{ (storage_bytes or 0) | filesizeformat }}</td>
+                    <td>
+                        {% if user.is_admin %}{{ badge('admin') }}{% endif %}
+                        {% if not user.is_active_flag %}{{ badge('inactive') }}{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="muted">no users found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 {{ pager(page, 'admin.users') }}

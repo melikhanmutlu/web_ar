@@ -28,7 +28,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob, ConversionJob
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob, ConversionJob, RigAnimationJob
 from auth import auth
 from admin import admin_bp
 from model_cleanup import purge_model_completely
@@ -38,6 +38,7 @@ import traceback
 import uuid
 from flask_migrate import Migrate
 from config import *
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 import qrcode
@@ -1080,7 +1081,15 @@ def init_app_dependencies():
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html")
+    import ai_generator
+    ai_remove_lighting_supported = ai_generator.supports_remove_lighting()
+    ai_quota = None
+    if current_user.is_authenticated:
+        exceeded, used, limit = _ai_quota_state(current_user.id)
+        ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+    return render_template("index.html",
+                            ai_remove_lighting_supported=ai_remove_lighting_supported,
+                            ai_quota=ai_quota)
 
 
 def convert_to_usdz(input_glb_path, output_usdz_path):
@@ -4814,6 +4823,7 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         cumulative_scale=1.0,
         display_name=(prompt[:80] if prompt else None),
         description=(f"AI generated ({source})" + (f": {prompt}" if prompt else "")),
+        source=source,
     )
     db.session.add(model)
     db.session.commit()
@@ -4839,6 +4849,68 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
             logger.error(f"[register_glb] usdz thread failed: {e}")
 
     return model
+
+
+_AI_TOPOLOGY_CHOICES = {"quad", "triangle"}
+_AI_SYMMETRY_CHOICES = {"off", "auto", "on"}
+_AI_POSE_MODE_CHOICES = {"a-pose", "t-pose"}
+_AI_ORIGIN_AT_CHOICES = {"bottom", "center"}
+
+
+def _parse_ai_options(raw):
+    """Whitelist-parse the client-supplied 'options' sub-dict for a generation
+    request. The raw client dict is never passed through to ai_generator --
+    each field is extracted and validated individually here."""
+    raw = raw if isinstance(raw, dict) else {}
+    out = {}
+    negative_prompt = (raw.get("negative_prompt") or "").strip()
+    if negative_prompt:
+        out["negative_prompt"] = negative_prompt[:600]
+    seed = raw.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        out["seed"] = seed
+    if raw.get("topology") in _AI_TOPOLOGY_CHOICES:
+        out["topology"] = raw["topology"]
+    target_polycount = raw.get("target_polycount")
+    if isinstance(target_polycount, int) and not isinstance(target_polycount, bool):
+        out["target_polycount"] = target_polycount
+    if raw.get("symmetry_mode") in _AI_SYMMETRY_CHOICES:
+        out["symmetry_mode"] = raw["symmetry_mode"]
+    if isinstance(raw.get("moderation"), bool):
+        out["moderation"] = raw["moderation"]
+    if raw.get("pose_mode") in _AI_POSE_MODE_CHOICES:
+        out["pose_mode"] = raw["pose_mode"]
+    if raw.get("origin_at") in _AI_ORIGIN_AT_CHOICES:
+        out["origin_at"] = raw["origin_at"]
+    if raw.get("remove_lighting") is True:
+        out["remove_lighting"] = True
+    texture_prompt = (raw.get("texture_prompt") or "").strip()
+    if texture_prompt:
+        out["texture_prompt"] = texture_prompt[:600]
+    return out
+
+
+def _stash_texture_reference(job_id, data_uri):
+    """Persist a refine-stage texture reference image to a temp file so it
+    survives between the initial request and the later async refine call
+    (texture_prompt/texture_image_url only apply once refine starts).
+    Never stored inline as base64 in the DB. Cleaned up by the reconciliation
+    sweep alongside abandoned jobs."""
+    if not isinstance(data_uri, str) or not data_uri.startswith("data:image/"):
+        return None
+    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_texture")
+    os.makedirs(tmp_dir, exist_ok=True)
+    path = os.path.join(tmp_dir, f"{job_id}.txt")
+    with open(path, "w") as f:
+        f.write(data_uri)
+    return path
+
+
+def _load_texture_reference(path):
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        return f.read()
 
 
 def _ai_quota_state(user_id):
@@ -4870,7 +4942,12 @@ def _claim_ai_stage(job_id, expect_stage, new_stage):
 
 
 def _finalize_ai_job(job, task):
-    """Download finished GLB (+USDZ), register as model, mark job ready."""
+    """Download finished GLB (+USDZ), register as model, mark job ready.
+
+    Pure job-mutation + commit (no HTTP response built here) -- shared by the
+    client-poll route, the webhook receiver and the reconciliation sweep.
+    Returns the created UserModel, or None if Meshy returned no GLB (job is
+    marked failed in that case instead)."""
     import ai_generator
 
     model_urls = task.get("model_urls") or {}
@@ -4879,8 +4956,7 @@ def _finalize_ai_job(job, task):
         job.status = "failed"
         job.error = "Generation finished but returned no GLB"
         db.session.commit()
-        resp = job.to_dict(); resp["success"] = True
-        return jsonify(resp)
+        return None
 
     tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_" + job.id)
     os.makedirs(tmp_dir, exist_ok=True)
@@ -4909,9 +4985,98 @@ def _finalize_ai_job(job, task):
     job.progress = 100
     job.model_id = model.id
     db.session.commit()
-    resp = job.to_dict(); resp["success"] = True
-    resp["viewer_url"] = url_for("view_model", model_id=model.id)
-    return jsonify(resp)
+    return model
+
+
+def _advance_ai_job(job):
+    """Advance a 'generating' AIGenerationJob by one step using whatever
+    Meshy task state is available right now: poll the active Meshy task, and
+    if it just finished, either kick off the next stage (preview -> refine)
+    or finalize (download + register the model).
+
+    Shared by the client-poll route (generate_3d_status), the Meshy webhook
+    receiver, and worker.py's reconciliation sweep -- all three call this
+    identically, so the existing _claim_ai_stage atomic claim prevents any
+    two of them from double-starting a refine or double-registering a model
+    for the same job (e.g. a webhook firing while a browser tab is also
+    polling). Mutates and commits `job`; raises on transient failures
+    (ai_generator.MeshyError etc.) so callers can decide how to react
+    (poll route -> 502 to the client, sweep/webhook -> log and move on).
+    """
+    import ai_generator
+
+    if job.status in ("ready", "failed"):
+        return
+
+    if job.kind == "image":
+        if job.stage == "image":
+            t = ai_generator.get_task("image", job.meshy_image_id)
+            job.progress = min(99, t["progress"])
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "image", "finalizing"):
+                    db.session.refresh(job)  # another poll is finalizing
+                else:
+                    try:
+                        _finalize_ai_job(job, t)
+                        return
+                    except Exception:
+                        # let the next poll retry the download/registration
+                        _claim_ai_stage(job.id, "finalizing", "image")
+                        raise
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Generation failed"
+    else:
+        if job.stage == "preview":
+            t = ai_generator.get_task("text", job.meshy_preview_id)
+            job.progress = min(49, t["progress"] // 2)
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "preview", "refining"):
+                    db.session.refresh(job)  # another poll started refine
+                else:
+                    job_options = job.options or {}
+                    texture_image_url = _load_texture_reference(job.texture_ref)
+                    try:
+                        refine_id = ai_generator.start_refine(
+                            job.meshy_preview_id,
+                            texture_prompt=job_options.get("texture_prompt"),
+                            texture_image_url=texture_image_url,
+                            moderation=job_options.get("moderation"),
+                            remove_lighting=job_options.get("remove_lighting"))
+                    except Exception:
+                        # release the claim so the next poll retries
+                        _claim_ai_stage(job.id, "refining", "preview")
+                        raise
+                    job.meshy_refine_id = refine_id
+                    job.stage = "refine"
+                    job.progress = 50
+                    if job.texture_ref:
+                        try:
+                            os.remove(job.texture_ref)
+                        except OSError:
+                            pass
+                        job.texture_ref = None
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Preview failed"
+        elif job.stage == "refine":
+            t = ai_generator.get_task("text", job.meshy_refine_id)
+            job.progress = min(99, 50 + t["progress"] // 2)
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "refine", "finalizing"):
+                    db.session.refresh(job)
+                else:
+                    try:
+                        _finalize_ai_job(job, t)
+                        return
+                    except Exception:
+                        _claim_ai_stage(job.id, "finalizing", "refine")
+                        raise
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Texturing failed"
+
+    db.session.commit()
 
 
 @app.route("/api/generate-3d", methods=["POST"])
@@ -4932,6 +5097,7 @@ def generate_3d():
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()
+    options = _parse_ai_options(data.get("options"))
     job_id = str(uuid.uuid4())
     try:
         if mode == "image":
@@ -4945,19 +5111,35 @@ def generate_3d():
             if not image.startswith("data:image/"):
                 return jsonify({"success": False,
                                 "error": "A valid image (jpg/png) is required."}), 400
-            task_id = ai_generator.start_image_to_3d(image)
+            task_id = ai_generator.start_image_to_3d(
+                image, topology=options.get("topology"),
+                target_polycount=options.get("target_polycount"),
+                symmetry_mode=options.get("symmetry_mode"),
+                moderation=options.get("moderation"),
+                pose_mode=options.get("pose_mode"),
+                origin_at=options.get("origin_at"),
+                remove_lighting=options.get("remove_lighting"))
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
                                   stage="image", meshy_image_id=task_id,
-                                  status="generating", progress=0)
+                                  status="generating", progress=0, options=options)
         else:
             prompt = (data.get("prompt") or "").strip()
             if not prompt:
                 return jsonify({"success": False,
                                 "error": "A text prompt is required."}), 400
-            task_id = ai_generator.start_text_to_3d(prompt)
+            task_id = ai_generator.start_text_to_3d(
+                prompt, negative_prompt=options.get("negative_prompt"),
+                seed=options.get("seed"), topology=options.get("topology"),
+                target_polycount=options.get("target_polycount"),
+                symmetry_mode=options.get("symmetry_mode"),
+                moderation=options.get("moderation"))
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="text",
                                   prompt=prompt, stage="preview", meshy_preview_id=task_id,
-                                  status="generating", progress=0)
+                                  status="generating", progress=0, options=options)
+        texture_image_url = (data.get("options") or {}).get("texture_image_url") \
+            if isinstance(data.get("options"), dict) else None
+        if texture_image_url:
+            job.texture_ref = _stash_texture_reference(job_id, texture_image_url)
         db.session.add(job)
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
@@ -4980,73 +5162,301 @@ def generate_3d_status(job_id):
     if job.user_id != current_user.id:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
-    if job.status in ("ready", "failed"):
-        resp = job.to_dict(); resp["success"] = True
-        if job.status == "ready" and job.model_id:
-            resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
-        return jsonify(resp)
+    if job.status not in ("ready", "failed"):
+        try:
+            _advance_ai_job(job)
+        except ai_generator.MeshyError as e:
+            return jsonify({"success": False, "error": str(e)}), 502
+        except Exception as e:
+            logger.error(f"[generate-3d] status error: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "Status check failed."}), 500
+
+    resp = job.to_dict(); resp["success"] = True
+    if job.status == "ready" and job.model_id:
+        resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
+        resp["model_glb_url"] = url_for("serve_converted_file", unique_id=job.model_id,
+                                        filename="model.glb")
+    return jsonify(resp)
+
+
+@app.route("/api/webhooks/meshy", methods=["POST"])
+@csrf.exempt
+@limiter.limit("120 per minute")
+def meshy_webhook():
+    """Receive Meshy task-status-change events.
+
+    Meshy webhooks are configured account-wide (one fixed URL) -- there is no
+    per-task callback_url for text/image-to-3d, so this endpoint cannot carry
+    a per-job secret. It is therefore treated purely as a "wake up and
+    re-check" signal: only task_id is trusted from the payload, and the job's
+    real state is always re-fetched from Meshy via _advance_ai_job, never
+    read out of the request body. Always returns 200 -- including for an
+    unknown or already-finished job -- so the endpoint never leaks which
+    task_ids are valid/in-flight to an unauthenticated caller.
+    """
+    payload = request.get_json(silent=True) or {}
+    task_id = payload.get("id") or payload.get("task_id")
+    if not task_id:
+        return jsonify({"ok": True}), 200
+
+    job = AIGenerationJob.query.filter(
+        or_(
+            AIGenerationJob.meshy_preview_id == task_id,
+            AIGenerationJob.meshy_refine_id == task_id,
+            AIGenerationJob.meshy_image_id == task_id,
+        )
+    ).first()
+    if not job or job.status in ("ready", "failed"):
+        return jsonify({"ok": True}), 200
 
     try:
-        if job.kind == "image":
-            if job.stage == "image":
-                t = ai_generator.get_task("image", job.meshy_image_id)
-                job.progress = min(99, t["progress"])
-                if t["status"] == ai_generator.SUCCEEDED:
-                    if not _claim_ai_stage(job.id, "image", "finalizing"):
-                        db.session.refresh(job)  # another poll is finalizing
-                    else:
-                        try:
-                            return _finalize_ai_job(job, t)
-                        except Exception:
-                            # let the next poll retry the download/registration
-                            _claim_ai_stage(job.id, "finalizing", "image")
-                            raise
-                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                    job.status = "failed"
-                    job.error = t.get("task_error") or "Generation failed"
-        else:
-            if job.stage == "preview":
-                t = ai_generator.get_task("text", job.meshy_preview_id)
-                job.progress = min(49, t["progress"] // 2)
-                if t["status"] == ai_generator.SUCCEEDED:
-                    if not _claim_ai_stage(job.id, "preview", "refining"):
-                        db.session.refresh(job)  # another poll started refine
-                    else:
-                        try:
-                            refine_id = ai_generator.start_refine(job.meshy_preview_id)
-                        except Exception:
-                            # release the claim so the next poll retries
-                            _claim_ai_stage(job.id, "refining", "preview")
-                            raise
-                        job.meshy_refine_id = refine_id
-                        job.stage = "refine"
-                        job.progress = 50
-                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                    job.status = "failed"
-                    job.error = t.get("task_error") or "Preview failed"
-            elif job.stage == "refine":
-                t = ai_generator.get_task("text", job.meshy_refine_id)
-                job.progress = min(99, 50 + t["progress"] // 2)
-                if t["status"] == ai_generator.SUCCEEDED:
-                    if not _claim_ai_stage(job.id, "refine", "finalizing"):
-                        db.session.refresh(job)
-                    else:
-                        try:
-                            return _finalize_ai_job(job, t)
-                        except Exception:
-                            _claim_ai_stage(job.id, "finalizing", "refine")
-                            raise
-                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                    job.status = "failed"
-                    job.error = t.get("task_error") or "Texturing failed"
+        _advance_ai_job(job)
+    except Exception as e:
+        logger.warning(f"[meshy-webhook] advance failed for job {job.id}: {e}")
+    return jsonify({"ok": True}), 200
+
+
+# --------------------------------------------------------------------------- #
+#  Rigging + Animation (Meshy) -- applies to any existing model, uploaded or
+#  AI-generated, not just "one prompt -> one generation".
+# --------------------------------------------------------------------------- #
+def _claim_rig_stage(job_id, expect_stage, new_stage):
+    """Same atomic-claim pattern as _claim_ai_stage, against RigAnimationJob."""
+    claimed = RigAnimationJob.query.filter_by(
+        id=job_id, stage=expect_stage
+    ).update({"stage": new_stage}, synchronize_session=False)
+    db.session.commit()
+    return bool(claimed)
+
+
+def _finalize_rig_job(job, task):
+    """Download the finished animated GLB, register it as a new UserModel
+    (the source model is left untouched), mark the job ready. Pure
+    job-mutation + commit, mirrors _finalize_ai_job's shape."""
+    import ai_generator
+
+    model_urls = task.get("model_urls") or {}
+    glb_url = model_urls.get("glb")
+    if not glb_url:
+        job.status = "failed"
+        job.error = "Animation finished but returned no GLB"
         db.session.commit()
+        return None
+
+    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "rig_" + job.id)
+    os.makedirs(tmp_dir, exist_ok=True)
+    glb_tmp = os.path.join(tmp_dir, "model.glb")
+    ai_generator.download(glb_url, glb_tmp)
+
+    source_model = UserModel.query.get(job.model_id)
+    model = register_glb_as_model(
+        glb_tmp, user_id=job.user_id, source="ai-rig-animate",
+        prompt=(source_model.display_name if source_model else None),
+    )
+    try:
+        shutil.rmtree(tmp_dir)
+    except Exception:
+        pass
+
+    job.status = "ready"
+    job.progress = 100
+    job.result_model_id = model.id
+    db.session.commit()
+    return model
+
+
+def _advance_rig_job(job):
+    """Advance a 'generating' RigAnimationJob by one step (remesh? -> rig ->
+    animate -> finalize). Mirrors _advance_ai_job's shape and guarantees:
+    shared by the client-poll route and worker.py's reconciliation sweep, and
+    protected against double-processing by the same atomic-claim pattern."""
+    import ai_generator
+
+    if job.status in ("ready", "failed"):
+        return
+
+    if job.stage == "remeshing":
+        t = ai_generator.get_remesh_task(job.meshy_remesh_id)
+        job.progress = min(19, t["progress"] // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            glb_url = (t.get("model_urls") or {}).get("glb")
+            if not glb_url:
+                job.status = "failed"
+                job.error = "Remesh finished but returned no GLB"
+            elif not _claim_rig_stage(job.id, "remeshing", "rigging"):
+                db.session.refresh(job)  # another poll started rigging
+            else:
+                try:
+                    # The remeshed GLB's URL comes straight from Meshy's own
+                    # response (not client input), so handing it back to
+                    # Meshy as model_url carries no SSRF risk.
+                    rig_id = ai_generator.start_rig(model_url=glb_url,
+                                                    height_meters=job.height_meters)
+                except Exception:
+                    _claim_rig_stage(job.id, "rigging", "remeshing")
+                    raise
+                job.meshy_rig_id = rig_id
+                job.stage = "rigging"
+                job.progress = 20
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Remesh failed"
+
+    elif job.stage == "rigging":
+        t = ai_generator.get_rig_task(job.meshy_rig_id)
+        job.progress = min(59, 20 + t["progress"] * 2 // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            if not _claim_rig_stage(job.id, "rigging", "animating"):
+                db.session.refresh(job)  # another poll started animating
+            else:
+                try:
+                    animate_id = ai_generator.start_animate(
+                        job.meshy_rig_id, job.animation_action_ids)
+                except Exception:
+                    _claim_rig_stage(job.id, "animating", "rigging")
+                    raise
+                job.meshy_animate_id = animate_id
+                job.stage = "animating"
+                job.progress = 60
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Rigging failed"
+
+    elif job.stage == "animating":
+        t = ai_generator.get_animate_task(job.meshy_animate_id)
+        job.progress = min(99, 60 + t["progress"] * 2 // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            if not _claim_rig_stage(job.id, "animating", "finalizing"):
+                db.session.refresh(job)
+            else:
+                try:
+                    _finalize_rig_job(job, t)
+                    return
+                except Exception:
+                    _claim_rig_stage(job.id, "finalizing", "animating")
+                    raise
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Animation failed"
+
+    db.session.commit()
+
+
+@app.route("/api/models/<model_id>/rig", methods=["POST"])
+@login_required
+@limiter.limit("6 per minute")
+def rig_model(model_id):
+    """Start a Meshy auto-rig (+ animate) job for an existing model (upload
+    or AI-generated). height_meters + up to 10 animation_action_ids are
+    collected up front so rig->animate runs as one chained job."""
+    import ai_generator
+
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
+
+    if not ai_generator.is_configured():
+        return jsonify({"success": False,
+                        "error": "AI generation is not configured on this server."}), 503
+
+    model = UserModel.query.get(model_id)
+    data = request.get_json(silent=True) or {}
+
+    try:
+        height_meters = float(data.get("height_meters"))
+        if not (0.05 <= height_meters <= 10):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"success": False,
+                        "error": "A valid height_meters (0.05-10) is required."}), 400
+
+    action_ids = data.get("animation_action_ids")
+    if not isinstance(action_ids, list) or not action_ids:
+        return jsonify({"success": False, "error": "At least one animation is required."}), 400
+    try:
+        action_ids = [int(a) for a in action_ids][:10]
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid animation selection."}), 400
+
+    # AI-generated models can reference their originating Meshy task directly;
+    # plain uploads have no such task and go through model_url instead.
+    ai_job = AIGenerationJob.query.filter_by(model_id=model_id).first()
+    input_task_id = None
+    if ai_job:
+        input_task_id = ai_job.meshy_refine_id or ai_job.meshy_image_id or ai_job.meshy_preview_id
+
+    faces = model.faces
+    if faces is None:
+        try:
+            import trimesh
+            mesh = trimesh.load(model.filename)
+            if isinstance(mesh, trimesh.Scene):
+                faces = sum(len(g.faces) for g in mesh.geometry.values()
+                           if hasattr(g, "faces"))
+            else:
+                faces = len(mesh.faces)
+        except Exception as e:
+            logger.warning(f"[rig] face count check failed: {e}")
+            faces = None
+
+    job_id = str(uuid.uuid4())
+    try:
+        if faces is not None and faces > ai_generator.RIG_MAX_FACES:
+            if not input_task_id:
+                return jsonify({"success": False, "error":
+                    f"This model has too many polygons for rigging (max "
+                    f"{ai_generator.RIG_MAX_FACES:,}) and automatic "
+                    f"reduction is only available for AI-generated models."}), 400
+            remesh_id = ai_generator.start_remesh(input_task_id)
+            job = RigAnimationJob(id=job_id, model_id=model_id, user_id=current_user.id,
+                                  height_meters=height_meters, animation_action_ids=action_ids,
+                                  meshy_remesh_id=remesh_id, stage="remeshing",
+                                  status="generating", progress=0)
+        else:
+            if input_task_id:
+                rig_id = ai_generator.start_rig(input_task_id=input_task_id,
+                                                height_meters=height_meters)
+            else:
+                model_url = url_for("serve_converted_file", unique_id=model.id,
+                                    filename="model.glb", _external=True)
+                rig_id = ai_generator.start_rig(model_url=model_url, height_meters=height_meters)
+            job = RigAnimationJob(id=job_id, model_id=model_id, user_id=current_user.id,
+                                  height_meters=height_meters, animation_action_ids=action_ids,
+                                  meshy_rig_id=rig_id, stage="rigging",
+                                  status="generating", progress=20)
+        db.session.add(job)
+        db.session.commit()
+        return jsonify({"success": True, "job_id": job_id})
     except ai_generator.MeshyError as e:
         return jsonify({"success": False, "error": str(e)}), 502
     except Exception as e:
-        logger.error(f"[generate-3d] status error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": "Status check failed."}), 500
+        logger.error(f"[rig] start error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "Failed to start rigging."}), 500
+
+
+@app.route("/api/rig-jobs/<job_id>/status", methods=["GET"])
+@login_required
+def rig_job_status(job_id):
+    import ai_generator
+
+    job = RigAnimationJob.query.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    if job.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+    if job.status not in ("ready", "failed"):
+        try:
+            _advance_rig_job(job)
+        except ai_generator.MeshyError as e:
+            return jsonify({"success": False, "error": str(e)}), 502
+        except Exception as e:
+            logger.error(f"[rig-status] error: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "Status check failed."}), 500
 
     resp = job.to_dict(); resp["success"] = True
+    if job.status == "ready" and job.result_model_id:
+        resp["viewer_url"] = url_for("view_model", model_id=job.result_model_id)
     return jsonify(resp)
 
 

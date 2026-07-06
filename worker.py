@@ -9,6 +9,11 @@ worker simply idles.
 On PostgreSQL, jobs are claimed with FOR UPDATE SKIP LOCKED so multiple
 workers never grab the same job. SQLite (local dev) falls back to a plain
 query — run a single worker there.
+
+Also periodically reconciles AIGenerationJob rows (see
+reconcile_stale_ai_jobs) -- those otherwise only advance via client-side
+polling, so this loop is what unsticks one left behind by a closed browser
+tab, independent of ConversionJob's own queue above.
 """
 
 import logging
@@ -16,8 +21,8 @@ import os
 import time
 from datetime import datetime, timedelta
 
-from app import app, db, run_conversion_job
-from models import ConversionJob
+from app import app, db, run_conversion_job, _advance_ai_job, _advance_rig_job
+from models import AIGenerationJob, ConversionJob, RigAnimationJob
 from site_settings import set_setting
 
 logging.basicConfig(
@@ -34,6 +39,12 @@ STALE_PROCESSING_MINUTES = int(os.environ.get("WORKER_STALE_MINUTES", "30"))
 # the admin dashboard can show "worker last seen Ns ago" instead of only
 # inferring liveness indirectly from stale ConversionJob rows.
 HEARTBEAT_INTERVAL = 30
+# AI generations otherwise only advance via client-side polling of
+# /api/generate-3d/<job_id>/status -- a closed browser tab leaves a job stuck
+# in a non-terminal stage forever with nothing to move it along. This sweep
+# re-checks any such job server-side, independent of whether a client is
+# still watching (and independent of whether Meshy's webhook ever fires).
+AI_RECONCILE_MINUTES = int(os.environ.get("AI_RECONCILE_MINUTES", "5"))
 
 
 def claim_next_job():
@@ -98,6 +109,46 @@ def requeue_stale_jobs():
         db.session.commit()
 
 
+def reconcile_stale_ai_jobs():
+    """Re-advance any AIGenerationJob that hasn't moved in AI_RECONCILE_MINUTES.
+
+    This is the actual fix for the "closed tab" problem -- a Meshy webhook is
+    only a latency optimization on top of this; delivery of the webhook is
+    never guaranteed (network blip, endpoint down during a deploy), so a
+    periodic sweep is the one thing that's guaranteed to eventually unstick a
+    job. Uses the exact same _advance_ai_job the client-poll route and the
+    webhook receiver use, so the existing _claim_ai_stage atomic claim keeps
+    this safe to run concurrently with either of them.
+    """
+    cutoff = datetime.utcnow() - timedelta(minutes=AI_RECONCILE_MINUTES)
+    stuck = AIGenerationJob.query.filter(
+        AIGenerationJob.status == "generating",
+        AIGenerationJob.updated_at < cutoff,
+    ).all()
+    for job in stuck:
+        try:
+            _advance_ai_job(job)
+        except Exception as e:
+            logger.warning(f"AI reconcile failed for job {job.id}: {e}")
+            db.session.rollback()
+
+
+def reconcile_stale_rig_jobs():
+    """Same reconciliation as reconcile_stale_ai_jobs, for RigAnimationJob --
+    a rig/animate job is exactly as vulnerable to a closed browser tab."""
+    cutoff = datetime.utcnow() - timedelta(minutes=AI_RECONCILE_MINUTES)
+    stuck = RigAnimationJob.query.filter(
+        RigAnimationJob.status == "generating",
+        RigAnimationJob.updated_at < cutoff,
+    ).all()
+    for job in stuck:
+        try:
+            _advance_rig_job(job)
+        except Exception as e:
+            logger.warning(f"Rig reconcile failed for job {job.id}: {e}")
+            db.session.rollback()
+
+
 def main():
     logger.info(
         f"Conversion worker started (poll {POLL_INTERVAL}s, "
@@ -105,6 +156,7 @@ def main():
     )
     last_stale_sweep = 0.0
     last_heartbeat = 0.0
+    last_ai_reconcile = 0.0
     while True:
         try:
             if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:
@@ -117,6 +169,11 @@ def main():
             if time.monotonic() - last_stale_sweep > 60:
                 requeue_stale_jobs()
                 last_stale_sweep = time.monotonic()
+
+            if time.monotonic() - last_ai_reconcile > 60:
+                reconcile_stale_ai_jobs()
+                reconcile_stale_rig_jobs()
+                last_ai_reconcile = time.monotonic()
 
             job = claim_next_job()
             if job is None:

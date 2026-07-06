@@ -34,6 +34,15 @@
         <div class="kpi-value">{{ stats.queue_pending }}</div>
         <div class="kpi-label">queued conversions</div>
     </div>
+    <div class="kpi-card">
+        <div class="kpi-value" id="meshyBalanceValue">{{ stats.meshy_balance if stats.meshy_balance is not none else '—' }}</div>
+        <div class="kpi-label">meshy credit balance</div>
+        <div class="kpi-sub">
+            {% if stats.meshy_balance_error %}<span class="admin-health-warn">{{ stats.meshy_balance_error }}</span>{% endif %}
+            <button type="button" id="refreshBalanceBtn" class="admin-link-btn"
+                    data-action-url="{{ url_for('admin.refresh_meshy_balance') }}">refresh</button>
+        </div>
+    </div>
 </div>
 
 {{ day_range('admin.dashboard', days, day_choices) }}

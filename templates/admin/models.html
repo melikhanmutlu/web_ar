@@ -30,6 +30,11 @@
         <option value="trashed" {% if status == 'trashed' %}selected{% endif %}>trashed</option>
         <option value="all" {% if status == 'all' %}selected{% endif %}>all</option>
     </select>
+    <select name="origin" class="av-select">
+        <option value="">all origins</option>
+        <option value="ai" {% if origin == 'ai' %}selected{% endif %}>ai-generated</option>
+        <option value="upload" {% if origin == 'upload' %}selected{% endif %}>uploaded</option>
+    </select>
     <select name="sort" class="av-select">
         <option value="date" {% if sort == 'date' %}selected{% endif %}>newest first</option>
         <option value="size" {% if sort == 'size' %}selected{% endif %}>largest first</option>
@@ -80,6 +85,7 @@
                     </td>
                     <td class="admin-row-title" title="{{ model.display_name or model.original_filename }}">
                         <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
+                        {% if model.source %}{{ badge('ai-generated') }}{% endif %}
                         <div class="muted" style="font-weight:400;font-size:0.7rem;">{{ model.id }}</div>
                     </td>
                     <td>

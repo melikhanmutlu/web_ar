@@ -210,6 +210,37 @@ def _worker_health():
     return last_seen, age, age > WORKER_HEARTBEAT_STALE_SECONDS
 
 
+# Meshy's balance is a live external API call -- cached separately from
+# SiteSetting (which is for admin-editable settings, not cached API results)
+# so it never blocks a plain dashboard page load. A manual refresh bypasses
+# the TTL on demand.
+_MESHY_BALANCE_CACHE_TTL = 300  # seconds
+_meshy_balance_cache = {"at": 0.0, "value": None, "error": None}
+
+
+def get_cached_meshy_balance(force=False):
+    """Returns (balance:int|None, error:str|None). Never raises -- a Meshy
+    outage must not break the dashboard."""
+    import time
+    import ai_generator
+
+    now = time.time()
+    if not force and (now - _meshy_balance_cache["at"]) < _MESHY_BALANCE_CACHE_TTL:
+        return _meshy_balance_cache["value"], _meshy_balance_cache["error"]
+
+    if not ai_generator.is_configured():
+        _meshy_balance_cache.update(at=now, value=None, error="not configured")
+        return None, "not configured"
+
+    try:
+        data = ai_generator.get_balance()
+        _meshy_balance_cache.update(at=now, value=data.get("balance"), error=None)
+    except ai_generator.MeshyError as e:
+        logger.warning(f"Meshy balance fetch failed: {e}")
+        _meshy_balance_cache.update(at=now, value=None, error=str(e))
+    return _meshy_balance_cache["value"], _meshy_balance_cache["error"]
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -251,6 +282,7 @@ def dashboard():
         "ai_failed": AIGenerationJob.query.filter_by(status="failed").count(),
         "queue_pending": ConversionJob.query.filter_by(status="pending").count(),
     }
+    stats["meshy_balance"], stats["meshy_balance_error"] = get_cached_meshy_balance()
 
     ai_stale_cutoff = now - timedelta(minutes=AI_STALE_MINUTES)
     worker_last_seen, worker_seconds_ago, worker_stale = _worker_health()
@@ -586,6 +618,7 @@ def _models_query():
     owner = (request.args.get("user") or "").strip()
     status = request.args.get("status", "active")
     sort = request.args.get("sort", "date")
+    origin = (request.args.get("origin") or "").strip()
 
     query = db.session.query(User.username, UserModel).select_from(UserModel).outerjoin(
         User, UserModel.user_id == User.id
@@ -610,6 +643,12 @@ def _models_query():
         )
     if file_type:
         query = query.filter(UserModel.file_type == file_type)
+    if origin == "ai":
+        query = query.filter(UserModel.source.isnot(None))
+    elif origin == "upload":
+        query = query.filter(UserModel.source.is_(None))
+    else:
+        origin = ""
 
     owner_user = None
     if owner == "anonymous":
@@ -632,7 +671,7 @@ def _models_query():
         query = query.order_by(UserModel.upload_date.desc())
 
     return query, {"q": q, "file_type": file_type, "owner": owner, "owner_user": owner_user,
-                    "status": status, "sort": sort}
+                    "status": status, "sort": sort, "origin": origin}
 
 
 @admin_bp.route("/models")
@@ -1046,6 +1085,13 @@ def mark_ai_job_failed(job_id):
     log_action("ai_job.mark_failed", "ai_job", job_id)
     db.session.commit()
     return jsonify({"success": True})
+
+
+@admin_bp.route("/ai-jobs/refresh-balance", methods=["POST"])
+@admin_required
+def refresh_meshy_balance():
+    balance, error = get_cached_meshy_balance(force=True)
+    return jsonify({"success": True, "balance": balance, "error": error})
 
 
 # ---------------------------------------------------------------------------

@@ -195,6 +195,53 @@
                         Image selected — the 3D model will be built from it.
                         <a href="#" id="t2iClear" style="text-decoration:underline;">Clear selection</a>
                     </p>
+
+                    <details class="av-advanced">
+                        <summary>Advanced options</summary>
+                        <div class="av-advanced-body">
+                            <label class="av-card-title" for="optNegativePrompt" style="font-size:0.85rem;">Negative prompt</label>
+                            <input type="text" id="optNegativePrompt" class="av-input" maxlength="600" placeholder="blurry, low quality, extra limbs">
+
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optTopology" style="font-size:0.85rem;">Topology</label>
+                                    <select id="optTopology" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="quad">Quad (smooth surfaces)</option>
+                                        <option value="triangle">Triangle (detailed geometry)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSymmetry" style="font-size:0.85rem;">Symmetry</label>
+                                    <select id="optSymmetry" class="av-select">
+                                        <option value="auto">Auto</option>
+                                        <option value="on">On</option>
+                                        <option value="off">Off</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optPolycount" style="font-size:0.85rem;">Target polycount</label>
+                                    <input type="number" id="optPolycount" class="av-number" min="100" max="300000" placeholder="e.g. 30000">
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSeed" style="font-size:0.85rem;">Seed</label>
+                                    <input type="number" id="optSeed" class="av-number" placeholder="random">
+                                </div>
+                            </div>
+                            <label class="av-card-title" for="optTexturePrompt" style="font-size:0.85rem;">Texture prompt</label>
+                            <input type="text" id="optTexturePrompt" class="av-input" maxlength="600" placeholder="brushed steel, weathered patina">
+                            <label class="av-switch-label" style="margin-top:0.6rem;">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optModeration" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Content moderation</span>
+                            </label>
+                        </div>
+                    </details>
                 </div>
 
                 <div id="genImage" class="av-card hidden">
@@ -222,6 +269,62 @@
                             <a href="#" id="i2iRevert" style="text-decoration:underline;">Revert to original</a>
                         </p>
                     </div>
+
+                    <details class="av-advanced">
+                        <summary>Advanced options</summary>
+                        <div class="av-advanced-body">
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optTopologyImg" style="font-size:0.85rem;">Topology</label>
+                                    <select id="optTopologyImg" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="quad">Quad (smooth surfaces)</option>
+                                        <option value="triangle">Triangle (detailed geometry)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSymmetryImg" style="font-size:0.85rem;">Symmetry</label>
+                                    <select id="optSymmetryImg" class="av-select">
+                                        <option value="auto">Auto</option>
+                                        <option value="on">On</option>
+                                        <option value="off">Off</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optPolycountImg" style="font-size:0.85rem;">Target polycount</label>
+                                    <input type="number" id="optPolycountImg" class="av-number" min="100" max="300000" placeholder="e.g. 30000">
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optPoseMode" style="font-size:0.85rem;">Pose</label>
+                                    <select id="optPoseMode" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="a-pose">A-pose</option>
+                                        <option value="t-pose">T-pose</option>
+                                    </select>
+                                </div>
+                            </div>
+                            {% if ai_remove_lighting_supported %}
+                            <label class="av-switch-label">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optRemoveLighting">
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Clean cutout — remove baked-in lighting (better for AR)</span>
+                            </label>
+                            {% endif %}
+                            <label class="av-switch-label" style="margin-top:0.6rem;">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optModerationImg" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Content moderation</span>
+                            </label>
+                        </div>
+                    </details>
                 </div>
 
                 <div id="generationStatus" class="hidden">
@@ -235,11 +338,26 @@
                     <div id="generationError" class="av-alert av-alert--error hidden"></div>
                 </div>
 
+                <div id="genResultPreview" class="av-card hidden" style="text-align:center;">
+                    <model-viewer id="genPreviewViewer" camera-controls auto-rotate
+                                  style="width:100%;height:260px;background:var(--color-gray-100);"></model-viewer>
+                    <div style="display:flex;gap:0.6rem;justify-content:center;margin-top:0.75rem;">
+                        <button type="button" id="genKeepBtn" class="btn-primary" style="width:auto;">Keep &amp; open in viewer</button>
+                        <button type="button" id="genDiscardBtn" class="btn-secondary" style="width:auto;">Discard</button>
+                    </div>
+                </div>
+
                 <button type="button" id="generateBtn" class="btn-primary">
                     <i data-lucide="sparkles" style="width:1.1rem;height:1.1rem;"></i>
                     Generate 3D Model
                 </button>
-                <p class="av-card-desc" style="text-align:center;">Uses AI credits · subject to a daily limit.</p>
+                <p class="av-card-desc" style="text-align:center;" id="genQuotaNote">
+                    {% if ai_quota %}
+                    <span id="genQuotaRemaining">{{ ai_quota.remaining }}</span> of {{ ai_quota.limit }} generations left today
+                    {% else %}
+                    Uses AI credits · subject to a daily limit.
+                    {% endif %}
+                </p>
             </div>
             {% else %}
             <div class="av-card" style="text-align:center;">
@@ -942,9 +1060,95 @@
             }
         });
 
+        // Collect the collapsed "Advanced options" panel into a plain object;
+        // blank/default fields are omitted so the server sees no options at
+        // all when the panel was never touched (identical to pre-Advanced-
+        // options behavior).
+        function collectAdvancedOptions(mode) {
+            const opts = {};
+            if (mode === 'text') {
+                const neg = document.getElementById('optNegativePrompt').value.trim();
+                if (neg) opts.negative_prompt = neg;
+                const topology = document.getElementById('optTopology').value;
+                if (topology) opts.topology = topology;
+                const symmetry = document.getElementById('optSymmetry').value;
+                if (symmetry) opts.symmetry_mode = symmetry;
+                const polycount = document.getElementById('optPolycount').value;
+                if (polycount) opts.target_polycount = parseInt(polycount, 10);
+                const seed = document.getElementById('optSeed').value;
+                if (seed) opts.seed = parseInt(seed, 10);
+                const texturePrompt = document.getElementById('optTexturePrompt').value.trim();
+                if (texturePrompt) opts.texture_prompt = texturePrompt;
+                opts.moderation = document.getElementById('optModeration').checked;
+            } else {
+                const topology = document.getElementById('optTopologyImg').value;
+                if (topology) opts.topology = topology;
+                const symmetry = document.getElementById('optSymmetryImg').value;
+                if (symmetry) opts.symmetry_mode = symmetry;
+                const polycount = document.getElementById('optPolycountImg').value;
+                if (polycount) opts.target_polycount = parseInt(polycount, 10);
+                const pose = document.getElementById('optPoseMode').value;
+                if (pose) opts.pose_mode = pose;
+                const removeLighting = document.getElementById('optRemoveLighting');
+                if (removeLighting && removeLighting.checked) opts.remove_lighting = true;
+                opts.moderation = document.getElementById('optModerationImg').checked;
+            }
+            return opts;
+        }
+
+        // model-viewer is only needed once a generation actually finishes, so
+        // it's loaded on demand rather than unconditionally in <head> (kept
+        // out of pure-upload visits' page weight).
+        let modelViewerLoading = null;
+        function ensureModelViewerLoaded() {
+            if (customElements.get('model-viewer')) return Promise.resolve();
+            if (!modelViewerLoading) {
+                modelViewerLoading = new Promise((resolve, reject) => {
+                    const s = document.createElement('script');
+                    s.type = 'module';
+                    s.src = 'https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js';
+                    s.onload = () => resolve();
+                    s.onerror = () => reject(new Error('Failed to load 3D preview.'));
+                    document.head.appendChild(s);
+                });
+            }
+            return modelViewerLoading;
+        }
+
+        const genResultPreview = document.getElementById('genResultPreview');
+        const genPreviewViewer = document.getElementById('genPreviewViewer');
+        const genKeepBtn = document.getElementById('genKeepBtn');
+        const genDiscardBtn = document.getElementById('genDiscardBtn');
+        const genQuotaRemaining = document.getElementById('genQuotaRemaining');
+
+        function decrementQuota() {
+            if (!genQuotaRemaining) return;
+            const n = parseInt(genQuotaRemaining.textContent, 10);
+            if (!isNaN(n) && n > 0) genQuotaRemaining.textContent = n - 1;
+        }
+
+        async function showGenResult(sd) {
+            await ensureModelViewerLoaded();
+            genPreviewViewer.src = sd.model_glb_url;
+            genResultPreview.classList.remove('hidden');
+            genKeepBtn.onclick = () => { window.location.href = sd.viewer_url; };
+            genDiscardBtn.onclick = async () => {
+                genDiscardBtn.disabled = true;
+                try {
+                    await fetch('/delete_model/' + sd.model_id, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    });
+                } catch (e) { /* best-effort; model just stays until the user retries from My Models */ }
+                genResultPreview.classList.add('hidden');
+                statusDiv.classList.add('hidden');
+            };
+        }
+
         genBtn.addEventListener('click', async () => {
             errBox.classList.add('hidden'); errBox.textContent = '';
-            const body = { mode: genMode };
+            const body = { mode: genMode, options: collectAdvancedOptions(genMode) };
             if (genMode === 'text') {
                 if (t2iSelection) {
                     // build 3D from the AI-generated reference image
@@ -965,6 +1169,7 @@
             }
 
             genBtn.disabled = true;
+            genResultPreview.classList.add('hidden');
             statusDiv.classList.remove('hidden');
             bar.classList.remove('error');
             setProgress(2, 'Starting…');
@@ -972,6 +1177,7 @@
             try {
                 const d = await startTask('/api/generate-3d', body, 'Starting 3D generation');
                 const jobId = d.job_id;
+                decrementQuota();
 
                 let done = false, tries = 0;
                 while (!done && tries < 200) {
@@ -984,7 +1190,11 @@
                         STAGE_LABELS[sd.stage] || 'Generating 3D model…');
                     if (sd.status === 'ready' && sd.viewer_url) {
                         setProgress(100, 'Done');
-                        window.location.href = sd.viewer_url;
+                        if (sd.model_glb_url) {
+                            await showGenResult(sd);
+                        } else {
+                            window.location.href = sd.viewer_url;
+                        }
                         done = true;
                     } else if (sd.status === 'failed') {
                         throw new Error(sd.error || 'Generation failed');

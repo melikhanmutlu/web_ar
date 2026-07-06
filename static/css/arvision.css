@@ -772,6 +772,24 @@ body.selection-mode .model-card { cursor: default; }
 .av-textarea:focus { border-color: var(--color-gray-500); }
 
 /* ===================================================================
+   Advanced options (collapsible, AI generation panel)
+   =================================================================== */
+.av-advanced { margin-top: var(--spacing-lg); border-top: 1px solid var(--color-gray-200); padding-top: var(--spacing-md); }
+.dark .av-advanced { border-color: var(--color-gray-700); }
+.av-advanced summary {
+    font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--color-gray-500); cursor: pointer; list-style: none;
+}
+.av-advanced summary::-webkit-details-marker { display: none; }
+.av-advanced summary::before { content: '+ '; }
+.av-advanced[open] summary::before { content: '\2212 '; }
+.dark .av-advanced summary { color: var(--color-gray-400); }
+.av-advanced-body { margin-top: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-md); }
+.av-advanced-body .av-input, .av-advanced-body .av-select { width: 100%; }
+.av-advanced-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); }
+.av-advanced-row .av-number { width: 100%; }
+
+/* ===================================================================
    Inputs
    =================================================================== */
 .av-input, .av-select, .av-number {

@@ -37,6 +37,7 @@
             </div>
             <div><dt>folder</dt><dd>{% if model.folder %}{{ model.folder.full_path | map(attribute='name') | join(' / ') }}{% else %}—{% endif %}</dd></div>
             <div><dt>type</dt><dd>{{ model.file_type }}</dd></div>
+            <div><dt>source</dt><dd>{% if model.source %}{{ badge('ai-generated') }} {{ model.source }}{% else %}upload{% endif %}</dd></div>
             <div><dt>file size</dt><dd>{{ model.file_size_formatted }}</dd></div>
             <div><dt>version storage</dt><dd>{{ version_bytes | filesizeformat }} ({{ versions | length }} versions)</dd></div>
             <div><dt>uploaded</dt><dd>{{ model.upload_date_formatted }}</dd></div>

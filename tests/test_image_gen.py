@@ -78,7 +78,7 @@ def test_generate_3d_from_image_task(client, logged_in, meshy_configured, monkey
     monkeypatch.setattr(ai_generator, "fetch_image_as_data_uri",
                         lambda url, max_bytes=0: TINY_PNG_URI)
 
-    def fake_start_image_to_3d(image_data_uri):
+    def fake_start_image_to_3d(image_data_uri, **kwargs):
         captured["image"] = image_data_uri
         return "img3d-task-9"
 
@@ -151,7 +151,7 @@ def test_refine_started_only_once(client, logged_in, meshy_configured, monkeypat
         return {"status": "IN_PROGRESS", "progress": 10,
                 "model_urls": {}, "thumbnail_url": None, "task_error": None}
 
-    def fake_start_refine(preview_id):
+    def fake_start_refine(preview_id, **kwargs):
         calls["refine"] += 1
         return "refine-1"
 

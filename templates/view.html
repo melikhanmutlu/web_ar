@@ -266,6 +266,12 @@
         .tp-note { font-size: 0.65rem; color: var(--color-gray-500); font-style: italic; margin-top: 0.2rem; }
         .tp-checkbox { width: 0.85rem; height: 0.85rem; accent-color: var(--color-gray-200); cursor: pointer; }
 
+        /* Rig & Animate: curated preset picker */
+        .rig-anim-grid { max-height: 11rem; overflow-y: auto; border: 1px solid var(--color-gray-700); padding: 0.4rem; }
+        .rig-anim-category { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-gray-500); margin: 0.35rem 0 0.15rem; }
+        .rig-anim-category:first-child { margin-top: 0; }
+        .rig-anim-item { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; color: var(--color-gray-300); cursor: pointer; }
+
         /* Dimensions block */
         .tp-dims { padding: 0.45rem 0.55rem; background: var(--color-gray-800); border: 1px solid var(--color-gray-700); margin-bottom: 0.55rem; }
         .tp-dim-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--color-gray-400); padding: 0.12rem 0; }
@@ -2142,6 +2148,37 @@ void main() {
                 </div>
             </div>
 
+            {% if is_owner %}
+            <!-- ─── AI RIG & ANIMATE ─── -->
+            <div class="tp-section" id="rigAnimateSection">
+                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                    <i data-lucide="user" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Rig &amp; Animate (AI)</span>
+                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body">
+                    <p class="tp-note" style="margin:0 0 0.5rem;">Auto-rig this model and apply animations. Uses AI credits; works best on textured humanoid models.</p>
+                    <div class="tp-field">
+                        <label class="tp-label">Height (meters)</label>
+                        <input type="number" id="rigHeight" class="tp-input" min="0.05" max="10" step="0.01" value="1.7">
+                    </div>
+                    <div class="tp-field">
+                        <label class="tp-label">Animations (up to 10) — <span id="rigAnimCount">0/10</span></label>
+                        <div id="rigAnimationGrid" class="rig-anim-grid"><p class="tp-note">Loading animation presets…</p></div>
+                    </div>
+                    <button id="startRigBtn" class="tp-btn-full" style="margin-top:0.5rem;">
+                        <i data-lucide="sparkles" style="width:0.8rem;height:0.8rem;"></i>
+                        Start Rig &amp; Animate
+                    </button>
+                    <div id="rigStatus" class="hidden" style="margin-top:0.5rem;">
+                        <div class="progress-bar-container"><div class="progress-bar" id="rigProgressBar"></div></div>
+                        <p class="tp-note" id="rigStatusText">Starting…</p>
+                    </div>
+                    <p id="rigError" class="tp-note hidden" style="color:#ef4444;"></p>
+                </div>
+            </div>
+            {% endif %}
+
             </div><!-- /.showcase-content -->
 
             <!-- Save Changes (sticky bottom) -->
@@ -3269,6 +3306,132 @@ void main() {
 
         loadVersions();
         refreshVersions?.addEventListener('click', loadVersions);
+
+        {% if is_owner %}
+        // ===================================================================
+        // AI RIG & ANIMATE
+        // ===================================================================
+        (function () {
+            const rigModelId = '{{ model.id }}';
+            const grid = document.getElementById('rigAnimationGrid');
+            const countLabel = document.getElementById('rigAnimCount');
+            const startBtn = document.getElementById('startRigBtn');
+            const statusBox = document.getElementById('rigStatus');
+            const progressBar = document.getElementById('rigProgressBar');
+            const statusText = document.getElementById('rigStatusText');
+            const errorBox = document.getElementById('rigError');
+            if (!grid || !startBtn) return;
+
+            const MAX_ANIMATIONS = 10;
+            let selected = [];
+
+            function updateCount() {
+                countLabel.textContent = selected.length + '/' + MAX_ANIMATIONS;
+            }
+
+            fetch('/static/data/meshy_animation_presets.json')
+                .then(r => r.json())
+                .then(data => {
+                    grid.innerHTML = '';
+                    (data.categories || []).forEach(cat => {
+                        const heading = document.createElement('div');
+                        heading.className = 'rig-anim-category';
+                        heading.textContent = cat.name;
+                        grid.appendChild(heading);
+                        (cat.actions || []).forEach(action => {
+                            const label = document.createElement('label');
+                            label.className = 'rig-anim-item';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'tp-checkbox';
+                            checkbox.value = action.id;
+                            checkbox.addEventListener('change', () => {
+                                if (checkbox.checked) {
+                                    if (selected.length >= MAX_ANIMATIONS) {
+                                        checkbox.checked = false;
+                                        return;
+                                    }
+                                    selected.push(action.id);
+                                } else {
+                                    selected = selected.filter(id => id !== action.id);
+                                }
+                                updateCount();
+                            });
+                            label.appendChild(checkbox);
+                            label.appendChild(document.createTextNode(' ' + action.label));
+                            grid.appendChild(label);
+                        });
+                    });
+                })
+                .catch(() => {
+                    grid.innerHTML = '<p class="tp-note">Failed to load animation presets.</p>';
+                });
+
+            function setRigProgress(pct, msg) {
+                progressBar.style.width = pct + '%';
+                if (msg) statusText.textContent = msg;
+            }
+
+            startBtn.addEventListener('click', async () => {
+                errorBox.classList.add('hidden'); errorBox.textContent = '';
+                const height = parseFloat(document.getElementById('rigHeight').value);
+                if (!height || height < 0.05 || height > 10) {
+                    errorBox.textContent = 'Enter a valid height (0.05–10 meters).';
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+                if (!selected.length) {
+                    errorBox.textContent = 'Select at least one animation.';
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+
+                startBtn.disabled = true;
+                statusBox.classList.remove('hidden');
+                setRigProgress(2, 'Starting…');
+
+                try {
+                    const r = await fetch('/api/models/' + rigModelId + '/rig', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ height_meters: height, animation_action_ids: selected })
+                    });
+                    const d = await r.json();
+                    if (!d.success) throw new Error(d.error || 'Failed to start');
+                    const jobId = d.job_id;
+
+                    const STAGE_LABELS = {
+                        remeshing: 'Reducing polygon count…',
+                        rigging: 'Rigging…',
+                        animating: 'Applying animations…',
+                        finalizing: 'Saving result…'
+                    };
+                    let done = false, tries = 0;
+                    while (!done && tries < 200) {
+                        await new Promise(res => setTimeout(res, 2500));
+                        tries++;
+                        const sr = await fetch('/api/rig-jobs/' + jobId + '/status');
+                        const sd = await sr.json();
+                        if (!sd.success) throw new Error(sd.error || 'Status check failed');
+                        setRigProgress(Math.max(2, sd.progress || 0), STAGE_LABELS[sd.stage] || 'Working…');
+                        if (sd.status === 'ready' && sd.viewer_url) {
+                            setRigProgress(100, 'Done');
+                            window.location.href = sd.viewer_url;
+                            done = true;
+                        } else if (sd.status === 'failed') {
+                            throw new Error(sd.error || 'Rigging failed');
+                        }
+                    }
+                    if (!done) throw new Error('Timed out. Please try again.');
+                } catch (e) {
+                    errorBox.textContent = e.message;
+                    errorBox.classList.remove('hidden');
+                } finally {
+                    startBtn.disabled = false;
+                }
+            });
+        })();
+        {% endif %}
 
         // ===================================================================
         // INLINE EDIT — Title & Description (owner only)

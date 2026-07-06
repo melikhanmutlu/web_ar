@@ -186,6 +186,13 @@ app.register_blueprint(auth)
 app.register_blueprint(admin_bp)
 limiter.limit("120 per minute")(admin_bp)
 
+# auth.py can't import `limiter` itself (it's imported before `limiter` exists
+# in this module, so that would be circular) — apply IP-based brute-force
+# throttling here instead, on top of the per-account lockout in models.py.
+app.view_functions["auth.login"] = limiter.limit("10 per minute")(
+    app.view_functions["auth.login"]
+)
+
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
     level=logging.INFO,
@@ -1425,6 +1432,33 @@ def _check_upload_size_limit():
     return None
 
 
+def _check_storage_quota():
+    """Admin-configurable per-user storage cap (storage_quota_mb setting).
+
+    Anonymous uploads (user_id is None) aren't tracked to anyone's quota —
+    consistent with my_models.html's storage view, which is per-account.
+    request.content_length is an approximation of the incoming file size
+    (matches the same approximation _check_upload_size_limit already makes).
+    Returns a response tuple or None.
+    """
+    if not current_user.is_authenticated:
+        return None
+    quota_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+    if not quota_mb:
+        return None
+    used = (
+        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+        .filter(UserModel.user_id == current_user.id)
+        .scalar()
+    )
+    incoming = request.content_length or 0
+    if used + incoming > quota_mb * 1024 * 1024:
+        return jsonify(
+            {"error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin."}
+        ), 413
+    return None
+
+
 @app.route("/upload", methods=["POST"])
 @limiter.limit("30 per hour")
 def upload_file():
@@ -1436,6 +1470,9 @@ def upload_file():
         size_guard = _check_upload_size_limit()
         if size_guard is not None:
             return size_guard
+        quota_guard = _check_storage_quota()
+        if quota_guard is not None:
+            return quota_guard
 
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
@@ -1613,6 +1650,9 @@ def upload_model():
     size_guard = _check_upload_size_limit()
     if size_guard is not None:
         return size_guard
+    quota_guard = _check_storage_quota()
+    if quota_guard is not None:
+        return quota_guard
 
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -3140,9 +3180,6 @@ def serve_thumbnail(unique_id):
 
 
 TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
-# Per-user storage quota. 1 GB for everyone for now; when paid plans land
-# this becomes a per-plan value (the env var stays as the global default).
-STORAGE_QUOTA_BYTES = int(os.getenv("STORAGE_QUOTA_MB", 1024)) * 1024 * 1024
 
 
 def _purge_expired_trash(user_id):
@@ -3225,7 +3262,13 @@ def my_models(folder_id=None):
             trash_models=trash_models,
             trash_retention_days=TRASH_RETENTION_DAYS,
             storage_used=storage_used,
-            storage_quota=STORAGE_QUOTA_BYTES,
+            storage_quota=(
+                setting_int(
+                    "storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024))
+                )
+                * 1024
+                * 1024
+            ),
         )
     except Exception as e:
         app.logger.error(f"Error in my_models: {str(e)}")
@@ -4388,6 +4431,7 @@ def get_versions(model_id):
 
 
 @app.route("/api/versions/<model_id>/restore/<int:version_number>", methods=["POST"])
+@limiter.limit("60 per minute")
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     try:
@@ -4415,6 +4459,7 @@ def restore_model_version(model_id, version_number):
 
 
 @app.route("/api/versions/<model_id>/delete/<int:version_number>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_model_version(model_id, version_number):
     """Delete a specific version"""
     try:
@@ -4438,6 +4483,10 @@ def delete_model_version(model_id, version_number):
 def download_version(model_id, version_number):
     """Download a specific version"""
     try:
+        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        if guard:
+            return guard
+
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()
@@ -4485,6 +4534,7 @@ def get_hotspots(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots", methods=["POST"])
+@limiter.limit("60 per minute")
 def create_hotspot(model_id):
     """Create a new hotspot on a model"""
     try:
@@ -4540,6 +4590,7 @@ def create_hotspot(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots/<hotspot_id>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_hotspot(model_id, hotspot_id):
     """Delete a specific hotspot"""
     try:
@@ -4563,6 +4614,7 @@ def delete_hotspot(model_id, hotspot_id):
 
 
 @app.route("/api/models/<model_id>/hotspots", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_all_hotspots(model_id):
     """Delete all hotspots for a model"""
     try:
@@ -4580,6 +4632,7 @@ def delete_all_hotspots(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots/visibility", methods=["PATCH"])
+@limiter.limit("60 per minute")
 def toggle_hotspots_visibility(model_id):
     """Toggle hotspot visibility for a model"""
     try:
@@ -4617,6 +4670,7 @@ def get_camera_views(model_id):
 
 
 @app.route("/api/models/<model_id>/camera-views", methods=["POST"])
+@limiter.limit("60 per minute")
 def create_camera_view(model_id):
     """Save a camera view"""
     try:
@@ -4653,6 +4707,7 @@ def create_camera_view(model_id):
 
 
 @app.route("/api/models/<model_id>/camera-views/<int:view_id>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_camera_view(model_id, view_id):
     """Delete a camera view"""
     try:

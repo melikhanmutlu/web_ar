@@ -105,8 +105,15 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
         
         db.session.add(version)
         db.session.commit()
-        
+
         logger.info(f"Created version {version_number} for model {model_id}: {operation_type}")
+
+        # Each version is a full on-disk GLB copy — cap how many accumulate
+        # per model regardless of call site (upload/transform/slice/AI/etc).
+        # cleanup_old_versions() never raises, so a prune failure can't turn
+        # a successful version creation into a failed one.
+        cleanup_old_versions(model_id)
+
         return version
         
     except Exception as e:
@@ -145,14 +152,26 @@ def restore_version(model_id, version_number):
         if not os.path.exists(version.filename):
             logger.error(f"Version file not found: {version.filename}")
             return False
-        
-        # Create a new version before restoring (to preserve current state)
-        create_version(model_id, 'restore', {'restored_from': version_number}, f'Restored from version {version_number}')
 
-        # Copy version file to current model atomically (temp + rename), so a
-        # failure mid-copy never leaves a truncated model.glb being served.
-        current_file = os.path.join(_model_dir(model_id), 'model.glb')
-        _atomic_copy(version.filename, current_file)
+        # Stash the restore source in a temp file before touching anything
+        # else: create_version() below now also prunes old versions, which
+        # could otherwise delete version.filename out from under us if this
+        # version falls outside the keep-last-N window (e.g. restoring a very
+        # old version on a heavily-edited model).
+        restore_source = f"{version.filename}.restoring.{os.getpid()}"
+        shutil.copy2(version.filename, restore_source)
+
+        try:
+            # Create a new version before restoring (to preserve current state)
+            create_version(model_id, 'restore', {'restored_from': version_number}, f'Restored from version {version_number}')
+
+            # Copy version file to current model atomically (temp + rename), so a
+            # failure mid-copy never leaves a truncated model.glb being served.
+            current_file = os.path.join(_model_dir(model_id), 'model.glb')
+            _atomic_copy(restore_source, current_file)
+        finally:
+            if os.path.exists(restore_source):
+                os.remove(restore_source)
 
         # Update model metadata
         model = UserModel.query.get(model_id)

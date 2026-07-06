@@ -41,10 +41,20 @@ def login():
         user = User.query.filter(
             (User.username == form.username.data) | (User.email == form.username.data)
         ).first()
-        
+
+        if user is not None and user.is_locked:
+            flash('Too many failed login attempts. Please try again in a few minutes.', 'error')
+            return redirect(url_for('auth.login'))
+
         if user is None or not user.check_password(form.password.data):
+            if user is not None:
+                user.register_failed_login()
+                db.session.commit()
             flash('Invalid username/email or password', 'error')
             return redirect(url_for('auth.login'))
+
+        user.register_successful_login()
+        db.session.commit()
 
         if not login_user(user, remember=form.remember.data):
             # login_user refuses inactive (admin-deactivated) accounts

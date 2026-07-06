@@ -1,12 +1,15 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import sqlalchemy as sa
 
 db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
+    LOCKOUT_THRESHOLD = 5
+    LOCKOUT_MINUTES = 15
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -16,6 +19,8 @@ class User(UserMixin, db.Model):
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
+    failed_login_attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    locked_until = db.Column(db.DateTime, nullable=True)
     models = db.relationship('UserModel', backref='user', lazy=True)
     folders = db.relationship('Folder', backref='user', lazy=True)
 
@@ -23,6 +28,21 @@ class User(UserMixin, db.Model):
     def is_active(self):
         # Flask-Login: login_user() refuses inactive users automatically.
         return bool(self.is_active_flag)
+
+    @property
+    def is_locked(self):
+        return self.locked_until is not None and self.locked_until > datetime.utcnow()
+
+    def register_failed_login(self):
+        """Brute-force guard: lock the account for LOCKOUT_MINUTES after
+        LOCKOUT_THRESHOLD consecutive failed password attempts."""
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= self.LOCKOUT_THRESHOLD:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=self.LOCKOUT_MINUTES)
+
+    def register_successful_login(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

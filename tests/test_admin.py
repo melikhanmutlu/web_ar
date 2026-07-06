@@ -133,10 +133,13 @@ def test_reset_password_returns_temp_password_once(client, init_database, admin_
     assert db.session.get(User, init_database.id).check_password(temp_password)
 
 
-def test_delete_user_cascades(client, init_database, admin_user, tmp_path):
-    app.config["UPLOAD_FOLDER"] = str(tmp_path / "uploads")
-    app.config["CONVERTED_FOLDER"] = str(tmp_path / "converted")
-    app.config["QR_FOLDER"] = str(tmp_path / "qr")
+def test_delete_user_cascades(client, init_database, admin_user, tmp_path, monkeypatch):
+    # monkeypatch.setitem restores these after the test, so a later test in
+    # the same session can't inherit a stale tmp_path (app.config is a
+    # process-wide singleton, not reset per-test like the DB is).
+    monkeypatch.setitem(app.config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.setitem(app.config, "CONVERTED_FOLDER", str(tmp_path / "converted"))
+    monkeypatch.setitem(app.config, "QR_FOLDER", str(tmp_path / "qr"))
 
     user = init_database
     model = make_model(user_id=user.id)
@@ -176,12 +179,14 @@ def test_delete_user_rejects_self(client, admin_user):
 # ---------------------------------------------------------------------------
 
 
-def test_model_trash_restore_purge(client, admin_user, init_database, tmp_path):
+def test_model_trash_restore_purge(client, admin_user, init_database, tmp_path, monkeypatch):
     upload_dir = tmp_path / "uploads"
     converted_dir = tmp_path / "converted"
-    app.config["UPLOAD_FOLDER"] = str(upload_dir)
-    app.config["CONVERTED_FOLDER"] = str(converted_dir)
-    app.config["QR_FOLDER"] = str(tmp_path / "qr")
+    # monkeypatch.setitem restores these after the test (see comment in
+    # test_delete_user_cascades above).
+    monkeypatch.setitem(app.config, "UPLOAD_FOLDER", str(upload_dir))
+    monkeypatch.setitem(app.config, "CONVERTED_FOLDER", str(converted_dir))
+    monkeypatch.setitem(app.config, "QR_FOLDER", str(tmp_path / "qr"))
 
     model = make_model(user_id=init_database.id)
     db.session.add(ModelLike(model_id=model.id, session_id="anon-1"))

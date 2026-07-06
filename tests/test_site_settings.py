@@ -134,3 +134,54 @@ def test_admin_can_save_settings_form(client, admin_user):
     assert response.status_code == 302
     site_settings.invalidate_cache()
     assert site_settings.setting_int("ai_daily_limit", 10) == 5
+
+
+def test_storage_quota_blocks_upload_when_exceeded(client, init_database):
+    login(client, "testuser", "testpassword")
+    site_settings.set_setting("storage_quota_mb", "1")
+    big = io.BytesIO(b"0" * (2 * 1024 * 1024))
+    response = client.post(
+        "/upload_model",
+        data={"file": (big, "big.stl")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 413
+    assert b"Storage quota exceeded" in response.data
+
+
+def test_storage_quota_zero_means_unlimited(client, init_database):
+    login(client, "testuser", "testpassword")
+    site_settings.set_setting("storage_quota_mb", "0")
+    big = io.BytesIO(b"0" * (2 * 1024 * 1024))
+    # .txt fails the extension check right after the quota gate — proves the
+    # quota didn't block it without also spinning up the real conversion
+    # pipeline (which the size of the quota check itself has no bearing on).
+    response = client.post(
+        "/upload_model",
+        data={"file": (big, "big.txt")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code != 413
+
+
+def test_anonymous_uploads_are_not_subject_to_storage_quota(client):
+    site_settings.set_setting("storage_quota_mb", "1")
+    big = io.BytesIO(b"0" * (2 * 1024 * 1024))
+    response = client.post(
+        "/upload_model",
+        data={"file": (big, "big.txt")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code != 413
+
+
+def test_admin_settings_uploads_tab_saves_storage_quota(client, admin_user):
+    login(client, "adminuser", "adminpassword")
+    response = client.post(
+        "/admin/settings?tab=uploads",
+        data={"max_upload_mb": "50", "storage_quota_mb": "500"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    site_settings.invalidate_cache()
+    assert site_settings.setting_int("storage_quota_mb", 0) == 500

@@ -9,6 +9,8 @@ app.py imports this blueprint). Anything shared with the site lives in
 model_cleanup.py / site_settings.py.
 """
 
+import csv
+import io
 import logging
 import math
 import os
@@ -19,6 +21,7 @@ from functools import wraps
 
 from flask import (
     Blueprint,
+    Response,
     abort,
     current_app,
     flash,
@@ -57,6 +60,14 @@ PER_PAGE = 25
 CHART_DAYS = 30
 # Mirrors worker.py's stale-processing cutoff (importing worker would pull in app.py)
 STALE_PROCESSING_MINUTES = int(os.environ.get("WORKER_STALE_MINUTES", "30"))
+# AI generations only advance via client-side polling (see app.py's
+# generate_3d_status) — a closed tab leaves a job stuck in a non-terminal
+# state forever with nothing to reconcile it server-side. This is purely a
+# visibility threshold, not tied to a sweep.
+AI_STALE_MINUTES = int(os.environ.get("AI_STALE_MINUTES", "30"))
+# worker.py writes a heartbeat every ~30s when running; allow a few missed
+# writes before calling it stale to avoid false alarms from scheduling jitter.
+WORKER_HEARTBEAT_STALE_SECONDS = int(os.environ.get("WORKER_HEARTBEAT_STALE_SECONDS", "120"))
 
 
 def admin_required(f):
@@ -118,6 +129,30 @@ def _page_arg():
         return 1
 
 
+DAY_RANGE_CHOICES = (7, 30, 90)
+
+
+def _days_arg():
+    try:
+        days = int(request.args.get("days", CHART_DAYS))
+    except (TypeError, ValueError):
+        return CHART_DAYS
+    return days if days in DAY_RANGE_CHOICES else CHART_DAYS
+
+
+def _csv_response(filename, header, rows):
+    """Build a CSV download from a header row + iterable of row tuples."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def _daily_series(date_col, days=CHART_DAYS, extra_filter=None):
     """Per-day row counts for the trailing `days` days, gap-filled."""
     start = datetime.utcnow() - timedelta(days=days - 1)
@@ -156,6 +191,23 @@ def _effective_storage_quota_mb():
     STORAGE_QUOTA_MB env default (app.py's original module constant) when no
     admin override has been saved yet."""
     return setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+
+
+def _worker_health():
+    """Reads the heartbeat worker.py writes every ~30s. Returns
+    (last_seen: datetime|None, seconds_ago: float|None, is_stale: bool).
+    No heartbeat ever recorded (JOB_QUEUE off, or worker never started) is
+    reported as stale but distinguished from a worker that stopped — the
+    dashboard renders each case with different wording."""
+    raw = get_setting("worker_heartbeat")
+    if not raw:
+        return None, None, True
+    try:
+        last_seen = datetime.fromisoformat(raw)
+    except ValueError:
+        return None, None, True
+    age = (datetime.utcnow() - last_seen).total_seconds()
+    return last_seen, age, age > WORKER_HEARTBEAT_STALE_SECONDS
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +252,9 @@ def dashboard():
         "queue_pending": ConversionJob.query.filter_by(status="pending").count(),
     }
 
+    ai_stale_cutoff = now - timedelta(minutes=AI_STALE_MINUTES)
+    worker_last_seen, worker_seconds_ago, worker_stale = _worker_health()
+
     health = {
         "failed_jobs_24h": ConversionJob.query.filter(
             ConversionJob.status == "failed", ConversionJob.finished_at >= day_ago
@@ -208,6 +263,13 @@ def dashboard():
             ConversionJob.status == "processing",
             ConversionJob.started_at < stale_cutoff,
         ).count(),
+        "stale_ai_jobs": AIGenerationJob.query.filter(
+            AIGenerationJob.status == "generating",
+            AIGenerationJob.updated_at < ai_stale_cutoff,
+        ).count(),
+        "worker_last_seen": worker_last_seen,
+        "worker_seconds_ago": worker_seconds_ago,
+        "worker_stale": worker_stale,
         "disk_total": None,
         "disk_free": None,
         "disk_used_pct": None,
@@ -221,9 +283,10 @@ def dashboard():
     except OSError as e:
         logger.warning(f"disk_usage failed: {e}")
 
+    days = _days_arg()
     charts = {
-        "registrations": _daily_series(User.created_at),
-        "uploads": _daily_series(UserModel.upload_date),
+        "registrations": _daily_series(User.created_at, days=days),
+        "uploads": _daily_series(UserModel.upload_date, days=days),
     }
 
     recent = {
@@ -237,7 +300,8 @@ def dashboard():
     }
 
     return render_template(
-        "admin/dashboard.html", stats=stats, health=health, charts=charts, recent=recent
+        "admin/dashboard.html", stats=stats, health=health, charts=charts, recent=recent,
+        days=days, day_choices=DAY_RANGE_CHOICES, ai_stale_minutes=AI_STALE_MINUTES,
     )
 
 
@@ -246,9 +310,7 @@ def dashboard():
 # ---------------------------------------------------------------------------
 
 
-@admin_bp.route("/users")
-@admin_required
-def users():
+def _users_query():
     q = (request.args.get("q") or "").strip()
     sort = request.args.get("sort", "newest")
 
@@ -296,8 +358,34 @@ def users():
         sort = "newest"
         query = query.order_by(User.created_at.desc())
 
+    return query, q, sort
+
+
+@admin_bp.route("/users")
+@admin_required
+def users():
+    query, q, sort = _users_query()
     page = paginate(query, _page_arg())
     return render_template("admin/users.html", page=page, q=q, sort=sort)
+
+
+@admin_bp.route("/users/export.csv")
+@admin_required
+def export_users_csv():
+    query, _, _ = _users_query()
+    rows = (
+        (
+            u.id, u.username, u.email,
+            u.created_at.isoformat() if u.created_at else "",
+            model_count or 0, storage_bytes or 0, u.is_admin, u.is_active_flag,
+        )
+        for u, model_count, storage_bytes in query.all()
+    )
+    return _csv_response(
+        "users.csv",
+        ["id", "username", "email", "joined", "models", "storage_bytes", "is_admin", "is_active"],
+        rows,
+    )
 
 
 @admin_bp.route("/users/<int:user_id>")
@@ -492,9 +580,7 @@ def bulk_delete_users():
 # ---------------------------------------------------------------------------
 
 
-@admin_bp.route("/models")
-@admin_required
-def models():
+def _models_query():
     q = (request.args.get("q") or "").strip()
     file_type = (request.args.get("type") or "").strip()
     owner = (request.args.get("user") or "").strip()
@@ -545,23 +631,47 @@ def models():
         sort = "date"
         query = query.order_by(UserModel.upload_date.desc())
 
+    return query, {"q": q, "file_type": file_type, "owner": owner, "owner_user": owner_user,
+                    "status": status, "sort": sort}
+
+
+@admin_bp.route("/models")
+@admin_required
+def models():
+    query, ctx = _models_query()
     file_types = [
         row[0]
         for row in db.session.query(UserModel.file_type).distinct().all()
         if row[0]
     ]
-
     page = paginate(query, _page_arg())
     return render_template(
         "admin/models.html",
         page=page,
-        q=q,
-        file_type=file_type,
         file_types=sorted(file_types),
-        owner=owner,
-        owner_user=owner_user,
-        status=status,
-        sort=sort,
+        **ctx,
+    )
+
+
+@admin_bp.route("/models/export.csv")
+@admin_required
+def export_models_csv():
+    query, _ = _models_query()
+    rows = (
+        (
+            m.id, m.display_name or m.original_filename, username or "anonymous",
+            m.file_type, m.file_size or 0, m.view_count or 0, m.download_count or 0,
+            m.share_count or 0,
+            m.upload_date.isoformat() if m.upload_date else "",
+            "trashed" if m.deleted_at else "active",
+        )
+        for username, m in query.all()
+    )
+    return _csv_response(
+        "models.csv",
+        ["id", "name", "owner", "type", "file_size", "views", "downloads", "shares",
+         "uploaded", "status"],
+        rows,
     )
 
 
@@ -727,24 +837,26 @@ def bulk_purge_models():
 # ---------------------------------------------------------------------------
 
 
-@admin_bp.route("/jobs")
-@admin_required
-def jobs():
+def _jobs_query():
     status = (request.args.get("status") or "").strip()
-
-    counts = dict(
-        db.session.query(ConversionJob.status, func.count())
-        .group_by(ConversionJob.status)
-        .all()
-    )
-
     query = db.session.query(User.username, ConversionJob).select_from(
         ConversionJob
     ).outerjoin(User, ConversionJob.user_id == User.id)
     if status:
         query = query.filter(ConversionJob.status == status)
     query = query.order_by(ConversionJob.created_at.desc())
+    return query, status
 
+
+@admin_bp.route("/jobs")
+@admin_required
+def jobs():
+    query, status = _jobs_query()
+    counts = dict(
+        db.session.query(ConversionJob.status, func.count())
+        .group_by(ConversionJob.status)
+        .all()
+    )
     page = paginate(query, _page_arg())
     return render_template(
         "admin/jobs.html",
@@ -752,6 +864,26 @@ def jobs():
         status=status,
         counts=counts,
         stale_minutes=STALE_PROCESSING_MINUTES,
+    )
+
+
+@admin_bp.route("/jobs/export.csv")
+@admin_required
+def export_jobs_csv():
+    query, _ = _jobs_query()
+    rows = (
+        (
+            j.id, j.job_type, j.status, username or "anonymous", j.attempts, j.max_attempts,
+            j.created_at.isoformat() if j.created_at else "",
+            j.finished_at.isoformat() if j.finished_at else "",
+            j.error or "",
+        )
+        for username, j in query.all()
+    )
+    return _csv_response(
+        "conversion_jobs.csv",
+        ["id", "type", "status", "owner", "attempts", "max_attempts", "created", "finished", "error"],
+        rows,
     )
 
 
@@ -819,11 +951,24 @@ def delete_job(job_id):
 # ---------------------------------------------------------------------------
 
 
+def _ai_jobs_query():
+    status = (request.args.get("status") or "").strip()
+    kind = (request.args.get("kind") or "").strip()
+    query = db.session.query(User.username, AIGenerationJob).select_from(
+        AIGenerationJob
+    ).outerjoin(User, AIGenerationJob.user_id == User.id)
+    if status:
+        query = query.filter(AIGenerationJob.status == status)
+    if kind:
+        query = query.filter(AIGenerationJob.kind == kind)
+    query = query.order_by(AIGenerationJob.created_at.desc())
+    return query, status, kind
+
+
 @admin_bp.route("/ai-jobs")
 @admin_required
 def ai_jobs():
-    status = (request.args.get("status") or "").strip()
-    kind = (request.args.get("kind") or "").strip()
+    query, status, kind = _ai_jobs_query()
 
     counts = dict(
         db.session.query(AIGenerationJob.status, func.count())
@@ -842,15 +987,6 @@ def ai_jobs():
         .all()
     )
 
-    query = db.session.query(User.username, AIGenerationJob).select_from(
-        AIGenerationJob
-    ).outerjoin(User, AIGenerationJob.user_id == User.id)
-    if status:
-        query = query.filter(AIGenerationJob.status == status)
-    if kind:
-        query = query.filter(AIGenerationJob.kind == kind)
-    query = query.order_by(AIGenerationJob.created_at.desc())
-
     page = paginate(query, _page_arg())
     return render_template(
         "admin/ai_jobs.html",
@@ -860,6 +996,28 @@ def ai_jobs():
         counts=counts,
         usage_24h=usage_24h,
         ai_limit=_effective_ai_daily_limit(),
+        stale_minutes=AI_STALE_MINUTES,
+        stale_cutoff=datetime.utcnow() - timedelta(minutes=AI_STALE_MINUTES),
+    )
+
+
+@admin_bp.route("/ai-jobs/export.csv")
+@admin_required
+def export_ai_jobs_csv():
+    query, _, _ = _ai_jobs_query()
+    rows = (
+        (
+            j.id, username or "anonymous", j.kind, j.status, j.stage or "", j.progress or 0,
+            j.model_id or "", (j.prompt or "")[:200],
+            j.created_at.isoformat() if j.created_at else "",
+            j.error or "",
+        )
+        for username, j in query.all()
+    )
+    return _csv_response(
+        "ai_jobs.csv",
+        ["id", "owner", "kind", "status", "stage", "progress", "model_id", "prompt", "created", "error"],
+        rows,
     )
 
 
@@ -869,6 +1027,23 @@ def delete_ai_job(job_id):
     job = AIGenerationJob.query.get_or_404(job_id)
     log_action("ai_job.delete", "ai_job", job_id)
     db.session.delete(job)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.route("/ai-jobs/<job_id>/mark-failed", methods=["POST"])
+@admin_required
+def mark_ai_job_failed(job_id):
+    """Close out a job stuck in a non-terminal state without touching Meshy —
+    the client-side poll is the only thing that ever advances these jobs, so
+    an abandoned tab leaves one stuck forever with no server-side retry path
+    that wouldn't risk starting a duplicate (paid) generation."""
+    job = AIGenerationJob.query.get_or_404(job_id)
+    if job.status in ("ready", "failed"):
+        return jsonify({"success": False, "error": "Job is already finished"}), 400
+    job.status = "failed"
+    job.error = "Marked as failed by an admin (job was stuck)."
+    log_action("ai_job.mark_failed", "ai_job", job_id)
     db.session.commit()
     return jsonify({"success": True})
 
@@ -907,11 +1082,12 @@ def analytics():
         .all()
     )
 
+    days = _days_arg()
     charts = {
-        "uploads": _daily_series(UserModel.upload_date),
-        "registrations": _daily_series(User.created_at),
-        "likes": _daily_series(ModelLike.created_at),
-        "ai_jobs": _daily_series(AIGenerationJob.created_at),
+        "uploads": _daily_series(UserModel.upload_date, days=days),
+        "registrations": _daily_series(User.created_at, days=days),
+        "likes": _daily_series(ModelLike.created_at, days=days),
+        "ai_jobs": _daily_series(AIGenerationJob.created_at, days=days),
     }
 
     return render_template(
@@ -920,6 +1096,8 @@ def analytics():
         totals=totals,
         type_breakdown=type_breakdown,
         charts=charts,
+        days=days,
+        day_choices=DAY_RANGE_CHOICES,
     )
 
 
@@ -1010,9 +1188,7 @@ def settings():
 # ---------------------------------------------------------------------------
 
 
-@admin_bp.route("/audit-log")
-@admin_required
-def audit_log():
+def _audit_log_query():
     q = (request.args.get("q") or "").strip()
     action = (request.args.get("action") or "").strip()
 
@@ -1031,12 +1207,37 @@ def audit_log():
         query = query.filter(AdminAuditLog.action == action)
 
     query = query.order_by(AdminAuditLog.created_at.desc())
+    return query, q, action
 
+
+@admin_bp.route("/audit-log")
+@admin_required
+def audit_log():
+    query, q, action = _audit_log_query()
     actions = sorted(
         row[0] for row in db.session.query(AdminAuditLog.action).distinct().all()
     )
-
     page = paginate(query, _page_arg())
     return render_template(
         "admin/audit_log.html", page=page, q=q, action=action, actions=actions
+    )
+
+
+@admin_bp.route("/audit-log/export.csv")
+@admin_required
+def export_audit_log_csv():
+    query, _, _ = _audit_log_query()
+    rows = (
+        (
+            e.created_at.isoformat() if e.created_at else "",
+            username or "",
+            e.action, e.target_type or "", e.target_id or "",
+            "" if not e.detail else str(e.detail),
+        )
+        for username, e in query.all()
+    )
+    return _csv_response(
+        "audit_log.csv",
+        ["when", "admin", "action", "target_type", "target_id", "detail"],
+        rows,
     )

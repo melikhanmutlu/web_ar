@@ -84,8 +84,9 @@
                     <td class="muted">{{ v.created_at_formatted }}</td>
                     <td class="muted">{{ v.comment or '—' }}</td>
                     <td class="actions">
-                        <a class="admin-icon-btn" href="{{ url_for('download_version', model_id=model.id, version_number=v.version_number) }}" title="download"><i data-lucide="download"></i></a>
+                        <a class="admin-icon-btn" href="{{ url_for('download_version', model_id=model.id, version_number=v.version_number) }}" title="download" aria-label="download version {{ v.version_number }}"><i data-lucide="download"></i></a>
                         <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete version"
+                                aria-label="delete version {{ v.version_number }}"
                                 data-action-url="{{ url_for('admin.delete_model_version_admin', model_id=model.id, version_number=v.version_number) }}"
                                 data-confirm="Delete version {{ v.version_number }}? This cannot be undone."><i data-lucide="x"></i></button>
                     </td>
@@ -107,6 +108,7 @@
                 <span class="title" title="{{ h.description or '' }}">{{ h.title }}</span>
                 <span class="meta">
                     <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete hotspot"
+                            aria-label="delete hotspot {{ h.title }}"
                             data-action-url="{{ url_for('admin.delete_model_hotspot', model_id=model.id, hotspot_id=h.hotspot_id) }}"
                             data-confirm="Delete hotspot &quot;{{ h.title }}&quot;?"><i data-lucide="x"></i></button>
                 </span>
@@ -124,6 +126,7 @@
                 <span class="title">{{ v.name }}</span>
                 <span class="meta">
                     <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete camera view"
+                            aria-label="delete camera view {{ v.name }}"
                             data-action-url="{{ url_for('admin.delete_model_camera_view', model_id=model.id, view_id=v.id) }}"
                             data-confirm="Delete camera view &quot;{{ v.name }}&quot;?"><i data-lucide="x"></i></button>
                 </span>

@@ -1,4 +1,5 @@
 {% extends "admin/base.html" %}
+{% from "admin/_day_range.html" import day_range %}
 
 {% block title %}analytics — arvision admin{% endblock %}
 {% block page_title %}analytics{% endblock %}
@@ -21,24 +22,26 @@
     {% endfor %}
 </div>
 
+{{ day_range('admin.analytics', days, day_choices) }}
+
 <div class="admin-grid-2">
     <div class="admin-card">
-        <h2 class="admin-card-title">uploads — last 30 days</h2>
+        <h2 class="admin-card-title">uploads — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.uploads | tojson }}'></div>
     </div>
     <div class="admin-card">
-        <h2 class="admin-card-title">registrations — last 30 days</h2>
+        <h2 class="admin-card-title">registrations — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.registrations | tojson }}'></div>
     </div>
 </div>
 
 <div class="admin-grid-2">
     <div class="admin-card">
-        <h2 class="admin-card-title">likes — last 30 days</h2>
+        <h2 class="admin-card-title">likes — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.likes | tojson }}'></div>
     </div>
     <div class="admin-card">
-        <h2 class="admin-card-title">ai generations — last 30 days</h2>
+        <h2 class="admin-card-title">ai generations — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.ai_jobs | tojson }}'></div>
     </div>
 </div>

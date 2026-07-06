@@ -1,0 +1,7 @@
+{% macro day_range(endpoint, days, day_choices) %}
+<div class="admin-pills">
+    {% for d in day_choices %}
+    <a href="{{ url_for(endpoint, days=d) }}" class="admin-pill {% if days == d %}is-active{% endif %}">{{ d }} days</a>
+    {% endfor %}
+</div>
+{% endmacro %}

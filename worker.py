@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 
 from app import app, db, run_conversion_job
 from models import ConversionJob
+from site_settings import set_setting
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +30,10 @@ POLL_INTERVAL = float(os.environ.get("WORKER_POLL_INTERVAL", "2"))
 # Jobs stuck in 'processing' longer than this are assumed orphaned
 # (worker crashed mid-job) and put back to pending.
 STALE_PROCESSING_MINUTES = int(os.environ.get("WORKER_STALE_MINUTES", "30"))
+# How often the loop records a liveness timestamp (site_settings-backed) so
+# the admin dashboard can show "worker last seen Ns ago" instead of only
+# inferring liveness indirectly from stale ConversionJob rows.
+HEARTBEAT_INTERVAL = 30
 
 
 def claim_next_job():
@@ -99,8 +104,16 @@ def main():
         f"db {db.engine.dialect.name})"
     )
     last_stale_sweep = 0.0
+    last_heartbeat = 0.0
     while True:
         try:
+            if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:
+                try:
+                    set_setting("worker_heartbeat", datetime.utcnow().isoformat())
+                except Exception as e:
+                    logger.warning(f"Heartbeat write failed: {e}")
+                last_heartbeat = time.monotonic()
+
             if time.monotonic() - last_stale_sweep > 60:
                 requeue_stale_jobs()
                 last_stale_sweep = time.monotonic()

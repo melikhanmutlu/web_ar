@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% from "admin/_status_badge.html" import badge %}
+{% from "admin/_day_range.html" import day_range %}
 
 {% block title %}dashboard — arvision admin{% endblock %}
 {% block page_title %}dashboard{% endblock %}
@@ -35,13 +36,15 @@
     </div>
 </div>
 
+{{ day_range('admin.dashboard', days, day_choices) }}
+
 <div class="admin-grid-2">
     <div class="admin-card">
-        <h2 class="admin-card-title">registrations — last 30 days</h2>
+        <h2 class="admin-card-title">registrations — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.registrations | tojson }}'></div>
     </div>
     <div class="admin-card">
-        <h2 class="admin-card-title">uploads — last 30 days</h2>
+        <h2 class="admin-card-title">uploads — last {{ days }} days</h2>
         <div class="admin-chart" data-points='{{ charts.uploads | tojson }}'></div>
     </div>
 </div>
@@ -63,6 +66,22 @@
                 <dd class="{% if health.stale_jobs %}admin-health-warn{% else %}admin-health-ok{% endif %}">
                     {{ health.stale_jobs }}{% if health.stale_jobs %} — worker may be down{% endif %}
                 </dd>
+            </div>
+            <div>
+                <dt>stale ai generations</dt>
+                <dd class="{% if health.stale_ai_jobs %}admin-health-warn{% else %}admin-health-ok{% endif %}">
+                    {{ health.stale_ai_jobs }}{% if health.stale_ai_jobs %} — stuck &gt; {{ ai_stale_minutes }}m{% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>conversion worker</dt>
+                {% if health.worker_last_seen %}
+                <dd class="{% if health.worker_stale %}admin-health-warn{% else %}admin-health-ok{% endif %}">
+                    last seen {{ health.worker_seconds_ago | round | int }}s ago{% if health.worker_stale %} — may be down{% endif %}
+                </dd>
+                {% else %}
+                <dd class="muted">never seen (inline mode, or not started)</dd>
+                {% endif %}
             </div>
             {% if health.disk_total %}
             <div>

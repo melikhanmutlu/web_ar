@@ -5,6 +5,10 @@
 {% block title %}models — arvision admin{% endblock %}
 {% block page_title %}models{% endblock %}
 
+{% block topbar_actions %}
+<a href="{{ url_for('admin.export_models_csv', **request.args) }}" class="admin-btn">export csv</a>
+{% endblock %}
+
 {% block content %}
 <form method="GET" action="{{ url_for('admin.models') }}" class="admin-filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search name, filename or id…" class="av-input">
@@ -92,15 +96,16 @@
                     <td class="muted">{{ model.upload_date_formatted }}</td>
                     <td>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</td>
                     <td class="actions">
-                        <a class="admin-icon-btn" href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer"><i data-lucide="eye"></i></a>
+                        <a class="admin-icon-btn" href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer" aria-label="open viewer"><i data-lucide="eye"></i></a>
                         {% if model.deleted_at %}
-                        <button type="button" class="admin-icon-btn" title="restore"
+                        <button type="button" class="admin-icon-btn" title="restore" aria-label="restore model"
                                 data-action-url="{{ url_for('admin.restore_model', model_id=model.id) }}"><i data-lucide="undo-2"></i></button>
                         {% else %}
-                        <button type="button" class="admin-icon-btn" title="move to trash"
+                        <button type="button" class="admin-icon-btn" title="move to trash" aria-label="move to trash"
                                 data-action-url="{{ url_for('admin.trash_model', model_id=model.id) }}"><i data-lucide="trash-2"></i></button>
                         {% endif %}
                         <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete permanently"
+                                aria-label="delete permanently"
                                 data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
                                 data-confirm="Permanently delete this model and its files? This cannot be undone."><i data-lucide="x"></i></button>
                     </td>

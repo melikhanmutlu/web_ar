@@ -63,9 +63,17 @@
     const confirmOk = document.getElementById('adminConfirmOk');
 
     let pending = null; // { url, typed, showPassword }
+    let lastFocusedElement = null;
+
+    function getFocusableModalElements() {
+        return Array.from(
+            modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        ).filter((el) => !el.disabled && el.offsetParent !== null);
+    }
 
     function openModal(options) {
         pending = options;
+        lastFocusedElement = document.activeElement;
         confirmText.textContent = options.message;
         confirmResult.style.display = 'none';
         confirmOk.style.display = '';
@@ -79,12 +87,14 @@
             confirmInput.style.display = 'none';
         }
         modal.style.display = 'block';
-        if (options.typed) confirmInput.focus();
+        (options.typed ? confirmInput : modal.querySelector('[data-confirm-cancel]')).focus();
     }
 
     function closeModal() {
         pending = null;
         modal.style.display = 'none';
+        if (lastFocusedElement) lastFocusedElement.focus();
+        lastFocusedElement = null;
     }
 
     if (confirmInput) {
@@ -101,6 +111,27 @@
         );
         modal.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (modal.style.display !== 'block') return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeModal();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            // Basic focus trap: keep Tab/Shift+Tab cycling within the modal.
+            const focusable = getFocusableModalElements();
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
         });
     }
 

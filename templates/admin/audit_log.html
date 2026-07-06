@@ -4,6 +4,10 @@
 {% block title %}audit log — arvision admin{% endblock %}
 {% block page_title %}audit log{% endblock %}
 
+{% block topbar_actions %}
+<a href="{{ url_for('admin.export_audit_log_csv', **request.args) }}" class="admin-btn">export csv</a>
+{% endblock %}
+
 {% block content %}
 <form method="GET" action="{{ url_for('admin.audit_log') }}" class="admin-filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search admin or target id…" class="av-input">

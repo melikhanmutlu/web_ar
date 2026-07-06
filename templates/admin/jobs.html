@@ -6,6 +6,7 @@
 {% block page_title %}conversion jobs{% endblock %}
 
 {% block topbar_actions %}
+<a href="{{ url_for('admin.export_jobs_csv', **request.args) }}" class="admin-btn">export csv</a>
 <button type="button" class="admin-btn"
         data-action-url="{{ url_for('admin.requeue_stale') }}"
         data-confirm="Requeue jobs stuck in processing for over {{ stale_minutes }} minutes? Jobs with missing source files or exhausted attempts are marked failed instead."
@@ -64,9 +65,11 @@
                 <td class="actions">
                     {% if job.status == 'failed' %}
                     <button type="button" class="admin-icon-btn" title="retry (works while the staged source file still exists)"
+                            aria-label="retry job"
                             data-action-url="{{ url_for('admin.retry_job', job_id=job.id) }}"><i data-lucide="rotate-cw"></i></button>
                     {% endif %}
                     <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete job record"
+                            aria-label="delete job record"
                             data-action-url="{{ url_for('admin.delete_job', job_id=job.id) }}"
                             data-confirm="Delete this job record?"><i data-lucide="x"></i></button>
                 </td>

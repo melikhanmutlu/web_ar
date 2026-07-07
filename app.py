@@ -1127,6 +1127,13 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
                         blender_exec = p
                         break
 
+        # Blender writes to a temp path first, then we atomically rename onto
+        # output_usdz_path — this runs in a daemon thread (see
+        # refresh_usdz_after_edit) that can be killed mid-write by a deploy;
+        # without this, a kill mid-export permanently corrupts an existing
+        # model's USDZ with nothing to ever regenerate it.
+        temp_usdz_path = f"{output_usdz_path}.tmp{os.getpid()}"
+
         # Construct command
         cmd = [
             blender_exec,
@@ -1135,7 +1142,7 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             blender_script,
             "--",
             input_glb_path,
-            output_usdz_path,
+            temp_usdz_path,
         ]
 
         logger.info(f"Running Blender command: {cmd}")
@@ -1149,17 +1156,28 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             timeout=300,  # 5 minute timeout
         )
 
-        if process.returncode == 0 and os.path.exists(output_usdz_path):
+        if process.returncode == 0 and os.path.exists(temp_usdz_path):
+            os.replace(temp_usdz_path, output_usdz_path)
             logger.info(f"USDZ conversion successful: {output_usdz_path}")
             return True
         else:
             logger.warning(f"USDZ conversion failed. Return code: {process.returncode}")
             logger.warning(f"Stdout: {process.stdout}")
             logger.warning(f"Stderr: {process.stderr}")
+            if os.path.exists(temp_usdz_path):
+                try:
+                    os.remove(temp_usdz_path)
+                except OSError:
+                    pass
             return False
 
     except Exception as e:
         logger.error(f"Error during USDZ conversion: {e}")
+        if os.path.exists(temp_usdz_path):
+            try:
+                os.remove(temp_usdz_path)
+            except OSError:
+                pass
         return False
 
 
@@ -1211,6 +1229,26 @@ def refresh_usdz_after_edit(model_id, glb_path):
         logger.info(f"[usdz-refresh - {model_id}] Regeneration thread started")
     except Exception as e:
         logger.error(f"[usdz-refresh - {model_id}] Failed to start thread: {e}")
+
+
+def _atomic_replace(dest_path, tmp_path):
+    """Atomically move a fully-written temp file onto dest_path.
+
+    Thumbnail/USDZ generation runs in daemon threads that a deploy can kill
+    mid-write; writing straight to dest_path would leave a permanently
+    corrupt file behind (nothing ever re-checks an existing file for
+    validity). Writing to tmp_path first and renaming here means dest_path
+    only ever holds a complete file.
+    """
+    try:
+        os.replace(tmp_path, dest_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
 
 
 def generate_thumbnail_async(model_id, input_glb_path, color=None):
@@ -1292,7 +1330,9 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                 )
 
             # Save thumbnail
-            img.save(thumbnail_path, "PNG")
+            tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+            img.save(tmp_thumbnail_path, "PNG")
+            _atomic_replace(thumbnail_path, tmp_thumbnail_path)
             logger.info(
                 f"[Thumbnail Async - {model_id}] Thumbnail generated from 3D model"
             )
@@ -1345,8 +1385,10 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                     bytestring=svg_content.encode(), output_width=256, output_height=256
                 )
 
-                with open(thumbnail_path, "wb") as f:
+                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+                with open(tmp_thumbnail_path, "wb") as f:
                     f.write(png_data)
+                _atomic_replace(thumbnail_path, tmp_thumbnail_path)
 
                 logger.info(
                     f"[Thumbnail Async - {model_id}] Thumbnail generated from SVG (PNG)"
@@ -3123,8 +3165,10 @@ def serve_thumbnail(unique_id):
                         anchor="mm",
                     )
 
-                # Save thumbnail
-                img.save(thumbnail_path, "PNG")
+                # Save thumbnail (via temp file + atomic rename — see _atomic_replace)
+                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+                img.save(tmp_thumbnail_path, "PNG")
+                _atomic_replace(thumbnail_path, tmp_thumbnail_path)
                 return send_from_directory(
                     os.path.join(app.config["CONVERTED_FOLDER"], unique_id),
                     "thumbnail.png",

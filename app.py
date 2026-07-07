@@ -2355,6 +2355,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0
+            source_filename=str(payload.get("client_filename", original_filename))[:255],
         )
         db.session.add(model)
         db.session.commit()
@@ -2673,21 +2674,6 @@ def view_model(model_id):
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
 
-    # Get last applied rotation from latest version
-    applied_rotation = {"x": 0, "y": 0, "z": 0}
-    if model.versions:
-        latest_version = model.versions[0]  # Already ordered by created_at desc
-        if (
-            latest_version.operation_details
-            and "transform" in latest_version.operation_details
-        ):
-            transform_details = latest_version.operation_details["transform"]
-            if "rotation" in transform_details:
-                applied_rotation = transform_details["rotation"]
-                app.logger.info(
-                    f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}"
-                )
-
     # Social data
     owner_username = model.user.username if model.user else "anonymous"
     like_count = ModelLike.query.filter_by(model_id=model_id).count()
@@ -2729,8 +2715,8 @@ def view_model(model_id):
         )
 
     # Derive display name
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
     is_owner = current_user.is_authenticated and model.user_id == current_user.id
 
@@ -2743,7 +2729,6 @@ def view_model(model_id):
         usdz_filename=usdz_actual_filename,
         model_dimensions=model_dimensions,
         cumulative_scale=model.cumulative_scale or 1.0,
-        applied_rotation=applied_rotation,
         owner_username=owner_username,
         like_count=like_count,
         is_liked=is_liked,
@@ -2841,8 +2826,8 @@ def vr_view(model_id):
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
 
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
 
     response = make_response(render_template(
@@ -3409,10 +3394,11 @@ def download_model(model_id):
         if not os.path.exists(file_path):
             return "Dosya bulunamadı", 404
 
+        base_name = os.path.splitext(model.original_filename)[0] or model_id
         return send_file(
             file_path,
             as_attachment=True,
-            download_name=model.original_filename,
+            download_name=f"{base_name}.glb",
             mimetype="application/octet-stream",
         )
     except Exception as e:
@@ -4385,10 +4371,11 @@ def slice_model():
             # Maybe model_id is the full filename from database
             model = UserModel.query.get(model_id)
             if model and model.filename:
-                # Extract folder from filename (e.g., "converted/uuid/model.glb" -> "uuid")
-                parts = model.filename.split("/")
-                if len(parts) >= 2:
-                    folder_id = parts[1]
+                # model.filename is the full storage path "<CONVERTED_FOLDER>/<uuid>/model.glb"
+                # (CONVERTED_FOLDER is absolute, so splitting on "/" and indexing
+                # doesn't recover the uuid — take the parent directory's basename instead).
+                folder_id = os.path.basename(os.path.dirname(model.filename))
+                if folder_id:
                     input_path = os.path.join(
                         app.config["CONVERTED_FOLDER"], folder_id, "model.glb"
                     )
@@ -4450,6 +4437,18 @@ def slice_model():
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )
 
+            # Re-run the same GLB quality pass upload does: patches any
+            # primitive that slicing left materialless with a default PBR
+            # material and re-asserts doubleSided, since nothing else does
+            # this after a slice (idempotent — never touches existing artwork).
+            quality_warnings = []
+            try:
+                quality_warnings = finalize_glb(input_path, search_dirs=[os.path.dirname(input_path)])
+                for w in quality_warnings:
+                    logger.warning(f"[slice_model] GLB quality: {w}")
+            except Exception as e:
+                logger.warning(f"[slice_model] GLB quality pass skipped: {e}")
+
             # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
             refresh_usdz_after_edit(model_id, input_path)
 
@@ -4501,18 +4500,25 @@ def slice_model():
             except Exception as version_error:
                 logger.error(f"[slice_model] Failed to create version: {version_error}")
 
+            # Surface near-flat results, lost materials, or GLB quality issues
+            # so the UI can warn the user instead of a silently degraded model.
+            warnings = []
+            if slice_result.get("degenerate"):
+                warnings.append(
+                    "The slice result is nearly flat — one dimension is almost zero. "
+                    "Check the kept side / slider position."
+                )
+            if slice_result.get("material_warning"):
+                warnings.append(slice_result["material_warning"])
+            warnings.extend(quality_warnings)
+
             response = {
                 "success": True,
                 "message": "Model sliced successfully",
                 "backup": os.path.basename(backup_path),
             }
-            # Surface near-flat results so the UI can warn the user instead of
-            # silently producing a degenerate model.
-            if slice_result.get("degenerate"):
-                response["warning"] = (
-                    "The slice result is nearly flat — one dimension is almost zero. "
-                    "Check the kept side / slider position."
-                )
+            if warnings:
+                response["warning"] = " ".join(warnings)
             return jsonify(response)
         else:
             logger.error("[slice_model] Slicing failed")

@@ -134,6 +134,11 @@ class UserModel(db.Model):
     # this as free text ("AI generated (...)"); this column makes it
     # queryable for a badge/filter without string-parsing description.
     source = db.Column(db.String(30), nullable=True)
+
+    # The user's original uploaded filename (e.g. "robot.stl"), distinct from
+    # `filename` which is the on-disk storage path (always "<uuid>/model.glb").
+    # Nullable so older rows fall back to the pre-existing (buggy) behaviour.
+    source_filename = db.Column(db.String(255), nullable=True)
     
     # Version tracking
     versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
@@ -146,6 +151,8 @@ class UserModel(db.Model):
 
     @property
     def original_filename(self):
+        if self.source_filename:
+            return self.source_filename
         return self.filename.split('/')[-1] if self.filename else 'Unknown'
 
     @property

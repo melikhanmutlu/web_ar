@@ -690,7 +690,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = modelUrl.split('/').pop() || 'model.glb';
+                    a.download = {{ (display_name ~ '.glb') | tojson }};
                     
                     document.body.appendChild(a);
                     a.click();
@@ -1688,9 +1688,8 @@ void main() {
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
     <!-- Collapsed Info Pill (visible when showcase card is collapsed) -->
-    {% set display_name_pill = (model.filename | replace('\\', '/')).split('/')[-1].rsplit('.', 1)[0] if model.filename else 'Model' %}
     <button id="showcaseCollapsedPill" class="showcase-collapsed-pill" type="button" aria-label="Expand model info">
-        <span class="pill-name">{{ display_name_pill }}</span>
+        <span class="pill-name">{{ display_name }}</span>
         <i data-lucide="menu"></i>
     </button>
 
@@ -2228,7 +2227,7 @@ void main() {
                         <i data-lucide="zap"></i>
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">File Name</p>
-                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.filename.split('/')[-1] if model.filename else 'Unknown' }}</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.original_filename }}</p>
                         </div>
                     </div>
 
@@ -2972,30 +2971,6 @@ void main() {
 
             transformEditorInitialized = true;
         }
-
-        // Apply initial rotation if stored
-        {% if applied_rotation %}
-        (function() {
-            const rot = {{ applied_rotation | tojson }};
-            if (rot) {
-                const rx = rot.x || 0;
-                const ry = rot.y || 0;
-                const rz = rot.z || 0;
-                const _rxSlider = document.getElementById('rotateXSlider');
-                const _rySlider = document.getElementById('rotateYSlider');
-                const _rzSlider = document.getElementById('rotateZSlider');
-                const _rxVal = document.getElementById('rotateXValue');
-                const _ryVal = document.getElementById('rotateYValue');
-                const _rzVal = document.getElementById('rotateZValue');
-                if (_rxSlider) { _rxSlider.value = rx; if (_rxVal) _rxVal.textContent = rx + '\u00B0'; }
-                if (_rySlider) { _rySlider.value = ry; if (_ryVal) _ryVal.textContent = ry + '\u00B0'; }
-                if (_rzSlider) { _rzSlider.value = rz; if (_rzVal) _rzVal.textContent = rz + '\u00B0'; }
-                // Apply the stored rotation to the actual THREE.js scene once the model
-                // has loaded (the scene is not available until then).
-                modelViewer?.addEventListener('load', () => applyTransform(), { once: true });
-            }
-        })();
-        {% endif %}
 
         // ===================================================================
         // ANNOTATIONS PANEL

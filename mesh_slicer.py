@@ -4,10 +4,11 @@ Handles 3D mesh slicing operations using trimesh.
 
 Scene-aware: each geometry in the scene is sliced separately (never
 concatenated), so multi-material models keep their per-primitive
-materials. Meshes that carry UVs or vertex/face colors are sliced with
-an attribute-preserving face mask (trimesh's plane cut cannot
-interpolate UVs — it would orphan every texture). Plain meshes get the
-clean geometric plane cut.
+materials. UV-textured meshes use trimesh's own plane cut (it clips
+triangles at the plane and interpolates UV correctly). Vertex/face-colored
+meshes use an attribute-preserving face mask instead, since trimesh's
+plane cut only ever interpolates UV and always drops color. Plain meshes
+get the clean, capped geometric plane cut.
 
 A pygltflib material re-injection pass runs ONLY when the exported GLB
 ends up with no materials at all (e.g. vertex-color-only uploads).
@@ -234,28 +235,43 @@ def _normalize_plane(plane_origin, plane_normal, keep_side):
     return plane_origin, plane_normal
 
 
-def _mesh_needs_attribute_preserve(mesh):
-    """
-    True when the mesh carries per-vertex data that a geometric plane
-    cut would destroy: UV coordinates (textures) or vertex/face colors.
-    """
+def _mesh_has_uv(mesh):
+    """True when the mesh has a per-vertex UV array trimesh can interpolate."""
     vis = getattr(mesh, 'visual', None)
     if isinstance(vis, trimesh.visual.TextureVisuals):
         uv = getattr(vis, 'uv', None)
         if uv is not None and len(uv) == len(mesh.vertices):
             return True
-    if isinstance(vis, trimesh.visual.ColorVisuals) and getattr(vis, 'kind', None) in ('vertex', 'face'):
-        return True
     return False
+
+
+def _mesh_has_vertex_color(mesh):
+    """True when the mesh has vertex/face colors trimesh's plane cut can't
+    carry (slice_plane only ever interpolates UV, never color)."""
+    vis = getattr(mesh, 'visual', None)
+    return isinstance(vis, trimesh.visual.ColorVisuals) and getattr(vis, 'kind', None) in ('vertex', 'face')
+
+
+def _mesh_needs_attribute_preserve(mesh):
+    """
+    True when the mesh carries per-vertex data that a plain geometric plane
+    cut would destroy: UV coordinates (textures) or vertex/face colors.
+    """
+    return _mesh_has_uv(mesh) or _mesh_has_vertex_color(mesh)
 
 
 def _facemask_slice(mesh, plane_origin, plane_normal):
     """
     Keep only faces whose vertices all lie on the kept side. No new
-    vertices are created, so UVs, vertex colors, and material refs are
-    carried over EXACTLY. The cut edge follows triangle boundaries
-    (slightly stepped on low-poly meshes) — the price of keeping
-    textures intact.
+    vertices are created, so vertex/face colors and material refs are
+    carried over EXACTLY — this is the only slicing path that can carry a
+    vertex/face color at all (trimesh's plane cut always drops it).
+
+    WARNING: any face straddling the plane is dropped WHOLE, not clipped.
+    On a coarse/low-poly mesh this can silently remove large chunks of
+    geometry near the cut (not just leave a "stepped" edge) — callers that
+    have UV instead of vertex color should prefer slice_plane(cap=False),
+    which clips and interpolates correctly.
     """
     vertices = mesh.vertices
     distances = np.dot(vertices - plane_origin, plane_normal)
@@ -301,7 +317,10 @@ def _facemask_slice(mesh, plane_origin, plane_normal):
                     result, face_colors=vis.face_colors[face_mask]
                 )
     except Exception as ve:
-        logger.warning(f"Could not copy visual attributes: {ve}")
+        # Don't hand back a "successful" mesh that silently lost its texture/
+        # color — let the caller's fallback chain (slice_plane) have a try
+        # instead of accepting a materialless result.
+        raise RuntimeError(f"Could not copy visual attributes: {ve}") from ve
 
     return result
 
@@ -310,15 +329,30 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
     """
     Slice a single Trimesh object.
 
-    Textured / colored meshes use the attribute-preserving face mask
-    (trimesh's plane cut creates new vertices with no UV/color, which
-    is what used to wreck materials after Apply). Plain meshes get the
-    clean capped plane cut.
+    UV-textured meshes go through trimesh's own plane cut (cap=False) FIRST:
+    it clips triangles that straddle the plane and correctly interpolates UV
+    at the new cut vertices. The face mask, by contrast, drops any triangle
+    that straddles the plane WHOLE (no new vertices are created) — on a
+    coarse/low-poly mesh that can silently remove most of the model near the
+    cut, not just leave a "slightly stepped" edge. Vertex/face-colored meshes
+    fall back to the face mask, since slice_plane only ever interpolates UV
+    and drops color entirely. Plain meshes get the clean capped plane cut.
     Returns sliced mesh or None if result is empty.
     """
     vis = getattr(mesh, 'visual', None)
+    has_uv = _mesh_has_uv(mesh)
+    has_vertex_color = _mesh_has_vertex_color(mesh)
 
-    if _mesh_needs_attribute_preserve(mesh):
+    if has_uv:
+        try:
+            sliced = mesh.slice_plane(plane_origin=plane_origin, plane_normal=plane_normal, cap=False)
+            if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
+                _reattach_material(sliced, vis)
+                return sliced
+        except Exception as e:
+            logger.warning(f"slice_plane(cap=False) failed ({e}); trying face mask")
+
+    if has_uv or has_vertex_color:
         try:
             sliced = _facemask_slice(mesh, plane_origin, plane_normal)
             if sliced is not None and len(sliced.vertices) > 0:
@@ -326,33 +360,22 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
         except Exception as e:
             logger.warning(f"Attribute-preserving slice failed ({e}); trying plane cut")
 
-    # --- Clean geometric cut, capped (needs shapely for cap triangulation) ---
-    try:
-        sliced = mesh.slice_plane(
-            plane_origin=plane_origin,
-            plane_normal=plane_normal,
-            cap=True,
-        )
-        if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
-            _reattach_material(sliced, vis)
-            return sliced
-    except Exception as e:
-        logger.warning(f"slice_plane(cap=True) failed ({e}), trying cap=False")
+    # Plain mesh, or every attribute-preserving attempt above failed: try the
+    # nicer capped cut, then uncapped, then the face mask as a last resort.
+    for cap in (True, False):
+        try:
+            sliced = mesh.slice_plane(
+                plane_origin=plane_origin,
+                plane_normal=plane_normal,
+                cap=cap,
+            )
+            if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
+                _reattach_material(sliced, vis)
+                return sliced
+        except Exception as e:
+            logger.warning(f"slice_plane(cap={cap}) failed ({e})")
 
-    # --- Same cut without a cap (open cross-section) ---
-    try:
-        sliced = mesh.slice_plane(
-            plane_origin=plane_origin,
-            plane_normal=plane_normal,
-            cap=False,
-        )
-        if sliced is not None and len(getattr(sliced, 'vertices', [])) > 0:
-            _reattach_material(sliced, vis)
-            return sliced
-    except Exception as e:
-        logger.warning(f"slice_plane(cap=False) failed ({e}), using face-mask fallback")
-
-    # --- Last resort for plain meshes too ---
+    # --- Last resort ---
     try:
         return _facemask_slice(mesh, plane_origin, plane_normal)
     except Exception as e:
@@ -361,8 +384,15 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
 
 
 def _reattach_material(sliced, vis):
-    """slice_plane drops the visual; put the material reference back."""
+    """slice_plane(cap=True) — and cap=False on a mesh with no UV — drops the
+    visual entirely, so put the material reference back. But slice_plane
+    (cap=False) on a UV mesh already returns a proper TextureVisuals with
+    correctly-interpolated UV for the new cut vertices; overwriting it here
+    with a bare, UV-less TextureVisuals would silently throw that away.
+    """
     try:
+        if getattr(sliced.visual, 'uv', None) is not None:
+            return
         if isinstance(vis, trimesh.visual.TextureVisuals) and getattr(vis, 'material', None) is not None:
             sliced.visual = trimesh.visual.TextureVisuals(material=vis.material)
     except Exception as e:
@@ -452,15 +482,20 @@ def _slice_core(input_path, output_path, planes):
 
     # Re-inject ONLY when the trimesh export carries no materials at all;
     # otherwise we would overwrite correct per-primitive assignments.
+    material_warning = None
     if mat_data and _exported_material_count(output_path) == 0:
         logger.info("Export has no materials — re-injecting originals")
-        _inject_materials(output_path, mat_data)
+        if not _inject_materials(output_path, mat_data):
+            material_warning = (
+                "Slice succeeded, but some material or texture data could not be restored."
+            )
 
     logger.info(f"Exported sliced model: {os.path.getsize(output_path)} bytes")
     return {
         "success": True,
         "degenerate": degenerate,
         "extents": [float(e) for e in extents] if extents is not None else None,
+        "material_warning": material_warning,
     }
 
 
@@ -507,7 +542,8 @@ def slice_mesh_multi(input_path, output_path, planes):
                      plane_normal:[x,y,z], keep_side:'positive'|'negative'}
 
     Returns:
-        dict: {'success': bool, 'degenerate': bool, 'extents': [x,y,z] | None}
+        dict: {'success': bool, 'degenerate': bool, 'extents': [x,y,z] | None,
+               'material_warning': str | None}
     """
     try:
         if not planes:

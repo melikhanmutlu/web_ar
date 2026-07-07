@@ -4253,10 +4253,11 @@ def slice_model():
             # Maybe model_id is the full filename from database
             model = UserModel.query.get(model_id)
             if model and model.filename:
-                # Extract folder from filename (e.g., "converted/uuid/model.glb" -> "uuid")
-                parts = model.filename.split("/")
-                if len(parts) >= 2:
-                    folder_id = parts[1]
+                # model.filename is the full storage path "<CONVERTED_FOLDER>/<uuid>/model.glb"
+                # (CONVERTED_FOLDER is absolute, so splitting on "/" and indexing
+                # doesn't recover the uuid — take the parent directory's basename instead).
+                folder_id = os.path.basename(os.path.dirname(model.filename))
+                if folder_id:
                     input_path = os.path.join(
                         app.config["CONVERTED_FOLDER"], folder_id, "model.glb"
                     )
@@ -4318,6 +4319,18 @@ def slice_model():
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )
 
+            # Re-run the same GLB quality pass upload does: patches any
+            # primitive that slicing left materialless with a default PBR
+            # material and re-asserts doubleSided, since nothing else does
+            # this after a slice (idempotent — never touches existing artwork).
+            quality_warnings = []
+            try:
+                quality_warnings = finalize_glb(input_path, search_dirs=[os.path.dirname(input_path)])
+                for w in quality_warnings:
+                    logger.warning(f"[slice_model] GLB quality: {w}")
+            except Exception as e:
+                logger.warning(f"[slice_model] GLB quality pass skipped: {e}")
+
             # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
             refresh_usdz_after_edit(model_id, input_path)
 
@@ -4369,18 +4382,25 @@ def slice_model():
             except Exception as version_error:
                 logger.error(f"[slice_model] Failed to create version: {version_error}")
 
+            # Surface near-flat results, lost materials, or GLB quality issues
+            # so the UI can warn the user instead of a silently degraded model.
+            warnings = []
+            if slice_result.get("degenerate"):
+                warnings.append(
+                    "The slice result is nearly flat — one dimension is almost zero. "
+                    "Check the kept side / slider position."
+                )
+            if slice_result.get("material_warning"):
+                warnings.append(slice_result["material_warning"])
+            warnings.extend(quality_warnings)
+
             response = {
                 "success": True,
                 "message": "Model sliced successfully",
                 "backup": os.path.basename(backup_path),
             }
-            # Surface near-flat results so the UI can warn the user instead of
-            # silently producing a degenerate model.
-            if slice_result.get("degenerate"):
-                response["warning"] = (
-                    "The slice result is nearly flat — one dimension is almost zero. "
-                    "Check the kept side / slider position."
-                )
+            if warnings:
+                response["warning"] = " ".join(warnings)
             return jsonify(response)
         else:
             logger.error("[slice_model] Slicing failed")

@@ -4,7 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% include '_security_head.html' %}
-    <title>Home — arvision</title>
+    {% set seo_title = "ARVision — Upload a 3D Model, Get an AR Viewer Link" %}
+    {% set seo_description = "Upload a 3D model (FBX, OBJ, STL, or GLTF) and get an instant AR-ready viewer link. View your models in augmented reality on iPhone and Android." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": {{ "ARVision" | tojson }},
+      "url": {{ (SITE_URL + '/') | tojson }},
+      "description": {{ seo_description | tojson }},
+      "applicationCategory": {{ "MultimediaApplication" | tojson }},
+      "operatingSystem": {{ "Web Browser" | tojson }}
+    }
+    </script>
+    <title>{{ seo_title }}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>

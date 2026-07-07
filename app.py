@@ -1092,6 +1092,53 @@ def index():
                             ai_quota=ai_quota)
 
 
+# Static pages listed in sitemap.xml. Extend this as new marketing/landing
+# pages are added. Model pages (/view, /embed, /vr) are deliberately not
+# enumerated here — see _seo_robots_for_model_page() for whether they're
+# indexable at all, and an unbounded number of user-uploaded models would
+# need a paginated sitemap index, which is future work.
+SITEMAP_STATIC_ENDPOINTS = ["index"]
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    """Hand-rolled robots.txt — no dependency needed for a few lines.
+    Deliberately has no Disallow for HTML pages that use meta-tag noindex
+    (/view, /embed, /vr, /login, ...): Googlebot must be able to crawl a
+    page to see its noindex tag, and blocking the crawl instead can leave a
+    bare URL indexed with no snippet if it has external backlinks. Only
+    non-HTML/closed areas that never rely on that mechanism are disallowed.
+    """
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin/",
+        "Disallow: /api/",
+        "",
+        f"Sitemap: {SITE_URL}{url_for('sitemap_xml')}",
+    ]
+    return app.response_class(response="\n".join(lines) + "\n", status=200, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    """Hand-rolled XML sitemap (no flask-sitemap dependency needed for a
+    handful of URLs). Lists SITEMAP_STATIC_ENDPOINTS only."""
+    from xml.sax.saxutils import escape as xml_escape
+
+    entries = [
+        f"  <url>\n    <loc>{xml_escape(SITE_URL + url_for(endpoint))}</loc>\n  </url>"
+        for endpoint in SITEMAP_STATIC_ENDPOINTS
+    ]
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(entries)
+        + "\n</urlset>\n"
+    )
+    return app.response_class(response=body, status=200, mimetype="application/xml")
+
+
 def convert_to_usdz(input_glb_path, output_usdz_path):
     """
     Convert GLB to USDZ using Blender script.
@@ -2472,6 +2519,22 @@ def convert():
         return jsonify({"error": str(e)}), 500
 
 
+def _seo_robots_for_model_page(is_canonical=False):
+    """Single source of truth for whether a model page (/view, /embed, /vr)
+    is indexable. Flip config.SEO_INDEX_MODEL_PAGES to change it for every
+    model's canonical /view/<id> page at once — that's the only call site
+    that can ever return "index, follow". /embed/<id> and /vr/<id> are
+    alternate renderings of the same content (an iframe-embed viewer and a
+    VR viewer) and always stay noindex, always deferring to /view/<id> via
+    their <link rel="canonical">, independent of this flag — mirrors how
+    YouTube's /embed/<id> stays noindex while /watch?v=<id> is indexed, and
+    avoids sending mixed index+cross-canonical signals on the same page.
+    """
+    if is_canonical and SEO_INDEX_MODEL_PAGES:
+        return "index, follow"
+    return "noindex, follow"
+
+
 @app.route("/view/<model_id>")
 def view_model(model_id):
     """View a specific model."""
@@ -2694,6 +2757,7 @@ def view_model(model_id):
         owner_models=owner_models,
         display_name=display_name,
         is_owner=is_owner,
+        seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -2750,6 +2814,7 @@ def embed_view(model_id):
         model_dimensions=model_dimensions,
         autoplay=request.args.get("autoplay", "0") == "1",
         ar=request.args.get("ar", "1") != "0",
+        seo_robots=_seo_robots_for_model_page(),
     )
 
 
@@ -2794,6 +2859,7 @@ def vr_view(model_id):
         model_unique_id=model_unique_id,
         actual_filename=actual_filename,
         display_name=display_name,
+        seo_robots=_seo_robots_for_model_page(),
     ))
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -3847,7 +3913,8 @@ def before_request():
     """
     if setting_bool("maintenance_mode", False):
         exempt = request.path.startswith(
-            ("/admin", "/login", "/logout", "/static", "/favicon.ico")
+            ("/admin", "/login", "/logout", "/static", "/favicon.ico",
+             "/robots.txt", "/sitemap.xml")
         )
         is_admin = current_user.is_authenticated and getattr(
             current_user, "is_admin", False
@@ -3861,6 +3928,14 @@ def before_request():
 def inject_announcement():
     """Admin-set announcement banner, rendered by base.html on every page."""
     return {"announcement_text": get_setting("announcement_text", "") or ""}
+
+
+@app.context_processor
+def inject_seo_defaults():
+    """Site-wide SEO context (SITE_URL for absolute canonical/OG URLs,
+    GOOGLE_SITE_VERIFICATION for the GSC verification meta tag) — available
+    in every template without each route passing them explicitly."""
+    return {"SITE_URL": SITE_URL, "GOOGLE_SITE_VERIFICATION": GOOGLE_SITE_VERIFICATION}
 
 
 @app.route("/apply_modifications", methods=["POST"])

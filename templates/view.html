@@ -690,7 +690,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = modelUrl.split('/').pop() || 'model.glb';
+                    a.download = {{ (display_name ~ '.glb') | tojson }};
                     
                     document.body.appendChild(a);
                     a.click();
@@ -1688,9 +1688,8 @@ void main() {
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
     <!-- Collapsed Info Pill (visible when showcase card is collapsed) -->
-    {% set display_name_pill = (model.filename | replace('\\', '/')).split('/')[-1].rsplit('.', 1)[0] if model.filename else 'Model' %}
     <button id="showcaseCollapsedPill" class="showcase-collapsed-pill" type="button" aria-label="Expand model info">
-        <span class="pill-name">{{ display_name_pill }}</span>
+        <span class="pill-name">{{ display_name }}</span>
         <i data-lucide="menu"></i>
     </button>
 
@@ -2228,7 +2227,7 @@ void main() {
                         <i data-lucide="zap"></i>
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">File Name</p>
-                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.filename.split('/')[-1] if model.filename else 'Unknown' }}</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.original_filename }}</p>
                         </div>
                     </div>
 

@@ -2313,6 +2313,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0
+            source_filename=str(payload.get("client_filename", original_filename))[:255],
         )
         db.session.add(model)
         db.session.commit()
@@ -2687,8 +2688,8 @@ def view_model(model_id):
         )
 
     # Derive display name
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
     is_owner = current_user.is_authenticated and model.user_id == current_user.id
 
@@ -2799,8 +2800,8 @@ def vr_view(model_id):
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
 
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
 
     response = make_response(render_template(
@@ -3331,10 +3332,11 @@ def download_model(model_id):
         if not os.path.exists(file_path):
             return "Dosya bulunamadı", 404
 
+        base_name = os.path.splitext(model.original_filename)[0] or model_id
         return send_file(
             file_path,
             as_attachment=True,
-            download_name=model.original_filename,
+            download_name=f"{base_name}.glb",
             mimetype="application/octet-stream",
         )
     except Exception as e:

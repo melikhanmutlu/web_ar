@@ -271,6 +271,10 @@
     background: var(--color-white);
     border: 1px solid var(--color-gray-200);
     overflow-x: auto;
+    /* Hints that a table with more columns than fit the viewport (common on
+       narrow screens) can be scrolled sideways -- there's otherwise no
+       visual cue that the actions column exists off-screen. */
+    box-shadow: inset -8px 0 6px -6px rgba(0, 0, 0, 0.15);
 }
 
 /* --------------------------------------------------------------------------
@@ -747,4 +751,13 @@
     .admin-menu-toggle { display: inline-flex; }
 
     .admin-main { padding: 0 1rem 2rem; }
+
+    /* Long label + long value no longer fight for one line -- stack them
+       instead of letting the value wrap under a half-width label. */
+    .admin-dl > div {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.15rem;
+    }
+    .admin-dl dd { text-align: left; }
 }

@@ -45,6 +45,7 @@ from models import (
     ModelLike,
     ModelSave,
     ModelVersion,
+    RigAnimationJob,
     User,
     UserModel,
     db,
@@ -280,6 +281,8 @@ def dashboard():
         "shares": engagement[2],
         "ai_ready": AIGenerationJob.query.filter_by(status="ready").count(),
         "ai_failed": AIGenerationJob.query.filter_by(status="failed").count(),
+        "rig_ready": RigAnimationJob.query.filter_by(status="ready").count(),
+        "rig_failed": RigAnimationJob.query.filter_by(status="failed").count(),
         "queue_pending": ConversionJob.query.filter_by(status="pending").count(),
     }
     stats["meshy_balance"], stats["meshy_balance_error"] = get_cached_meshy_balance()
@@ -298,6 +301,10 @@ def dashboard():
         "stale_ai_jobs": AIGenerationJob.query.filter(
             AIGenerationJob.status == "generating",
             AIGenerationJob.updated_at < ai_stale_cutoff,
+        ).count(),
+        "stale_rig_jobs": RigAnimationJob.query.filter(
+            RigAnimationJob.status == "generating",
+            RigAnimationJob.updated_at < ai_stale_cutoff,
         ).count(),
         "worker_last_seen": worker_last_seen,
         "worker_seconds_ago": worker_seconds_ago,
@@ -700,7 +707,7 @@ def export_models_csv():
         (
             m.id, m.display_name or m.original_filename, username or "anonymous",
             m.file_type, m.file_size or 0, m.view_count or 0, m.download_count or 0,
-            m.share_count or 0,
+            m.share_count or 0, m.source or "upload",
             m.upload_date.isoformat() if m.upload_date else "",
             "trashed" if m.deleted_at else "active",
         )
@@ -709,7 +716,7 @@ def export_models_csv():
     return _csv_response(
         "models.csv",
         ["id", "name", "owner", "type", "file_size", "views", "downloads", "shares",
-         "uploaded", "status"],
+         "source", "uploaded", "status"],
         rows,
     )
 
@@ -734,6 +741,11 @@ def model_detail(model_id):
         .order_by(CameraView.created_at)
         .all()
     )
+    rig_jobs = (
+        RigAnimationJob.query.filter_by(model_id=model_id)
+        .order_by(RigAnimationJob.created_at.desc())
+        .all()
+    )
 
     return render_template(
         "admin/model_detail.html",
@@ -742,6 +754,7 @@ def model_detail(model_id):
         version_bytes=sum(v.file_size or 0 for v in versions),
         hotspots=hotspots,
         camera_views=camera_views,
+        rig_jobs=rig_jobs,
         likes=ModelLike.query.filter_by(model_id=model_id).count(),
         saves=ModelSave.query.filter_by(model_id=model_id).count(),
     )
@@ -877,20 +890,23 @@ def bulk_purge_models():
 
 
 def _jobs_query():
+    q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
     query = db.session.query(User.username, ConversionJob).select_from(
         ConversionJob
     ).outerjoin(User, ConversionJob.user_id == User.id)
+    if q:
+        query = query.filter(ConversionJob.id.ilike(f"%{q}%"))
     if status:
         query = query.filter(ConversionJob.status == status)
     query = query.order_by(ConversionJob.created_at.desc())
-    return query, status
+    return query, status, q
 
 
 @admin_bp.route("/jobs")
 @admin_required
 def jobs():
-    query, status = _jobs_query()
+    query, status, q = _jobs_query()
     counts = dict(
         db.session.query(ConversionJob.status, func.count())
         .group_by(ConversionJob.status)
@@ -901,6 +917,7 @@ def jobs():
         "admin/jobs.html",
         page=page,
         status=status,
+        q=q,
         counts=counts,
         stale_minutes=STALE_PROCESSING_MINUTES,
     )
@@ -909,7 +926,7 @@ def jobs():
 @admin_bp.route("/jobs/export.csv")
 @admin_required
 def export_jobs_csv():
-    query, _ = _jobs_query()
+    query, _, _ = _jobs_query()
     rows = (
         (
             j.id, j.job_type, j.status, username or "anonymous", j.attempts, j.max_attempts,
@@ -991,23 +1008,39 @@ def delete_job(job_id):
 
 
 def _ai_jobs_query():
+    q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
     kind = (request.args.get("kind") or "").strip()
+    owner = (request.args.get("user") or "").strip()
     query = db.session.query(User.username, AIGenerationJob).select_from(
         AIGenerationJob
     ).outerjoin(User, AIGenerationJob.user_id == User.id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(AIGenerationJob.id.ilike(like), AIGenerationJob.prompt.ilike(like))
+        )
     if status:
         query = query.filter(AIGenerationJob.status == status)
     if kind:
         query = query.filter(AIGenerationJob.kind == kind)
+    owner_user = None
+    if owner:
+        try:
+            owner_id = int(owner)
+        except ValueError:
+            owner = ""
+        else:
+            query = query.filter(AIGenerationJob.user_id == owner_id)
+            owner_user = db.session.get(User, owner_id)
     query = query.order_by(AIGenerationJob.created_at.desc())
-    return query, status, kind
+    return query, status, kind, q, owner, owner_user
 
 
 @admin_bp.route("/ai-jobs")
 @admin_required
 def ai_jobs():
-    query, status, kind = _ai_jobs_query()
+    query, status, kind, q, owner, owner_user = _ai_jobs_query()
 
     counts = dict(
         db.session.query(AIGenerationJob.status, func.count())
@@ -1032,6 +1065,9 @@ def ai_jobs():
         page=page,
         status=status,
         kind=kind,
+        q=q,
+        owner=owner,
+        owner_user=owner_user,
         counts=counts,
         usage_24h=usage_24h,
         ai_limit=_effective_ai_daily_limit(),
@@ -1043,11 +1079,12 @@ def ai_jobs():
 @admin_bp.route("/ai-jobs/export.csv")
 @admin_required
 def export_ai_jobs_csv():
-    query, _, _ = _ai_jobs_query()
+    query, _, _, _, _, _ = _ai_jobs_query()
     rows = (
         (
             j.id, username or "anonymous", j.kind, j.status, j.stage or "", j.progress or 0,
             j.model_id or "", (j.prompt or "")[:200],
+            "" if not j.options else str(j.options),
             j.created_at.isoformat() if j.created_at else "",
             j.error or "",
         )
@@ -1055,7 +1092,8 @@ def export_ai_jobs_csv():
     )
     return _csv_response(
         "ai_jobs.csv",
-        ["id", "owner", "kind", "status", "stage", "progress", "model_id", "prompt", "created", "error"],
+        ["id", "owner", "kind", "status", "stage", "progress", "model_id", "prompt",
+         "options", "created", "error"],
         rows,
     )
 
@@ -1092,6 +1130,95 @@ def mark_ai_job_failed(job_id):
 def refresh_meshy_balance():
     balance, error = get_cached_meshy_balance(force=True)
     return jsonify({"success": True, "balance": balance, "error": error})
+
+
+# ---------------------------------------------------------------------------
+# Rig + animate generations
+# ---------------------------------------------------------------------------
+
+
+def _rig_jobs_query():
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    query = db.session.query(User.username, RigAnimationJob).select_from(
+        RigAnimationJob
+    ).outerjoin(User, RigAnimationJob.user_id == User.id)
+    if q:
+        query = query.filter(RigAnimationJob.id.ilike(f"%{q}%"))
+    if status:
+        query = query.filter(RigAnimationJob.status == status)
+    query = query.order_by(RigAnimationJob.created_at.desc())
+    return query, status, q
+
+
+@admin_bp.route("/rig-jobs")
+@admin_required
+def rig_jobs():
+    query, status, q = _rig_jobs_query()
+
+    counts = dict(
+        db.session.query(RigAnimationJob.status, func.count())
+        .group_by(RigAnimationJob.status)
+        .all()
+    )
+
+    page = paginate(query, _page_arg())
+    return render_template(
+        "admin/rig_jobs.html",
+        page=page,
+        status=status,
+        q=q,
+        counts=counts,
+        stale_minutes=AI_STALE_MINUTES,
+        stale_cutoff=datetime.utcnow() - timedelta(minutes=AI_STALE_MINUTES),
+    )
+
+
+@admin_bp.route("/rig-jobs/export.csv")
+@admin_required
+def export_rig_jobs_csv():
+    query, _, _ = _rig_jobs_query()
+    rows = (
+        (
+            j.id, username or "anonymous", j.model_id, j.height_meters,
+            len(j.animation_action_ids or []), j.status, j.stage or "", j.progress or 0,
+            j.result_model_id or "", j.created_at.isoformat() if j.created_at else "",
+            j.error or "",
+        )
+        for username, j in query.all()
+    )
+    return _csv_response(
+        "rig_jobs.csv",
+        ["id", "owner", "model_id", "height_meters", "animation_count", "status",
+         "stage", "progress", "result_model_id", "created", "error"],
+        rows,
+    )
+
+
+@admin_bp.route("/rig-jobs/<job_id>/delete", methods=["POST"])
+@admin_required
+def delete_rig_job(job_id):
+    job = RigAnimationJob.query.get_or_404(job_id)
+    log_action("rig_job.delete", "rig_job", job_id)
+    db.session.delete(job)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.route("/rig-jobs/<job_id>/mark-failed", methods=["POST"])
+@admin_required
+def mark_rig_job_failed(job_id):
+    """Same rationale as mark_ai_job_failed: closes out a stuck job without
+    contacting Meshy, since only client-side polling (and the reconciliation
+    sweep) ever advances these."""
+    job = RigAnimationJob.query.get_or_404(job_id)
+    if job.status in ("ready", "failed"):
+        return jsonify({"success": False, "error": "Job is already finished"}), 400
+    job.status = "failed"
+    job.error = "Marked as failed by an admin (job was stuck)."
+    log_action("rig_job.mark_failed", "rig_job", job_id)
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 # ---------------------------------------------------------------------------

@@ -78,6 +78,42 @@ def test_rig_requires_meshy_configured(client, owner, monkeypatch):
     assert resp.status_code == 503
 
 
+def test_rig_respects_daily_ai_quota(client, owner, meshy_configured, monkeypatch):
+    """Rigging spends real Meshy credits exactly like text/image generation,
+    so it must count against (and be blocked by) the same daily limit --
+    otherwise ai_daily_limit=0 wouldn't actually disable Meshy usage."""
+    import app as app_module
+    monkeypatch.setattr(app_module, "setting_int", lambda key, default: 1)
+
+    model = make_model(user_id=owner.id, faces=1000)
+    login(client, "rigowner", "testpassword")
+
+    existing = AIGenerationJob(id=str(uuid.uuid4()), user_id=owner.id, kind="text",
+                               prompt="x", stage="preview", status="ready")
+    db.session.add(existing)
+    db.session.commit()
+
+    resp = client.post(f"/api/models/{model.id}/rig", json=VALID_BODY)
+    assert resp.status_code == 429
+
+
+def test_existing_rig_job_counts_against_generate_3d_quota(client, owner, meshy_configured, monkeypatch):
+    """Symmetric to test_rig_respects_daily_ai_quota: a prior rig job also
+    counts toward the limit that gates /api/generate-3d."""
+    import app as app_module
+    monkeypatch.setattr(app_module, "setting_int", lambda key, default: 1)
+
+    model = make_model(user_id=owner.id, faces=1000)
+    db.session.add(RigAnimationJob(id=str(uuid.uuid4()), model_id=model.id,
+                                   user_id=owner.id, height_meters=1.7,
+                                   animation_action_ids=[0], status="ready"))
+    db.session.commit()
+    login(client, "rigowner", "testpassword")
+
+    resp = client.post("/api/generate-3d", json={"mode": "text", "prompt": "a vase"})
+    assert resp.status_code == 429
+
+
 def test_rig_validates_height(client, owner, meshy_configured):
     model = make_model(user_id=owner.id, faces=1000)
     login(client, "rigowner", "testpassword")

@@ -16,10 +16,16 @@
 {% endblock %}
 
 {% block content %}
+<form method="GET" action="{{ url_for('admin.jobs') }}" class="admin-filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search job id…" class="av-input">
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+    <button type="submit" class="admin-filter-submit">filter</button>
+</form>
+
 <div class="admin-pills">
-    <a href="{{ url_for('admin.jobs') }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
+    <a href="{{ url_for('admin.jobs', q=q or None) }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
     {% for s in ('pending', 'processing', 'completed', 'failed') %}
-    <a href="{{ url_for('admin.jobs', status=s) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
+    <a href="{{ url_for('admin.jobs', status=s, q=q or None) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
         {{ s }} <span class="count">{{ counts.get(s, 0) }}</span>
     </a>
     {% endfor %}

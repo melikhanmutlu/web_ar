@@ -31,6 +31,11 @@
         <div class="kpi-sub">{{ stats.ai_failed }} failed</div>
     </div>
     <div class="kpi-card">
+        <div class="kpi-value">{{ stats.rig_ready }}</div>
+        <div class="kpi-label">rig &amp; animate models</div>
+        <div class="kpi-sub">{{ stats.rig_failed }} failed</div>
+    </div>
+    <div class="kpi-card">
         <div class="kpi-value">{{ stats.queue_pending }}</div>
         <div class="kpi-label">queued conversions</div>
     </div>
@@ -80,6 +85,12 @@
                 <dt>stale ai generations</dt>
                 <dd class="{% if health.stale_ai_jobs %}admin-health-warn{% else %}admin-health-ok{% endif %}">
                     {{ health.stale_ai_jobs }}{% if health.stale_ai_jobs %} — stuck &gt; {{ ai_stale_minutes }}m{% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>stale rig jobs</dt>
+                <dd class="{% if health.stale_rig_jobs %}admin-health-warn{% else %}admin-health-ok{% endif %}">
+                    {{ health.stale_rig_jobs }}{% if health.stale_rig_jobs %} — stuck &gt; {{ ai_stale_minutes }}m{% endif %}
                 </dd>
             </div>
             <div>

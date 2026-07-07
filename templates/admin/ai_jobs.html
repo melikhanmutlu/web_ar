@@ -10,6 +10,17 @@
 {% endblock %}
 
 {% block content %}
+<form method="GET" action="{{ url_for('admin.ai_jobs') }}" class="admin-filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search job id or prompt…" class="av-input">
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+    {% if kind %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+    {% if owner %}<input type="hidden" name="user" value="{{ owner }}">{% endif %}
+    <button type="submit" class="admin-filter-submit">filter</button>
+</form>
+{% if owner_user %}
+<p class="muted">Filtered to <strong>{{ owner_user.username }}</strong>'s jobs — <a href="{{ url_for('admin.ai_jobs', status=status or None, kind=kind or None, q=q or None) }}">clear</a></p>
+{% endif %}
+
 <div class="admin-grid-2">
     <div class="admin-card">
         <h2 class="admin-card-title">usage — last 24 hours (limit {{ ai_limit }}/day)</h2>
@@ -36,17 +47,17 @@
 
 <div class="admin-filters">
     <div class="admin-pills">
-        <a href="{{ url_for('admin.ai_jobs', kind=kind or None) }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
+        <a href="{{ url_for('admin.ai_jobs', kind=kind or None, q=q or None, user=owner or None) }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
         {% for s in ('generating', 'ready', 'failed') %}
-        <a href="{{ url_for('admin.ai_jobs', status=s, kind=kind or None) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
+        <a href="{{ url_for('admin.ai_jobs', status=s, kind=kind or None, q=q or None, user=owner or None) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
             {{ s }} <span class="count">{{ counts.get(s, 0) }}</span>
         </a>
         {% endfor %}
     </div>
     <div class="admin-pills">
-        <a href="{{ url_for('admin.ai_jobs', status=status or None) }}" class="admin-pill {% if not kind %}is-active{% endif %}">any kind</a>
+        <a href="{{ url_for('admin.ai_jobs', status=status or None, q=q or None, user=owner or None) }}" class="admin-pill {% if not kind %}is-active{% endif %}">any kind</a>
         {% for k in ('text', 'image') %}
-        <a href="{{ url_for('admin.ai_jobs', kind=k, status=status or None) }}" class="admin-pill {% if kind == k %}is-active{% endif %}">{{ k }}</a>
+        <a href="{{ url_for('admin.ai_jobs', kind=k, status=status or None, q=q or None, user=owner or None) }}" class="admin-pill {% if kind == k %}is-active{% endif %}">{{ k }}</a>
         {% endfor %}
     </div>
 </div>

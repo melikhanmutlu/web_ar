@@ -4914,6 +4914,10 @@ def _load_texture_reference(path):
 
 
 def _ai_quota_state(user_id):
+    """Counts both AIGenerationJob and RigAnimationJob rows -- rigging and
+    animation spend real Meshy credits exactly like text/image generation,
+    so an admin setting ai_daily_limit to 0 to disable Meshy usage entirely
+    must also cover it."""
     from datetime import timedelta
     since = datetime.utcnow() - timedelta(days=1)
     # Admin-editable override; falls back to the env default when unset.
@@ -4921,6 +4925,9 @@ def _ai_quota_state(user_id):
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,
+    ).count() + RigAnimationJob.query.filter(
+        RigAnimationJob.user_id == user_id,
+        RigAnimationJob.created_at >= since,
     ).count()
     return (count >= limit), count, limit
 
@@ -5358,6 +5365,11 @@ def rig_model(model_id):
     if not ai_generator.is_configured():
         return jsonify({"success": False,
                         "error": "AI generation is not configured on this server."}), 503
+
+    exceeded, count, limit = _ai_quota_state(current_user.id)
+    if exceeded:
+        return jsonify({"success": False,
+                        "error": f"Daily generation limit reached ({limit}). Try again tomorrow."}), 429
 
     model = UserModel.query.get(model_id)
     data = request.get_json(silent=True) or {}

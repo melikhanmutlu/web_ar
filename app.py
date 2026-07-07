@@ -3254,6 +3254,23 @@ def _purge_expired_trash(user_id):
         app.logger.info(f"Purged {len(expired)} expired trash models for user {user_id}")
 
 
+def _storage_usage_for(user_id):
+    """Bytes used across all of a user's models, including trash (still on disk)."""
+    return (
+        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+        .filter(UserModel.user_id == user_id)
+        .scalar()
+    )
+
+
+def _storage_quota_bytes():
+    return (
+        setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
+        * 1024
+        * 1024
+    )
+
+
 @app.route("/my_models")
 @app.route("/my_models/<folder_id>")
 @login_required
@@ -3287,23 +3304,13 @@ def my_models(folder_id=None):
                 m.id for m in folder_q.order_by(UserModel.upload_date.desc()).limit(4).all()
             ]
 
-        # Trash (all folders) — shown only on the root view
-        trash_models = []
+        # Trash shows up as its own "folder" card — only need the count here,
+        # the dedicated /my_models/trash view renders the actual list.
+        trash_count = 0
         if not folder_id:
-            trash_models = (
-                UserModel.query.filter(
-                    UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
-                )
-                .order_by(UserModel.deleted_at.desc())
-                .all()
-            )
-
-        # Storage usage across all of the user's models (incl. trash — still on disk)
-        storage_used = (
-            db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-            .filter(UserModel.user_id == current_user.id)
-            .scalar()
-        )
+            trash_count = UserModel.query.filter(
+                UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
+            ).count()
 
         return render_template(
             "my_models.html",
@@ -3312,20 +3319,47 @@ def my_models(folder_id=None):
             current_folder=current_folder,
             folder_model_counts=folder_model_counts,
             folder_previews=folder_previews,
-            trash_models=trash_models,
+            trash_view=False,
+            trash_count=trash_count,
             trash_retention_days=TRASH_RETENTION_DAYS,
-            storage_used=storage_used,
-            storage_quota=(
-                setting_int(
-                    "storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024))
-                )
-                * 1024
-                * 1024
-            ),
+            storage_used=_storage_usage_for(current_user.id),
+            storage_quota=_storage_quota_bytes(),
         )
     except Exception as e:
         app.logger.error(f"Error in my_models: {str(e)}")
         return redirect("/")
+
+
+@app.route("/my_models/trash")
+@login_required
+def my_models_trash():
+    try:
+        _purge_expired_trash(current_user.id)
+
+        trashed_models = (
+            UserModel.query.filter(
+                UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
+            )
+            .order_by(UserModel.deleted_at.desc())
+            .all()
+        )
+
+        return render_template(
+            "my_models.html",
+            folders=[],
+            models=trashed_models,
+            current_folder=None,
+            folder_model_counts={},
+            folder_previews={},
+            trash_view=True,
+            trash_count=len(trashed_models),
+            trash_retention_days=TRASH_RETENTION_DAYS,
+            storage_used=_storage_usage_for(current_user.id),
+            storage_quota=_storage_quota_bytes(),
+        )
+    except Exception as e:
+        app.logger.error(f"Error in my_models_trash: {str(e)}")
+        return redirect(url_for("my_models"))
 
 
 @app.route("/converted/<path:filename>")
@@ -3773,6 +3807,46 @@ def restore_model(model_id):
         db.session.rollback()
         app.logger.error(f"Error restoring model {model_id}: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/restore_selected_models", methods=["POST"])
+@login_required
+def restore_selected_models():
+    """Bulk-restore trashed models back to the active library."""
+    try:
+        data = request.get_json()
+        model_ids = data.get("model_ids", [])
+
+        if not model_ids:
+            return jsonify({"success": False, "error": "No models selected"}), 400
+
+        models = UserModel.query.filter(
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
+        ).all()
+
+        if len(models) != len(model_ids):
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Some models were not found or do not belong to you",
+                }
+            ), 403
+
+        for model in models:
+            model.deleted_at = None
+            # Its folder may have been deleted while the model sat in trash
+            if model.folder_id and not Folder.query.get(model.folder_id):
+                model.folder_id = None
+
+        db.session.commit()
+        return jsonify(
+            {"success": True, "message": f"Successfully restored {len(models)} models"}
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error restoring models: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to restore models"}), 500
 
 
 @app.route("/rename_folder/<int:folder_id>", methods=["POST"])

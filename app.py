@@ -2632,21 +2632,6 @@ def view_model(model_id):
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
 
-    # Get last applied rotation from latest version
-    applied_rotation = {"x": 0, "y": 0, "z": 0}
-    if model.versions:
-        latest_version = model.versions[0]  # Already ordered by created_at desc
-        if (
-            latest_version.operation_details
-            and "transform" in latest_version.operation_details
-        ):
-            transform_details = latest_version.operation_details["transform"]
-            if "rotation" in transform_details:
-                applied_rotation = transform_details["rotation"]
-                app.logger.info(
-                    f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}"
-                )
-
     # Social data
     owner_username = model.user.username if model.user else "anonymous"
     like_count = ModelLike.query.filter_by(model_id=model_id).count()
@@ -2702,7 +2687,6 @@ def view_model(model_id):
         usdz_filename=usdz_actual_filename,
         model_dimensions=model_dimensions,
         cumulative_scale=model.cumulative_scale or 1.0,
-        applied_rotation=applied_rotation,
         owner_username=owner_username,
         like_count=like_count,
         is_liked=is_liked,

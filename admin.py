@@ -32,7 +32,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from model_cleanup import purge_model_completely
 from models import (
@@ -170,7 +170,11 @@ def _daily_series(date_col, days=CHART_DAYS, extra_filter=None):
     for i in range(days):
         day = start + timedelta(days=i)
         series.append(
-            {"d": day.strftime("%b %d"), "v": counts.get(day.strftime("%Y-%m-%d"), 0)}
+            {
+                "d": day.strftime("%b %d"),
+                "v": counts.get(day.strftime("%Y-%m-%d"), 0),
+                "iso": day.strftime("%Y-%m-%d"),
+            }
         )
     return series
 
@@ -1261,6 +1265,7 @@ def analytics():
         "registrations": _daily_series(User.created_at, days=days),
         "likes": _daily_series(ModelLike.created_at, days=days),
         "ai_jobs": _daily_series(AIGenerationJob.created_at, days=days),
+        "rig_jobs": _daily_series(RigAnimationJob.created_at, days=days),
     }
 
     return render_template(
@@ -1271,6 +1276,73 @@ def analytics():
         charts=charts,
         days=days,
         day_choices=DAY_RANGE_CHOICES,
+        today=datetime.utcnow().date().isoformat(),
+    )
+
+
+@admin_bp.route("/analytics/day/<date_str>")
+@admin_required
+def analytics_day(date_str):
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        abort(404)
+    if day > datetime.utcnow().date():
+        abort(404)
+
+    day_start = datetime(day.year, day.month, day.day)
+    day_end = day_start + timedelta(days=1)
+
+    def _in_day(col):
+        return and_(col >= day_start, col < day_end)
+
+    registrations = User.query.filter(_in_day(User.created_at)).order_by(
+        User.created_at.desc()
+    ).all()
+    uploads = (
+        UserModel.query.filter(_in_day(UserModel.upload_date))
+        .order_by(UserModel.upload_date.desc())
+        .all()
+    )
+    ai_jobs = (
+        AIGenerationJob.query.filter(_in_day(AIGenerationJob.created_at))
+        .order_by(AIGenerationJob.created_at.desc())
+        .all()
+    )
+    rig_jobs = (
+        RigAnimationJob.query.filter(_in_day(RigAnimationJob.created_at))
+        .order_by(RigAnimationJob.created_at.desc())
+        .all()
+    )
+
+    counts = {
+        "registrations": len(registrations),
+        "uploads": len(uploads),
+        "ai_jobs": len(ai_jobs),
+        "rig_jobs": len(rig_jobs),
+        "likes": ModelLike.query.filter(_in_day(ModelLike.created_at)).count(),
+        "saves": ModelSave.query.filter(_in_day(ModelSave.created_at)).count(),
+    }
+
+    job_status_breakdown = (
+        db.session.query(ConversionJob.status, func.count())
+        .filter(_in_day(ConversionJob.created_at))
+        .group_by(ConversionJob.status)
+        .all()
+    )
+
+    return render_template(
+        "admin/day_detail.html",
+        day=day,
+        prev_day=(day - timedelta(days=1)).isoformat(),
+        next_day=(day + timedelta(days=1)).isoformat(),
+        is_today=(day == datetime.utcnow().date()),
+        counts=counts,
+        registrations=registrations,
+        uploads=uploads,
+        ai_jobs=ai_jobs,
+        rig_jobs=rig_jobs,
+        job_status_breakdown=job_status_breakdown,
     )
 
 

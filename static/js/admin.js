@@ -268,6 +268,8 @@
         const maxValue = Math.max(1, ...points.map((p) => p.v));
         const chartHeight = height - padBottom - padTop;
 
+        const drillBase = el.getAttribute('data-drill-base');
+
         const svgNS = 'http://www.w3.org/2000/svg';
         const svg = document.createElementNS(svgNS, 'svg');
         svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -292,23 +294,37 @@
             bar.setAttribute('height', Math.max(p.v > 0 ? 2 : 0, barHeight));
             bar.setAttribute('class', 'bar');
             const title = document.createElementNS(svgNS, 'title');
-            title.textContent = `${p.d}: ${p.v}`;
+            title.textContent = p.iso ? `${p.iso} (${p.d}): ${p.v}` : `${p.d}: ${p.v}`;
             bar.appendChild(title);
+            if (drillBase && p.iso) {
+                bar.style.cursor = 'pointer';
+                bar.addEventListener('click', () => {
+                    window.location.href = drillBase + p.iso;
+                });
+            }
             svg.appendChild(bar);
         });
 
-        // First / middle / last date labels
-        [0, Math.floor(points.length / 2), points.length - 1].forEach((i, idx) => {
+        // Date labels, spaced out so they don't overlap on wide ranges.
+        const step = Math.max(1, Math.ceil(points.length / 7));
+        const labelIndexes = [];
+        for (let i = 0; i < points.length; i += step) labelIndexes.push(i);
+        if (labelIndexes[labelIndexes.length - 1] !== points.length - 1) {
+            labelIndexes.push(points.length - 1);
+        }
+        labelIndexes.forEach((i) => {
             const label = document.createElementNS(svgNS, 'text');
             label.setAttribute('y', height - 5);
             label.setAttribute('class', 'axis-label');
-            if (idx === 0) label.setAttribute('x', 0);
-            else if (idx === 1) {
-                label.setAttribute('x', width / 2);
-                label.setAttribute('text-anchor', 'middle');
-            } else {
+            const x = i * (barWidth + gap) + barWidth / 2;
+            if (i === 0) {
+                label.setAttribute('x', 0);
+            } else if (i === points.length - 1) {
                 label.setAttribute('x', width);
                 label.setAttribute('text-anchor', 'end');
+            } else {
+                label.setAttribute('x', x);
+                label.setAttribute('text-anchor', 'middle');
             }
             label.textContent = points[i].d;
             svg.appendChild(label);
@@ -319,4 +335,16 @@
     }
 
     document.querySelectorAll('.admin-chart[data-points]').forEach(renderBarChart);
+
+    // ------------------------------------------------------------------
+    // Analytics "go to day" date-jump form
+    // ------------------------------------------------------------------
+    const dayJumpForm = document.getElementById('analytics-day-jump');
+    if (dayJumpForm) {
+        dayJumpForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const date = dayJumpForm.querySelector('input[name="date"]').value;
+            if (date) window.location.href = dayJumpForm.dataset.base + date;
+        });
+    }
 })();

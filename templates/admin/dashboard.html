@@ -52,14 +52,15 @@
 
 {{ day_range('admin.dashboard', days, day_choices) }}
 
+{% set drill_base = url_for('admin.analytics_day', date_str='') %}
 <div class="admin-grid-2">
     <div class="admin-card">
         <h2 class="admin-card-title">registrations — last {{ days }} days</h2>
-        <div class="admin-chart" data-points='{{ charts.registrations | tojson }}'></div>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.registrations | tojson }}'></div>
     </div>
     <div class="admin-card">
         <h2 class="admin-card-title">uploads — last {{ days }} days</h2>
-        <div class="admin-chart" data-points='{{ charts.uploads | tojson }}'></div>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.uploads | tojson }}'></div>
     </div>
 </div>
 

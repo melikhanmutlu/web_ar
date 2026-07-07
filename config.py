@@ -92,6 +92,21 @@ MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')
 # Per-user daily generation quota (each generation costs Meshy credits = money).
 AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
 
+# SEO / canonical site config. SITE_URL is env-var-driven (never derived from
+# the request Host header) because the production domain is expected to move
+# off the current Railway subdomain to a custom domain later — canonical
+# links, the sitemap, and OG/Twitter URLs must stay stable across that move.
+SITE_URL = os.getenv('SITE_URL', 'https://webar.up.railway.app').rstrip('/')
+# Google Search Console HTML-tag ownership verification value (just the
+# content="..." string). Leave empty until a GSC property exists.
+GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
+# Whether /view/<id> (the canonical model-viewer page) is indexable by search
+# engines. Default noindex — UserModel has no is_public/visibility field, so
+# there's no per-model opt-in yet; every uploaded model would become
+# Google-searchable if this were on. /embed/<id> and /vr/<id> always stay
+# noindex regardless of this flag (see _seo_robots_for_model_page in app.py).
+SEO_INDEX_MODEL_PAGES = os.getenv('SEO_INDEX_MODEL_PAGES', 'false').lower() == 'true'
+
 # Klasörleri oluştur
 def create_directories():
     """Create necessary directories if they don't exist."""

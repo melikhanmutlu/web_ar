@@ -80,21 +80,35 @@ window.toggleModelSelection = function(event, modelId, cardElement) {
     
     // In selection mode, toggle selection
     if (event.target.tagName !== 'BUTTON' && event.target.tagName !== 'A') {
-        event.preventDefault();
         event.stopPropagation();
-        
+
         const checkbox = cardElement.querySelector('.model-checkbox');
-        
-        if (selectedModels.has(modelId)) {
-            selectedModels.delete(modelId);
-            cardElement.classList.remove('selected');
-            if (checkbox) checkbox.checked = false;
-        } else {
+        const isCheckboxClick = event.target === checkbox;
+
+        // Clicking elsewhere on the card has no native toggle to fight —
+        // prevent the default (text selection etc.) and drive everything
+        // ourselves. A direct checkbox click already toggled `.checked`
+        // natively before this handler runs; calling preventDefault() here
+        // would trigger the checkbox's "canceled activation steps" right
+        // after we return, silently reverting our own `checked` assignment
+        // below and leaving the box looking unchecked despite the selection
+        // having actually registered — so let the native toggle stand and
+        // just read it as the source of truth instead.
+        if (!isCheckboxClick) {
+            event.preventDefault();
+        }
+        const nowSelected = isCheckboxClick ? checkbox.checked : !selectedModels.has(modelId);
+
+        if (nowSelected) {
             selectedModels.add(modelId);
             cardElement.classList.add('selected');
             if (checkbox) checkbox.checked = true;
+        } else {
+            selectedModels.delete(modelId);
+            cardElement.classList.remove('selected');
+            if (checkbox) checkbox.checked = false;
         }
-        
+
         updateSelectionUI();
     }
 }

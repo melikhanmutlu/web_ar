@@ -90,11 +90,6 @@
         #rightSidebar { position: fixed; top: 50%; right: var(--spacing-lg); transform: translateY(-50%); width: 20rem; max-height: calc(100vh - var(--spacing-2xl)); overflow-y: auto; transition: transform 0.3s ease; }
         #rightSidebar.sidebar-collapsed { transform: translateX(calc(100% + var(--spacing-lg))); }
 
-        #sidebarToggle { position: absolute; left: -2rem; top: 50%; transform: translateY(-50%); width: 2rem; height: 3.5rem; background: var(--color-gray-100); border: 1px solid var(--color-gray-200); border-right: none; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 30; transition: background 0.2s; }
-        .dark #sidebarToggle { background: var(--color-gray-800); border-color: var(--color-gray-700); }
-        #sidebarToggle:hover { background: var(--color-gray-200); }
-        .dark #sidebarToggle:hover { background: var(--color-gray-700); }
-
         #saveChangesWrapper { position: sticky; bottom: 0; flex-shrink: 0; z-index: 5; padding-top: 2px; }
         .modal-overlay { background-color: rgba(0, 0, 0, 0.7); transition: opacity 0.3s ease; }
         .modal-container { transform: scale(0.95); opacity: 0; transition: all 0.3s ease; }
@@ -136,7 +131,6 @@
         #rightSidebar.info-hidden { opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }
         #rightSidebar.showcase-sidebar { gap: 0; padding-right: 0 !important; scrollbar-width: none; }
         #rightSidebar.showcase-sidebar::-webkit-scrollbar { display: none; }
-        #rightSidebar.showcase-sidebar #sidebarToggle { display: none; }
 
         /* Tools Panel body — ensure moved content inherits dark theme */
         #toolsPanelBody .showcase-content { padding-right: 0; margin-top: 0; overflow: visible; }
@@ -144,7 +138,6 @@
         .showcase-card { display: flex; flex-direction: column; height: auto; padding: var(--spacing-xl); background: var(--color-gray-900); color: var(--color-gray-200); border: 1px solid var(--color-gray-700); overflow: hidden; transition: opacity 0.2s ease, transform 0.2s ease; }
         .showcase-card.is-collapsed { opacity: 0; pointer-events: none; transform: translateX(var(--spacing-lg)); }
 
-        .showcase-collapsed-pill { display: none !important; }
         #rightSidebar.info-hidden .showcase-card { opacity: 0; pointer-events: none; }
 
         .showcase-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-md); padding-bottom: var(--spacing-sm); }
@@ -305,8 +298,6 @@
         .tp-save-bar { padding: 0.65rem 0.85rem; border-top: 1px solid var(--color-gray-700); background: var(--color-gray-900); }
 
         .bottom-right-controls { display: flex; align-items: center; gap: 0.25rem; }
-        .tb-btn.is-liked, .tb-btn.is-saved { color: var(--color-gray-900); }
-        .dark .tb-btn.is-liked, .dark .tb-btn.is-saved { color: var(--color-gray-200); }
         #toolsPanelToggle.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
         .dark #toolsPanelToggle.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
@@ -431,14 +422,6 @@
                 display: block;
             }
 
-            #sidebarToggle {
-                display: inline-flex;
-                top: var(--spacing-md);
-                left: auto;
-                right: var(--spacing-lg);
-                transform: none;
-            }
-
             /* Toolbar: fixed bottom, horizontal icons */
             .toolbar-shell {
                 position: fixed !important;
@@ -514,10 +497,6 @@
             .showcase-sidebar {
                 width: 100vw !important;
                 max-width: 100vw !important;
-            }
-
-            #sidebarToggle {
-                display: none;
             }
 
             .toolbar-shell {
@@ -599,17 +578,6 @@
             const viewerStage = document.querySelector('.viewer-stage');
             const fullscreenButton = document.querySelector('#fullscreenButton');
             const downloadButton = document.querySelector('#downloadButton');
-            const colorPicker = document.querySelector('#colorPicker');
-            const hexInput = document.querySelector('#hexInput');
-            const resetColorButton = document.querySelector('#resetColor');
-            const resetViewButton = document.querySelector('#resetView');
-            const qrButton = document.querySelector('#qrButton');
-            const qrModal = document.querySelector('#qrModal');
-            const closeQrModal = document.querySelector('#closeQrModal');
-            const arButton = document.querySelector('#arButton');
-            const arModal = document.querySelector('#arModal');
-            const closeArModal = document.querySelector('#closeArModal');
-            const showQrFromAr = document.querySelector('#showQrFromAr');
             const screenshotButton = document.getElementById('screenshotButton');
             const modelInfoButton = document.querySelector('#modelInfoButton');
             const modelInfoModal = document.querySelector('#modelInfoModal');
@@ -643,17 +611,7 @@
                 }
             });
 
-            // Store initial camera settings
-            let initialCameraOrbit = null;
-            let initialFieldOfView = null;
-            let initialCameraTarget = null;
-            let isColorApplied = false;
-
-            // Store initial camera settings when model loads
             modelViewer?.addEventListener('load', () => {
-                initialCameraOrbit = modelViewer.cameraOrbit;
-                initialFieldOfView = modelViewer.fieldOfView;
-                initialCameraTarget = modelViewer.cameraTarget;
                 // Pre-initialize slicer internals (delay to let model-viewer finish setup)
                 // Uses window. prefix because discoverInternals is defined in a separate scope
                 setTimeout(() => {
@@ -712,144 +670,11 @@
                 }
             });
 
-            // Like button
-            document.getElementById('likeButton')?.addEventListener('click', async () => {
-                try {
-                    const resp = await fetch('/api/models/{{ model_id }}/like', { method: 'POST' });
-                    const data = await resp.json();
-                    const btn = document.getElementById('likeButton');
-                    if (data.liked) {
-                        btn.classList.add('is-liked');
-                    } else {
-                        btn.classList.remove('is-liked');
-                    }
-                } catch (e) { console.error('Like error:', e); }
-            });
-
-            // Save/Bookmark button
-            document.getElementById('saveModelButton')?.addEventListener('click', async () => {
-                try {
-                    const resp = await fetch('/api/models/{{ model_id }}/save', { method: 'POST' });
-                    if (resp.status === 401) { alert('Please login to save models.'); return; }
-                    const data = await resp.json();
-                    const btn = document.getElementById('saveModelButton');
-                    if (data.saved) {
-                        btn.classList.add('is-saved');
-                    } else {
-                        btn.classList.remove('is-saved');
-                    }
-                } catch (e) { console.error('Save error:', e); }
-            });
-
-            // Share button
-            document.getElementById('shareButton')?.addEventListener('click', async () => {
-                try {
-                    if (navigator.share) {
-                        await navigator.share({ title: document.querySelector('.showcase-title')?.textContent || 'Model', url: window.location.href });
-                    } else {
-                        await navigator.clipboard.writeText(window.location.href);
-                        const btn = document.getElementById('shareButton');
-                        btn.title = 'Link copied!';
-                        setTimeout(() => { btn.title = 'Share'; }, 2000);
-                    }
-                    await fetch('/api/models/{{ model_id }}/share', { method: 'POST' });
-                } catch (e) { if (e.name !== 'AbortError') console.error('Share error:', e); }
-            });
-
-            // Color picker functionality
-            function rgb2hex(rgb) {
-                if (!rgb) return '#FFFFFF';
-                const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-                if (!match) return '#FFFFFF';
-                return `#${match.slice(1).map(n => parseInt(n, 10).toString(16).padStart(2, '0')).join('')}`;
-            }
-
-            function setViewerBackgroundColor(color) {
-                if (!viewerStage) return;
-                viewerStage.style.background = color;
-            }
-
-            colorPicker?.addEventListener('input', (event) => {
-                try {
-                    const color = event.target.value;
-                    setViewerBackgroundColor(color);
-                    hexInput.value = color.toUpperCase();
-                    isColorApplied = true;
-                } catch (error) {
-                    console.error('Color picker error:', error);
-                }
-            });
-
-            hexInput?.addEventListener('input', (event) => {
-                try {
-                    let color = event.target.value;
-                    if (!color.startsWith('#')) {
-                        color = '#' + color;
-                    }
-                    if (/^#[0-9A-F]{6}$/i.test(color)) {
-                        setViewerBackgroundColor(color);
-                        colorPicker.value = color.toUpperCase();
-                        hexInput.value = color.toUpperCase();
-                        isColorApplied = true;
-                    }
-                } catch (error) {
-                    console.error('Hex input error:', error);
-                }
-            });
-
-            // Reset color button handler
-            resetColorButton?.addEventListener('click', () => {
-                try {
-                    setViewerBackgroundColor('#FFFFFF');
-                    colorPicker.value = '#FFFFFF';
-                    hexInput.value = '#FFFFFF';
-                    isColorApplied = false;
-                } catch (error) {
-                    console.error('Reset color error:', error);
-                }
-            });
-
-            function toggleDarkMode() {
-                document.documentElement.classList.remove('dark');
-                localStorage.theme = 'light';
-                setViewerBackgroundColor('#FFFFFF');
-                colorPicker.value = '#FFFFFF';
-                hexInput.value = '#FFFFFF';
-            }
-
-            // Panel Toggling logic
-            window.togglePanel = function(panelId) {
-                const panel = document.getElementById(panelId);
-                const icon = document.getElementById(panelId + 'Icon');
-                if (!panel) return;
-
-                if (panel.classList.contains('open')) {
-                    // Closing: lock to current height first, then animate to 0
-                    panel.style.maxHeight = panel.scrollHeight + 'px';
-                    panel.classList.remove('open');
-                    requestAnimationFrame(() => requestAnimationFrame(() => {
-                        panel.style.maxHeight = '0';
-                    }));
-                    if (icon) icon.style.transform = 'rotate(0deg)';
-                } else {
-                    // Opening: animate to content height
-                    panel.classList.add('open');
-                    panel.style.maxHeight = panel.scrollHeight + 'px';
-                    if (icon) icon.style.transform = 'rotate(180deg)';
-                    // After animation, remove restriction so dynamic content (AJAX etc.) shows fully
-                    const onEnd = () => {
-                        if (panel.classList.contains('open')) panel.style.maxHeight = 'none';
-                        panel.removeEventListener('transitionend', onEnd);
-                    };
-                    panel.addEventListener('transitionend', onEnd);
-                }
-            };
-
+            // The viewer is a light-only page; the stage default in CSS is
+            // gray-100, but the viewer has always rendered on white.
             document.documentElement.classList.remove('dark');
             localStorage.theme = 'light';
-            setViewerBackgroundColor('#FFFFFF');
-            colorPicker.value = '#FFFFFF';
-            hexInput.value = '#FFFFFF';
+            if (viewerStage) viewerStage.style.background = '#FFFFFF';
 
             // Screenshot functionality
             screenshotButton?.addEventListener('click', async () => {
@@ -871,6 +696,9 @@
         });
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Bare `modelViewer` references below used to resolve only through
+            // the id="modelViewer" named-element global — bind it explicitly.
+            const modelViewer = document.querySelector('model-viewer');
             // Get modal elements
             const arButton = document.querySelector('#arButton');
             const qrButton = document.querySelector('#qrButton');
@@ -878,12 +706,10 @@
             const qrModal = document.querySelector('#qrModal');
             const closeArModal = document.querySelector('#closeArModal');
             const closeQrModal = document.querySelector('#closeQrModal');
-            const showQrFromAr = document.querySelector('#showQrFromAr');
             let qrcode = null;
 
             // Function to check if AR is supported
             function isARSupported() {
-                const modelViewer = document.querySelector('model-viewer');
                 return modelViewer && modelViewer.canActivateAR;
             }
 
@@ -912,7 +738,7 @@
                 document.getElementById('arButton')?.classList.remove('is-active');
             }
 
-            document.getElementById('closeArModal')?.addEventListener('click', hideArModal);
+            // Close on overlay click (the close button itself is wired below)
             document.getElementById('arModal')?.addEventListener('click', function(e) {
                 if (e.target === this) hideArModal();
             });
@@ -956,10 +782,6 @@
             qrButton?.addEventListener('click', showQRModal);
             closeArModal?.addEventListener('click', hideArModal);
             closeQrModal?.addEventListener('click', hideQRModal);
-            showQrFromAr?.addEventListener('click', () => {
-                hideArModal();
-                showQRModal();
-            });
 
             // ===== USDZ STATUS CHECK (iOS AR) =====
             (function checkUsdzStatus() {
@@ -1191,7 +1013,6 @@
 
             const _patchedMaterials = new Set();
             const _originalSides = new Map();  // Store original material.side for restore
-            const _shaderRefs = [];
 
             // Global clip plane uniforms (shared across all materials)
             const _clipUniforms = {
@@ -1223,9 +1044,6 @@
                     shader.uniforms.slicerPlaneNZ = _clipUniforms.slicerPlaneNZ;
                     shader.uniforms.slicerPlaneD = _clipUniforms.slicerPlaneD;
                     shader.uniforms.slicerNumPlanes = _clipUniforms.slicerNumPlanes;
-
-                    // Store reference for uniform updates
-                    _shaderRefs.push(shader);
 
                     // Vertex shader: pass world-space position to fragment
                     // Uses modelMatrix to match the coordinate system of
@@ -1407,6 +1225,24 @@ void main() {
                 _renderPumpId = requestAnimationFrame(pump);
             }
 
+            // A backgrounded tab gets no rAF, but on return the pump must resume
+            // (and if the browser DOES keep ticking rAF, don't render unseen
+            // frames at full speed forever while a preview is just left open).
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    if (_renderPumpId) { cancelAnimationFrame(_renderPumpId); _renderPumpId = null; }
+                } else if (isClippingEnabled) {
+                    startRenderPump();
+                }
+            });
+
+            // Cross-script-block hooks: the annotations code (separate scope)
+            // needs to know whether a clip preview is active, and the material
+            // editor re-applies clipping after material changes so recompiled/
+            // replaced materials regain the clip shader patch.
+            window._slicerClippingActive = () => isClippingEnabled;
+            window._reapplyClipping = () => { if (isClippingEnabled) applyClippingPlanes(); };
+
             function disableAllClipping() {
                 for (const axis of ['x', 'y', 'z']) {
                     slicerAxes[axis].enabled = false;
@@ -1524,6 +1360,19 @@ void main() {
                         modelViewer.cameraOrbit = '36deg 70deg auto';
                         modelViewer.fieldOfView = '24deg';
                         modelViewer.cameraTarget = 'auto auto auto';
+
+                        // The clip planes are computed from the SAVED model's
+                        // bounds, but an unsaved transform preview (scale/rotate
+                        // sliders) moves the geometry in world space — the
+                        // preview would cut in the wrong place while the actual
+                        // server slice stays in the model's own frame. Reset the
+                        // preview so what you see is what gets cut.
+                        window._resetTransformPreview?.();
+
+                        // Shader clipping only HIDES geometry — raycasts still hit
+                        // the clipped-away surfaces, so hotspot placement while a
+                        // slice preview is active lands pins on invisible faces.
+                        window._disableHotspotMode?.();
                     }
 
                     updateAxisPlane(axis);
@@ -1637,66 +1486,17 @@ void main() {
                 }
             });
 
-            // Modal Open/Close logic
-            const openModal = (modal) => {
-                if (!modal) return;
-                modal.classList.remove('hidden');
-                modal.style.display = 'flex';
-                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
-                if (container) setTimeout(() => container.classList.add('active'), 10);
-            };
-
-            const closeModal = (modal) => {
-                if (!modal) return;
-                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
-                if (container) container.classList.remove('active');
-                setTimeout(() => {
-                    modal.classList.add('hidden');
-                    modal.style.display = 'none';
-                }, 300);
-            };
-
-            document.getElementById('qrButton')?.addEventListener('click', () => {
-                const qrModal = document.getElementById('qrModal');
-                openModal(qrModal);
-                const qrContainer = document.getElementById('qrcode');
-                if (qrContainer) {
-                    qrContainer.innerHTML = '';
-                    new QRCode(qrContainer, {
-                        text: window.location.href,
-                        width: 256,
-                        height: 256
-                    });
-                }
-            });
-
-            document.getElementById('closeQrModal')?.addEventListener('click', () => {
-                closeModal(document.getElementById('qrModal'));
-            });
-            
-            document.getElementById('modelInfoButton')?.addEventListener('click', () => {
-                openModal(document.getElementById('modelInfoModal'));
-            });
-
-            document.getElementById('closeModalButton')?.addEventListener('click', () => {
-                closeModal(document.getElementById('modelInfoModal'));
-            });
-
-            document.getElementById('closeModalFooterButton')?.addEventListener('click', () => {
-                closeModal(document.getElementById('modelInfoModal'));
-            });
+            // NOTE: QR modal open/close lives above (showQRModal/hideQRModal,
+            // `.show`-class based — the CSS uses `display:none !important`, so
+            // an inline-style mechanism can't drive this modal). The model-info
+            // modal handlers live in the first script block. A second wiring of
+            // both existed here and double-fired every open/close.
         });
     </script>
 
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen">
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
-
-    <!-- Collapsed Info Pill (visible when showcase card is collapsed) -->
-    <button id="showcaseCollapsedPill" class="showcase-collapsed-pill" type="button" aria-label="Expand model info">
-        <span class="pill-name">{{ display_name }}</span>
-        <i data-lucide="menu"></i>
-    </button>
 
     <!-- Header -->
     <div class="top-header">
@@ -1759,14 +1559,6 @@ void main() {
             </model-viewer>
         </div>
 
-        <!-- Bottom Left Controls -->
-        <!-- Hidden color picker (moved to material editor context) -->
-        <div id="hiddenColorPicker" style="display:none;">
-            <input type="color" id="colorPicker" class="w-5 h-5 rounded cursor-pointer">
-            <input type="text" id="hexInput" class="px-1.5 py-0.5 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs w-16" placeholder="#FFFFFF">
-            <button id="resetColor" class="px-1.5 py-0.5 text-[10px] bg-gray-200/50 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400">Reset</button>
-        </div>
-
         <!-- Portfolio Tagline -->
         <div class="portfolio-tagline hidden xl:block">
             <p class="tagline-line">A Perfect Place</p>
@@ -1780,11 +1572,6 @@ void main() {
 
         <!-- Right Side Panels -->
         <div id="rightSidebar" class="showcase-sidebar absolute right-3 top-12 bottom-12 z-20 flex flex-col gap-1.5 overflow-y-auto" style="max-width: 360px; width: 360px; scrollbar-width: thin; padding-right: 2px;">
-
-            <!-- Sidebar Toggle Tab -->
-            <button id="sidebarToggle" title="Toggle panel">
-                <i data-lucide="chevron-right"></i>
-            </button>
 
             <div class="showcase-card">
                 <div class="showcase-header">
@@ -2033,19 +1820,25 @@ void main() {
                 <div class="tp-section-body" id="annotationsPanel">
                     <div class="tp-field" style="padding-bottom:0.5rem;border-bottom:1px solid var(--color-gray-700);margin-bottom:0.5rem;">
                         <label class="tp-label">Camera Views</label>
+                        {% if can_edit %}
                         <button id="saveCameraView" class="tp-btn-full">Save Current View</button>
+                        {% endif %}
                         <div id="cameraViewsList" style="margin-top:0.35rem;max-height:6rem;overflow-y:auto;">
                             <p class="tp-note">No saved views</p>
                         </div>
                     </div>
                     <div class="tp-field" style="padding-bottom:0.5rem;border-bottom:1px solid var(--color-gray-700);margin-bottom:0.5rem;">
                         <label class="tp-label">Hotspots</label>
+                        {% if can_edit %}
                         <button id="toggleHotspotMode" class="tp-btn-full">Click Model to Add Hotspot</button>
+                        {% endif %}
                         <div id="hotspotsList" style="margin-top:0.35rem;max-height:10rem;overflow-y:auto;">
                             <p class="tp-note">No hotspots yet</p>
                         </div>
                     </div>
+                    {% if can_edit %}
                     <button id="clearAnnotations" class="tp-btn-full" style="color:var(--color-gray-400);">Clear All</button>
+                    {% endif %}
                 </div>
             </div>
 
@@ -2125,12 +1918,18 @@ void main() {
 
                     <div style="display:flex;gap:0.35rem;margin-top:0.6rem;">
                         <button id="slicerReset" class="tp-btn-full" style="flex:1;">Reset</button>
+                        {% if can_edit %}
                         <button id="slicerApply" class="tp-btn-primary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.3rem;">
                             <svg id="slicerSpinner" class="hidden" style="width:0.75rem;height:0.75rem;animation:spin 0.6s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                             <i data-lucide="scissors" style="width:0.7rem;height:0.7rem;"></i> Apply Slice
                         </button>
+                        {% endif %}
                     </div>
+                    {% if can_edit %}
                     <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Permanently cuts the model as a new version</p>
+                    {% else %}
+                    <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Preview only — you don't own this model</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -2185,6 +1984,7 @@ void main() {
 
             </div><!-- /.showcase-content -->
 
+            {% if can_edit %}
             <!-- Save Changes (sticky bottom) -->
             <div id="saveChangesWrapper">
                 <div class="tp-save-bar">
@@ -2194,6 +1994,7 @@ void main() {
                     </button>
                 </div>
             </div><!-- /saveChangesWrapper -->
+            {% endif %}
 
             </div><!-- /#toolsPanelBody -->
         </div><!-- /#toolsPanel -->
@@ -2202,6 +2003,7 @@ void main() {
         <!-- Bottom-right Toolbar -->
         <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
             <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
+            <button id="modelInfoButton" class="tb-btn" title="Details"><i data-lucide="file-text"></i></button>
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
@@ -2390,10 +2192,26 @@ void main() {
     // Global initialization state variables (must be accessible from all script blocks)
     let materialEditorInitialized = false;
     let transformEditorInitialized = false;
+    // Set when the user actually touches a material control. Saving sends
+    // mat[0]'s values and the backend applies them to EVERY material, so a
+    // save must never include a material block the user didn't ask for —
+    // on a multi-material model that would silently overwrite materials
+    // 1..N with material 0's appearance.
+    let materialDirty = false;
+    function markMaterialChanged() {
+        materialDirty = true;
+        // If a slice preview is active, re-patch materials: a material change
+        // can recompile/replace the THREE material and lose the clip shader.
+        window._reapplyClipping?.();
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         const modelViewer = document.querySelector('model-viewer');
         const modelId = '{{ model_unique_id }}';
+        // Mirrors the backend's check_model_mutation_allowed: owner, or an
+        // anonymous model. Mutating UI (version restore/delete etc.) is only
+        // built when the server would actually accept the mutation.
+        const CAN_EDIT = {{ can_edit | tojson }};
 
         // ===================================================================
         // RESET CAMERA
@@ -2471,6 +2289,10 @@ void main() {
                 if (isCardCollapsed) expandCard();
                 else collapseCard();
             };
+            // The toolbar Info button must be able to bring the card back after
+            // it was collapsed via its X — openInfo() only clears `info-hidden`,
+            // which left an `is-collapsed` card invisible with no way to expand.
+            window._expandShowcaseCard = expandCard;
 
             // Mobile fab should also expand card if collapsed
             mobileFab?.addEventListener('click', () => {
@@ -2691,6 +2513,7 @@ void main() {
                 const hex = e.target.value;
                 if (matColorHex) matColorHex.value = hex.toUpperCase();
                 applyMaterialColor(hex);
+                markMaterialChanged();
             });
 
             matColorHex?.addEventListener('input', (e) => {
@@ -2699,6 +2522,7 @@ void main() {
                 if (/^#[0-9A-F]{6}$/i.test(hex)) {
                     if (matColor) matColor.value = hex;
                     applyMaterialColor(hex);
+                    markMaterialChanged();
                 }
             });
 
@@ -2708,6 +2532,7 @@ void main() {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setMetallicFactor(val);
                 });
+                markMaterialChanged();
             });
 
             roughnessSlider?.addEventListener('input', (e) => {
@@ -2716,6 +2541,7 @@ void main() {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setRoughnessFactor(val);
                 });
+                markMaterialChanged();
             });
 
             opacitySlider?.addEventListener('input', (e) => {
@@ -2730,6 +2556,7 @@ void main() {
                         mat.setAlphaMode('OPAQUE');
                     }
                 });
+                markMaterialChanged();
             });
 
             // Texture upload
@@ -2750,6 +2577,7 @@ void main() {
                         mat.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, cf[3]]);
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     });
+                    markMaterialChanged();
                     // Sync color pickers with the reset tint
                     if (matColor) matColor.value = '#ffffff';
                     if (matColorHex) matColorHex.value = '#FFFFFF';
@@ -2816,6 +2644,10 @@ void main() {
                 if (opacitySlider) { opacitySlider.value = 1; if (opacityValue) opacityValue.textContent = '1.0'; }
                 if (texturePreview) texturePreview.classList.add('hidden');
                 if (textureUpload) textureUpload.value = '';
+                // Back at the model's saved appearance — nothing material-wise
+                // left to persist, so a later save must not send a material block.
+                materialDirty = false;
+                window._reapplyClipping?.();
             });
 
             materialEditorInitialized = true;
@@ -2960,7 +2792,7 @@ void main() {
                 applyTransform();
             });
 
-            resetTransform?.addEventListener('click', () => {
+            function resetTransformPreview() {
                 if (scaleSlider) scaleSlider.value = 1;
                 if (scaleInput) scaleInput.value = '1.0';
                 if (rotateXSlider) rotateXSlider.value = 0;
@@ -2972,7 +2804,23 @@ void main() {
                 // Apply the reset values to the actual THREE.js scene (applyTransform
                 // reads the sliders and calls forceModelViewerRefresh internally).
                 applyTransform();
-            });
+            }
+
+            resetTransform?.addEventListener('click', resetTransformPreview);
+
+            // The slicer (separate script block) neutralizes any unsaved
+            // transform preview when a clip axis is enabled \u2014 its clip planes
+            // are computed from the SAVED model's bounds, so a live scale/
+            // rotation preview would make the cut appear in the wrong place.
+            window._resetTransformPreview = () => {
+                const active =
+                    parseFloat(scaleSlider?.value || 1) !== 1 ||
+                    parseFloat(rotateXSlider?.value || 0) !== 0 ||
+                    parseFloat(rotateYSlider?.value || 0) !== 0 ||
+                    parseFloat(rotateZSlider?.value || 0) !== 0;
+                if (!active) return;
+                resetTransformPreview();
+            };
 
             transformEditorInitialized = true;
         }
@@ -3039,7 +2887,7 @@ void main() {
                 const div = document.createElement('div');
                 div.className = 'tp-list-item';
                 div.innerHTML = '<button class="load-view-btn" style="background:none;border:none;color:var(--color-gray-200);font-size:0.72rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">' + escapeHtml(v.name) + '</button>' +
-                    '<button class="delete-view-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>';
+                    (CAN_EDIT ? '<button class="delete-view-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>' : '');
                 div.querySelector('.load-view-btn').addEventListener('click', () => {
                     if (v._orbit) {
                         modelViewer.cameraOrbit = v._orbit.toString();
@@ -3053,7 +2901,7 @@ void main() {
                         if (v.fov) modelViewer.fieldOfView = v.fov + 'deg';
                     }
                 });
-                div.querySelector('.delete-view-btn').addEventListener('click', () => {
+                div.querySelector('.delete-view-btn')?.addEventListener('click', () => {
                     const viewId = v.id;
                     if (viewId) {
                         fetch('/api/models/' + modelId + '/camera-views/' + viewId, { method: 'DELETE' })
@@ -3078,16 +2926,43 @@ void main() {
         loadCameraViewsFromDB();
 
         // Hotspot mode
-        toggleHotspotMode?.addEventListener('click', () => {
-            hotspotMode = !hotspotMode;
+        function setHotspotMode(on) {
+            hotspotMode = on;
+            if (!toggleHotspotMode) return;
             toggleHotspotMode.textContent = hotspotMode ? 'Hotspot Mode: ON (click model)' : 'Click Model to Add Hotspot';
             toggleHotspotMode.style.background = hotspotMode ? 'var(--color-gray-200)' : '';
             toggleHotspotMode.style.color = hotspotMode ? 'var(--color-gray-900)' : '';
             toggleHotspotMode.classList.toggle('text-white', hotspotMode);
+        }
+        // The slicer (separate script block) turns hotspot mode off when a clip
+        // axis is enabled: the preview only *hides* geometry via shader discard,
+        // so clicks would still land hotspots on invisible, clipped-away surfaces.
+        window._disableHotspotMode = () => setHotspotMode(false);
+
+        toggleHotspotMode?.addEventListener('click', () => {
+            if (!hotspotMode && window._slicerClippingActive?.()) {
+                alert('Hotspots can\'t be placed while a slice preview is active — reset the slicer first.');
+                return;
+            }
+            setHotspotMode(!hotspotMode);
+        });
+
+        // model-viewer fires `click` on pointerup even after an orbit drag —
+        // without this, every rotate gesture in hotspot mode ended with an
+        // unwanted "add hotspot" prompt. Only a genuine tap (little to no
+        // pointer travel) may place a hotspot.
+        let _hotspotPointerDown = null;
+        modelViewer?.addEventListener('pointerdown', (e) => {
+            _hotspotPointerDown = { x: e.clientX, y: e.clientY };
         });
 
         modelViewer?.addEventListener('click', (e) => {
             if (!hotspotMode) return;
+            if (_hotspotPointerDown) {
+                const dx = e.clientX - _hotspotPointerDown.x;
+                const dy = e.clientY - _hotspotPointerDown.y;
+                if ((dx * dx + dy * dy) > 36) return; // >6px travel = drag, not a tap
+            }
             const rect = modelViewer.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
@@ -3122,17 +2997,20 @@ void main() {
         });
 
         function renderHotspotOnViewer(name, label, pos, norm) {
+            // Names are generated as 'hotspot-<ts>' already — model-viewer only
+            // needs the slot to start with "hotspot-", so don't double the prefix.
+            const slot = name.startsWith('hotspot-') ? name : 'hotspot-' + name;
             const hotspot = document.createElement('button');
-            hotspot.slot = 'hotspot-' + name;
+            hotspot.slot = slot;
             hotspot.className = 'hotspot-dot';
             hotspot.dataset.position = pos.x + 'm ' + pos.y + 'm ' + pos.z + 'm';
             if (norm) hotspot.dataset.normal = norm.x + 'm ' + norm.y + 'm ' + norm.z + 'm';
             hotspot.dataset.visibility = 'visible';
             hotspot.style.cssText = 'background:rgba(76,175,80,0.9);color:white;border:2px solid white;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
-            hotspot.textContent = ++document.querySelectorAll('.hotspot-dot').length || hotspotCount;
+            hotspot.textContent = document.querySelectorAll('.hotspot-dot').length + 1;
 
             const annotation = document.createElement('div');
-            annotation.slot = 'hotspot-' + name;
+            annotation.slot = slot;
             annotation.className = 'hotspot-annotation';
             annotation.style.cssText = 'background:rgba(0,0,0,0.75);color:white;padding:4px 10px;border-radius:6px;font-size:11px;white-space:nowrap;pointer-events:none;margin-top:-40px;';
             annotation.textContent = label;
@@ -3152,8 +3030,8 @@ void main() {
             div.className = 'tp-list-item';
             div.dataset.hotspotId = name;
             div.innerHTML = '<span style="font-size:0.72rem;color:var(--color-gray-200);">' + escapeHtml(label) + '</span>' +
-                '<button class="delete-hotspot-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>';
-            div.querySelector('.delete-hotspot-btn').addEventListener('click', () => {
+                (CAN_EDIT ? '<button class="delete-hotspot-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>' : '');
+            div.querySelector('.delete-hotspot-btn')?.addEventListener('click', () => {
                 // Delete from DB
                 fetch('/api/models/' + modelId + '/hotspots/' + name, { method: 'DELETE' })
                 .then(r => r.json())
@@ -3192,10 +3070,16 @@ void main() {
 
         clearAnnotations?.addEventListener('click', () => {
             if (!confirm('Clear all annotations and hotspots?')) return;
-            // Delete all hotspots from DB
-            fetch('/api/models/' + modelId + '/hotspots', { method: 'DELETE' })
-            .then(r => r.json())
-            .then(data => {
+            // Camera views only have a per-id DELETE route; clearing them just
+            // client-side made them reappear on the next page load.
+            const viewDeletes = savedViews
+                .filter(v => v.id)
+                .map(v => fetch('/api/models/' + modelId + '/camera-views/' + v.id, { method: 'DELETE' }).catch(() => {}));
+            Promise.all([
+                fetch('/api/models/' + modelId + '/hotspots', { method: 'DELETE' }).then(r => r.json()),
+                ...viewDeletes,
+            ])
+            .then(([data]) => {
                 if (!data.success) { console.error('Failed to clear hotspots:', data.error); return; }
                 savedViews = [];
                 renderCameraViews();
@@ -3203,7 +3087,7 @@ void main() {
                 modelViewer?.querySelectorAll('[slot^="hotspot-"]').forEach(el => el.remove());
                 if (hotspotsList) hotspotsList.innerHTML = '<p class="tp-note">No hotspots yet</p>';
             })
-            .catch(err => console.error('Error clearing hotspots:', err));
+            .catch(err => console.error('Error clearing annotations:', err));
         });
 
         // ===================================================================
@@ -3243,12 +3127,12 @@ void main() {
                             (v.comment ? '<p style="font-size:0.68rem;color:var(--color-gray-500);margin-bottom:0.2rem;">' + escapeHtml(v.comment) + '</p>' : '') +
                             (v.file_size_formatted ? '<p style="font-size:0.6rem;color:var(--color-gray-500);margin-bottom:0.3rem;">Size: ' + v.file_size_formatted + '</p>' : '') +
                             '<div style="display:flex;gap:3px;">' +
-                            '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' +
+                            (CAN_EDIT ? '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' : '') +
                             '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' +
-                            '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' +
+                            (CAN_EDIT ? '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' : '') +
                             '</div>';
 
-                        div.querySelector('.restore-btn').addEventListener('click', async () => {
+                        div.querySelector('.restore-btn')?.addEventListener('click', async () => {
                             if (!confirm('Restore to version ' + v.version_number + '? Current model will be replaced.')) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/restore/' + v.version_number, { method: 'POST' });
@@ -3262,7 +3146,7 @@ void main() {
                             window.open('/api/versions/' + modelId + '/download/' + v.version_number, '_blank');
                         });
 
-                        div.querySelector('.delete-btn').addEventListener('click', async () => {
+                        div.querySelector('.delete-btn')?.addEventListener('click', async () => {
                             if (!confirm('Delete version ' + v.version_number + '?')) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/delete/' + v.version_number, { method: 'DELETE' });
@@ -3475,9 +3359,13 @@ void main() {
         function gatherModifications() {
             const mods = {};
 
-            // Material modifications (guard against not-yet-loaded materials)
+            // Material modifications — ONLY when the user actually touched a
+            // material control. The backend applies this single value set to
+            // every material in the GLB, so sending mat[0]'s current state on
+            // an untouched save (e.g. transform-only) would permanently
+            // overwrite all other materials on a multi-material model.
             const mats = getMaterials();
-            if (mats.length > 0) {
+            if (materialDirty && mats.length > 0) {
                 try {
                     const mat = mats[0];
                     const cf = mat.pbrMetallicRoughness?.baseColorFactor;
@@ -3488,13 +3376,12 @@ void main() {
                         opacity: cf ? cf[3] : 1
                     };
                 } catch (e) { /* material not loaded — skip material mods */ }
-
-                // Include texture if one was uploaded
-                const _textureUpload = document.getElementById('textureUpload');
-                if (_textureUpload?.files?.length > 0) {
-                    if (!mods.material) mods.material = {};
-                    mods.material._pendingTextureFile = _textureUpload.files[0];
-                }
+            }
+            // A pending texture upload is a material change in its own right.
+            const _textureUpload = document.getElementById('textureUpload');
+            if (_textureUpload?.files?.length > 0) {
+                if (!mods.material) mods.material = {};
+                mods.material._pendingTextureFile = _textureUpload.files[0];
             }
 
             // Transform modifications
@@ -3579,6 +3466,10 @@ void main() {
         function openInfo() {
             document.getElementById('rightSidebar')?.classList.remove('info-hidden');
             document.getElementById('infoToggleBtn')?.classList.add('is-active');
+            // Also un-collapse the card if it was closed via its X button —
+            // otherwise the sidebar becomes visible but the card stays at
+            // opacity 0 and the Info button appears to do nothing.
+            window._expandShowcaseCard?.();
             closeTools();
         }
 

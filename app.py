@@ -2782,6 +2782,10 @@ def view_model(model_id):
                      if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
     is_owner = current_user.is_authenticated and model.user_id == current_user.id
+    # Anonymous models (user_id None) are editable by anyone by design — this
+    # mirrors check_model_mutation_allowed, so edit UI is only rendered for
+    # viewers whose mutations the backend would actually accept.
+    can_edit = is_owner or model.user_id is None
 
     response = make_response(render_template(
         "view.html",
@@ -2799,6 +2803,7 @@ def view_model(model_id):
         owner_models=owner_models,
         display_name=display_name,
         is_owner=is_owner,
+        can_edit=can_edit,
         seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -3472,7 +3477,9 @@ def download_model(model_id):
         return "Dosya indirilirken bir hata oluştu", 500
 
 
-@app.route("/api/model-info/<int:model_id>")
+# Model ids are UUID strings — the old <int:model_id> converter could never
+# match a real id, so this route was unreachable as written.
+@app.route("/api/model-info/<model_id>")
 @login_required
 def get_model_info_api(model_id):
     session = Session(db.engine)
@@ -4148,10 +4155,12 @@ def download_modified(model_id, filename):
 
 @app.route("/get_model_dimensions/<model_id>")
 def get_model_dimensions(model_id):
-    """Get model dimensions in meters"""
-    guard = check_model_mutation_allowed(model_id)
-    if guard is not None:
-        return guard
+    """Get model dimensions in meters.
+
+    Read-only: no ownership guard. The viewer page calls this for every
+    visitor, and the same dimensions are already server-rendered publicly —
+    the old mutation guard just made non-owners 403 for data they can see.
+    """
     try:
         glb_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
 

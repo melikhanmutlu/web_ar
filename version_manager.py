@@ -21,6 +21,21 @@ def _model_dir(model_id):
     return os.path.join(CONVERTED_FOLDER, model_id)
 
 
+def version_path(version):
+    """Live path to a version snapshot file.
+
+    ModelVersion.filename stores an absolute path captured at snapshot time;
+    when the storage root moves between deploys (e.g. a Railway volume is
+    attached or its mount path changes) that path goes stale even though the
+    file still exists under the current root. Resolve against the current
+    CONVERTED_FOLDER first, falling back to the stored path.
+    """
+    live = os.path.join(_model_dir(version.model_id), os.path.basename(version.filename))
+    if os.path.exists(live):
+        return live
+    return version.filename
+
+
 def _atomic_copy(src, dst):
     """Copy src over dst atomically (temp file + os.replace on same dir)."""
     tmp = f"{dst}.tmp.{os.getpid()}"
@@ -149,17 +164,18 @@ def restore_version(model_id, version_number):
             logger.error(f"Version {version_number} not found for model {model_id}")
             return False
         
-        if not os.path.exists(version.filename):
-            logger.error(f"Version file not found: {version.filename}")
+        src = version_path(version)
+        if not os.path.exists(src):
+            logger.error(f"Version file not found: {src}")
             return False
 
         # Stash the restore source in a temp file before touching anything
         # else: create_version() below now also prunes old versions, which
-        # could otherwise delete version.filename out from under us if this
+        # could otherwise delete the version file out from under us if this
         # version falls outside the keep-last-N window (e.g. restoring a very
         # old version on a heavily-edited model).
-        restore_source = f"{version.filename}.restoring.{os.getpid()}"
-        shutil.copy2(version.filename, restore_source)
+        restore_source = f"{src}.restoring.{os.getpid()}"
+        shutil.copy2(src, restore_source)
 
         try:
             # Create a new version before restoring (to preserve current state)
@@ -207,7 +223,7 @@ def delete_version(model_id, version_number):
         
         # Commit the DB deletion first; only remove the file once the row is
         # gone. Removing the file first risks losing data if the commit fails.
-        version_file = version.filename
+        version_file = version_path(version)
         db.session.delete(version)
         db.session.commit()
 

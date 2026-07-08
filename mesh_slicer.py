@@ -191,9 +191,16 @@ def _inject_materials(sliced_path, mat_data):
         gltf.set_binary_blob(bytes(blob))
 
         # ---- ensure every primitive points to a valid material ----
+        # Primitives that already carry COLOR_0 render correctly from vertex
+        # color alone (that's how they looked before slicing — no material at
+        # all). Per the glTF spec, COLOR_0 multiplies baseColorFactor, so
+        # assigning them the material we just promoted FROM that same vertex
+        # color would tint it a second time, crushing it towards black.
         num_mats = len(gltf.materials)
         for mesh in (gltf.meshes or []):
             for prim in (mesh.primitives or []):
+                if getattr(prim.attributes, 'COLOR_0', None) is not None:
+                    continue
                 if prim.material is None or prim.material >= num_mats:
                     prim.material = 0      # fall back to first material
 

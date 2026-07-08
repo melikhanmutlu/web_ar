@@ -103,6 +103,38 @@ def test_slice_caps_plain_mesh():
     assert result.is_watertight, "plain-mesh slice should be capped (closed), not an open shell"
 
 
+def test_slice_preserves_vertex_color_without_double_tinting():
+    """STL-sourced models carry color as vertex colors only (no material) —
+    that's how they render correctly pre-slice. _inject_materials used to
+    force-assign every colorless primitive a synthetic material promoted
+    FROM that same vertex color, and since glTF multiplies COLOR_0 by
+    baseColorFactor, the result was the color squared (crushed towards
+    black) instead of preserved."""
+    box = trimesh.creation.box(extents=(1, 1, 1))
+    vertex_colors = np.tile([200, 50, 50, 255], (len(box.vertices), 1)).astype(np.uint8)
+    box.visual = trimesh.visual.ColorVisuals(vertex_colors=vertex_colors)
+
+    in_path = f"/tmp/test_slice_vc_in_{uuid.uuid4().hex}.glb"
+    out_path = f"/tmp/test_slice_vc_out_{uuid.uuid4().hex}.glb"
+    trimesh.Scene([box]).export(in_path, file_type="glb")
+    try:
+        result = ms.slice_mesh(in_path, out_path, [0, 0, 0], [1, 0, 0], keep_side="positive")
+        assert result is True
+
+        gltf = GLTF2().load(out_path)
+        for mesh in gltf.meshes:
+            for prim in mesh.primitives:
+                if getattr(prim.attributes, "COLOR_0", None) is not None:
+                    assert prim.material is None, (
+                        "primitive has both COLOR_0 and a material — glTF will "
+                        "multiply them, crushing the color towards black"
+                    )
+    finally:
+        for p in (in_path, out_path):
+            if os.path.exists(p):
+                os.remove(p)
+
+
 def test_slice_fallback_preserves_uv_and_material():
     """A mesh where the face mask can never keep a whole face (every
     triangle straddles the cut) must fall through to slice_plane without

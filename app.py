@@ -1323,6 +1323,15 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
             )
             return
 
+        # First choice: render the actual geometry (software rasterizer, no GPU)
+        from converters.thumbnail_render import render_thumbnail
+
+        if render_thumbnail(input_glb_path, thumbnail_path):
+            logger.info(
+                f"[Thumbnail Async - {model_id}] Real 3D thumbnail rendered"
+            )
+            return
+
         # Try to generate from 3D model using trimesh
         try:
             import trimesh
@@ -3172,6 +3181,15 @@ def serve_thumbnail(unique_id):
         )
 
         if os.path.exists(model_path):
+            # First choice: render the actual geometry (software rasterizer)
+            from converters.thumbnail_render import render_thumbnail
+
+            if render_thumbnail(model_path, thumbnail_path):
+                return send_from_directory(
+                    os.path.join(app.config["CONVERTED_FOLDER"], unique_id),
+                    "thumbnail.png",
+                )
+
             try:
                 import trimesh
                 import numpy as np

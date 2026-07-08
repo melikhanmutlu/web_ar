@@ -44,7 +44,7 @@ from sqlalchemy.orm.attributes import flag_modified
 import qrcode
 from slugify import slugify
 import trimesh
-from converters import OBJConverter, FBXConverter, STLConverter
+from converters import OBJConverter, FBXConverter, STLConverter, STEPConverter
 from converters.glb_optimizer import optimize_glb
 from converters.glb_quality import finalize_glb
 import numpy as np
@@ -96,7 +96,7 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["CONVERTED_FOLDER"] = CONVERTED_FOLDER
 app.config["TEMP_FOLDER"] = TEMP_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB limit
-app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx", "glb", "gltf"}
+app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx", "glb", "gltf", "step", "stp"}
 
 # NOTE: UPLOAD_FOLDER/CONVERTED_FOLDER/TEMP_FOLDER/QR_FOLDER and the limits come
 # from config.py via `from config import *`. They are storage-root aware (they
@@ -342,10 +342,10 @@ def get_file_info(file_path):
         # For 3D models, get additional information
         if file_ext[1:] in app.config["ALLOWED_EXTENSIONS"]:
             try:
-                # For FBX files, we can't get mesh information directly
-                if file_ext == ".fbx":
+                # For FBX/STEP files, we can't get mesh information directly
+                if file_ext in (".fbx", ".step", ".stp"):
                     logger.info(
-                        "FBX file detected - mesh information will be updated after conversion"
+                        f"{file_ext} file detected - mesh information will be updated after conversion"
                     )
                     return info
 
@@ -550,6 +550,8 @@ def convert_model_new(input_file, output_path=None, color=None):
             converter = STLConverter()
         elif file_ext == ".obj":
             converter = OBJConverter()
+        elif file_ext in (".step", ".stp"):
+            converter = STEPConverter()
         elif file_ext in (".glb", ".gltf"):
             # Direct copy/re-export for GLB/GLTF
             try:
@@ -718,6 +720,8 @@ def convert_to_glb(file_path):
             converter = STLConverter()
         elif file_ext == "fbx":
             converter = FBXConverter()
+        elif file_ext in ("step", "stp"):
+            converter = STEPConverter()
         else:
             logger.error(f"No converter available for {file_ext}")
             return None
@@ -1684,6 +1688,9 @@ def upload_file():
             if remove_textures:
                 converter.remove_textures = True
                 logger.info("FBX texture removal enabled")
+        elif file_extension in (".step", ".stp"):
+            # STEP carries real units; cascadio converts to meters directly
+            converter = STEPConverter()
         else:
             return jsonify({"error": "Unsupported file format"}), 400
 
@@ -2055,6 +2062,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
             converter.set_source_unit(source_unit or "cm")
         elif file_extension == ".fbx":
             converter = FBXConverter()
+        elif file_extension in (".step", ".stp"):
+            # STEP carries real units; cascadio converts to meters directly
+            converter = STEPConverter()
         elif file_extension in (".glb", ".gltf"):
             # GLB is already the target format; GLTF can be loaded+exported as GLB
             converter = None  # No converter needed, handle directly below

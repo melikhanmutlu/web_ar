@@ -59,11 +59,11 @@
             <!-- File Upload -->
             <div>
                 <div id="dropZone" class="av-dropzone">
-                    <input id="file-upload" name="file" type="file" class="hidden" accept=".obj,.glb,.gltf,.fbx,.stl">
+                    <input id="file-upload" name="file" type="file" class="hidden" accept=".obj,.glb,.gltf,.fbx,.stl,.step,.stp">
                     <i data-lucide="upload-cloud" class="av-dropzone-icon"></i>
                     <p class="av-dropzone-title">Drag &amp; drop your 3D model here</p>
                     <p class="av-dropzone-hint">or click to browse</p>
-                    <p class="av-dropzone-formats">Supported: <strong>FBX, OBJ, GLB, GLTF, STL</strong> (max. 100MB)</p>
+                    <p class="av-dropzone-formats">Supported: <strong>FBX, OBJ, GLB, GLTF, STL, STEP</strong> (max. 100MB)</p>
                     <div id="selectedFileName" class="av-dropzone-selected hidden"></div>
                 </div>
             </div>
@@ -553,11 +553,11 @@
             const file = files[0];
             if (file) {
                 // Check file type
-                const validExtensions = ['.obj', '.glb', '.gltf', '.fbx', '.stl'];
+                const validExtensions = ['.obj', '.glb', '.gltf', '.fbx', '.stl', '.step', '.stp'];
                 const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
 
                 if (!validExtensions.includes(fileExtension)) {
-                    displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, or STL).');
+                    displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, STL, or STEP).');
                     return;
                 }
 

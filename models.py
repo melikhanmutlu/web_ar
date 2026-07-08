@@ -1,3 +1,5 @@
+import os
+
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -154,6 +156,35 @@ class UserModel(db.Model):
         if self.source_filename:
             return self.source_filename
         return self.filename.split('/')[-1] if self.filename else 'Unknown'
+
+    # `filename`/`usdz_filename` store ABSOLUTE paths captured at creation
+    # time. The storage root can move between deploys (Railway volume mount
+    # attached/renamed, STORAGE_ROOT introduced), which strands every old row
+    # pointing at a path that no longer exists even though the file is still
+    # sitting at <current CONVERTED_FOLDER>/<id>/. Readers must resolve
+    # through these properties, which prefer the live layout and only fall
+    # back to the stored path.
+    def _live_converted_path(self, basename):
+        try:
+            from flask import current_app
+            root = current_app.config['CONVERTED_FOLDER']
+        except Exception:
+            from config import CONVERTED_FOLDER as root
+        return os.path.join(root, self.id, basename)
+
+    @property
+    def glb_path(self):
+        live = self._live_converted_path('model.glb')
+        if os.path.exists(live):
+            return live
+        return self.filename
+
+    @property
+    def usdz_path(self):
+        live = self._live_converted_path('model.usdz')
+        if os.path.exists(live):
+            return live
+        return self.usdz_filename
 
     @property
     def file_size_formatted(self):

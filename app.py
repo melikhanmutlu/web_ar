@@ -57,6 +57,7 @@ from version_manager import (
     get_version_history,
     restore_version,
     delete_version,
+    version_path,
 )
 
 app = Flask(__name__)
@@ -1498,9 +1499,10 @@ def get_usdz_status(model_id):
         usdz_ready = False
         usdz_filename = None
 
-        if model.usdz_filename and os.path.exists(model.usdz_filename):
+        usdz_path = model.usdz_path
+        if usdz_path and os.path.exists(usdz_path):
             usdz_ready = True
-            usdz_filename = os.path.basename(model.usdz_filename)
+            usdz_filename = os.path.basename(usdz_path)
         else:
             # Also check the converted directory for usdz files
             converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
@@ -2597,9 +2599,14 @@ def view_model(model_id):
     model.view_count = (model.view_count or 0) + 1
     db.session.commit()
 
-    # Check if converted file exists
-    if not model.filename or not os.path.exists(model.filename):
-        app.logger.error(f"Converted GLB file not found at path: {model.filename}")
+    # Check if converted file exists. glb_path resolves from the CURRENT
+    # CONVERTED_FOLDER — the absolute path stored in model.filename goes stale
+    # when the storage root moves between deploys (e.g. a Railway volume is
+    # attached or its mount path changes), which used to strand every old
+    # model behind this redirect even though its file still existed.
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
+        app.logger.error(f"Converted GLB file not found at path: {glb_path}")
         flash("Converted model file not found", "error")
         return redirect(url_for("index"))
 
@@ -2630,7 +2637,7 @@ def view_model(model_id):
             import trimesh
             import numpy as np
 
-            mesh = trimesh.load(model.filename)
+            mesh = trimesh.load(glb_path)
             app.logger.info(f"Loaded mesh type: {type(mesh)}")
 
             # Get extents based on mesh type
@@ -2694,8 +2701,8 @@ def view_model(model_id):
 
     # Parse the path to get unique_id and actual filename for URL generation
     try:
-        full_path = model.filename
-        app.logger.info(f"Model full path from DB: {full_path}")
+        full_path = glb_path
+        app.logger.info(f"Model full path: {full_path}")
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
 
         if full_path.startswith(converted_folder_abs):
@@ -2721,12 +2728,9 @@ def view_model(model_id):
 
         # Check for USDZ file
         usdz_actual_filename = None
-        if (
-            hasattr(model, "usdz_filename")
-            and model.usdz_filename
-            and os.path.exists(model.usdz_filename)
-        ):
-            usdz_actual_filename = os.path.basename(model.usdz_filename)
+        usdz_path = model.usdz_path
+        if usdz_path and os.path.exists(usdz_path):
+            usdz_actual_filename = os.path.basename(usdz_path)
             app.logger.info(f"Found USDZ file: {usdz_actual_filename}")
 
     except Exception as e:
@@ -2818,12 +2822,13 @@ def embed_view(model_id):
     if not model:
         return "Model not found", 404
 
-    if not model.filename or not os.path.exists(model.filename):
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
         return "Model file not found", 404
 
     # Parse path
     try:
-        full_path = model.filename
+        full_path = glb_path
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
         relative_path = os.path.relpath(full_path, converted_folder_abs)
         parts = os.path.normpath(relative_path).split(os.sep)
@@ -2834,8 +2839,9 @@ def embed_view(model_id):
 
     # Check USDZ
     usdz_actual_filename = None
-    if model.usdz_filename and os.path.exists(model.usdz_filename):
-        usdz_actual_filename = os.path.basename(model.usdz_filename)
+    usdz_path = model.usdz_path
+    if usdz_path and os.path.exists(usdz_path):
+        usdz_actual_filename = os.path.basename(usdz_path)
 
     # Dimensions
     model_dimensions = None
@@ -2873,13 +2879,14 @@ def vr_view(model_id):
         flash("Model not found", "error")
         return redirect(url_for("index"))
 
-    if not model.filename or not os.path.exists(model.filename):
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
         flash("Converted model file not found", "error")
         return redirect(url_for("index"))
 
-    # Parse unique_id and actual_filename from model.filename (same logic as view_model)
+    # Parse unique_id and actual_filename from the live path (same logic as view_model)
     try:
-        full_path = model.filename
+        full_path = glb_path
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
         if full_path.startswith(converted_folder_abs):
             relative_path = os.path.relpath(full_path, converted_folder_abs)
@@ -3007,8 +3014,10 @@ def get_model_bounds(model_id):
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
 
-        # Check if model file exists
-        if not model.filename or not os.path.exists(model.filename):
+        # Check if model file exists (live path — the stored one goes stale
+        # when the storage root moves between deploys)
+        glb_path = model.glb_path
+        if not glb_path or not os.path.exists(glb_path):
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
         # Try to get bounds from database first
@@ -3035,7 +3044,7 @@ def get_model_bounds(model_id):
         try:
             import trimesh
 
-            mesh = trimesh.load(model.filename, force="scene")
+            mesh = trimesh.load(glb_path, force="scene")
 
             # Get bounds
             if isinstance(mesh, trimesh.Scene):
@@ -3490,7 +3499,7 @@ def get_model_info_api(model_id):
         flash("Bu modele erişim izniniz yok.", "error")
         return redirect(url_for("auth.profile"))
 
-    model_info = get_file_info(model.filename)
+    model_info = get_file_info(model.glb_path)
     if model_info is None:
         return jsonify({"error": "Model not found"}), 404
 
@@ -4710,11 +4719,12 @@ def download_version(model_id, version_number):
         if not version:
             return jsonify({"success": False, "error": "Version not found"}), 404
 
-        if not os.path.exists(version.filename):
+        version_file = version_path(version)
+        if not os.path.exists(version_file):
             return jsonify({"success": False, "error": "Version file not found"}), 404
 
-        directory = os.path.dirname(version.filename)
-        filename = os.path.basename(version.filename)
+        directory = os.path.dirname(version_file)
+        filename = os.path.basename(version_file)
 
         return send_from_directory(
             directory,
@@ -5609,7 +5619,7 @@ def rig_model(model_id):
     if faces is None:
         try:
             import trimesh
-            mesh = trimesh.load(model.filename)
+            mesh = trimesh.load(model.glb_path)
             if isinstance(mesh, trimesh.Scene):
                 faces = sum(len(g.faces) for g in mesh.geometry.values()
                            if hasattr(g, "faces"))

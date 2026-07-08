@@ -1486,3 +1486,30 @@ def export_audit_log_csv():
         ["when", "admin", "action", "target_type", "target_id", "detail"],
         rows,
     )
+
+
+@admin_bp.route("/audit-log/<int:entry_id>/delete", methods=["POST"])
+@admin_required
+def delete_audit_log_entry(entry_id):
+    entry = AdminAuditLog.query.get(entry_id)
+    if not entry:
+        return jsonify({"success": False, "error": "Entry not found"}), 404
+    db.session.delete(entry)
+    log_action("audit_log.delete", target_type="audit_log", target_id=entry_id)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@admin_bp.route("/audit-log/bulk-delete", methods=["POST"])
+@admin_required
+def bulk_delete_audit_log():
+    ids = _parse_bulk_ids(int)
+    if not ids:
+        return jsonify({"success": False, "error": "No valid entries selected"}), 400
+    entries = AdminAuditLog.query.filter(AdminAuditLog.id.in_(ids)).all()
+    count = len(entries)
+    for entry in entries:
+        db.session.delete(entry)
+    log_action("audit_log.bulk_delete", detail={"count": count, "ids": ids})
+    db.session.commit()
+    return jsonify({"success": True, "count": count})

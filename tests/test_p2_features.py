@@ -118,6 +118,49 @@ def test_csv_exports_require_admin(client, init_database):
         assert client.get(path).status_code == 404
 
 
+def test_delete_audit_log_entry(client, admin_user, init_database):
+    login(client, "adminuser", "adminpassword")
+    client.post(f"/admin/users/{init_database.id}/toggle-active")
+    entry = AdminAuditLog.query.filter_by(action="user.toggle_active").first()
+    assert entry is not None
+
+    response = client.post(f"/admin/audit-log/{entry.id}/delete")
+    assert response.status_code == 200
+    assert db.session.get(AdminAuditLog, entry.id) is None
+    # The delete itself is logged.
+    assert AdminAuditLog.query.filter_by(action="audit_log.delete").first() is not None
+
+
+def test_delete_audit_log_entry_not_found(client, admin_user):
+    login(client, "adminuser", "adminpassword")
+    assert client.post("/admin/audit-log/999999/delete").status_code == 404
+
+
+def test_bulk_delete_audit_log(client, admin_user, init_database):
+    login(client, "adminuser", "adminpassword")
+    client.post(f"/admin/users/{init_database.id}/toggle-active")
+    client.post(f"/admin/users/{init_database.id}/toggle-active")
+    ids = [e.id for e in AdminAuditLog.query.filter_by(action="user.toggle_active").all()]
+    assert len(ids) == 2
+
+    response = client.post("/admin/audit-log/bulk-delete", json={"ids": ids})
+    assert response.status_code == 200
+    assert response.get_json()["count"] == 2
+    assert AdminAuditLog.query.filter(AdminAuditLog.id.in_(ids)).count() == 0
+
+
+def test_bulk_delete_audit_log_rejects_empty_selection(client, admin_user):
+    login(client, "adminuser", "adminpassword")
+    assert client.post("/admin/audit-log/bulk-delete", json={"ids": []}).status_code == 400
+    assert client.post("/admin/audit-log/bulk-delete", json={}).status_code == 400
+
+
+def test_audit_log_delete_routes_require_admin(client, init_database):
+    login(client, "testuser", "testpassword")
+    assert client.post("/admin/audit-log/1/delete").status_code == 404
+    assert client.post("/admin/audit-log/bulk-delete", json={"ids": [1]}).status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Date range selector
 # ---------------------------------------------------------------------------

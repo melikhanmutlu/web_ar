@@ -103,6 +103,34 @@ def test_slice_caps_plain_mesh():
     assert result.is_watertight, "plain-mesh slice should be capped (closed), not an open shell"
 
 
+def _make_vertex_colored_glb(path, rgba=(200, 50, 50, 255)):
+    """What the STL converter writes: COLOR_0 vertex colors, no materials."""
+    box = trimesh.creation.box(extents=(1, 1, 1)).subdivide()
+    vertex_colors = np.tile(rgba, (len(box.vertices), 1)).astype(np.uint8)
+    box.visual = trimesh.visual.ColorVisuals(vertex_colors=vertex_colors)
+    trimesh.Scene([box]).export(path, file_type="glb")
+
+
+def _first_color0(gltf):
+    """(first vertex color, material index) of the first COLOR_0 primitive."""
+    import struct as _struct
+    blob = gltf.binary_blob()
+    for mesh in gltf.meshes:
+        for prim in mesh.primitives:
+            c = getattr(prim.attributes, "COLOR_0", None)
+            if c is None:
+                continue
+            acc = gltf.accessors[c]
+            bv = gltf.bufferViews[acc.bufferView]
+            off = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+            n = 4 if acc.type == "VEC4" else 3
+            if acc.componentType == 5121:  # UNSIGNED_BYTE
+                return tuple(blob[off + i] for i in range(n)), prim.material
+            if acc.componentType == 5126:  # FLOAT
+                return _struct.unpack_from(f"<{n}f", blob, off), prim.material
+    return None, None
+
+
 def test_slice_preserves_vertex_color_without_double_tinting():
     """STL-sourced models carry color as vertex colors only (no material) —
     that's how they render correctly pre-slice. _inject_materials used to
@@ -110,29 +138,92 @@ def test_slice_preserves_vertex_color_without_double_tinting():
     FROM that same vertex color, and since glTF multiplies COLOR_0 by
     baseColorFactor, the result was the color squared (crushed towards
     black) instead of preserved."""
-    box = trimesh.creation.box(extents=(1, 1, 1))
-    vertex_colors = np.tile([200, 50, 50, 255], (len(box.vertices), 1)).astype(np.uint8)
-    box.visual = trimesh.visual.ColorVisuals(vertex_colors=vertex_colors)
-
     in_path = f"/tmp/test_slice_vc_in_{uuid.uuid4().hex}.glb"
     out_path = f"/tmp/test_slice_vc_out_{uuid.uuid4().hex}.glb"
-    trimesh.Scene([box]).export(in_path, file_type="glb")
+    _make_vertex_colored_glb(in_path)
     try:
         result = ms.slice_mesh(in_path, out_path, [0, 0, 0], [1, 0, 0], keep_side="positive")
         assert result is True
 
         gltf = GLTF2().load(out_path)
-        for mesh in gltf.meshes:
-            for prim in mesh.primitives:
-                if getattr(prim.attributes, "COLOR_0", None) is not None:
-                    assert prim.material is None, (
-                        "primitive has both COLOR_0 and a material — glTF will "
-                        "multiply them, crushing the color towards black"
-                    )
+        color, material = _first_color0(gltf)
+        assert color is not None, "sliced GLB lost its COLOR_0 vertex colors"
+        assert color[:3] == (200, 50, 50)
+        assert material is None, (
+            "primitive has both COLOR_0 and the material promoted from that "
+            "same color — glTF will multiply them, crushing it towards black"
+        )
     finally:
         for p in (in_path, out_path):
             if os.path.exists(p):
                 os.remove(p)
+
+
+def test_slice_keeps_color_through_real_upload_pipeline():
+    """The bug as actually deployed: the upload pipeline runs finalize_glb,
+    which assigns a neutral WHITE material to the STL converter's
+    vertex-colored GLB. trimesh loads that combo as TextureVisuals with the
+    colors hidden in vertex_attributes['color'] (NOT a ColorVisuals), so the
+    slicer used to take the plain geometric path and drop COLOR_0 entirely —
+    every sliced STL model came back gray. Colors must survive the full
+    convert → finalize → slice → finalize → slice-again flow."""
+    from converters.glb_quality import finalize_glb
+
+    path = f"/tmp/test_slice_pipeline_{uuid.uuid4().hex}.glb"
+    _make_vertex_colored_glb(path)
+    try:
+        finalize_glb(path)  # what upload does before the model reaches disk
+        color, material = _first_color0(GLTF2().load(path))
+        assert color[:3] == (200, 50, 50) and material is not None
+
+        # First slice (the /slice_model flow: slice + finalize).
+        assert ms.slice_mesh(path, path, [0, 0, 0], [1, 0, 0], "positive") is True
+        finalize_glb(path)
+        gltf = GLTF2().load(path)
+        color, material = _first_color0(gltf)
+        assert color is not None, "slice dropped COLOR_0 — model renders gray"
+        assert color[:3] == (200, 50, 50)
+        if material is not None:
+            base = gltf.materials[material].pbrMetallicRoughness.baseColorFactor
+            assert base == pytest.approx([1.0, 1.0, 1.0, 1.0]), (
+                "linked material must stay neutral white so it doesn't tint COLOR_0"
+            )
+
+        # Slicing the already-sliced model again must not degrade either.
+        assert ms.slice_mesh(path, path, [0, 0, 0], [0, 1, 0], "positive") is True
+        finalize_glb(path)
+        color, _ = _first_color0(GLTF2().load(path))
+        assert color is not None and color[:3] == (200, 50, 50)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def test_slice_keeps_user_edited_material_multiplying_color0():
+    """A model whose material color was edited in the viewer (baseColorFactor
+    set while COLOR_0 remains) rendered as material × COLOR_0 before the
+    slice — the same material must stay linked after it."""
+    from converters.glb_quality import finalize_glb
+
+    path = f"/tmp/test_slice_edited_{uuid.uuid4().hex}.glb"
+    _make_vertex_colored_glb(path)
+    try:
+        finalize_glb(path)
+        gltf = GLTF2().load(path)
+        gltf.materials[0].pbrMetallicRoughness.baseColorFactor = [0.1, 0.2, 0.9, 1.0]
+        gltf.save(path)
+
+        assert ms.slice_mesh(path, path, [0, 0, 0], [1, 0, 0], "positive") is True
+        gltf = GLTF2().load(path)
+        color, material = _first_color0(gltf)
+        assert color is not None and color[:3] == (200, 50, 50)
+        assert material is not None, "user-edited material lost its primitive link"
+        base = gltf.materials[material].pbrMetallicRoughness.baseColorFactor
+        # trimesh round-trips the factor through 8-bit, so allow quantization.
+        assert base == pytest.approx([0.1, 0.2, 0.9, 1.0], abs=0.01)
+    finally:
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def test_slice_fallback_preserves_uv_and_material():

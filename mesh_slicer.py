@@ -93,10 +93,12 @@ def _extract_material_data(glb_path):
         gltf = GLTF2().load(glb_path)
 
         # ── Promote vertex colors to PBR if no materials exist ──
+        promoted = False
         if not gltf.materials:
             vertex_color = _sample_vertex_color(gltf)
             if vertex_color:
                 logger.info(f"No materials found – promoting vertex color to PBR: {vertex_color}")
+                promoted = True
                 gltf.materials = [Material(
                     pbrMetallicRoughness=PbrMetallicRoughness(
                         baseColorFactor=vertex_color,
@@ -133,6 +135,11 @@ def _extract_material_data(glb_path):
             'samplers':  gltf.samplers or [],
             'images':    gltf.images or [],
             'image_blobs': image_blobs,
+            # True when the single material above was synthesized FROM the
+            # vertex colors (no real materials existed). Such a material must
+            # never be linked onto a COLOR_0 primitive — glTF multiplies them,
+            # tinting the model by its own color twice.
+            'promoted': promoted,
         }
     except Exception as e:
         logger.error(f"_extract_material_data failed: {e}", exc_info=True)
@@ -191,15 +198,16 @@ def _inject_materials(sliced_path, mat_data):
         gltf.set_binary_blob(bytes(blob))
 
         # ---- ensure every primitive points to a valid material ----
-        # Primitives that already carry COLOR_0 render correctly from vertex
-        # color alone (that's how they looked before slicing — no material at
-        # all). Per the glTF spec, COLOR_0 multiplies baseColorFactor, so
-        # assigning them the material we just promoted FROM that same vertex
-        # color would tint it a second time, crushing it towards black.
+        # A primitive that kept its COLOR_0 must NOT be linked to a material
+        # that was synthesized from that same vertex color: glTF multiplies
+        # COLOR_0 by baseColorFactor, so the model would be tinted by its own
+        # color twice, crushing it towards black. Real (non-promoted)
+        # materials multiplied the colors before the slice too — keep linking.
+        promoted = mat_data.get('promoted', False)
         num_mats = len(gltf.materials)
         for mesh in (gltf.meshes or []):
             for prim in (mesh.primitives or []):
-                if getattr(prim.attributes, 'COLOR_0', None) is not None:
+                if promoted and getattr(prim.attributes, 'COLOR_0', None) is not None:
                     continue
                 if prim.material is None or prim.material >= num_mats:
                     prim.material = 0      # fall back to first material
@@ -223,6 +231,34 @@ def _exported_material_count(glb_path):
         return len(gltf.materials or [])
     except Exception:
         return 0
+
+
+def _relink_dropped_materials(glb_path):
+    """Restore primitive→material links trimesh drops on export.
+
+    When a mesh carries COLOR_0 through the slice via
+    TextureVisuals.vertex_attributes['color'], trimesh exports the material
+    into the GLB's material list but leaves the primitive's material index
+    unset. Re-link so a user-edited material (e.g. a baseColorFactor picked
+    in the viewer) keeps multiplying the vertex colors exactly as it did
+    before the slice. Only safe with a single material — with several there
+    is no way to know which one the primitive lost.
+    """
+    try:
+        gltf = GLTF2().load(glb_path)
+        if len(gltf.materials or []) != 1:
+            return
+        changed = False
+        for mesh in (gltf.meshes or []):
+            for prim in (mesh.primitives or []):
+                if prim.material is None:
+                    prim.material = 0
+                    changed = True
+        if changed:
+            gltf.save(glb_path)
+            logger.info("Re-linked primitives to their exported material")
+    except Exception as e:
+        logger.warning(f"_relink_dropped_materials failed: {e}")
 
 
 # ================================================================== #
@@ -252,11 +288,36 @@ def _mesh_has_uv(mesh):
     return False
 
 
+def _texture_visual_color_attr(mesh):
+    """Per-vertex COLOR_0 hiding inside a TextureVisuals, or None.
+
+    A GLB primitive that carries BOTH a material and COLOR_0 (the STL
+    pipeline after finalize_glb assigns its neutral default material) loads
+    as TextureVisuals — trimesh stashes the colors in
+    visual.vertex_attributes['color'] instead of making a ColorVisuals.
+    """
+    vis = getattr(mesh, 'visual', None)
+    if not isinstance(vis, trimesh.visual.TextureVisuals):
+        return None
+    try:
+        color = vis.vertex_attributes.get('color')
+    except Exception:
+        return None
+    if color is not None and len(color) == len(mesh.vertices):
+        return color
+    return None
+
+
 def _mesh_has_vertex_color(mesh):
     """True when the mesh has vertex/face colors trimesh's plane cut can't
     carry (slice_plane only ever interpolates UV, never color)."""
     vis = getattr(mesh, 'visual', None)
-    return isinstance(vis, trimesh.visual.ColorVisuals) and getattr(vis, 'kind', None) in ('vertex', 'face')
+    if isinstance(vis, trimesh.visual.ColorVisuals) and getattr(vis, 'kind', None) in ('vertex', 'face'):
+        return True
+    # Material + COLOR_0 combo (TextureVisuals with a color vertex attribute).
+    # Without this, such meshes take the plain slice_plane path and come back
+    # gray: the colors are dropped and only the neutral material survives.
+    return _texture_visual_color_attr(mesh) is not None
 
 
 def _mesh_needs_attribute_preserve(mesh):
@@ -314,6 +375,11 @@ def _facemask_slice(mesh, plane_origin, plane_normal):
                 uv=uv_subset,
                 material=getattr(vis, 'material', None),
             )
+            color_attr = _texture_visual_color_attr(mesh)
+            if color_attr is not None:
+                # COLOR_0 riding alongside the material — subset it too, or
+                # the export loses the model's actual colors.
+                result.visual.vertex_attributes['color'] = color_attr[used_idx]
         elif isinstance(vis, trimesh.visual.ColorVisuals):
             if vis.kind == 'vertex':
                 result.visual = trimesh.visual.ColorVisuals(
@@ -406,6 +472,22 @@ def _reattach_material(sliced, vis):
         logger.warning(f"Could not reattach material: {e}")
 
 
+def _copy_preserving_color_attr(geom):
+    """geom.copy() that keeps TextureVisuals.vertex_attributes['color'].
+
+    trimesh's TextureVisuals.copy() only carries uv + material — the COLOR_0
+    data it stashed in vertex_attributes silently vanishes, which is exactly
+    the data a materialized vertex-colored mesh (STL pipeline after
+    finalize_glb) keeps its colors in. Colors are transform-invariant, so
+    re-attaching after the copy is safe.
+    """
+    m = geom.copy()
+    color_attr = _texture_visual_color_attr(geom)
+    if color_attr is not None and isinstance(m.visual, trimesh.visual.TextureVisuals):
+        m.visual.vertex_attributes['color'] = color_attr.copy()
+    return m
+
+
 def _iter_world_meshes(loaded):
     """
     Yield (name, mesh) pairs with node transforms baked in, WITHOUT
@@ -413,7 +495,7 @@ def _iter_world_meshes(loaded):
     into one primitive and loses per-geometry materials.
     """
     if isinstance(loaded, trimesh.Trimesh):
-        yield 'mesh_0', loaded.copy()
+        yield 'mesh_0', _copy_preserving_color_attr(loaded)
         return
 
     seen = set()
@@ -422,7 +504,7 @@ def _iter_world_meshes(loaded):
         geom = loaded.geometry.get(geom_name)
         if not isinstance(geom, trimesh.Trimesh):
             continue
-        m = geom.copy()
+        m = _copy_preserving_color_attr(geom)
         if transform is not None:
             m.apply_transform(transform)
         # Unique node name per instance
@@ -496,6 +578,11 @@ def _slice_core(input_path, output_path, planes):
             material_warning = (
                 "Slice succeeded, but some material or texture data could not be restored."
             )
+    elif mat_data and not mat_data.get('promoted'):
+        # Export kept real (non-synthesized) materials, but trimesh drops the
+        # primitive→material link for meshes whose COLOR_0 rode through as a
+        # vertex attribute — restore it.
+        _relink_dropped_materials(output_path)
 
     logger.info(f"Exported sliced model: {os.path.getsize(output_path)} bytes")
     return {

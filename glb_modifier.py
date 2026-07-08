@@ -33,41 +33,6 @@ def hex_to_rgb(hex_color):
     return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 
-def euler_to_rotation_matrix(rx, ry, rz):
-    """
-    Convert Euler angles (in radians, YXZ intrinsic order) to a 3x3 rotation matrix
-    Positive angles rotate clockwise when looking along the positive axis direction
-    
-    Args:
-        rx, ry, rz: Rotation angles in radians (X, Y, Z axes)
-    
-    Returns:
-        3x3 numpy rotation matrix
-    """
-    # Rotation matrices for each axis (clockwise direction)
-    # Inverted sin signs for clockwise rotation
-    Rx = np.array([
-        [1, 0, 0],
-        [0, np.cos(rx), np.sin(rx)],   # Inverted sin for clockwise
-        [0, -np.sin(rx), np.cos(rx)]
-    ])
-    
-    Ry = np.array([
-        [np.cos(ry), 0, -np.sin(ry)],  # Inverted sin for clockwise
-        [0, 1, 0],
-        [np.sin(ry), 0, np.cos(ry)]
-    ])
-    
-    Rz = np.array([
-        [np.cos(rz), np.sin(rz), 0],   # Inverted sin for clockwise
-        [-np.sin(rz), np.cos(rz), 0],
-        [0, 0, 1]
-    ])
-    
-    # YXZ intrinsic order: R = Rz * Rx * Ry
-    return Rz @ Rx @ Ry
-
-
 def apply_material_modifications(gltf, material_mods):
     """
     Apply material modifications to all materials in the GLTF
@@ -658,10 +623,14 @@ def apply_transform_modifications(gltf, transform_mods):
     rz = np.radians(float(rotation.get('z', 0)))
     has_rotation = (rx != 0 or ry != 0 or rz != 0)
     
-    # Calculate rotation matrix if needed
+    # Calculate rotation matrix if needed. create_rotation_matrix follows
+    # model-viewer's orientation convention (intrinsic YXZ, right-handed) so
+    # the baked result matches the live preview — the old inverted-sign
+    # "clockwise" matrix was the exact inverse and saved every rotation
+    # mirrored relative to what the preview showed.
     rotation_matrix = None
     if has_rotation:
-        rotation_matrix = euler_to_rotation_matrix(rx, ry, rz)
+        rotation_matrix = create_rotation_matrix(rx, ry, rz)
         logger.info(f"Rotation matrix calculated for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
@@ -743,7 +712,35 @@ def apply_transform_modifications(gltf, transform_mods):
                                 
                                 # Write back
                                 struct.pack_into('fff', new_data, pos, x, y, z)
-                            
+
+                            # Rotate NORMAL / TANGENT too — positions rotating
+                            # while normals stay put leaves the baked model lit
+                            # as if it never rotated. Normals need rotation only
+                            # (no pivot translate; uniform scale doesn't change
+                            # direction). TANGENT is VEC4: rotate xyz, keep the
+                            # w handedness sign.
+                            if rotation_matrix is not None:
+                                for attr_name, n_floats in (('NORMAL', 3), ('TANGENT', 4)):
+                                    attr_idx = getattr(primitive.attributes, attr_name, None)
+                                    if attr_idx is None:
+                                        continue
+                                    a_acc = gltf.accessors[attr_idx]
+                                    a_bv = gltf.bufferViews[a_acc.bufferView]
+                                    if a_bv.buffer != buffer_view.buffer:
+                                        logger.warning(
+                                            f"{attr_name} lives in a different buffer than POSITION — skipping rotation for it"
+                                        )
+                                        continue
+                                    a_off = (a_bv.byteOffset or 0) + (a_acc.byteOffset or 0)
+                                    a_stride = a_bv.byteStride if a_bv.byteStride else n_floats * 4
+                                    for i in range(a_acc.count):
+                                        pos = a_off + i * a_stride
+                                        vals = struct.unpack_from(f'{n_floats}f', binary_data, pos)
+                                        rotated = rotation_matrix @ np.array(vals[:3])
+                                        out = (rotated[0], rotated[1], rotated[2]) + tuple(vals[3:])
+                                        struct.pack_into(f'{n_floats}f', new_data, pos, *out)
+                                    logger.info(f"Rotated {a_acc.count} {attr_name} vectors in mesh {mesh_idx}, primitive {prim_idx}")
+
                             # Update buffer based on type
                             if buffer.uri and buffer.uri.startswith('data:'):
                                 # Update data URI

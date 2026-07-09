@@ -410,76 +410,161 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
 
 def normalize_model_to_center(gltf):
     """
-    Normalize model by moving its center to origin (0, 0, 0)
-    This ensures consistent pivot behavior in viewer
-    
-    Note: Basis correction (Z-up to Y-up) is applied only when rotation is applied
-    via apply_transform_modifications, not during initial normalization.
-    This keeps the model in its original orientation on upload.
-    
+    Normalize model by translating its WORLD-space bounding-box center to
+    the origin. The shift is conjugated into each mesh's local frame
+    (t = −L⁻¹·center for a mesh under world matrix W = [L|t]), so models
+    whose parts are positioned by node transforms (STEP assemblies, GLB
+    uploads) keep their inter-part layout. The old local-space version
+    centered every mesh's own vertices instead, which piled all the parts
+    of an assembly on top of each other at the origin.
+
+    Normalization is cosmetic — whenever it cannot be applied safely
+    (instanced meshes under different transforms, shared vertex data,
+    compressed geometry) the model is returned UNCHANGED rather than risking
+    corruption.
+
     Returns:
         GLTF2: Modified GLTF object
     """
     logger.info("Normalizing model to center origin")
-    
-    # Calculate current center
-    center_x, center_y, center_z = calculate_model_center(gltf)
-    
+
+    import base64
+    import struct
+
     try:
-        # Move all vertices to center the model at origin
+        if not gltf.meshes:
+            return gltf
+
+        # One world matrix per mesh. Instanced meshes under differing
+        # transforms would need different shifts in the same vertex data —
+        # skip normalization for those models.
+        mesh_world = _mesh_world_matrices(gltf)
+        identity = np.eye(4)
+        mesh_w = {}
+        for mesh_idx in range(len(gltf.meshes)):
+            entries = mesh_world.get(mesh_idx)
+            ws = [w for _, w in entries] if entries else [identity]
+            for w in ws[1:]:
+                if not np.allclose(w, ws[0], atol=1e-9):
+                    logger.warning(
+                        f"Mesh {mesh_idx} instanced under differing node transforms "
+                        "— skipping center normalization"
+                    )
+                    return gltf
+            mesh_w[mesh_idx] = ws[0]
+
+        # Unique POSITION accessors (the old per-primitive loop shifted
+        # shared vertex data once per referencing primitive). An accessor
+        # shared across meshes with different transforms can't be shifted
+        # both ways — skip.
+        pos_targets = {}
         for mesh_idx, mesh in enumerate(gltf.meshes):
-            if not mesh.primitives:
-                continue
-            
-            for prim_idx, primitive in enumerate(mesh.primitives):
+            for primitive in (mesh.primitives or []):
                 if primitive.attributes is None:
                     continue
-                
-                # Get POSITION accessor
-                if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
-                    pos_accessor_idx = primitive.attributes.POSITION
-                    accessor = gltf.accessors[pos_accessor_idx]
-                    buffer_view = gltf.bufferViews[accessor.bufferView]
-                    buffer = gltf.buffers[buffer_view.buffer]
-                    
-                    # Get binary data
-                    if buffer.uri and buffer.uri.startswith('data:'):
-                        data_start = buffer.uri.find(',') + 1
-                        binary_data = base64.b64decode(buffer.uri[data_start:])
-                    elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
-                        binary_data = gltf.binary_blob()
-                    else:
-                        continue
-                    
-                    # Parse and translate vertices
-                    offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
-                    offset += accessor.byteOffset if accessor.byteOffset else 0
-                    vertex_count = accessor.count
-                    stride = buffer_view.byteStride if buffer_view.byteStride else 12
-                    
-                    new_data = bytearray(binary_data)
-                    for i in range(vertex_count):
-                        pos = offset + i * stride
-                        x, y, z = struct.unpack_from('fff', binary_data, pos)
-                        
-                        # Translate to origin
-                        x -= center_x
-                        y -= center_y
-                        z -= center_z
-                        
-                        struct.pack_into('fff', new_data, pos, x, y, z)
-                    
-                    # Update buffer
-                    if buffer.uri and buffer.uri.startswith('data:'):
-                        buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
-                    else:
-                        gltf.set_binary_blob(bytes(new_data))
-                    
-                    logger.info(f"Translated {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
-        
+                p_idx = getattr(primitive.attributes, 'POSITION', None)
+                if p_idx is None:
+                    continue
+                claimed = pos_targets.get(p_idx)
+                if claimed is not None and not np.allclose(
+                    mesh_w[claimed], mesh_w[mesh_idx], atol=1e-9
+                ):
+                    logger.warning(
+                        f"POSITION accessor {p_idx} shared across differing node "
+                        "transforms — skipping center normalization"
+                    )
+                    return gltf
+                pos_targets.setdefault(p_idx, mesh_idx)
+
+        for acc_idx in pos_targets:
+            acc = gltf.accessors[acc_idx]
+            if acc.bufferView is None or acc.componentType != 5126:
+                logger.warning(
+                    f"POSITION accessor {acc_idx} not plain float data — "
+                    "skipping center normalization"
+                )
+                return gltf
+
+        buffers_data = {}
+
+        def _buffer_bytes(buf_idx):
+            if buf_idx not in buffers_data:
+                buffer = gltf.buffers[buf_idx]
+                if buffer.uri and buffer.uri.startswith('data:'):
+                    raw = base64.b64decode(buffer.uri[buffer.uri.find(',') + 1:])
+                elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                    raw = gltf.binary_blob()
+                else:
+                    raise ValueError(f"buffer {buf_idx} has no accessible data")
+                buffers_data[buf_idx] = bytearray(raw)
+            return buffers_data[buf_idx]
+
+        def _accessor_layout(acc_idx):
+            accessor = gltf.accessors[acc_idx]
+            buffer_view = gltf.bufferViews[accessor.bufferView]
+            data = _buffer_bytes(buffer_view.buffer)
+            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
+            stride = buffer_view.byteStride if buffer_view.byteStride else 12
+            return accessor, data, offset, stride
+
+        # World-space bounding box (the old local-space scan pooled vertices
+        # across unrelated coordinate frames).
+        mins_w = [float('inf')] * 3
+        maxs_w = [float('-inf')] * 3
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx)
+            (w00, w01, w02, wt0), (w10, w11, w12, wt1), (w20, w21, w22, wt2) = mesh_w[mesh_idx][:3]
+            for i in range(accessor.count):
+                x, y, z = struct.unpack_from('fff', data, offset + i * stride)
+                wv = (w00 * x + w01 * y + w02 * z + wt0,
+                      w10 * x + w11 * y + w12 * z + wt1,
+                      w20 * x + w21 * y + w22 * z + wt2)
+                for j in range(3):
+                    if wv[j] < mins_w[j]:
+                        mins_w[j] = wv[j]
+                    if wv[j] > maxs_w[j]:
+                        maxs_w[j] = wv[j]
+        if mins_w[0] == float('inf'):
+            return gltf
+        center = (np.array(mins_w) + np.array(maxs_w)) / 2.0
+        if np.allclose(center, 0.0, atol=1e-9):
+            logger.info("Model already centered — nothing to normalize")
+            return gltf
+        logger.info(f"World-space model center: ({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})")
+
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx)
+            # World shift of -center, expressed in this mesh's local frame.
+            sx, sy, sz = -np.linalg.solve(mesh_w[mesh_idx][:3, :3], center)
+            mins = [float('inf')] * 3
+            maxs = [float('-inf')] * 3
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                x, y, z = struct.unpack_from('fff', data, pos)
+                nx, ny, nz = x + sx, y + sy, z + sz
+                struct.pack_into('fff', data, pos, nx, ny, nz)
+                for j, v in enumerate((nx, ny, nz)):
+                    if v < mins[j]:
+                        mins[j] = v
+                    if v > maxs[j]:
+                        maxs[j] = v
+            if accessor.count:
+                accessor.min = [float(v) for v in mins]
+                accessor.max = [float(v) for v in maxs]
+            logger.info(f"Translated {accessor.count} vertices in POSITION accessor {acc_idx}")
+
+        # Commit buffers only after every accessor shifted cleanly.
+        for buf_idx, data in buffers_data.items():
+            buffer = gltf.buffers[buf_idx]
+            if buffer.uri and buffer.uri.startswith('data:'):
+                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(data)).decode('utf-8')
+            else:
+                gltf.set_binary_blob(bytes(data))
+            buffer.byteLength = len(data)
+
         logger.info("✅ Model normalized to center origin")
         return gltf
-        
+
     except Exception as e:
         logger.error(f"Failed to normalize model: {e}", exc_info=True)
         return gltf

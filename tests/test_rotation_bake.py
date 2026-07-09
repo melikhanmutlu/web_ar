@@ -290,3 +290,106 @@ def test_scale_under_rotated_node_is_exact():
         expected = center + 0.5 * (before.vertices - center)
         dist, _ = cKDTree(expected).query(after.vertices)
         assert float(dist.max()) < 1e-4
+
+
+# ---------------------------------------------------------------------------
+# normalize_model_to_center — the upload-time centering step must respect
+# node transforms. The old local-space version centered every mesh's own
+# vertices, which piled all parts of a node-positioned assembly (e.g. a
+# STEP file) on top of each other at the origin.
+# ---------------------------------------------------------------------------
+
+
+def _rotated_assembly_glb(path):
+    """Two parts with local-offset geometry, one under a rotated node —
+    the structure cascadio emits for STEP assemblies."""
+    body = trimesh.creation.box(extents=(0.7, 0.4, 0.1))
+    body.apply_translation([0.9, 0.5, 0])
+    led = trimesh.creation.box(extents=(0.2, 0.1, 0.02))
+    led.apply_translation([0.9, 0.5, 0])
+    scene = trimesh.Scene()
+    scene.add_geometry(body, node_name="body", geom_name="g1")
+    scene.add_geometry(
+        led, node_name="led", geom_name="g2",
+        transform=trimesh.transformations.rotation_matrix(np.radians(90), [0, 1, 0]),
+    )
+    scene.export(path)
+
+
+def _part_centers(path):
+    scene = trimesh.load(path, force="scene")
+    centers = {}
+    for name in scene.graph.nodes_geometry:
+        transform, geom_name = scene.graph[name]
+        geom = scene.geometry[geom_name].copy()
+        geom.apply_transform(transform)
+        centers[name] = (geom.bounds[0] + geom.bounds[1]) / 2
+    return centers
+
+
+def test_normalize_preserves_assembly_layout():
+    from pygltflib import GLTF2
+    from glb_modifier import normalize_model_to_center
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "asm.glb")
+        _rotated_assembly_glb(path)
+        before = _part_centers(path)
+
+        gltf = GLTF2().load_binary(path)
+        gltf = normalize_model_to_center(gltf)
+        out = os.path.join(d, "out.glb")
+        gltf.save(out)
+        after = _part_centers(out)
+
+        # Parts must move together (same world shift), not pile onto origin.
+        rel_before = before["led"] - before["body"]
+        rel_after = after["led"] - after["body"]
+        assert rel_after == pytest.approx(rel_before, abs=1e-5), (
+            "normalization moved assembly parts relative to each other"
+        )
+        # And the model as a whole must end up centered.
+        merged = trimesh.load(out, force="scene").dump(concatenate=True)
+        world_center = (merged.bounds[0] + merged.bounds[1]) / 2
+        assert world_center == pytest.approx([0, 0, 0], abs=1e-5)
+
+
+def test_normalize_still_centers_flat_models():
+    from pygltflib import GLTF2
+    from glb_modifier import normalize_model_to_center
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "flat.glb")
+        box = trimesh.creation.box(extents=(2, 2, 2))
+        box.apply_translation([3, 4, 5])
+        trimesh.Scene([box]).export(path)
+
+        gltf = GLTF2().load_binary(path)
+        gltf = normalize_model_to_center(gltf)
+        out = os.path.join(d, "out.glb")
+        gltf.save(out)
+        merged = trimesh.load(out, force="mesh")
+        center = (merged.bounds[0] + merged.bounds[1]) / 2
+        assert center == pytest.approx([0, 0, 0], abs=1e-6)
+
+
+def test_normalize_shifts_shared_accessor_once():
+    """The old per-primitive loop shifted shared vertex data once per
+    referencing primitive — a model with two primitives on one POSITION
+    accessor got centered twice as far."""
+    import copy
+    from pygltflib import GLTF2
+    from glb_modifier import normalize_model_to_center
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "shared.glb")
+        box = trimesh.creation.box(extents=(2, 2, 2))
+        box.apply_translation([3, 4, 5])
+        trimesh.Scene([box]).export(path)
+
+        gltf = GLTF2().load_binary(path)
+        gltf.meshes[0].primitives.append(copy.deepcopy(gltf.meshes[0].primitives[0]))
+        gltf = normalize_model_to_center(gltf)
+        acc = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION]
+        assert acc.min == pytest.approx([-1, -1, -1], abs=1e-6)
+        assert acc.max == pytest.approx([1, 1, 1], abs=1e-6)

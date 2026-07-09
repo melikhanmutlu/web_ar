@@ -188,3 +188,105 @@ def test_transform_is_all_or_nothing_on_unreadable_accessor():
         assert _extent_x(gltf) == pytest.approx(2.0, rel=1e-4), (
             "a failed bake must not leave earlier meshes already transformed"
         )
+
+
+# ---------------------------------------------------------------------------
+# Node-positioned (multi-part) models — the transform must apply in WORLD
+# space. Baking into local vertices while node offsets stayed put shrank
+# each part in place and tore the model apart.
+# ---------------------------------------------------------------------------
+
+
+def _noded_two_part_glb(path):
+    """Two identical boxes positioned by a node translation (trimesh dedupes
+    identical geometry, so they also SHARE vertex accessors)."""
+    scene = trimesh.Scene()
+    scene.add_geometry(trimesh.creation.box(extents=(2, 2, 2)), node_name="a", geom_name="ga")
+    scene.add_geometry(
+        trimesh.creation.box(extents=(2, 2, 2)), node_name="b", geom_name="gb",
+        transform=trimesh.transformations.translation_matrix([5, 0, 0]),
+    )
+    scene.export(path)
+
+
+def _world_extents(gltf, path):
+    gltf.save(path)
+    merged = trimesh.load(path, force="scene").dump(concatenate=True)
+    return merged.bounds[1] - merged.bounds[0]
+
+
+def test_scale_shrinks_node_positioned_parts_together():
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "noded.glb")
+        _noded_two_part_glb(path)
+        gltf = GLTF2().load(path)
+        gltf = apply_transform_modifications(gltf, {"scale": 0.1})
+        ext = _world_extents(gltf, os.path.join(d, "out.glb"))
+        # Node offset must scale with the parts: 7 -> 0.7 world span, not 5.2.
+        assert ext == pytest.approx([0.7, 0.2, 0.2], abs=1e-3)
+
+
+def test_rotation_turns_node_positioned_model_as_one_piece():
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "noded.glb")
+        _noded_two_part_glb(path)
+        gltf = GLTF2().load(path)
+        gltf = apply_transform_modifications(gltf, {"rotation": {"x": 0, "y": 90, "z": 0}})
+        ext = _world_extents(gltf, os.path.join(d, "out.glb"))
+        # The whole model turns about the world center: x-span becomes z-span.
+        assert ext == pytest.approx([2.0, 2.0, 7.0], abs=1e-3)
+
+
+def test_scale_on_mesh_instanced_by_two_nodes():
+    """One mesh referenced by two nodes at different positions: vertex data
+    can't satisfy both — the bake must give the second node its own copy."""
+    from pygltflib import GLTF2, Node
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "inst.glb")
+        trimesh.Scene([trimesh.creation.box(extents=(2, 2, 2))]).export(path)
+        gltf = GLTF2().load(path)
+        mesh_node = next(i for i, n in enumerate(gltf.nodes) if n.mesh is not None)
+        gltf.nodes.append(Node(mesh=gltf.nodes[mesh_node].mesh, translation=[5, 0, 0]))
+        root = next(i for i, n in enumerate(gltf.nodes) if n.children)
+        gltf.nodes[root].children.append(len(gltf.nodes) - 1)
+
+        gltf = apply_transform_modifications(gltf, {"scale": 0.1})
+        ext = _world_extents(gltf, os.path.join(d, "out.glb"))
+        assert ext == pytest.approx([0.7, 0.2, 0.2], abs=1e-3)
+
+
+def test_scale_under_rotated_node_is_exact():
+    """A part whose node carries a rotation: the local-space change is a full
+    conjugation (W⁻¹·M·W), not just a scaled offset."""
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+    from scipy.spatial import cKDTree
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "rotnode.glb")
+        scene = trimesh.Scene()
+        scene.add_geometry(trimesh.creation.box(extents=(2, 1, 1)), node_name="a", geom_name="ga")
+        t = trimesh.transformations.rotation_matrix(np.radians(90), [0, 1, 0])
+        t[:3, 3] = [5, 0, 0]
+        scene.add_geometry(trimesh.creation.box(extents=(2, 1, 1)), node_name="b", geom_name="gb", transform=t)
+        scene.export(path)
+
+        before = trimesh.load(path, force="scene").dump(concatenate=True)
+        gltf = GLTF2().load(path)
+        gltf = apply_transform_modifications(gltf, {"scale": 0.5})
+        out = os.path.join(d, "out.glb")
+        gltf.save(out)
+        after = trimesh.load(out, force="scene").dump(concatenate=True)
+
+        center = (before.bounds[0] + before.bounds[1]) / 2
+        expected = center + 0.5 * (before.vertices - center)
+        dist, _ = cKDTree(expected).query(after.vertices)
+        assert float(dist.max()) < 1e-4

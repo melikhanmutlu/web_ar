@@ -600,22 +600,75 @@ def create_rotation_matrix(rx, ry, rz):
         return Ry @ Rx @ Rz
 
 
+def _quat_to_matrix(q):
+    """glTF node rotation quaternion [x, y, z, w] -> 3x3 rotation matrix."""
+    x, y, z, w = (float(v) for v in q)
+    n = (x * x + y * y + z * z + w * w) ** 0.5 or 1.0
+    x, y, z, w = x / n, y / n, z / n, w / n
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _node_local_matrix(node):
+    """4x4 local transform of a glTF node (matrix or TRS form)."""
+    if node.matrix:
+        # glTF stores matrices column-major.
+        return np.array(node.matrix, dtype=float).reshape(4, 4).T
+    m = np.eye(4)
+    if node.rotation:
+        m[:3, :3] = _quat_to_matrix(node.rotation)
+    if node.scale:
+        m[:3, :3] = m[:3, :3] @ np.diag([float(s) for s in node.scale])
+    if node.translation:
+        m[:3, 3] = [float(t) for t in node.translation]
+    return m
+
+
+def _mesh_world_matrices(gltf):
+    """mesh index -> list of (node_idx, 4x4 world matrix) for every node
+    that instances the mesh. Meshes not referenced by any node don't appear
+    (callers treat them as identity)."""
+    world = {}
+    scene_idx = gltf.scene if gltf.scene is not None else 0
+    if not gltf.scenes or scene_idx >= len(gltf.scenes):
+        return world
+    visiting = set()
+
+    def walk(node_idx, parent):
+        if node_idx in visiting:
+            raise ValueError("cyclic node graph in GLB")
+        visiting.add(node_idx)
+        node = gltf.nodes[node_idx]
+        w = parent @ _node_local_matrix(node)
+        if node.mesh is not None:
+            world.setdefault(node.mesh, []).append((node_idx, w))
+        for child in (node.children or []):
+            walk(child, w)
+        visiting.discard(node_idx)
+
+    for root in (gltf.scenes[scene_idx].nodes or []):
+        walk(root, np.eye(4))
+    return world
+
+
 def apply_transform_modifications(gltf, transform_mods):
     """
-    Apply transform modifications to GLTF with model center as pivot
-    - Scale: Applied to mesh vertices around model center
-    - Rotation: Applied to node transforms around model center
-    
+    Apply transform modifications with the model's world-space center as
+    pivot, baked into vertex data. Node transforms are respected: for a mesh
+    under world matrix W the world-space change M is baked as W⁻¹·M·W, so
+    multi-part models whose parts are positioned by node translations scale
+    and rotate as one model instead of each part transforming around its own
+    local frame while the node offsets stay put.
+
     Args:
         gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
-    
-    # Calculate model center to use as pivot
-    center_x, center_y, center_z = calculate_model_center(gltf)
-    logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
-    
+
     # Get rotation parameters
     rotation = transform_mods.get('rotation', {})
     rx = np.radians(float(rotation.get('x', 0)))
@@ -647,53 +700,33 @@ def apply_transform_modifications(gltf, transform_mods):
             transforms.append(f"scale {scale_factor}")
         logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
 
-        # ---- Collect unique target accessors first. Primitives commonly
-        # share vertex data (e.g. one POSITION accessor reused by several
-        # per-material primitives) — transforming per primitive applied the
-        # scale/rotation to the same bytes several times, so shared parts
-        # ended up scaled 0.1 -> 0.01 while unshared parts got 0.1. ----
-        pos_accessor_ids = []
-        attr_targets = []       # (accessor_idx, n_floats, attr_name)
-        seen_pos, seen_attr = set(), set()
+        # ---- Validate every target accessor up front: this bake is
+        # all-or-nothing. The old loop wrote buffers back per primitive, so
+        # one unreadable accessor mid-way (Draco/quantized geometry) left
+        # the model half-transformed — some parts scaled, the rest not.
+        # Raising here instead propagates to modify_glb, the endpoint
+        # reports the error, and the original file is never replaced. ----
+        FLOAT_COMPONENT = 5126
+        target_attr_names = ('POSITION', 'NORMAL', 'TANGENT') if has_rotation else ('POSITION',)
         for mesh in gltf.meshes:
             for primitive in (mesh.primitives or []):
                 if primitive.attributes is None:
                     continue
-                p_idx = getattr(primitive.attributes, 'POSITION', None)
-                if p_idx is not None and p_idx not in seen_pos:
-                    seen_pos.add(p_idx)
-                    pos_accessor_ids.append(p_idx)
-                if rotation_matrix is not None:
-                    # Rotate NORMAL / TANGENT too — positions rotating while
-                    # normals stay put leaves the baked model lit as if it
-                    # never rotated. Rotation only (no pivot translate;
-                    # uniform scale doesn't change direction). TANGENT is
-                    # VEC4: rotate xyz, keep the w handedness sign.
-                    for attr_name, n_floats in (('NORMAL', 3), ('TANGENT', 4)):
-                        a_idx = getattr(primitive.attributes, attr_name, None)
-                        if a_idx is not None and a_idx not in seen_attr:
-                            seen_attr.add(a_idx)
-                            attr_targets.append((a_idx, n_floats, attr_name))
-
-        # ---- Validate everything up front: this bake is all-or-nothing.
-        # The old loop wrote buffers back per primitive, so one unreadable
-        # accessor mid-way (Draco/quantized geometry) left the model
-        # half-transformed — some parts scaled, the rest not. Raising here
-        # instead propagates to modify_glb, the endpoint reports the error,
-        # and the original file is never replaced. ----
-        FLOAT_COMPONENT = 5126
-        for acc_idx in pos_accessor_ids + [t[0] for t in attr_targets]:
-            acc = gltf.accessors[acc_idx]
-            if acc.bufferView is None:
-                raise ValueError(
-                    f"accessor {acc_idx} has no bufferView (Draco/sparse-compressed "
-                    "geometry) — cannot bake transforms into this model"
-                )
-            if acc.componentType != FLOAT_COMPONENT:
-                raise ValueError(
-                    f"accessor {acc_idx} componentType {acc.componentType} is not "
-                    "float (quantized geometry) — cannot bake transforms into this model"
-                )
+                for attr_name in target_attr_names:
+                    a_idx = getattr(primitive.attributes, attr_name, None)
+                    if a_idx is None:
+                        continue
+                    acc = gltf.accessors[a_idx]
+                    if acc.bufferView is None:
+                        raise ValueError(
+                            f"accessor {a_idx} has no bufferView (Draco/sparse-compressed "
+                            "geometry) — cannot bake transforms into this model"
+                        )
+                    if acc.componentType != FLOAT_COMPONENT:
+                        raise ValueError(
+                            f"accessor {a_idx} componentType {acc.componentType} is not "
+                            "float (quantized geometry) — cannot bake transforms into this model"
+                        )
 
         # ---- Read each involved buffer once; every accessor mutates the
         # same bytearray and buffers are only written back after ALL
@@ -712,35 +745,162 @@ def apply_transform_modifications(gltf, transform_mods):
                 buffers_data[buf_idx] = bytearray(raw)
             return buffers_data[buf_idx]
 
-        for acc_idx in pos_accessor_ids:
+        def _accessor_layout(acc_idx, n_floats):
             accessor = gltf.accessors[acc_idx]
             buffer_view = gltf.bufferViews[accessor.bufferView]
             data = _buffer_bytes(buffer_view.buffer)
             offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
-            stride = buffer_view.byteStride if buffer_view.byteStride else 12  # 3 floats
+            stride = buffer_view.byteStride if buffer_view.byteStride else n_floats * 4
+            return accessor, data, offset, stride
+
+        N_FLOATS = {'POSITION': 3, 'NORMAL': 3, 'TANGENT': 4}
+
+        def _duplicate_accessor(acc_idx, n_floats):
+            """Fresh accessor+bufferView with a tightly-packed copy of the
+            data, appended to the accessor's buffer."""
+            from pygltflib import BufferView as GLTFBufferView
+            accessor, data, offset, stride = _accessor_layout(acc_idx, n_floats)
+            item = n_floats * 4
+            raw = bytearray()
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                raw += data[pos:pos + item]
+            while len(data) % 4:
+                data.append(0)
+            new_offset = len(data)
+            data += raw
+            src_bv = gltf.bufferViews[accessor.bufferView]
+            gltf.bufferViews.append(GLTFBufferView(
+                buffer=src_bv.buffer, byteOffset=new_offset, byteLength=len(raw),
+            ))
+            import copy as _copy
+            new_acc = _copy.deepcopy(accessor)
+            new_acc.bufferView = len(gltf.bufferViews) - 1
+            new_acc.byteOffset = 0
+            gltf.accessors.append(new_acc)
+            return len(gltf.accessors) - 1
+
+        # ---- Parts of a multi-part model are positioned by node
+        # transforms: the world-space change M must be conjugated into each
+        # mesh's local space (A = W⁻¹·M·W). Baking M directly into local
+        # vertices shrank each part in place while the node offsets stayed
+        # put, tearing the model apart. ----
+        mesh_world = _mesh_world_matrices(gltf)
+        identity = np.eye(4)
+
+        # A mesh instanced by several nodes under DIFFERENT world transforms
+        # can't satisfy them all with one set of vertices — give the extra
+        # nodes their own copy (transform-relevant accessors duplicated,
+        # indices/UV/color/material shared).
+        mesh_w = {}
+        for mesh_idx in range(len(gltf.meshes)):
+            entries = mesh_world.get(mesh_idx)
+            if not entries:
+                mesh_w[mesh_idx] = identity
+                continue
+            mesh_w[mesh_idx] = entries[0][1]
+            for node_idx, w in entries[1:]:
+                if np.allclose(w, entries[0][1], atol=1e-9):
+                    continue
+                import copy as _copy
+                new_mesh = _copy.deepcopy(gltf.meshes[mesh_idx])
+                for primitive in (new_mesh.primitives or []):
+                    if primitive.attributes is None:
+                        continue
+                    for attr_name in target_attr_names:
+                        a_idx = getattr(primitive.attributes, attr_name, None)
+                        if a_idx is not None:
+                            setattr(primitive.attributes, attr_name,
+                                    _duplicate_accessor(a_idx, N_FLOATS[attr_name]))
+                gltf.meshes.append(new_mesh)
+                new_mesh_idx = len(gltf.meshes) - 1
+                gltf.nodes[node_idx].mesh = new_mesh_idx
+                mesh_w[new_mesh_idx] = w
+                logger.info(f"Duplicated mesh {mesh_idx} for node {node_idx} (differing instance transforms)")
+
+        # ---- Collect unique target accessors. Primitives commonly share
+        # vertex data (one POSITION accessor reused by several per-material
+        # primitives) — transforming per primitive applied the change to the
+        # same bytes several times, so shared parts ended up scaled
+        # 0.1 -> 0.01 while unshared parts got 0.1. An accessor shared
+        # ACROSS meshes with different node transforms (exporters dedupe
+        # identical parts) needs a distinct copy per local-space change. ----
+        pos_targets = {}     # accessor_idx -> mesh_idx
+        attr_targets = {}    # accessor_idx -> (attr_name, mesh_idx)
+
+        def _claim(acc_idx, mesh_idx, attr_name, registry):
+            claimed = registry.get(acc_idx)
+            claimed_mesh = claimed if attr_name == 'POSITION' else (claimed[1] if claimed else None)
+            if claimed is None or np.allclose(mesh_w[claimed_mesh], mesh_w[mesh_idx], atol=1e-9):
+                return acc_idx, False
+            return _duplicate_accessor(acc_idx, N_FLOATS[attr_name]), True
+
+        for mesh_idx in range(len(gltf.meshes)):
+            for primitive in (gltf.meshes[mesh_idx].primitives or []):
+                if primitive.attributes is None:
+                    continue
+                for attr_name in target_attr_names:
+                    a_idx = getattr(primitive.attributes, attr_name, None)
+                    if a_idx is None:
+                        continue
+                    # NORMAL/TANGENT only change under rotation (uniform
+                    # scale conjugates to itself: W⁻¹·sI·W = sI).
+                    registry = pos_targets if attr_name == 'POSITION' else attr_targets
+                    new_idx, duplicated = _claim(a_idx, mesh_idx, attr_name, registry)
+                    if duplicated:
+                        setattr(primitive.attributes, attr_name, new_idx)
+                        logger.info(f"Duplicated {attr_name} accessor {a_idx} (shared across differing transforms)")
+                    if attr_name == 'POSITION':
+                        registry.setdefault(new_idx, mesh_idx)
+                    else:
+                        registry.setdefault(new_idx, (attr_name, mesh_idx))
+
+        # ---- Pivot: the model's world-space bounding-box center. A local
+        # scan would mix coordinate frames on node-positioned models. ----
+        mins_w = [float('inf')] * 3
+        maxs_w = [float('-inf')] * 3
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx, 3)
+            (w00, w01, w02, wt0), (w10, w11, w12, wt1), (w20, w21, w22, wt2) = mesh_w[mesh_idx][:3]
+            for i in range(accessor.count):
+                x, y, z = struct.unpack_from('fff', data, offset + i * stride)
+                wv = (w00 * x + w01 * y + w02 * z + wt0,
+                      w10 * x + w11 * y + w12 * z + wt1,
+                      w20 * x + w21 * y + w22 * z + wt2)
+                for j in range(3):
+                    if wv[j] < mins_w[j]:
+                        mins_w[j] = wv[j]
+                    if wv[j] > maxs_w[j]:
+                        maxs_w[j] = wv[j]
+        if mins_w[0] == float('inf'):
+            logger.warning("No readable vertices — skipping transform bake")
+            return gltf
+        center = (np.array(mins_w) + np.array(maxs_w)) / 2.0
+        logger.info(f"Using world-space model center as pivot: ({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})")
+
+        # World-space change: M = T(center) · R · S · T(-center)
+        linear = (rotation_matrix if rotation_matrix is not None else np.eye(3)) * scale_factor
+        M = np.eye(4)
+        M[:3, :3] = linear
+        M[:3, 3] = center - linear @ center
+
+        def _local_change(mesh_idx):
+            w = mesh_w[mesh_idx]
+            return M if np.allclose(w, identity, atol=1e-9) else np.linalg.inv(w) @ M @ w
+
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx, 3)
+            (a00, a01, a02, at0), (a10, a11, a12, at1), (a20, a21, a22, at2) = _local_change(mesh_idx)[:3]
             mins = [float('inf')] * 3
             maxs = [float('-inf')] * 3
             for i in range(accessor.count):
                 pos = offset + i * stride
                 x, y, z = struct.unpack_from('fff', data, pos)
-
-                # Transform around model center (pivot)
-                x -= center_x
-                y -= center_y
-                z -= center_z
-                if rotation_matrix is not None:
-                    rotated = rotation_matrix @ np.array([x, y, z])
-                    x, y, z = rotated[0], rotated[1], rotated[2]
-                if scale_factor != 1.0:
-                    x *= scale_factor
-                    y *= scale_factor
-                    z *= scale_factor
-                x += center_x
-                y += center_y
-                z += center_z
-
-                struct.pack_into('fff', data, pos, x, y, z)
-                for j, v in enumerate((x, y, z)):
+                nx = a00 * x + a01 * y + a02 * z + at0
+                ny = a10 * x + a11 * y + a12 * z + at1
+                nz = a20 * x + a21 * y + a22 * z + at2
+                struct.pack_into('fff', data, pos, nx, ny, nz)
+                for j, v in enumerate((nx, ny, nz)):
                     if v < mins[j]:
                         mins[j] = v
                     if v > maxs[j]:
@@ -753,18 +913,30 @@ def apply_transform_modifications(gltf, transform_mods):
                 accessor.max = [float(v) for v in maxs]
             logger.info(f"Transformed {accessor.count} vertices in POSITION accessor {acc_idx}")
 
-        for acc_idx, n_floats, attr_name in attr_targets:
-            accessor = gltf.accessors[acc_idx]
-            buffer_view = gltf.bufferViews[accessor.bufferView]
-            data = _buffer_bytes(buffer_view.buffer)
-            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
-            stride = buffer_view.byteStride if buffer_view.byteStride else n_floats * 4
+        # Rotate NORMAL / TANGENT too — positions rotating while normals
+        # stay put leaves the baked model lit as if it never rotated.
+        # Directions transform differently from points: normals by the
+        # inverse-transpose of the linear part, tangents by the linear part
+        # itself (TANGENT is VEC4: xyz rotated, w handedness kept); both
+        # renormalized so uniform scale cancels out.
+        for acc_idx, (attr_name, mesh_idx) in attr_targets.items():
+            n_floats = N_FLOATS[attr_name]
+            accessor, data, offset, stride = _accessor_layout(acc_idx, n_floats)
+            al = _local_change(mesh_idx)[:3, :3]
+            dir_m = np.linalg.inv(al).T if attr_name == 'NORMAL' else al
+            (d00, d01, d02), (d10, d11, d12), (d20, d21, d22) = dir_m
+            fmt = f'{n_floats}f'
             for i in range(accessor.count):
                 pos = offset + i * stride
-                vals = struct.unpack_from(f'{n_floats}f', data, pos)
-                rotated = rotation_matrix @ np.array(vals[:3])
-                out = (rotated[0], rotated[1], rotated[2]) + tuple(vals[3:])
-                struct.pack_into(f'{n_floats}f', data, pos, *out)
+                vals = struct.unpack_from(fmt, data, pos)
+                x, y, z = vals[:3]
+                nx = d00 * x + d01 * y + d02 * z
+                ny = d10 * x + d11 * y + d12 * z
+                nz = d20 * x + d21 * y + d22 * z
+                norm = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if norm > 1e-12:
+                    nx, ny, nz = nx / norm, ny / norm, nz / norm
+                struct.pack_into(fmt, data, pos, nx, ny, nz, *vals[3:])
             logger.info(f"Rotated {accessor.count} {attr_name} vectors in accessor {acc_idx}")
 
         # ---- Commit: write buffers back only now that every accessor
@@ -775,6 +947,7 @@ def apply_transform_modifications(gltf, transform_mods):
                 buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(data)).decode('utf-8')
             else:
                 gltf.set_binary_blob(bytes(data))
+            buffer.byteLength = len(data)
 
         logger.info(f"✅ Geometry transformed: {', '.join(transforms)}")
 

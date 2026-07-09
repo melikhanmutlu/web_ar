@@ -82,3 +82,33 @@ def test_convert_fails_cleanly_on_invalid_file(tmp_path):
     assert converter.convert(str(bad), str(output)) is False
     assert not output.exists()
     assert converter.errors
+
+
+def test_convert_retries_coarser_tessellation_when_over_limit(tmp_path, monkeypatch):
+    """A model too complex at default tessellation quality must be retried
+    with coarser tolerances instead of bouncing the upload — STEP is B-rep,
+    so triangle count is a conversion-time choice. The fixture yields ~8.3k
+    faces at default quality and ~2.9k at the first coarser step."""
+    import converters.step_converter as sc
+
+    monkeypatch.setattr(sc, "MAX_MESH_FACES", 5000)
+    output = tmp_path / "model.glb"
+    converter = STEPConverter()
+    assert converter.convert(FIXTURE, str(output)) is True
+
+    faces, verts = sc._glb_complexity(str(output))
+    assert faces <= 5000, "kept a tessellation above the complexity limit"
+    # Units/geometry must survive the coarsening (still the same real part).
+    scene = trimesh.load(str(output))
+    assert np.allclose(scene.extents, EXPECTED_EXTENTS, rtol=0.05)
+
+
+def test_convert_fails_when_even_coarsest_tessellation_too_complex(tmp_path, monkeypatch):
+    import converters.step_converter as sc
+
+    monkeypatch.setattr(sc, "MAX_MESH_FACES", 100)
+    output = tmp_path / "model.glb"
+    converter = STEPConverter()
+    assert converter.convert(FIXTURE, str(output)) is False
+    assert not output.exists()
+    assert any("too complex" in e.lower() for e in converter.errors)

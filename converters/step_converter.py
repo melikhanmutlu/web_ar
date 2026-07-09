@@ -25,8 +25,38 @@ from .stl_converter import (
 logger = logging.getLogger(__name__)
 
 
+def _glb_complexity(glb_path):
+    """(faces, vertices) of a GLB read from accessor counts alone — no
+    trimesh geometry decode, so huge tessellations can be rejected without
+    paying their full memory cost."""
+    from pygltflib import GLTF2
+
+    # load_binary explicitly: GLTF2.load() dispatches on file extension and
+    # the tessellation temp file doesn't end in .glb.
+    gltf = GLTF2().load_binary(glb_path)
+    faces = verts = 0
+    for mesh in (gltf.meshes or []):
+        for prim in (mesh.primitives or []):
+            pos = getattr(prim.attributes, "POSITION", None)
+            if pos is None:
+                continue
+            verts += gltf.accessors[pos].count
+            if prim.indices is not None:
+                faces += gltf.accessors[prim.indices].count // 3
+            else:
+                faces += gltf.accessors[pos].count // 3
+    return faces, verts
+
+
 class STEPConverter(BaseConverter):
     """Converter for STEP files to GLB format using cascadio (OpenCASCADE)."""
+
+    # (tol_linear, tol_angular) tessellation qualities, finest first. The
+    # first entry matches cascadio's defaults; later (coarser) entries are
+    # only used when the resulting mesh exceeds the complexity limits —
+    # STEP is a B-rep format, so triangle count is a property of the
+    # tessellation tolerance, not of the file itself.
+    TESSELLATION_LADDER = [(0.01, 0.5), (0.05, 0.8), (0.2, 1.0), (1.0, 1.5)]
 
     def __init__(self):
         super().__init__()
@@ -106,15 +136,55 @@ class STEPConverter(BaseConverter):
                 ensure_directory(out_dir)
 
             # Tessellate the B-rep solids straight to GLB via OpenCASCADE.
-            self.log_operation("Tessellating STEP file with cascadio/OpenCASCADE...")
-            result = cascadio.step_to_glb(input_path, tmp_glb)
-            if result != 0 or not os.path.exists(tmp_glb):
+            # If the default-quality mesh blows past the complexity limits,
+            # retry with coarser deflection tolerances instead of bouncing
+            # the upload back to the user.
+            n_faces = n_verts = 0
+            tessellated = False
+            for tol_linear, tol_angular in self.TESSELLATION_LADDER:
+                self.log_operation(
+                    f"Tessellating STEP file with cascadio/OpenCASCADE "
+                    f"(tol_linear={tol_linear}, tol_angular={tol_angular})..."
+                )
+                safe_delete_file(tmp_glb)
+                result = cascadio.step_to_glb(
+                    input_path, tmp_glb,
+                    tol_linear=tol_linear, tol_angular=tol_angular,
+                )
+                if result != 0 or not os.path.exists(tmp_glb):
+                    self.handle_error(
+                        f"cascadio failed to convert STEP file (exit code {result})"
+                    )
+                    return False
+
+                # Complexity guard on accessor counts — no geometry decode,
+                # so an over-limit tessellation is rejected cheaply.
+                n_faces, n_verts = _glb_complexity(tmp_glb)
+                if n_faces <= MAX_MESH_FACES and n_verts <= MAX_MESH_VERTICES:
+                    if (tol_linear, tol_angular) != self.TESSELLATION_LADDER[0]:
+                        self.log_operation(
+                            f"Kept automatically coarsened tessellation: "
+                            f"{n_faces:,} faces / {n_verts:,} vertices"
+                        )
+                    tessellated = True
+                    break
+                self.log_operation(
+                    f"Too complex at this tolerance: {n_faces:,} faces / "
+                    f"{n_verts:,} vertices (limits {MAX_MESH_FACES:,} faces, "
+                    f"{MAX_MESH_VERTICES:,} vertices) — retrying coarser",
+                    "WARNING",
+                )
+
+            if not tessellated:
                 self.handle_error(
-                    f"cascadio failed to convert STEP file (exit code {result})"
+                    f"Model too complex: {n_faces:,} faces / {n_verts:,} vertices "
+                    f"even at the coarsest tessellation (limits: {MAX_MESH_FACES:,} "
+                    f"faces, {MAX_MESH_VERTICES:,} vertices). "
+                    "Please simplify the model and re-upload."
                 )
                 return False
 
-            # Load the tessellated GLB for the complexity guard and any edits
+            # Load the tessellated GLB for any edits
             scene = trimesh.load(tmp_glb, file_type="glb")
             if isinstance(scene, trimesh.Trimesh):
                 scene = trimesh.Scene([scene])
@@ -129,17 +199,6 @@ class STEPConverter(BaseConverter):
             ]
             if not meshes:
                 self.handle_error("No geometry found in STEP file")
-                return False
-
-            # Complexity guard — fail fast with a clear message instead of OOM
-            n_faces = sum(len(g.faces) for g in meshes)
-            n_verts = sum(len(g.vertices) for g in meshes)
-            if n_faces > MAX_MESH_FACES or n_verts > MAX_MESH_VERTICES:
-                self.handle_error(
-                    f"Model too complex: {n_faces:,} faces / {n_verts:,} vertices "
-                    f"(limits: {MAX_MESH_FACES:,} faces, {MAX_MESH_VERTICES:,} vertices). "
-                    "Please simplify the model and re-upload."
-                )
                 return False
 
             # STEP units are already converted to meters by OpenCASCADE

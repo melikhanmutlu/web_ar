@@ -12,6 +12,7 @@ from pygltflib import (
     Material, PbrMetallicRoughness,
 )
 import os
+import copy
 import struct
 import base64
 from PIL import Image
@@ -150,6 +151,116 @@ def apply_material_modifications(gltf, material_mods):
         except Exception:
             pass
     
+    return gltf
+
+
+def _iter_gltf_mesh_nodes(gltf):
+    """
+    Yield (node_index, node) for every node with a mesh, in the same
+    depth-first pre-order the viewer's THREE.Scene.traverse() visits them in
+    (both walk the glTF node hierarchy top-down, children in array order),
+    so layer identities line up between the client's live scene and this
+    on-disk GLTF2 object.
+    """
+    if not gltf.nodes:
+        return []
+
+    result = []
+    visited = set()
+
+    def walk(node_idx):
+        if node_idx in visited or node_idx < 0 or node_idx >= len(gltf.nodes):
+            return
+        visited.add(node_idx)
+        node = gltf.nodes[node_idx]
+        if node.mesh is not None:
+            result.append((node_idx, node))
+        for child_idx in (node.children or []):
+            walk(child_idx)
+
+    if gltf.scenes:
+        scene_idx = gltf.scene if gltf.scene is not None else 0
+        roots = gltf.scenes[scene_idx].nodes or []
+    else:
+        roots = list(range(len(gltf.nodes)))
+
+    for r in roots:
+        walk(r)
+    return result
+
+
+def _resolve_layer_node(mesh_nodes, name, occurrence):
+    """Find the Nth (0-indexed `occurrence`) mesh node named `name`."""
+    count = 0
+    for node_idx, node in mesh_nodes:
+        if (node.name or "") == (name or ""):
+            if count == occurrence:
+                return node_idx, node
+            count += 1
+    return None, None
+
+
+def apply_layer_modifications(gltf, layer_mods):
+    """
+    Apply per-layer (per-mesh-node) visibility and color overrides baked
+    from the viewer's Layers panel.
+
+    Args:
+        gltf: GLTF2 object
+        layer_mods: {
+            'hidden': [{'name': str, 'occurrence': int}, ...],
+            'colors': [{'name': str, 'occurrence': int, 'color': [r, g, b]}, ...]
+        }
+    """
+    if not gltf.nodes or not gltf.meshes:
+        return gltf
+
+    mesh_nodes = _iter_gltf_mesh_nodes(gltf)
+
+    # Recolor first: clone the primitive's material per targeted layer so a
+    # color change on one layer never bleeds into a sibling layer that
+    # happens to share the same material.
+    for entry in layer_mods.get('colors') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node is None or node.mesh is None:
+            continue
+        try:
+            color = [float(c) for c in entry['color'][:3]]
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+
+        mesh = gltf.meshes[node.mesh]
+        for prim in (mesh.primitives or []):
+            if prim.material is None or not gltf.materials:
+                continue
+            new_material = copy.deepcopy(gltf.materials[prim.material])
+            if not new_material.pbrMetallicRoughness:
+                new_material.pbrMetallicRoughness = PbrMetallicRoughness(baseColorFactor=[1.0, 1.0, 1.0, 1.0])
+            alpha = (new_material.pbrMetallicRoughness.baseColorFactor or [1.0, 1.0, 1.0, 1.0])[3]
+            new_material.pbrMetallicRoughness.baseColorFactor = color + [alpha]
+            new_material.doubleSided = True
+            gltf.materials.append(new_material)
+            prim.material = len(gltf.materials) - 1
+            logger.info(f"Applied layer color {color} to node '{node.name}' (cloned material {prim.material})")
+
+    # Hide last: detach the node from its parent's children (or the scene's
+    # root node list) so AR viewers (which load the GLB directly, not the
+    # viewer's live THREE scene) never see it either.
+    hidden_targets = set()
+    for entry in layer_mods.get('hidden') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node_idx is not None:
+            hidden_targets.add(node_idx)
+
+    if hidden_targets:
+        for node in gltf.nodes:
+            if node.children:
+                node.children = [c for c in node.children if c not in hidden_targets]
+        for scene in (gltf.scenes or []):
+            if scene.nodes:
+                scene.nodes = [n for n in scene.nodes if n not in hidden_targets]
+        logger.info(f"Hid {len(hidden_targets)} layer node(s): {sorted(hidden_targets)}")
+
     return gltf
 
 
@@ -1112,7 +1223,11 @@ def modify_glb(input_path, output_path, modifications):
                     except Exception as te:
                         logger.warning(f"Could not derive texture tint from color: {te}")
                 gltf = apply_texture_modifications(gltf, mat_mods['texture'], tint_rgba=tint_rgba)
-        
+
+        # Apply per-layer visibility/color modifications
+        if 'layers' in modifications:
+            gltf = apply_layer_modifications(gltf, modifications['layers'])
+
         # Apply transform modifications
         if 'transform' in modifications:
             gltf = apply_transform_modifications(gltf, modifications['transform'])

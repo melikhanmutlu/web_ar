@@ -617,8 +617,9 @@
                 setTimeout(() => {
                     if (typeof window._slicerDiscoverInternals === 'function') {
                         window._slicerDiscoverInternals();
-                        setTimeout(() => window._slicerDiscoverInternals?.(), 1000);
-                        setTimeout(() => window._slicerDiscoverInternals?.(), 3000);
+                        window._buildLayersList?.();
+                        setTimeout(() => { window._slicerDiscoverInternals?.(); window._buildLayersList?.(); }, 1000);
+                        setTimeout(() => { window._slicerDiscoverInternals?.(); window._buildLayersList?.(); }, 3000);
                     }
                 }, 500);
             });
@@ -1243,6 +1244,304 @@ void main() {
             window._slicerClippingActive = () => isClippingEnabled;
             window._reapplyClipping = () => { if (isClippingEnabled) applyClippingPlanes(); };
 
+            // ===== LAYERS PANEL (visibility, per-layer color, explode) =====
+            // Reuses the THREE internals discovered above for the slicer —
+            // no server round-trip needed to enumerate a model's parts.
+            let modelLayers = [];
+            let layersBuiltForModel = false;
+            let layersExplodeDiagonal = 1;
+
+            function getMvMaterialsForLayers() {
+                try { return document.querySelector('model-viewer')?.model?.materials || []; } catch (e) { return []; }
+            }
+
+            function layersRgbToHex(r, g, b) {
+                const c = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+                return '#' + c(r) + c(g) + c(b);
+            }
+
+            function layersHexToRgb(hex) {
+                hex = hex.replace('#', '');
+                return [
+                    parseInt(hex.substring(0, 2), 16) / 255,
+                    parseInt(hex.substring(2, 4), 16) / 255,
+                    parseInt(hex.substring(4, 6), 16) / 255
+                ];
+            }
+
+            async function buildLayersList() {
+                if (layersBuiltForModel) return;
+                if (!discoverInternals() || !_mvScene) return;
+
+                const meshes = [];
+                _mvScene.traverse(child => {
+                    if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
+                        meshes.push(child);
+                    }
+                });
+
+                // A single-part model (e.g. any STL — always flattened to one mesh
+                // by the converter) has nothing to break into layers.
+                if (meshes.length <= 1) return;
+
+                layersBuiltForModel = true;
+                _mvScene.updateMatrixWorld(true);
+
+                const mvMats = getMvMaterialsForLayers();
+                await Promise.all(mvMats.map(m => { try { return m.ensureLoaded ? m.ensureLoaded() : null; } catch (e) { return null; } }));
+
+                // Count how many layers reference each material NAME so a color
+                // change can target the public per-material API when a material
+                // belongs to exactly one layer, and safely fall back to cloning
+                // the THREE material when several layers share one material.
+                const matNameCounts = {};
+                meshes.forEach(mesh => {
+                    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                    const matName = mat?.name || '';
+                    if (matName) matNameCounts[matName] = (matNameCounts[matName] || 0) + 1;
+                });
+
+                // World-space bounds of the whole model (union of every mesh's
+                // local bbox corners transformed to world space) — used to scale
+                // the explode offsets and to derive each layer's explode direction.
+                let worldMin = [Infinity, Infinity, Infinity];
+                let worldMax = [-Infinity, -Infinity, -Infinity];
+                meshes.forEach(mesh => {
+                    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                    const bb = mesh.geometry.boundingBox;
+                    for (let xi = 0; xi <= 1; xi++) for (let yi = 0; yi <= 1; yi++) for (let zi = 0; zi <= 1; zi++) {
+                        const corner = new _InternalVector3(
+                            xi ? bb.max.x : bb.min.x,
+                            yi ? bb.max.y : bb.min.y,
+                            zi ? bb.max.z : bb.min.z
+                        ).applyMatrix4(mesh.matrixWorld);
+                        worldMin[0] = Math.min(worldMin[0], corner.x); worldMax[0] = Math.max(worldMax[0], corner.x);
+                        worldMin[1] = Math.min(worldMin[1], corner.y); worldMax[1] = Math.max(worldMax[1], corner.y);
+                        worldMin[2] = Math.min(worldMin[2], corner.z); worldMax[2] = Math.max(worldMax[2], corner.z);
+                    }
+                });
+                const modelCenter = new _InternalVector3(
+                    (worldMin[0] + worldMax[0]) / 2,
+                    (worldMin[1] + worldMax[1]) / 2,
+                    (worldMin[2] + worldMax[2]) / 2
+                );
+                const dx = worldMax[0] - worldMin[0], dy = worldMax[1] - worldMin[1], dz = worldMax[2] - worldMin[2];
+                layersExplodeDiagonal = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+
+                const occurrenceCounts = {};
+                modelLayers = meshes.map((mesh, idx) => {
+                    const rawNodeName = mesh.name || '';
+                    const occurrence = occurrenceCounts[rawNodeName] || 0;
+                    occurrenceCounts[rawNodeName] = occurrence + 1;
+                    const displayName = mesh.name || mesh.parent?.name || ('Layer ' + (idx + 1));
+
+                    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                    const matName = mat?.name || '';
+                    const isExclusive = !!matName && matNameCounts[matName] === 1;
+                    const mvMaterial = isExclusive ? (mvMats.find(m => m.name === matName) || null) : null;
+
+                    let origColorHex = '#ffffff';
+                    try {
+                        if (mvMaterial) {
+                            const cf = mvMaterial.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                            origColorHex = layersRgbToHex(cf[0], cf[1], cf[2]);
+                        } else if (mat && mat.color) {
+                            origColorHex = '#' + mat.color.getHexString();
+                        }
+                    } catch (e) { /* material not loaded yet — keep default swatch */ }
+
+                    const localCenter = new _InternalVector3(
+                        (mesh.geometry.boundingBox.min.x + mesh.geometry.boundingBox.max.x) / 2,
+                        (mesh.geometry.boundingBox.min.y + mesh.geometry.boundingBox.max.y) / 2,
+                        (mesh.geometry.boundingBox.min.z + mesh.geometry.boundingBox.max.z) / 2
+                    );
+                    const worldCenter = localCenter.clone().applyMatrix4(mesh.matrixWorld);
+                    const dirWorld = worldCenter.clone().sub(modelCenter).normalize();
+
+                    return {
+                        node: mesh,
+                        rawNodeName: rawNodeName,
+                        occurrence: occurrence,
+                        name: displayName,
+                        origVisible: mesh.visible,
+                        origLocalPos: mesh.position.clone(),
+                        origWorldPos: new _InternalVector3().setFromMatrixPosition(mesh.matrixWorld),
+                        dirWorld: dirWorld,
+                        matMode: mvMaterial ? 'exclusive' : 'clone',
+                        mvMaterial: mvMaterial,
+                        origColorHex: origColorHex,
+                        colorChanged: false
+                    };
+                });
+
+                renderLayersList();
+
+                // An active AnimationMixer overwrites node transforms every
+                // frame, so explode (which offsets node.position) can't coexist
+                // with playback — disable the slider on animated models instead
+                // of showing an effect that instantly snaps back.
+                const mv = document.querySelector('model-viewer');
+                const hasAnims = (mv?.availableAnimations || []).length > 0;
+                const explodeSliderEl = document.getElementById('explodeSlider');
+                const explodeAnimNoteEl = document.getElementById('explodeAnimNote');
+                if (hasAnims) {
+                    explodeSliderEl?.setAttribute('disabled', 'disabled');
+                    explodeAnimNoteEl?.classList.remove('hidden');
+                } else {
+                    explodeSliderEl?.removeAttribute('disabled');
+                    explodeAnimNoteEl?.classList.add('hidden');
+                }
+            }
+
+            function renderLayersList() {
+                const container = document.getElementById('layersContainer');
+                const list = document.getElementById('layersList');
+                if (!list || !container) return;
+                if (modelLayers.length === 0) { container.classList.add('hidden'); return; }
+                container.classList.remove('hidden');
+
+                list.innerHTML = '';
+                modelLayers.forEach((layer, i) => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0.35rem;background:var(--color-gray-800);border:1px solid var(--color-gray-700);';
+                    row.innerHTML =
+                        '<button type="button" class="layer-vis-btn" data-idx="' + i + '" style="background:none;border:none;color:var(--color-gray-300);cursor:pointer;display:flex;padding:0;">' +
+                            '<i data-lucide="eye" class="layer-eye-on' + (layer.node.visible ? '' : ' hidden') + '" style="width:0.85rem;height:0.85rem;"></i>' +
+                            '<i data-lucide="eye-off" class="layer-eye-off' + (layer.node.visible ? ' hidden' : '') + '" style="width:0.85rem;height:0.85rem;"></i>' +
+                        '</button>' +
+                        '<span style="flex:1;font-size:0.72rem;color:var(--color-gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + window.escapeHtml(layer.name) + '</span>' +
+                        '<input type="color" class="tp-color-swatch layer-color-input" data-idx="' + i + '" value="' + layer.origColorHex + '" style="width:1.6rem;height:1.6rem;padding:0;">';
+                    list.appendChild(row);
+                });
+                if (window.lucide?.createIcons) lucide.createIcons();
+
+                list.querySelectorAll('.layer-vis-btn').forEach(btn => {
+                    btn.addEventListener('click', () => toggleLayerVisibility(parseInt(btn.dataset.idx, 10)));
+                });
+                list.querySelectorAll('.layer-color-input').forEach(inp => {
+                    inp.addEventListener('input', (e) => applyLayerColor(parseInt(inp.dataset.idx, 10), e.target.value));
+                });
+            }
+
+            function toggleLayerVisibility(i) {
+                const layer = modelLayers[i];
+                if (!layer) return;
+                layer.node.visible = !layer.node.visible;
+                const btn = document.querySelector('.layer-vis-btn[data-idx="' + i + '"]');
+                btn?.querySelector('.layer-eye-on')?.classList.toggle('hidden', !layer.node.visible);
+                btn?.querySelector('.layer-eye-off')?.classList.toggle('hidden', layer.node.visible);
+                forceModelViewerRender();
+            }
+
+            function applyLayerColor(i, hex) {
+                const layer = modelLayers[i];
+                if (!layer) return;
+                layer.colorChanged = true;
+                const rgb = layersHexToRgb(hex);
+                if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                    try {
+                        const currentAlpha = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
+                        layer.mvMaterial.pbrMetallicRoughness.setBaseColorFactor([rgb[0], rgb[1], rgb[2], currentAlpha]);
+                    } catch (e) { console.warn('[Layers] color apply failed', e); }
+                } else {
+                    // Material shared by multiple layers (or not publicly
+                    // addressable) — clone it client-side once so recoloring
+                    // this layer can never bleed into a sibling layer.
+                    const mesh = layer.node;
+                    if (!mesh.userData._layerMaterialCloned) {
+                        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : mesh.material.clone();
+                        mesh.userData._layerMaterialCloned = true;
+                    }
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(m => { if (m.color) { m.color.setRGB(rgb[0], rgb[1], rgb[2]); m.needsUpdate = true; } });
+                    // A cloned material can lose the slicer's clip-shader patch —
+                    // same reasoning as the global material editor (see markMaterialChanged).
+                    window._reapplyClipping?.();
+                }
+                forceModelViewerRender();
+            }
+
+            function applyExplode(t) {
+                modelLayers.forEach(layer => {
+                    if (!layer.node.parent) return;
+                    const worldTarget = layer.origWorldPos.clone().add(
+                        layer.dirWorld.clone().multiplyScalar(t * layersExplodeDiagonal * 0.5)
+                    );
+                    const parentInv = new _InternalMatrix4().copy(layer.node.parent.matrixWorld).invert();
+                    layer.node.position.copy(worldTarget.applyMatrix4(parentInv));
+                });
+                _mvScene.updateMatrixWorld(true);
+                forceModelViewerRender();
+            }
+
+            document.getElementById('explodeSlider')?.addEventListener('input', (e) => {
+                const t = parseFloat(e.target.value);
+                const explodeValueEl = document.getElementById('explodeValue');
+                if (explodeValueEl) explodeValueEl.textContent = Math.round(t * 100) + '%';
+                if (t > 0) {
+                    const mv = document.querySelector('model-viewer');
+                    if ((mv?.availableAnimations || []).length > 0) mv.pause();
+                }
+                applyExplode(t);
+            });
+
+            document.getElementById('resetLayers')?.addEventListener('click', () => {
+                modelLayers.forEach(layer => {
+                    layer.node.visible = layer.origVisible;
+                    layer.node.position.copy(layer.origLocalPos);
+                    layer.colorChanged = false;
+                    const rgb = layersHexToRgb(layer.origColorHex);
+                    if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                        try {
+                            const alpha = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
+                            layer.mvMaterial.pbrMetallicRoughness.setBaseColorFactor([rgb[0], rgb[1], rgb[2], alpha]);
+                        } catch (e) { /* not loaded */ }
+                    } else if (layer.node.userData._layerMaterialCloned) {
+                        const mats = Array.isArray(layer.node.material) ? layer.node.material : [layer.node.material];
+                        mats.forEach(m => { if (m.color) { m.color.setRGB(rgb[0], rgb[1], rgb[2]); m.needsUpdate = true; } });
+                    }
+                });
+                _mvScene.updateMatrixWorld(true);
+                const explodeSliderEl = document.getElementById('explodeSlider');
+                const explodeValueEl = document.getElementById('explodeValue');
+                if (explodeSliderEl) explodeSliderEl.value = 0;
+                if (explodeValueEl) explodeValueEl.textContent = '0%';
+                renderLayersList();
+                window._reapplyClipping?.();
+                forceModelViewerRender();
+            });
+
+            // Called from the save-changes flow (separate script scope) to
+            // collect per-layer state to persist into the GLB. Returns null
+            // when nothing was changed from the model's loaded state.
+            window._layersGatherMods = function() {
+                if (!modelLayers.length) return null;
+                const hidden = [];
+                const colors = [];
+                modelLayers.forEach(layer => {
+                    if (!layer.node.visible) {
+                        hidden.push({ name: layer.rawNodeName, occurrence: layer.occurrence });
+                    }
+                    if (layer.colorChanged) {
+                        let hex = layer.origColorHex;
+                        try {
+                            if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                                const cf = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                                hex = layersRgbToHex(cf[0], cf[1], cf[2]);
+                            } else {
+                                const mat = Array.isArray(layer.node.material) ? layer.node.material[0] : layer.node.material;
+                                if (mat?.color) hex = '#' + mat.color.getHexString();
+                            }
+                        } catch (e) { /* keep original hex */ }
+                        colors.push({ name: layer.rawNodeName, occurrence: layer.occurrence, color: layersHexToRgb(hex) });
+                    }
+                });
+                if (!hidden.length && !colors.length) return null;
+                return { hidden: hidden, colors: colors };
+            };
+
+            window._buildLayersList = buildLayersList;
+
             function disableAllClipping() {
                 for (const axis of ['x', 'y', 'z']) {
                     slicerAxes[axis].enabled = false;
@@ -1767,6 +2066,32 @@ void main() {
                         </div>
                     </div>
                     <button id="resetMaterial" class="tp-btn-full">Reset Material</button>
+                </div>
+            </div>
+
+            <!-- ─── LAYERS ─── -->
+            <div class="tp-section hidden" id="layersContainer">
+                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                    <i data-lucide="layers" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Layers</span>
+                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body" id="layersPanel">
+                    <div id="layersList" style="max-height:12rem;overflow-y:auto;display:flex;flex-direction:column;gap:0.3rem;"></div>
+                    <div class="tp-field" style="margin-top:0.5rem;">
+                        <div class="tp-slider-row">
+                            <label class="tp-label">Explode</label>
+                            <span id="explodeValue" class="tp-val">0%</span>
+                        </div>
+                        <input type="range" id="explodeSlider" min="0" max="1" step="0.01" value="0" class="tp-range">
+                        <p id="explodeAnimNote" class="tp-note hidden">Explode is disabled while an animation is playing.</p>
+                    </div>
+                    <button id="resetLayers" class="tp-btn-full">Reset Layers</button>
+                    {% if can_edit %}
+                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only and is never saved.</p>
+                    {% else %}
+                    <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -3395,6 +3720,13 @@ void main() {
                     scale: scale,
                     rotation: { x: rx, y: ry, z: rz }
                 };
+            }
+
+            // Layer visibility/color — gathered from the Layers panel's own
+            // scope (separate <script> block, see window._layersGatherMods).
+            const layerMods = window._layersGatherMods?.();
+            if (layerMods) {
+                mods.layers = layerMods;
             }
 
             return mods;

@@ -111,3 +111,80 @@ def test_normals_are_rotated_with_geometry():
     # Sanity: the rotation actually changed the data (guards against a
     # trivially-passing identity comparison).
     assert not np.allclose(after, before, atol=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Scale baking (same vertex loop) — shared accessors and atomicity
+# ---------------------------------------------------------------------------
+
+
+def _extent_x(gltf):
+    import struct
+    blob = gltf.binary_blob()
+    acc = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION]
+    bv = gltf.bufferViews[acc.bufferView]
+    off = (bv.byteOffset or 0) + (acc.byteOffset or 0)
+    stride = bv.byteStride or 12
+    xs = [struct.unpack_from("fff", blob, off + i * stride)[0] for i in range(acc.count)]
+    return max(xs) - min(xs)
+
+
+def test_scale_applies_once_to_shared_position_accessor():
+    """Primitives commonly share one POSITION accessor (per-material splits).
+    The old loop transformed per primitive, so shared vertex data was scaled
+    once per referencing primitive — 0.1 became 0.01 for shared parts while
+    unshared parts got 0.1, visibly breaking the model."""
+    import copy
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "shared.glb")
+        trimesh.Scene([trimesh.creation.box(extents=(2, 2, 2))]).export(path)
+        gltf = GLTF2().load(path)
+        gltf.meshes[0].primitives.append(copy.deepcopy(gltf.meshes[0].primitives[0]))
+
+        gltf = apply_transform_modifications(gltf, {"scale": 0.1})
+        assert _extent_x(gltf) == pytest.approx(0.2, rel=1e-4), (
+            "shared POSITION accessor was transformed once per primitive"
+        )
+
+
+def test_scale_updates_position_min_max():
+    """Viewers frame/place the model from POSITION min/max — the bake must
+    keep them in sync with the transformed geometry."""
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "bounds.glb")
+        trimesh.Scene([trimesh.creation.box(extents=(2, 2, 2))]).export(path)
+        gltf = GLTF2().load(path)
+        gltf = apply_transform_modifications(gltf, {"scale": 0.1})
+        acc = gltf.accessors[gltf.meshes[0].primitives[0].attributes.POSITION]
+        assert acc.min == pytest.approx([-0.1, -0.1, -0.1], abs=1e-6)
+        assert acc.max == pytest.approx([0.1, 0.1, 0.1], abs=1e-6)
+
+
+def test_transform_is_all_or_nothing_on_unreadable_accessor():
+    """One unreadable POSITION accessor (Draco/sparse: bufferView=None) used
+    to abort the loop midway AFTER earlier meshes were already written —
+    saving a model with some parts scaled and others not. The bake must
+    fail as a whole, leaving every buffer untouched."""
+    from pygltflib import GLTF2
+    from glb_modifier import apply_transform_modifications
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "twomesh.glb")
+        b1 = trimesh.creation.box(extents=(2, 2, 2))
+        b2 = trimesh.creation.box(extents=(2, 2, 2))
+        b2.apply_translation([5, 0, 0])
+        trimesh.Scene({"a": b1, "b": b2}).export(path)
+        gltf = GLTF2().load(path)
+        gltf.accessors[gltf.meshes[1].primitives[0].attributes.POSITION].bufferView = None
+
+        with pytest.raises(ValueError):
+            apply_transform_modifications(gltf, {"scale": 0.1})
+        assert _extent_x(gltf) == pytest.approx(2.0, rel=1e-4), (
+            "a failed bake must not leave earlier meshes already transformed"
+        )

@@ -637,136 +637,149 @@ def apply_transform_modifications(gltf, transform_mods):
     scale_factor = float(transform_mods.get('scale', 1.0))
     
     if (scale_factor != 1.0 or has_rotation) and gltf.meshes:
-            transforms = []
-            if has_rotation:
-                transforms.append(f"rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
-            if scale_factor != 1.0:
-                transforms.append(f"scale {scale_factor}")
-            logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
-            try:
-                for mesh_idx, mesh in enumerate(gltf.meshes):
-                    if not mesh.primitives:
-                        continue
-                    
-                    for prim_idx, primitive in enumerate(mesh.primitives):
-                        if primitive.attributes is None:
-                            continue
-                        
-                        # Get POSITION accessor
-                        if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
-                            pos_accessor_idx = primitive.attributes.POSITION
-                            accessor = gltf.accessors[pos_accessor_idx]
-                            buffer_view = gltf.bufferViews[accessor.bufferView]
-                            buffer = gltf.buffers[buffer_view.buffer]
-                            
-                            # Get binary data
-                            import base64
-                            if buffer.uri and buffer.uri.startswith('data:'):
-                                # Data URI (embedded as base64)
-                                data_start = buffer.uri.find(',') + 1
-                                binary_data = base64.b64decode(buffer.uri[data_start:])
-                            elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
-                                # GLB binary chunk
-                                binary_data = gltf.binary_blob()
-                            else:
-                                logger.warning(f"Cannot scale: buffer {buffer_view.buffer} has no accessible data")
-                                continue
-                            
-                            # Parse vertex positions
-                            import struct
-                            offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
-                            offset += accessor.byteOffset if accessor.byteOffset else 0
-                            
-                            # Read and scale vertices
-                            vertex_count = accessor.count
-                            stride = buffer_view.byteStride if buffer_view.byteStride else 12  # 3 floats
-                            
-                            new_data = bytearray(binary_data)
-                            for i in range(vertex_count):
-                                pos = offset + i * stride
-                                # Read XYZ
-                                x, y, z = struct.unpack_from('fff', binary_data, pos)
-                                
-                                # Transform around model center (pivot)
-                                # 1. Translate to origin (relative to center)
-                                x -= center_x
-                                y -= center_y
-                                z -= center_z
-                                
-                                # 2. Apply rotation (if any)
-                                if rotation_matrix is not None:
-                                    vertex = np.array([x, y, z])
-                                    rotated = rotation_matrix @ vertex
-                                    x, y, z = rotated[0], rotated[1], rotated[2]
-                                
-                                # 3. Apply scale
-                                if scale_factor != 1.0:
-                                    x *= scale_factor
-                                    y *= scale_factor
-                                    z *= scale_factor
-                                
-                                # 4. Translate back
-                                x += center_x
-                                y += center_y
-                                z += center_z
-                                
-                                # Write back
-                                struct.pack_into('fff', new_data, pos, x, y, z)
+        import base64
+        import struct
 
-                            # Rotate NORMAL / TANGENT too — positions rotating
-                            # while normals stay put leaves the baked model lit
-                            # as if it never rotated. Normals need rotation only
-                            # (no pivot translate; uniform scale doesn't change
-                            # direction). TANGENT is VEC4: rotate xyz, keep the
-                            # w handedness sign.
-                            if rotation_matrix is not None:
-                                for attr_name, n_floats in (('NORMAL', 3), ('TANGENT', 4)):
-                                    attr_idx = getattr(primitive.attributes, attr_name, None)
-                                    if attr_idx is None:
-                                        continue
-                                    a_acc = gltf.accessors[attr_idx]
-                                    a_bv = gltf.bufferViews[a_acc.bufferView]
-                                    if a_bv.buffer != buffer_view.buffer:
-                                        logger.warning(
-                                            f"{attr_name} lives in a different buffer than POSITION — skipping rotation for it"
-                                        )
-                                        continue
-                                    a_off = (a_bv.byteOffset or 0) + (a_acc.byteOffset or 0)
-                                    a_stride = a_bv.byteStride if a_bv.byteStride else n_floats * 4
-                                    for i in range(a_acc.count):
-                                        pos = a_off + i * a_stride
-                                        vals = struct.unpack_from(f'{n_floats}f', binary_data, pos)
-                                        rotated = rotation_matrix @ np.array(vals[:3])
-                                        out = (rotated[0], rotated[1], rotated[2]) + tuple(vals[3:])
-                                        struct.pack_into(f'{n_floats}f', new_data, pos, *out)
-                                    logger.info(f"Rotated {a_acc.count} {attr_name} vectors in mesh {mesh_idx}, primitive {prim_idx}")
+        transforms = []
+        if has_rotation:
+            transforms.append(f"rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+        if scale_factor != 1.0:
+            transforms.append(f"scale {scale_factor}")
+        logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
 
-                            # Update buffer based on type
-                            if buffer.uri and buffer.uri.startswith('data:'):
-                                # Update data URI
-                                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
-                            else:
-                                # Update GLB binary chunk
-                                gltf.set_binary_blob(bytes(new_data))
-                            
-                            transform_desc = []
-                            if has_rotation:
-                                transform_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
-                            if scale_factor != 1.0:
-                                transform_desc.append(f"scaled {scale_factor}x")
-                            logger.info(f"Transformed {vertex_count} vertices ({', '.join(transform_desc)}) in mesh {mesh_idx}, primitive {prim_idx}")
-                
-                result_desc = []
-                if has_rotation:
-                    result_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+        # ---- Collect unique target accessors first. Primitives commonly
+        # share vertex data (e.g. one POSITION accessor reused by several
+        # per-material primitives) — transforming per primitive applied the
+        # scale/rotation to the same bytes several times, so shared parts
+        # ended up scaled 0.1 -> 0.01 while unshared parts got 0.1. ----
+        pos_accessor_ids = []
+        attr_targets = []       # (accessor_idx, n_floats, attr_name)
+        seen_pos, seen_attr = set(), set()
+        for mesh in gltf.meshes:
+            for primitive in (mesh.primitives or []):
+                if primitive.attributes is None:
+                    continue
+                p_idx = getattr(primitive.attributes, 'POSITION', None)
+                if p_idx is not None and p_idx not in seen_pos:
+                    seen_pos.add(p_idx)
+                    pos_accessor_ids.append(p_idx)
+                if rotation_matrix is not None:
+                    # Rotate NORMAL / TANGENT too — positions rotating while
+                    # normals stay put leaves the baked model lit as if it
+                    # never rotated. Rotation only (no pivot translate;
+                    # uniform scale doesn't change direction). TANGENT is
+                    # VEC4: rotate xyz, keep the w handedness sign.
+                    for attr_name, n_floats in (('NORMAL', 3), ('TANGENT', 4)):
+                        a_idx = getattr(primitive.attributes, attr_name, None)
+                        if a_idx is not None and a_idx not in seen_attr:
+                            seen_attr.add(a_idx)
+                            attr_targets.append((a_idx, n_floats, attr_name))
+
+        # ---- Validate everything up front: this bake is all-or-nothing.
+        # The old loop wrote buffers back per primitive, so one unreadable
+        # accessor mid-way (Draco/quantized geometry) left the model
+        # half-transformed — some parts scaled, the rest not. Raising here
+        # instead propagates to modify_glb, the endpoint reports the error,
+        # and the original file is never replaced. ----
+        FLOAT_COMPONENT = 5126
+        for acc_idx in pos_accessor_ids + [t[0] for t in attr_targets]:
+            acc = gltf.accessors[acc_idx]
+            if acc.bufferView is None:
+                raise ValueError(
+                    f"accessor {acc_idx} has no bufferView (Draco/sparse-compressed "
+                    "geometry) — cannot bake transforms into this model"
+                )
+            if acc.componentType != FLOAT_COMPONENT:
+                raise ValueError(
+                    f"accessor {acc_idx} componentType {acc.componentType} is not "
+                    "float (quantized geometry) — cannot bake transforms into this model"
+                )
+
+        # ---- Read each involved buffer once; every accessor mutates the
+        # same bytearray and buffers are only written back after ALL
+        # transforms succeeded. ----
+        buffers_data = {}
+
+        def _buffer_bytes(buf_idx):
+            if buf_idx not in buffers_data:
+                buffer = gltf.buffers[buf_idx]
+                if buffer.uri and buffer.uri.startswith('data:'):
+                    raw = base64.b64decode(buffer.uri[buffer.uri.find(',') + 1:])
+                elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                    raw = gltf.binary_blob()
+                else:
+                    raise ValueError(f"buffer {buf_idx} has no accessible data")
+                buffers_data[buf_idx] = bytearray(raw)
+            return buffers_data[buf_idx]
+
+        for acc_idx in pos_accessor_ids:
+            accessor = gltf.accessors[acc_idx]
+            buffer_view = gltf.bufferViews[accessor.bufferView]
+            data = _buffer_bytes(buffer_view.buffer)
+            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
+            stride = buffer_view.byteStride if buffer_view.byteStride else 12  # 3 floats
+            mins = [float('inf')] * 3
+            maxs = [float('-inf')] * 3
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                x, y, z = struct.unpack_from('fff', data, pos)
+
+                # Transform around model center (pivot)
+                x -= center_x
+                y -= center_y
+                z -= center_z
+                if rotation_matrix is not None:
+                    rotated = rotation_matrix @ np.array([x, y, z])
+                    x, y, z = rotated[0], rotated[1], rotated[2]
                 if scale_factor != 1.0:
-                    result_desc.append(f"scaled by {scale_factor}")
-                logger.info(f"✅ Geometry transformed: {', '.join(result_desc) if result_desc else 'no changes'}")
-            except Exception as e:
-                logger.error(f"Failed to transform geometry: {e}", exc_info=True)
-    
+                    x *= scale_factor
+                    y *= scale_factor
+                    z *= scale_factor
+                x += center_x
+                y += center_y
+                z += center_z
+
+                struct.pack_into('fff', data, pos, x, y, z)
+                for j, v in enumerate((x, y, z)):
+                    if v < mins[j]:
+                        mins[j] = v
+                    if v > maxs[j]:
+                        maxs[j] = v
+
+            # POSITION min/max is what viewers frame and place the model
+            # from — stale bounds survive the bake otherwise.
+            if accessor.count:
+                accessor.min = [float(v) for v in mins]
+                accessor.max = [float(v) for v in maxs]
+            logger.info(f"Transformed {accessor.count} vertices in POSITION accessor {acc_idx}")
+
+        for acc_idx, n_floats, attr_name in attr_targets:
+            accessor = gltf.accessors[acc_idx]
+            buffer_view = gltf.bufferViews[accessor.bufferView]
+            data = _buffer_bytes(buffer_view.buffer)
+            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
+            stride = buffer_view.byteStride if buffer_view.byteStride else n_floats * 4
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                vals = struct.unpack_from(f'{n_floats}f', data, pos)
+                rotated = rotation_matrix @ np.array(vals[:3])
+                out = (rotated[0], rotated[1], rotated[2]) + tuple(vals[3:])
+                struct.pack_into(f'{n_floats}f', data, pos, *out)
+            logger.info(f"Rotated {accessor.count} {attr_name} vectors in accessor {acc_idx}")
+
+        # ---- Commit: write buffers back only now that every accessor
+        # transformed cleanly. ----
+        for buf_idx, data in buffers_data.items():
+            buffer = gltf.buffers[buf_idx]
+            if buffer.uri and buffer.uri.startswith('data:'):
+                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(data)).decode('utf-8')
+            else:
+                gltf.set_binary_blob(bytes(data))
+
+        logger.info(f"✅ Geometry transformed: {', '.join(transforms)}")
+
     logger.info("Transform modifications applied (rotation and scale baked into vertices)")
-    
+
     return gltf
 
 

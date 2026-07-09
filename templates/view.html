@@ -241,6 +241,19 @@
         .tp-section-body { display: none; padding: 0.6rem 0.85rem 0.75rem; }
         .tp-section-body.is-open { display: block; }
 
+        /* ── Tools Panel navigation: menu (all headers) ↔ detail (one section, full height) ── */
+        #toolsDetailBack { display: none; align-items: center; gap: 0.5rem; padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--color-gray-700); flex-shrink: 0; }
+        #toolsDetailBack.is-visible { display: flex; }
+        .tools-detail-back-btn { display: flex; align-items: center; gap: 0.2rem; background: none; border: none; color: var(--color-gray-400); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; padding: 0.15rem 0.3rem 0.15rem 0.1rem; margin-left: -0.1rem; }
+        .tools-detail-back-btn:hover { color: var(--color-gray-200); }
+        .tools-detail-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gray-200); border-left: 1px solid var(--color-gray-700); padding-left: 0.6rem; }
+
+        /* Menu mode: only header rows show, every section body stays closed regardless of is-open */
+        #toolsSections[data-active-section=""] .tp-section-body { display: none !important; }
+        /* Detail mode: only the active section (header hidden, body shown full-width) renders; siblings vanish */
+        #toolsSections:not([data-active-section=""]) .tp-section:not(.is-active) { display: none; }
+        #toolsSections:not([data-active-section=""]) .tp-section.is-active > .tp-section-header { display: none; }
+
         .tp-field { margin-bottom: 0.55rem; }
         .tp-field:last-child { margin-bottom: 0; }
         .tp-label { display: block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-gray-500); margin-bottom: 0.2rem; }
@@ -259,6 +272,8 @@
         .tp-btn-full:hover { background: var(--color-gray-700); color: var(--color-gray-200); }
         .tp-btn-sm { display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.25rem 0.45rem; background: var(--color-gray-800); border: 1px solid var(--color-gray-700); color: var(--color-gray-400); font-size: 0.65rem; font-weight: 600; cursor: pointer; transition: background 0.12s; }
         .tp-btn-sm:hover { background: var(--color-gray-700); color: var(--color-gray-200); }
+        .tp-view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+        .tp-view-grid .tp-btn-sm { padding: 0.4rem 0.3rem; }
         .tp-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; padding: 0.45rem 0.7rem; background: var(--color-gray-200); border: 1px solid var(--color-gray-300); color: var(--color-gray-900); font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: background 0.12s; }
         .tp-btn-primary:hover { background: var(--color-white); }
         .tp-note { font-size: 0.65rem; color: var(--color-gray-500); font-style: italic; margin-top: 0.2rem; }
@@ -1483,6 +1498,7 @@ void main() {
                     if ((mv?.availableAnimations || []).length > 0) mv.pause();
                 }
                 applyExplode(t);
+                document.getElementById('saveExplodedLayout')?.classList.toggle('hidden', t <= 0);
             });
 
             document.getElementById('resetLayers')?.addEventListener('click', () => {
@@ -1506,10 +1522,27 @@ void main() {
                 const explodeValueEl = document.getElementById('explodeValue');
                 if (explodeSliderEl) explodeSliderEl.value = 0;
                 if (explodeValueEl) explodeValueEl.textContent = '0%';
+                document.getElementById('saveExplodedLayout')?.classList.add('hidden');
                 renderLayersList();
                 window._reapplyClipping?.();
                 forceModelViewerRender();
             });
+
+            // Called from the "Save Exploded Layout" button (separate script
+            // scope) to bake the CURRENT explode offsets as permanent node
+            // translations. Unlike _layersGatherMods, this is never included
+            // in the default Save & Apply to AR payload — explode only
+            // becomes permanent when the user explicitly asks for it.
+            window._layersGatherExplodeMods = function() {
+                const t = parseFloat(document.getElementById('explodeSlider')?.value || 0);
+                if (!modelLayers.length || !(t > 0)) return null;
+                const positions = modelLayers.map(layer => ({
+                    name: layer.rawNodeName,
+                    occurrence: layer.occurrence,
+                    translation: [layer.node.position.x, layer.node.position.y, layer.node.position.z]
+                }));
+                return { positions: positions };
+            };
 
             // Called from the save-changes flow (separate script scope) to
             // collect per-layer state to persist into the GLB. Returns null
@@ -1976,20 +2009,40 @@ void main() {
             </div>
             <div id="toolsPanelBody">
 
-            <div class="showcase-content">
+            <div id="toolsDetailBack">
+                <button type="button" id="toolsDetailBackBtn" class="tools-detail-back-btn">
+                    <i data-lucide="chevron-left" style="width:0.9rem;height:0.9rem;"></i>
+                    Tools
+                </button>
+                <span id="toolsDetailTitle" class="tools-detail-title"></span>
+            </div>
+
+            <div class="showcase-content" id="toolsSections" data-active-section="">
 
             <!-- ─── VIEW ─── -->
-            <div class="tp-section">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+            <div class="tp-section" id="viewContainer">
+                <button class="tp-section-header">
                     <i data-lucide="rotate-ccw" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>View</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
-                <div class="tp-section-body is-open">
+                <div class="tp-section-body">
                     <button id="resetCamera" class="tp-btn-full">
                         <i data-lucide="rotate-ccw" style="width:0.8rem;height:0.8rem;"></i>
                         Reset Camera
                     </button>
+
+                    <div class="tp-field" style="margin-top:0.5rem;">
+                        <label class="tp-label">Camera Presets</label>
+                        <div class="tp-view-grid">
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="90">Front</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="180" data-phi="90">Back</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="90" data-phi="90">Right</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="-90" data-phi="90">Left</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="0.01">Top</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="179.99">Bottom</button>
+                        </div>
+                    </div>
 
                     <!-- Animation (hidden if no animations) -->
                     <div id="animationPanel" class="hidden" style="margin-top:0.5rem;">
@@ -2018,10 +2071,10 @@ void main() {
 
             <!-- ─── MATERIAL ─── -->
             <div class="tp-section" id="materialContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="palette" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Material</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="materialPanel">
                     <div class="tp-field">
@@ -2071,13 +2124,13 @@ void main() {
 
             <!-- ─── LAYERS ─── -->
             <div class="tp-section hidden" id="layersContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="layers" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Layers</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="layersPanel">
-                    <div id="layersList" style="max-height:12rem;overflow-y:auto;display:flex;flex-direction:column;gap:0.3rem;"></div>
+                    <div id="layersList" style="display:flex;flex-direction:column;gap:0.3rem;"></div>
                     <div class="tp-field" style="margin-top:0.5rem;">
                         <div class="tp-slider-row">
                             <label class="tp-label">Explode</label>
@@ -2088,7 +2141,11 @@ void main() {
                     </div>
                     <button id="resetLayers" class="tp-btn-full">Reset Layers</button>
                     {% if can_edit %}
-                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only and is never saved.</p>
+                    <button id="saveExplodedLayout" class="tp-btn-full hidden" style="margin-top:0.35rem;color:#fbbf24;">
+                        <i data-lucide="expand" style="width:0.75rem;height:0.75rem;"></i>
+                        Save Exploded Layout
+                    </button>
+                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
                     {% else %}
                     <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>
                     {% endif %}
@@ -2097,10 +2154,10 @@ void main() {
 
             <!-- ─── TRANSFORM ─── -->
             <div class="tp-section" id="transformContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="move-3d" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Transform</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="transformPanel">
                     <!-- Dimensions -->
@@ -2137,10 +2194,10 @@ void main() {
 
             <!-- ─── ANNOTATIONS ─── -->
             <div class="tp-section" id="annotationsContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="map-pin" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Annotations</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="annotationsPanel">
                     <div class="tp-field" style="padding-bottom:0.5rem;border-bottom:1px solid var(--color-gray-700);margin-bottom:0.5rem;">
@@ -2169,10 +2226,10 @@ void main() {
 
             <!-- ─── SLICER ─── -->
             <div class="tp-section" id="slicerContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="scissors" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Slicer</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="slicerPanel">
                     <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
@@ -2259,11 +2316,11 @@ void main() {
             </div>
 
             <!-- ─── HISTORY ─── -->
-            <div class="tp-section">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+            <div class="tp-section" id="historyContainer">
+                <button class="tp-section-header">
                     <i data-lucide="clock" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>History</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
@@ -2279,10 +2336,10 @@ void main() {
             {% if is_owner %}
             <!-- ─── AI RIG & ANIMATE ─── -->
             <div class="tp-section" id="rigAnimateSection">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="user" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Rig &amp; Animate (AI)</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body">
                     <p class="tp-note" style="margin:0 0 0.5rem;">Auto-rig this model and apply animations. Uses AI credits; works best on textured humanoid models.</p>
@@ -2548,6 +2605,68 @@ void main() {
             modelViewer.cameraTarget = 'auto auto auto';
         });
 
+        // ===================================================================
+        // CAMERA PRESETS (Front / Back / Left / Right / Top / Bottom)
+        // ===================================================================
+        // Keeps the model's current zoom (radius) — only theta/phi change —
+        // so switching presets doesn't reset how close the user zoomed in.
+        document.querySelectorAll('.camera-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!modelViewer) return;
+                const theta = btn.dataset.theta;
+                const phi = btn.dataset.phi;
+                let radius = 'auto';
+                try {
+                    const current = modelViewer.getCameraOrbit?.();
+                    if (current && current.radius) radius = current.radius + 'm';
+                } catch (e) { /* keep auto */ }
+                modelViewer.cameraOrbit = theta + 'deg ' + phi + 'deg ' + radius;
+            });
+        });
+
+        // ===================================================================
+        // TOOLS PANEL NAVIGATION (menu list ↔ full-height section detail)
+        // ===================================================================
+        (function() {
+            const sectionsRoot = document.getElementById('toolsSections');
+            const backBar = document.getElementById('toolsDetailBack');
+            const backBtn = document.getElementById('toolsDetailBackBtn');
+            const titleEl = document.getElementById('toolsDetailTitle');
+            if (!sectionsRoot) return;
+
+            function allSections() {
+                return Array.from(sectionsRoot.querySelectorAll(':scope > .tp-section'));
+            }
+
+            function showToolsMenu() {
+                sectionsRoot.dataset.activeSection = '';
+                allSections().forEach(sec => {
+                    sec.classList.remove('is-active');
+                    sec.querySelector(':scope > .tp-section-header')?.classList.remove('is-open');
+                    sec.querySelector(':scope > .tp-section-body')?.classList.remove('is-open');
+                });
+                backBar?.classList.remove('is-visible');
+                document.getElementById('toolsPanelBody')?.scrollTo?.(0, 0);
+            }
+
+            function showToolsDetail(sectionEl) {
+                if (!sectionEl) return;
+                sectionsRoot.dataset.activeSection = sectionEl.id || 'active';
+                allSections().forEach(sec => sec.classList.toggle('is-active', sec === sectionEl));
+                sectionEl.querySelector(':scope > .tp-section-header')?.classList.add('is-open');
+                sectionEl.querySelector(':scope > .tp-section-body')?.classList.add('is-open');
+                if (titleEl) titleEl.textContent = sectionEl.querySelector(':scope > .tp-section-header span')?.textContent || '';
+                backBar?.classList.add('is-visible');
+                document.getElementById('toolsPanelBody')?.scrollTo?.(0, 0);
+            }
+
+            allSections().forEach(sec => {
+                sec.querySelector(':scope > .tp-section-header')?.addEventListener('click', () => showToolsDetail(sec));
+            });
+            backBtn?.addEventListener('click', showToolsMenu);
+
+            window._toolsShowMenu = showToolsMenu;
+        })();
 
         // ===================================================================
         // SIDEBAR TOGGLE
@@ -3773,6 +3892,63 @@ void main() {
             } finally {
                 saveChangesBtn.disabled = false;
                 saveChangesBtn.innerHTML = defaultSaveButtonMarkup;
+            }
+        });
+
+        // ===================================================================
+        // SAVE EXPLODED LAYOUT — separate from Save & Apply to AR: bakes the
+        // current explode offsets as permanent node translations. Also
+        // includes any other pending changes (material/transform/layers)
+        // via the same gatherModifications(), so it's a superset save.
+        // ===================================================================
+        const saveExplodedBtn = document.getElementById('saveExplodedLayout');
+        saveExplodedBtn?.addEventListener('click', async () => {
+            const explodeMods = window._layersGatherExplodeMods?.();
+            if (!explodeMods) {
+                alert('Drag Explode above 0% first, then save the layout.');
+                return;
+            }
+            if (!confirm('This permanently moves the exploded parts in the saved model, including in AR. Continue?')) {
+                return;
+            }
+
+            const modifications = gatherModifications();
+            modifications.explode = explodeMods;
+
+            const defaultExplodeButtonMarkup = saveExplodedBtn.innerHTML;
+            saveExplodedBtn.disabled = true;
+            saveExplodedBtn.innerHTML = '<i data-lucide="circle"></i> Saving...';
+
+            try {
+                if (modifications.material?._pendingTextureFile) {
+                    const file = modifications.material._pendingTextureFile;
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    modifications.material.texture = base64;
+                    delete modifications.material._pendingTextureFile;
+                }
+
+                const response = await fetch('/save_modifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId, modifications })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Save failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Save exploded layout error:', err);
+                alert('Failed to save exploded layout.');
+            } finally {
+                saveExplodedBtn.disabled = false;
+                saveExplodedBtn.innerHTML = defaultExplodeButtonMarkup;
             }
         });
 

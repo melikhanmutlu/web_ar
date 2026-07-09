@@ -264,6 +264,43 @@ def apply_layer_modifications(gltf, layer_mods):
     return gltf
 
 
+def apply_explode_modifications(gltf, explode_mods):
+    """
+    Permanently bake the viewer's exploded per-layer positions (normally
+    preview-only) into each mesh node's local transform, so AR viewers
+    (which load the GLB directly) show the exploded layout too.
+
+    Args:
+        gltf: GLTF2 object
+        explode_mods: {'positions': [{'name': str, 'occurrence': int, 'translation': [x, y, z]}, ...]}
+    """
+    if not gltf.nodes:
+        return gltf
+
+    mesh_nodes = _iter_gltf_mesh_nodes(gltf)
+
+    for entry in explode_mods.get('positions') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node is None:
+            continue
+        try:
+            translation = [float(c) for c in entry['translation'][:3]]
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+
+        if node.matrix:
+            # Column-major 4x4: elements 12-14 are the translation column,
+            # independent of whatever rotation/scale the other columns encode.
+            m = list(node.matrix)
+            m[12], m[13], m[14] = translation
+            node.matrix = m
+        else:
+            node.translation = translation
+        logger.info(f"Baked exploded position {translation} onto node '{node.name}'")
+
+    return gltf
+
+
 def _ensure_texcoord0(gltf):
     """
     Generate TEXCOORD_0 for mesh primitives that lack it.
@@ -1231,7 +1268,12 @@ def modify_glb(input_path, output_path, modifications):
         # Apply transform modifications
         if 'transform' in modifications:
             gltf = apply_transform_modifications(gltf, modifications['transform'])
-        
+
+        # Bake exploded layer positions (only present when the user explicitly
+        # pressed "Save Exploded Layout" — never part of a regular save)
+        if 'explode' in modifications:
+            gltf = apply_explode_modifications(gltf, modifications['explode'])
+
         # Export modified GLB
         logger.info(f"Exporting modified GLB to {output_path}")
         gltf.save(output_path)

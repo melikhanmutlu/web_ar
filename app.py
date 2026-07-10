@@ -36,6 +36,7 @@ import traceback
 import uuid
 import secrets
 import hashlib
+import math
 from urllib.parse import urlparse, urlsplit
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
@@ -1670,6 +1671,10 @@ def upload_file():
             use_color = bool(use_color_raw)
 
         color = request.form.get("color", "#4CAF50")
+        try:
+            color = validate_color(color)
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
         compression = request.form.get("compression")
         if compression not in (None, "none", "meshopt", "draco"):
             return jsonify({"success": False, "error": "Invalid compression mode"}), 400
@@ -1848,14 +1853,17 @@ def upload_model():
             max_dimension_str = request.form.get("maxDimension")
             if max_dimension_str:
                 try:
-                    max_dimension = (
-                        float(max_dimension_str) / 100.0
-                    )  # Convert cm to meters
+                    max_dimension = float(max_dimension_str) / 100.0
+                    if not math.isfinite(max_dimension) or not 0 < max_dimension <= 100:
+                        return jsonify({
+                            "success": False,
+                            "error": "Maximum dimension must be greater than 0 and no more than 100 meters",
+                        }), 400
                     logger.info(
                         f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)"
                     )
                 except ValueError:
-                    logger.warning(f"Invalid maxDimension value: {max_dimension_str}")
+                    return jsonify({"success": False, "error": "Invalid maximum dimension"}), 400
         else:
             logger.info(
                 "Maximum dimension limit disabled - model will keep original size"
@@ -3550,6 +3558,8 @@ def organization_members_api(organization_id):
         organization_id=organization_id, user_id=user.id
     ).first()
     if existing:
+        if existing.role == "owner":
+            return jsonify({"success": False, "error": "Owner membership cannot be changed"}), 409
         existing.role = role
     else:
         db.session.add(OrganizationMember(
@@ -3747,11 +3757,15 @@ def assign_model_organization(model_id):
     if model.user_id != current_user.id:
         return jsonify({"success": False, "error": "Only the model owner can assign a team"}), 403
     organization_id = (request.get_json(silent=True) or {}).get("organization_id")
+    try:
+        organization_id = int(organization_id) if organization_id is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid organization id"}), 400
     if organization_id is not None and not _organization_membership(
-        int(organization_id), {"owner", "admin"}
+        organization_id, {"owner", "admin"}
     ):
         return jsonify({"success": False, "error": "Organization admin role required"}), 403
-    model.organization_id = int(organization_id) if organization_id is not None else None
+    model.organization_id = organization_id
     db.session.commit()
     return jsonify({"success": True, "organization_id": model.organization_id})
 
@@ -3796,8 +3810,12 @@ def api_tokens():
     if not isinstance(scopes, list) or not scopes or not set(scopes) <= API_TOKEN_SCOPES:
         return jsonify({"success": False, "error": "Invalid scopes"}), 400
     organization_id = data.get("organization_id")
+    try:
+        organization_id = int(organization_id) if organization_id is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid organization id"}), 400
     if organization_id is not None and not _organization_membership(
-        int(organization_id), {"owner", "admin"}
+        organization_id, {"owner", "admin"}
     ):
         return jsonify({"success": False, "error": "Organization admin role required"}), 403
     expires_in_days = data.get("expires_in_days", 90)
@@ -3810,7 +3828,7 @@ def api_tokens():
     plaintext = "arv_" + secrets.token_urlsafe(32)
     token = ApiToken(
         user_id=current_user.id,
-        organization_id=int(organization_id) if organization_id is not None else None,
+        organization_id=organization_id,
         name=name or "API token",
         token_prefix=plaintext[:12],
         token_digest=hashlib.sha256(plaintext.encode()).hexdigest(),
@@ -4576,6 +4594,8 @@ def download_model(model_id):
         # Get the model from database
         session = Session(db.engine)
         model = session.get(UserModel, model_id)
+        if model is None or model.deleted_at is not None:
+            return "Model not found", 404
 
         # Check if user owns this model
         if model.user_id != current_user.id:

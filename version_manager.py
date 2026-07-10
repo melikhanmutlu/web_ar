@@ -36,8 +36,9 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
         version_number = (last_version.version_number + 1) if last_version else 1
         
         # Copy current model file to version storage
-        current_file = os.path.join('converted', model_id, 'model.glb')
-        version_file = os.path.join('converted', model_id, f'version_{version_number}.glb')
+        current_file = model.filename
+        model_dir = os.path.dirname(os.path.abspath(current_file))
+        version_file = os.path.join(model_dir, f'version_{version_number}.glb')
         
         if os.path.exists(current_file):
             shutil.copy2(current_file, version_file)
@@ -124,11 +125,14 @@ def restore_version(model_id, version_number):
         create_version(model_id, 'restore', {'restored_from': version_number}, f'Restored from version {version_number}')
         
         # Copy version file to current model
-        current_file = os.path.join('converted', model_id, 'model.glb')
+        model = UserModel.query.get(model_id)
+        if not model or not model.filename:
+            logger.error(f"Model {model_id} has no current file")
+            return False
+        current_file = model.filename
         shutil.copy2(version.filename, current_file)
         
         # Update model metadata
-        model = UserModel.query.get(model_id)
         if model and version.dimensions:
             model.original_dimensions = version.dimensions
             db.session.commit()

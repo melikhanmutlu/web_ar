@@ -39,5 +39,20 @@ def test_access_protected_route_without_login(client):
     """Test that protected routes redirect to login."""
     response = client.get('/profile', follow_redirects=True)
     assert response.status_code == 200
-    # Unauthenticated user should be redirected to login page for protected routes
     assert response.request.path == '/login'
+
+
+def test_login_rate_limit_blocks_brute_force(client):
+    from app import limiter
+
+    limiter.storage.reset()
+    limiter.enabled = True
+    try:
+        responses = [
+            client.post('/login', data={'username': 'missing', 'password': 'wrong'})
+            for _ in range(11)
+        ]
+        assert responses[-1].status_code == 429
+    finally:
+        limiter.storage.reset()
+        limiter.enabled = False

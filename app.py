@@ -51,7 +51,6 @@ from converters.glb_optimizer import optimize_glb
 from converters.glb_quality import finalize_glb
 import numpy as np
 from glb_modifier import modify_glb, normalize_model_to_center
-from mesh_slicer import slice_mesh, get_mesh_bounds
 from pygltflib import GLTF2
 import time
 from version_manager import (
@@ -452,8 +451,12 @@ def resolve_custom_domain():
 
 # Register blueprints
 app.register_blueprint(auth)
-app.view_functions["auth.login"] = limiter.limit("10 per minute")(app.view_functions["auth.login"])
-app.view_functions["auth.register"] = limiter.limit("5 per hour")(app.view_functions["auth.register"])
+app.view_functions["auth.login"] = limiter.limit(
+    "10 per minute", methods=["POST"]
+)(app.view_functions["auth.login"])
+app.view_functions["auth.register"] = limiter.limit(
+    "5 per hour", methods=["POST"]
+)(app.view_functions["auth.register"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
@@ -4298,7 +4301,18 @@ def save_viewer_thumbnail(unique_id):
         img_data = data["image"]
         # Strip data URL prefix if present
         img_data = re.sub(r"^data:image/\w+;base64,", "", img_data)
-        img_bytes = base64.b64decode(img_data)
+        try:
+            img_bytes = base64.b64decode(img_data, validate=True)
+            if len(img_bytes) > 5 * 1024 * 1024:
+                return jsonify({"error": "Thumbnail exceeds 5 MB"}), 413
+            from io import BytesIO
+            from PIL import Image
+            with Image.open(BytesIO(img_bytes)) as image:
+                image.verify()
+                if image.format != "PNG":
+                    return jsonify({"error": "Thumbnail must be a PNG image"}), 400
+        except (ValueError, OSError, base64.binascii.Error):
+            return jsonify({"error": "Invalid thumbnail image"}), 400
 
         thumb_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
         os.makedirs(thumb_dir, exist_ok=True)
@@ -4702,28 +4716,11 @@ def get_temp_file(filename):
     """Serve temporary files (like QR codes)."""
     return "Legacy temporary-file endpoint removed", 410
 
-    try:
-        temp_path = os.path.join(app.config["CONVERTED_FOLDER"], filename)
-        if os.path.exists(temp_path):
-            return send_file(temp_path)
-        else:
-            logger.error(f"Temp file not found: {temp_path}")
-            return "Dosya bulunamadı", 404
-    except Exception as e:
-        logger.error(f"Error serving temp file: {str(e)}")
-        return str(e), 500
-
 
 @app.route("/qr/<filename>")
 def get_qr_code(filename):
     """Serve QR code files."""
     return "Legacy QR endpoint removed", 410
-
-    try:
-        return send_from_directory(app.config["CONVERTED_FOLDER"], filename)
-    except Exception as e:
-        logger.error(f"Error serving QR code: {str(e)}")
-        return "QR code not found", 404
 
 
 @app.route("/delete_model/<string:model_id>", methods=["POST"])

@@ -259,6 +259,9 @@ class ModelHotspot(db.Model):
     # Metadata
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('model_id', 'hotspot_id', name='uq_model_hotspot_external_id'),
+    )
     
     def __repr__(self):
         return f'<ModelHotspot {self.title} on {self.model_id}>'
@@ -321,6 +324,9 @@ class ModelVersion(db.Model):
     
     # Optional: User comment
     comment = db.Column(db.String(500), nullable=True)
+    __table_args__ = (
+        db.UniqueConstraint('model_id', 'version_number', name='uq_model_version_number'),
+    )
     
     def __repr__(self):
         return f'<ModelVersion {self.model_id} v{self.version_number}>'
@@ -406,6 +412,10 @@ class ModelLike(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     session_id = db.Column(db.String(128), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('model_id', 'user_id', name='uq_model_like_user'),
+        db.UniqueConstraint('model_id', 'session_id', name='uq_model_like_session'),
+    )
 
     model = db.relationship('UserModel', backref=db.backref('likes', lazy=True, cascade='all, delete-orphan'))
 
@@ -415,6 +425,9 @@ class ModelSave(db.Model):
     model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('model_id', 'user_id', name='uq_model_save_user'),
+    )
 
     model = db.relationship('UserModel', backref=db.backref('saves', lazy=True, cascade='all, delete-orphan'))
 

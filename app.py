@@ -288,6 +288,11 @@ def healthz():
 @app.route("/metrics")
 def metrics():
     """Small Prometheus-compatible operational surface without user data."""
+    configured_token = app.config.get("METRICS_TOKEN", "")
+    if app.config.get("FLASK_ENV") == "production":
+        supplied_token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        if not configured_token or not secrets.compare_digest(supplied_token, configured_token):
+            abort(404)
     states = dict(
         db.session.query(ConversionJob.status, db.func.count(ConversionJob.id))
         .group_by(ConversionJob.status).all()
@@ -300,8 +305,8 @@ def metrics():
         lines.append(f'arvision_conversion_jobs{{status="{state}"}} {states.get(state, 0)}')
     completed = ConversionJob.query.filter(
         ConversionJob.finished_at.isnot(None), ConversionJob.started_at.isnot(None)
-    ).all()
-    durations = [(j.finished_at - j.started_at).total_seconds() for j in completed[-100:]]
+    ).order_by(ConversionJob.finished_at.desc()).limit(100).all()
+    durations = [(j.finished_at - j.started_at).total_seconds() for j in completed]
     lines.extend([
         "# HELP arvision_conversion_duration_seconds Average duration of recent conversions",
         "# TYPE arvision_conversion_duration_seconds gauge",
@@ -3223,9 +3228,11 @@ def track_share(model_id):
     denied = check_model_view_allowed(model_id)
     if denied:
         return jsonify({"error": denied.error}), denied.status
-    model.share_count = (model.share_count or 0) + 1
-    db.session.commit()
+    UserModel.query.filter_by(id=model_id).update({
+        UserModel.share_count: db.func.coalesce(UserModel.share_count, 0) + 1
+    })
     record_model_event(model_id, "share")
+    db.session.refresh(model)
     return jsonify({"shares": model.share_count})
 
 
@@ -3235,9 +3242,11 @@ def track_download(model_id):
     denied = check_model_view_allowed(model_id)
     if denied:
         return jsonify({"error": denied.error}), denied.status
-    model.download_count = (model.download_count or 0) + 1
-    db.session.commit()
+    UserModel.query.filter_by(id=model_id).update({
+        UserModel.download_count: db.func.coalesce(UserModel.download_count, 0) + 1
+    })
     record_model_event(model_id, "download")
+    db.session.refresh(model)
     return jsonify({"downloads": model.download_count})
 
 
@@ -3394,7 +3403,9 @@ def model_viewer_settings(model_id):
             current[field] = int(value) if field == "auto_rotate_delay" else value
     for field in ("auto_rotate", "show_dimensions", "show_ar"):
         if field in data:
-            current[field] = bool(data[field])
+            if not isinstance(data[field], bool):
+                return jsonify({"success": False, "error": f"{field} must be a boolean"}), 400
+            current[field] = data[field]
     if "background_color" in data:
         color = str(data["background_color"])
         if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
@@ -3424,7 +3435,9 @@ def model_viewer_settings(model_id):
                 return jsonify({"success": False, "error": "Invalid branding color"}), 400
             merged["primary_color"] = color
         if "hide_powered_by" in branding:
-            merged["hide_powered_by"] = bool(branding["hide_powered_by"])
+            if not isinstance(branding["hide_powered_by"], bool):
+                return jsonify({"success": False, "error": "hide_powered_by must be a boolean"}), 400
+            merged["hide_powered_by"] = branding["hide_powered_by"]
         current["branding"] = merged
     if "section_presets" in data:
         presets = data["section_presets"]
@@ -4875,9 +4888,14 @@ def create_folder():
 
         # Convert parent_id to int if it exists, otherwise None
         parent_id = int(parent_id) if parent_id else None
+        if parent_id is not None and not Folder.query.filter_by(
+            id=parent_id, user_id=current_user.id, organization_id=None
+        ).first():
+            flash("Parent folder not found", "error")
+            return redirect(url_for("my_models"))
 
         # Create a URL-friendly slug from the folder name
-        slug = slugify(folder_name)
+        slug = f"{slugify(folder_name)[:80] or 'folder'}-{secrets.token_hex(4)}"
 
         # Check if folder with same name exists in the same parent
         existing_folder = Folder.query.filter_by(
@@ -6083,18 +6101,15 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
     except Exception as e:
         logger.error(f"[register_glb] version failed: {e}")
 
-    try:
-        threading.Thread(target=generate_thumbnail_async,
-                         args=(unique_id, output_path, color), daemon=True).start()
-    except Exception as e:
-        logger.error(f"[register_glb] thumbnail thread failed: {e}")
-
+    _enqueue_internal_job(
+        "thumbnail", unique_id,
+        {"kind": "thumbnail", "color": color, "user_id": user_id},
+    )
     if not usdz_filename:
-        try:
-            threading.Thread(target=convert_usdz_async,
-                             args=(unique_id, output_path, usdz_path), daemon=True).start()
-        except Exception as e:
-            logger.error(f"[register_glb] usdz thread failed: {e}")
+        _enqueue_internal_job(
+            "usdz", unique_id,
+            {"kind": "usdz", "user_id": user_id},
+        )
 
     return model
 
@@ -6360,6 +6375,9 @@ def generate_3d():
         return jsonify({"success": False,
                         "error": "AI generation is not configured on this server."}), 503
 
+    # Serialize quota checks per user on PostgreSQL so concurrent requests
+    # cannot each observe the same remaining credit and overspend it.
+    db.session.query(User).filter_by(id=current_user.id).with_for_update().one()
     exceeded, count, limit = _ai_quota_state(current_user.id)
     if exceeded:
         return jsonify({"success": False,
@@ -6419,13 +6437,15 @@ def generate_3d_status(job_id):
     """Poll a generation job; advances text two-stage and finalizes on success."""
     import ai_generator
 
-    job = AIGenerationJob.query.get(job_id)
+    # Status polling advances the external two-stage workflow. Locking prevents
+    # simultaneous polls from launching duplicate paid refine/finalize work.
+    job = AIGenerationJob.query.filter_by(id=job_id).with_for_update().first()
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     if job.user_id != current_user.id:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
-    if job.status in ("ready", "failed"):
+    if job.status in ("ready", "failed", "finalizing"):
         resp = job.to_dict(); resp["success"] = True
         if job.status == "ready" and job.model_id:
             resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
@@ -6436,6 +6456,8 @@ def generate_3d_status(job_id):
             t = ai_generator.get_task("image", job.meshy_image_id)
             job.progress = min(99, t["progress"])
             if t["status"] == ai_generator.SUCCEEDED:
+                job.status = "finalizing"
+                db.session.commit()
                 return _finalize_ai_job(job, t)
             if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
                 job.status = "failed"
@@ -6455,15 +6477,25 @@ def generate_3d_status(job_id):
                 t = ai_generator.get_task("text", job.meshy_refine_id)
                 job.progress = min(99, 50 + t["progress"] // 2)
                 if t["status"] == ai_generator.SUCCEEDED:
+                    job.status = "finalizing"
+                    db.session.commit()
                     return _finalize_ai_job(job, t)
                 if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
                     job.status = "failed"
                     job.error = t.get("task_error") or "Texturing failed"
         db.session.commit()
     except ai_generator.MeshyError as e:
+        if job.status == "finalizing":
+            job.status = "failed"
+            job.error = str(e)[:2000]
+            db.session.commit()
         return jsonify({"success": False, "error": str(e)}), 502
     except Exception as e:
         logger.error(f"[generate-3d] status error: {e}", exc_info=True)
+        if job.status == "finalizing":
+            job.status = "failed"
+            job.error = "Finalization failed"
+            db.session.commit()
         return jsonify({"success": False, "error": "Status check failed."}), 500
 
     resp = job.to_dict(); resp["success"] = True

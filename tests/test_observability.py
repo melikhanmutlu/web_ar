@@ -29,3 +29,17 @@ def test_metrics_report_queue_state_and_duration(client):
     text = response.get_data(as_text=True)
     assert 'arvision_conversion_jobs{status="pending"} 1' in text
     assert "arvision_conversion_duration_seconds 5.000" in text
+
+
+def test_production_metrics_require_bearer_token(client):
+    app = client.application
+    previous_env = app.config.get("FLASK_ENV")
+    previous_token = app.config.get("METRICS_TOKEN")
+    app.config.update(FLASK_ENV="production", METRICS_TOKEN="metrics-secret")
+    try:
+        assert client.get("/metrics").status_code == 404
+        assert client.get(
+            "/metrics", headers={"Authorization": "Bearer metrics-secret"}
+        ).status_code == 200
+    finally:
+        app.config.update(FLASK_ENV=previous_env, METRICS_TOKEN=previous_token)

@@ -20,6 +20,7 @@ def _analytics_model():
 def test_privacy_safe_events_and_owner_summary(client):
     owner, model = _analytics_model()
     headers = {
+        "Origin": "http://localhost",
         "Referer": "https://shop.example/products/chair",
         "User-Agent": "Mobile Safari iPhone",
     }

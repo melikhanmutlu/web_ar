@@ -77,6 +77,7 @@ MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')
 MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-5')
 # Per-user daily generation quota (each generation costs Meshy credits = money).
 AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
+METRICS_TOKEN = os.getenv('METRICS_TOKEN', '')
 
 # Klasörleri oluştur
 def create_directories():

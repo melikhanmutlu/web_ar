@@ -2,7 +2,7 @@ import io
 from pathlib import Path
 
 import app as app_module
-from models import ConversionJob, UserModel, db
+from models import ConversionJob, Folder, User, UserModel, db
 
 def test_upload_without_login_creates_trackable_job(client, monkeypatch):
     monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
@@ -39,6 +39,25 @@ def test_owner_can_download_model(client, init_database):
     assert response.status_code == 200
     assert response.data == b'glTF'
     app_module.shutil.rmtree(model_dir, ignore_errors=True)
+
+
+def test_personal_folder_rejects_another_users_parent(client, init_database):
+    other = User(username="other-folder-user", email="other-folder@example.com")
+    other.set_password("password")
+    db.session.add(other)
+    db.session.flush()
+    foreign_parent = Folder(
+        name="Private", slug="private-parent", user_id=other.id,
+    )
+    db.session.add(foreign_parent)
+    db.session.commit()
+    client.post('/login', data={'username': 'testuser', 'password': 'testpassword'})
+    response = client.post(
+        '/create_folder',
+        data={'folder_name': 'Injected child', 'parent_id': foreign_parent.id},
+    )
+    assert response.status_code == 302
+    assert Folder.query.filter_by(name='Injected child').first() is None
 
 def test_upload_invalid_file_extension(client, init_database):
     # Log in first

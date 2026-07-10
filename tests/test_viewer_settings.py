@@ -61,3 +61,9 @@ def test_viewer_settings_validate_untrusted_branding_and_presets(client):
         f"/api/models/{model.id}/viewer-settings",
         json={"section_presets": [{"axis": "x", "value": "not-a-number"}]},
     ).status_code == 400
+    response = client.patch(
+        f"/api/models/{model.id}/viewer-settings",
+        json={"show_ar": "false"},
+    )
+    assert response.status_code == 400
+    assert "boolean" in response.get_json()["error"]

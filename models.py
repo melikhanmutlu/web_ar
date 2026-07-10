@@ -94,6 +94,7 @@ class UserModel(db.Model):
     edit_token_hash = db.Column(db.String(255), nullable=True)
     visibility = db.Column(db.String(20), nullable=False, default="unlisted", index=True)
     embed_allowed_domains = db.Column(db.Text, nullable=True)
+    validation_report = db.Column(db.JSON, nullable=True)
 
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)

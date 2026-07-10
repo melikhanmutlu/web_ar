@@ -55,7 +55,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
-from services import ConversionJobService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
+from services import AssetQualityService, ConversionJobService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -169,6 +169,10 @@ upload_staging = UploadStagingService(
     TEMP_FOLDER,
     max_uncompressed_bytes=MAX_CONTENT_LENGTH,
     max_archive_entries=ZIP_MAX_ENTRIES,
+)
+asset_quality = AssetQualityService(
+    warning_triangles=int(os.environ.get("GLB_WARNING_TRIANGLES", "250000")),
+    warning_bytes=int(os.environ.get("GLB_WARNING_BYTES", str(25 * 1024 * 1024))),
 )
 
 
@@ -2086,6 +2090,8 @@ def _run_upload_pipeline(payload, progress_callback=None):
             )
             # Continue even if normalization fails
 
+        quality_warnings = []
+        asset_report = None
         # GLB quality pass: embed stray external textures, guarantee PBR
         # materials, validate (warn-only — never blocks a viewable upload)
         try:
@@ -2098,6 +2104,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
                 logger.warning(f"[upload_model - {unique_id}] GLB quality: {w}")
         except Exception as e:
             logger.warning(f"[upload_model - {unique_id}] GLB quality pass skipped: {e}")
+        try:
+            asset_report = asset_quality.inspect(output_path, quality_warnings)
+        except Exception as e:
+            logger.warning(f"[upload_model - {unique_id}] Asset report failed: {e}")
+            asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
 
         # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
         # Start USDZ conversion in background thread to not block upload response
@@ -2292,6 +2303,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0
             edit_token_hash=payload.get("edit_token_hash"),
+            validation_report=asset_report,
+            vertices=(asset_report or {}).get("vertices"),
+            faces=(asset_report or {}).get("triangles"),
         )
         db.session.add(model)
         db.session.commit()
@@ -3088,6 +3102,27 @@ def get_model_bounds(model_id):
     except Exception as e:
         logger.error(f"Error in get_model_bounds: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/models/<model_id>/validation")
+def get_model_validation(model_id):
+    model = get_live_model(model_id)
+    if not model:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"success": False, "error": denied.error}), denied.status
+    report = model.validation_report
+    if report is None and model.filename and os.path.exists(model.filename):
+        try:
+            report = asset_quality.inspect(model.filename)
+            model.validation_report = report
+            model.vertices = report.get("vertices")
+            model.faces = report.get("triangles")
+            db.session.commit()
+        except Exception as exc:
+            return jsonify({"success": False, "error": f"Validation failed: {exc}"}), 422
+    return jsonify({"success": True, "report": report})
 
 
 # Route to serve converted model files

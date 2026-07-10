@@ -55,7 +55,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
-from services import AssetQualityService, ConversionJobService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
+from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -174,6 +174,7 @@ asset_quality = AssetQualityService(
     warning_triangles=int(os.environ.get("GLB_WARNING_TRIANGLES", "250000")),
     warning_bytes=int(os.environ.get("GLB_WARNING_BYTES", str(25 * 1024 * 1024))),
 )
+conversion_service = ConversionService(asset_quality)
 
 DEFAULT_VIEWER_SETTINGS = {
     "environment": "neutral",
@@ -2067,9 +2068,14 @@ def _run_upload_pipeline(payload, progress_callback=None):
 
     try:
         report(48, "Reading source", f"Inspecting {original_filename} and selected conversion options.")
-        # Instantiate appropriate converter
-        converter = None
-        if file_extension == ".obj":
+        conversion_result = conversion_service.convert(payload, output_path, progress=report)
+        converter = conversion_result["converter"]
+        service_converted = True
+        # Legacy orchestration below remains temporarily for dimension metadata;
+        # format dispatch itself is owned by ConversionService.
+        if service_converted:
+            pass
+        elif file_extension == ".obj":
             converter = OBJConverter()
             # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
             converter.set_source_unit(source_unit or "m")
@@ -2089,7 +2095,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
             converter = None  # No converter needed, handle directly below
 
         # Handle GLB/GLTF directly (no converter needed)
-        if file_extension in (".glb", ".gltf"):
+        if service_converted:
+            conversion_success = True
+        elif file_extension in (".glb", ".gltf"):
             try:
                 report(56, "Preparing GLB", "Copying or repacking the uploaded glTF asset.")
                 if file_extension == ".glb":
@@ -2184,10 +2192,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
         try:
             report(72, "Optimizing GLB", "Checking compression and viewer compatibility.")
             compression = payload.get("compression")
-            optimize_glb(
-                output_path,
-                enabled=None if compression is None else compression == "meshopt",
-            )
+            if not service_converted:
+                optimize_glb(
+                    output_path,
+                    enabled=None if compression is None else compression == "meshopt",
+                )
         except Exception as e:
             logger.warning(
                 f"[upload_model - {unique_id}] GLB optimization skipped: {e}"

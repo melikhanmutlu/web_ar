@@ -5,5 +5,6 @@ from .storage import StorageService
 from .conversion_jobs import ConversionJobService
 from .upload_staging import UploadStagingError, UploadStagingService
 from .asset_quality import AssetQualityService
+from .conversion import ConversionService
 
-__all__ = ["AccessDecision", "ModelAccessService", "StorageService", "ConversionJobService", "UploadStagingError", "UploadStagingService", "AssetQualityService"]
+__all__ = ["AccessDecision", "ModelAccessService", "StorageService", "ConversionJobService", "UploadStagingError", "UploadStagingService", "AssetQualityService", "ConversionService"]

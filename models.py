@@ -361,7 +361,7 @@ class ConversionJob(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # job UUID == future model id
     job_type = db.Column(db.String(20), nullable=False, default='upload')
     status = db.Column(db.String(20), nullable=False, default='pending', index=True)
-    # pending | processing | completed | failed
+    # pending | processing | completed | failed | dead_letter
 
     payload = db.Column(db.JSON, nullable=True)      # staged paths + options
     model_id = db.Column(db.String(36), nullable=True)  # UserModel.id when done
@@ -375,6 +375,10 @@ class ConversionJob(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     started_at = db.Column(db.DateTime, nullable=True)
     finished_at = db.Column(db.DateTime, nullable=True)
+    next_attempt_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_heartbeat_at = db.Column(db.DateTime, nullable=True)
+    events = db.relationship('ConversionJobEvent', backref='job', lazy=True,
+                             cascade='all, delete-orphan', order_by='ConversionJobEvent.created_at')
 
     def to_dict(self):
         return {
@@ -384,4 +388,33 @@ class ConversionJob(db.Model):
             'model_id': self.model_id,
             'error': self.error,
             'attempts': self.attempts,
+            'next_attempt_at': self.next_attempt_at.isoformat() if self.next_attempt_at else None,
+        }
+
+
+class WorkerHeartbeat(db.Model):
+    worker_id = db.Column(db.String(120), primary_key=True)
+    hostname = db.Column(db.String(255), nullable=True)
+    process_id = db.Column(db.Integer, nullable=True)
+    current_job_id = db.Column(db.String(36), nullable=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class ConversionJobEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(db.String(36), db.ForeignKey('conversion_job.id'), nullable=False, index=True)
+    level = db.Column(db.String(10), nullable=False, default='info')
+    event = db.Column(db.String(60), nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    attempt = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            'level': self.level,
+            'event': self.event,
+            'message': self.message,
+            'attempt': self.attempt,
+            'created_at': self.created_at.isoformat(),
         }

@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -38,7 +38,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from config import *
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.attributes import flag_modified
 import qrcode
 from slugify import slugify
 import trimesh
@@ -56,7 +55,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
-from services import ModelAccessService, StorageService
+from services import ConversionJobService, ModelAccessService, StorageService
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -161,6 +160,11 @@ limiter = Limiter(
 
 model_access = ModelAccessService(UserModel)
 storage = StorageService(CONVERTED_FOLDER, UPLOAD_FOLDER, TEMP_FOLDER)
+conversion_jobs = ConversionJobService(
+    db,
+    retry_base_seconds=int(os.environ.get("JOB_RETRY_BASE_SECONDS", "15")),
+    retry_max_seconds=int(os.environ.get("JOB_RETRY_MAX_SECONDS", "900")),
+)
 
 
 @app.errorhandler(429)
@@ -178,7 +182,19 @@ def healthz():
     except Exception:
         logger.exception("Database health check failed")
         return jsonify({"status": "unhealthy", "database": "down"}), 503
-    return jsonify({"status": "ok", "database": "up"})
+    result = {"status": "ok", "database": "up"}
+    if os.environ.get("JOB_QUEUE", "false").lower() in ("true", "1", "yes"):
+        cutoff = datetime.utcnow() - timedelta(
+            seconds=int(os.environ.get("WORKER_HEALTH_MAX_AGE_SECONDS", "90"))
+        )
+        active_workers = WorkerHeartbeat.query.filter(
+            WorkerHeartbeat.last_seen_at >= cutoff
+        ).count()
+        result["active_workers"] = active_workers
+        if active_workers == 0:
+            result["status"] = "degraded"
+            return jsonify(result), 503
+    return jsonify(result)
 
 
 @app.route("/metrics")
@@ -192,7 +208,7 @@ def metrics():
         "# HELP arvision_conversion_jobs Conversion jobs by current state",
         "# TYPE arvision_conversion_jobs gauge",
     ]
-    for state in ("pending", "processing", "completed", "failed"):
+    for state in ("pending", "processing", "completed", "failed", "dead_letter"):
         lines.append(f'arvision_conversion_jobs{{status="{state}"}} {states.get(state, 0)}')
     completed = ConversionJob.query.filter(
         ConversionJob.finished_at.isnot(None), ConversionJob.started_at.isnot(None)
@@ -1771,16 +1787,9 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
 
 
 def update_conversion_progress(job, *, progress=None, stage=None, detail=None):
-    payload = dict(job.payload or {})
-    if progress is not None:
-        payload["progress"] = int(max(0, min(100, progress)))
-    if stage is not None:
-        payload["stage"] = stage
-    if detail is not None:
-        payload["detail"] = detail
-    job.payload = payload
-    flag_modified(job, "payload")
-    db.session.commit()
+    conversion_jobs.update_progress(
+        job, progress=progress, stage=stage, detail=detail
+    )
 
 
 def run_conversion_job(job, allow_retry=True):
@@ -1790,10 +1799,7 @@ def run_conversion_job(job, allow_retry=True):
     worker retries), or 'failed' otherwise. Inline callers pass
     allow_retry=False because nothing would re-poll a pending job.
     """
-    job.status = "processing"
-    job.started_at = datetime.utcnow()
-    job.attempts = (job.attempts or 0) + 1
-    db.session.commit()
+    conversion_jobs.start(job)
     update_conversion_progress(
         job,
         progress=45,
@@ -1807,11 +1813,7 @@ def run_conversion_job(job, allow_retry=True):
                 job, progress=progress, stage=stage, detail=detail
             ),
         )
-        job.model_id = model_id
-        job.status = "completed"
-        job.error = None
-        job.finished_at = datetime.utcnow()
-        db.session.commit()
+        conversion_jobs.succeed(job, model_id)
         update_conversion_progress(
             job,
             progress=100,
@@ -1819,23 +1821,20 @@ def run_conversion_job(job, allow_retry=True):
             detail="The model is ready for the viewer.",
         )
     except Exception as e:
-        db.session.rollback()
-        retry = allow_retry and job.attempts < (job.max_attempts or 1)
-        job.status = "pending" if retry else "failed"
-        job.error = str(e)[:2000]
-        job.finished_at = None if retry else datetime.utcnow()
-        db.session.commit()
+        retry = conversion_jobs.fail(job, e, allow_retry=allow_retry)
         update_conversion_progress(
             job,
             progress=35 if retry else 100,
-            stage="Retrying" if retry else "Failed",
+            stage="Retrying" if retry else ("Dead letter" if allow_retry else "Failed"),
             detail=str(e)[:240],
         )
         logger.error(
             f"[conversion_job - {job.id}] attempt {job.attempts} failed "
             f"({'will retry' if retry else 'giving up'}): {e}"
         )
-        if not retry:
+        # Keep dead-letter staging for explicit replay/inspection. Inline jobs
+        # cannot be replayed, so their staged files are cleaned immediately.
+        if not retry and not allow_retry:
             staged_dir = (job.payload or {}).get("temp_dir")
             if staged_dir and os.path.exists(staged_dir):
                 try:
@@ -2313,9 +2312,37 @@ def upload_job_status(job_id):
     data["stage"] = payload.get("stage")
     data["detail"] = payload.get("detail")
     data["filename"] = payload.get("client_filename") or payload.get("original_filename")
+    data["events"] = [event.to_dict() for event in job.events[-50:]]
     if job.status == "completed" and job.model_id:
         data["viewer_url"] = url_for("view_model", model_id=job.model_id)
     return jsonify(data)
+
+
+@app.route("/api/upload-jobs/<job_id>/retry", methods=["POST"])
+@limiter.limit("10 per hour")
+def retry_upload_job(job_id):
+    """Explicitly replay a dead-lettered job after capability authorization."""
+    job = ConversionJob.query.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    is_owner = current_user.is_authenticated and job.user_id == current_user.id
+    token = request.headers.get("X-Job-Status-Token") or (request.get_json(silent=True) or {}).get("status_token")
+    if not is_owner and (not token or not job.status_token_hash or
+                         not check_password_hash(job.status_token_hash, token)):
+        return jsonify({"success": False, "error": "Valid status token required"}), 403
+    if job.status not in {"dead_letter", "failed"}:
+        return jsonify({"success": False, "error": "Only failed jobs can be retried"}), 409
+    staged_dir = (job.payload or {}).get("temp_dir")
+    if not staged_dir or not os.path.isdir(staged_dir):
+        return jsonify({"success": False, "error": "Staged upload is no longer available"}), 410
+    job.status = "pending"
+    job.attempts = 0
+    job.error = None
+    job.finished_at = None
+    job.next_attempt_at = datetime.utcnow()
+    db.session.commit()
+    conversion_jobs.record(job, "manually_requeued", "Job manually returned to queue")
+    return jsonify({"success": True, "status": job.status}), 202
 
 
 @app.route("/convert", methods=["POST"])

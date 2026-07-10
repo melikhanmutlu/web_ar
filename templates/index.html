@@ -613,7 +613,7 @@
                                 clearInterval(poll);
                                 const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
                                 finishUpload('Model converted successfully', viewerUrl);
-                            } else if (job.status === 'failed') {
+                            } else if (job.status === 'failed' || job.status === 'dead_letter') {
                                 clearInterval(poll);
                                 clearInterval(elapsedTimer);
                                 progressBar.classList.add('error');

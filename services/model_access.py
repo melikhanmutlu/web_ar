@@ -24,7 +24,7 @@ class ModelAccessService:
         self, model_id, *, actor_id=None, edit_token=None, share_can_edit=False,
         organization_can_edit=False, require_exists=True
     ):
-        model = self.model_type.query.get(model_id)
+        model = self.model_type.query.session.get(self.model_type, model_id)
         if model is None:
             if require_exists:
                 return None, AccessDecision(False, 404, "Model not found")
@@ -46,7 +46,7 @@ class ModelAccessService:
 
     def view_decision(self, model_id, *, actor_id=None, has_share_grant=False,
                       organization_member=False):
-        model = self.model_type.query.get(model_id)
+        model = self.model_type.query.session.get(self.model_type, model_id)
         if model is None or model.deleted_at is not None:
             return model, AccessDecision(False, 404, "Model not found")
         if (model.visibility == "private" and actor_id != model.user_id and

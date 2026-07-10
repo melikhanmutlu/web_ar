@@ -26,7 +26,7 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
         ModelVersion object or None
     """
     try:
-        model = UserModel.query.get(model_id)
+        model = db.session.get(UserModel, model_id)
         if not model:
             logger.error(f"Model {model_id} not found")
             return None
@@ -125,7 +125,7 @@ def restore_version(model_id, version_number):
         create_version(model_id, 'restore', {'restored_from': version_number}, f'Restored from version {version_number}')
         
         # Copy version file to current model
-        model = UserModel.query.get(model_id)
+        model = db.session.get(UserModel, model_id)
         if not model or not model.filename:
             logger.error(f"Model {model_id} has no current file")
             return False

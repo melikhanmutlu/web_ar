@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
+from services.time_utils import datetime
 import os
 import json
 from flask import (
@@ -191,7 +192,7 @@ login_manager.login_view = "auth.login"
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 
 # Rate limiting — keyed by user id when logged in, client IP otherwise.
@@ -1941,7 +1942,7 @@ def upload_model():
 
         def run_local_job(job_id):
             with app.app_context():
-                queued_job = ConversionJob.query.get(job_id)
+                queued_job = db.session.get(ConversionJob, job_id)
                 if queued_job:
                     run_conversion_job(queued_job, allow_retry=False)
 
@@ -2686,7 +2687,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
 def upload_job_status(job_id):
     """Poll a conversion job. Job ids are unguessable UUIDs; status is safe to
     expose without auth (mirrors the AI generation status endpoint)."""
-    job = ConversionJob.query.get(job_id)
+    job = db.session.get(ConversionJob, job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     is_owner = current_user.is_authenticated and job.user_id == current_user.id
@@ -2711,7 +2712,7 @@ def upload_job_status(job_id):
 @limiter.limit("10 per hour")
 def retry_upload_job(job_id):
     """Explicitly replay a dead-lettered job after capability authorization."""
-    job = ConversionJob.query.get(job_id)
+    job = db.session.get(ConversionJob, job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     is_owner = current_user.is_authenticated and job.user_id == current_user.id

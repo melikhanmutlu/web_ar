@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
+from services.time_utils import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
 

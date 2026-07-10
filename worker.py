@@ -15,7 +15,8 @@ import logging
 import os
 import time
 import socket
-from datetime import datetime, timedelta
+from datetime import timedelta
+from services.time_utils import datetime
 from sqlalchemy import or_
 
 from app import app, db, run_conversion_job

@@ -1,0 +1,14 @@
+.git
+.github
+.pytest_cache
+.pytest-tmp
+__pycache__
+*.pyc
+*.log
+.env
+instance
+uploads
+converted
+temp
+output
+reports

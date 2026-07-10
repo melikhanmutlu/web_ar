@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "python app.py",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "python -m pytest -q",
+    "check": "python -m py_compile app.py models.py worker.py"
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",

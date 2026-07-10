@@ -88,16 +88,20 @@ if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["CONVERTED_FOLDER"] = CONVERTED_FOLDER
 app.config["TEMP_FOLDER"] = TEMP_FOLDER
-app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100MB limit
-app.config["ALLOWED_EXTENSIONS"] = {"obj", "stl", "fbx", "glb", "gltf"}
+app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
+app.config["ALLOWED_EXTENSIONS"] = ALLOWED_EXTENSIONS
 
-# Constants
-UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-CONVERTED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "converted")
-TEMP_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
-QR_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_codes")
-ALLOWED_EXTENSIONS = {"obj", "stl", "fbx", "glb", "gltf"}
-MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB limit
+
+@app.context_processor
+def upload_capabilities():
+    """Expose the backend's authoritative upload policy to templates."""
+    extensions = sorted(app.config["ALLOWED_EXTENSIONS"])
+    return {
+        "upload_extensions": extensions,
+        "upload_accept": ",".join(f".{ext}" for ext in extensions),
+        "upload_max_bytes": app.config["MAX_CONTENT_LENGTH"],
+        "upload_max_mb": app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024),
+    }
 
 # Initialize extensions
 db.init_app(app)
@@ -1322,7 +1326,7 @@ def cleanup_old_backups(model_dir, max_backups=3):
 def get_usdz_status(model_id):
     """Check if USDZ file is ready for iOS AR viewing."""
     try:
-        model = UserModel.query.get(model_id)
+        model = get_live_model(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
 
@@ -1356,6 +1360,8 @@ def get_usdz_status(model_id):
 def upload_file():
     """DEPRECATED: Legacy upload route. Use /upload_model instead.
     Kept for backward compatibility with existing tests."""
+    return jsonify({"success": False, "error": "Legacy upload endpoint removed; use /upload_model"}), 410
+
     try:
         logger.info("Starting upload process")
 
@@ -3127,7 +3133,8 @@ def get_converted_file(filename):
     try:
         # Get model from database
         model = UserModel.query.filter_by(
-            filename=os.path.join(app.config["CONVERTED_FOLDER"], filename)
+            filename=os.path.join(app.config["CONVERTED_FOLDER"], filename),
+            deleted_at=None,
         ).first()
         if not model:
             app.logger.error(f"Model not found for file: {filename}")
@@ -3683,7 +3690,7 @@ def move_selected_models():
 @app.errorhandler(413)
 def too_large(e):
     return jsonify(
-        {"error": "Dosya boyutu çok büyük. Maksimum dosya boyutu 100MB."}
+        {"error": f"Dosya boyutu çok büyük. Maksimum dosya boyutu {app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)}MB."}
     ), 413
 
 
@@ -3736,6 +3743,10 @@ def apply_modifications():
                 {"success": False, "error": "Missing model_id or modifications"}
             ), 400
 
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
+
         logger.info(f"[apply_modifications] Model ID: {model_id}")
         logger.info(f"[apply_modifications] Modifications: {modifications}")
 
@@ -3784,6 +3795,9 @@ def apply_modifications():
 def download_modified(model_id, filename):
     """Download modified GLB file"""
     try:
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
         directory = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
         logger.info(f"[download_modified] Serving {filename} from {directory}")
 
@@ -3806,6 +3820,8 @@ def download_modified(model_id, filename):
 def get_model_dimensions(model_id):
     """Get model dimensions in meters"""
     try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
         glb_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
 
         if not os.path.exists(glb_path):
@@ -4014,6 +4030,8 @@ def save_modifications():
 def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
     try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
         from mesh_slicer import get_mesh_bounds as get_bounds
 
         model_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
@@ -4218,6 +4236,8 @@ def slice_model():
 def get_versions(model_id):
     """Get version history for a model"""
     try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
         versions = get_version_history(model_id)
         return jsonify(
             {
@@ -4291,6 +4311,8 @@ def delete_model_version(model_id, version_number):
 def download_version(model_id, version_number):
     """Download a specific version"""
     try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()
@@ -4322,7 +4344,7 @@ def download_version(model_id, version_number):
 def get_hotspots(model_id):
     """Get all hotspots for a model"""
     try:
-        model = UserModel.query.get(model_id)
+        model = get_live_model(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
 
@@ -4462,6 +4484,8 @@ def toggle_hotspots_visibility(model_id):
 def get_camera_views(model_id):
     """Get all saved camera views for a model"""
     try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
         views = CameraView.query.filter_by(model_id=model_id).order_by(CameraView.created_at).all()
         return jsonify({"success": True, "views": [v.to_dict() for v in views]})
     except Exception as e:

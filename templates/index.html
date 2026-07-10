@@ -597,10 +597,10 @@
             }
 
             // Queue mode: poll the job status endpoint until done
-            function pollUploadJob(jobId) {
+            function pollUploadJob(jobId, statusToken, editToken) {
                 setProgress(Math.max(currentProgress, 45), 'Conversion queued', 'Waiting for the conversion worker to pick up the model.', 'Queued');
                 const poll = setInterval(() => {
-                    fetch(`/api/upload-jobs/${jobId}`)
+                    fetch(`/api/upload-jobs/${jobId}`, {headers: {'X-Job-Status-Token': statusToken}})
                         .then(r => r.json())
                         .then(job => {
                             if (!job.success) return;
@@ -611,7 +611,8 @@
 
                             if (job.status === 'completed' && job.viewer_url) {
                                 clearInterval(poll);
-                                finishUpload('Model converted successfully', job.viewer_url);
+                                const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
+                                finishUpload('Model converted successfully', viewerUrl);
                             } else if (job.status === 'failed') {
                                 clearInterval(poll);
                                 clearInterval(elapsedTimer);
@@ -652,7 +653,7 @@
                         setProgress(96, 'Finalizing model', 'Conversion finished; preparing the viewer route.', 'Finalizing');
                         finishUpload(response.message, response.viewer_url);
                     } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.job_id) {
-                        pollUploadJob(response.job_id);
+                        pollUploadJob(response.job_id, response.status_token, response.edit_token);
                     } else {
                         throw new Error(response.error || 'Upload failed');
                     }

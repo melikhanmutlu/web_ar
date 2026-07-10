@@ -31,6 +31,8 @@ from auth import auth
 import re
 import traceback
 import uuid
+import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from config import *
 from sqlalchemy.orm import Session
@@ -156,6 +158,8 @@ def check_model_mutation_allowed(model_id, require_exists=True):
         if require_exists:
             return jsonify({"success": False, "error": "Model not found"}), 404
         return None
+    if model.deleted_at is not None:
+        return jsonify({"success": False, "error": "Model is in trash"}), 410
     if model.user_id is not None:
         is_owner = (
             current_user.is_authenticated and current_user.id == model.user_id
@@ -164,7 +168,20 @@ def check_model_mutation_allowed(model_id, require_exists=True):
             return jsonify(
                 {"success": False, "error": "Forbidden: you do not own this model"}
             ), 403
+    elif model.edit_token_hash:
+        body = request.get_json(silent=True) or {}
+        token = (request.headers.get("X-Model-Edit-Token") or
+                 request.args.get("edit_token") or body.get("edit_token") or
+                 session.get(f"model_edit_token:{model_id}"))
+        if not token or not check_password_hash(model.edit_token_hash, token):
+            return jsonify({"success": False, "error": "Valid edit token required"}), 403
+        session[f"model_edit_token:{model_id}"] = token
     return None
+
+
+def get_live_model(model_id):
+    """Find a model only when it is not in trash."""
+    return UserModel.query.filter_by(id=model_id, deleted_at=None).first()
 
 
 # Register blueprints
@@ -1356,6 +1373,8 @@ def upload_file():
 
         # Generate unique ID
         unique_id = str(uuid.uuid4())
+        edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
+        status_token = secrets.token_urlsafe(32)
         logger.info(f"Generated unique ID: {unique_id}")
 
         # Create upload subdirectory
@@ -1622,6 +1641,7 @@ def upload_model():
             "max_dimension": max_dimension,
             "source_unit": request.form.get("sourceUnit"),
             "user_id": current_user.id if current_user.is_authenticated else None,
+            "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
         }
         job = ConversionJob(
             id=unique_id,
@@ -1629,6 +1649,7 @@ def upload_model():
             status="pending",
             payload=payload,
             user_id=payload["user_id"],
+            status_token_hash=generate_password_hash(status_token),
         )
         db.session.add(job)
         db.session.commit()
@@ -1641,6 +1662,8 @@ def upload_model():
                     "job_id": unique_id,
                     "status": "pending",
                     "status_url": url_for("upload_job_status", job_id=unique_id),
+                    "status_token": status_token,
+                    "edit_token": edit_token,
                 }
             ), 202
 
@@ -1657,6 +1680,8 @@ def upload_model():
                 "job_id": unique_id,
                 "status": "pending",
                 "status_url": url_for("upload_job_status", job_id=unique_id),
+                "status_token": status_token,
+                "edit_token": edit_token,
             }
         ), 202
 
@@ -2151,6 +2176,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0
+            edit_token_hash=payload.get("edit_token_hash"),
         )
         db.session.add(model)
         db.session.commit()
@@ -2210,6 +2236,11 @@ def upload_job_status(job_id):
     job = ConversionJob.query.get(job_id)
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
+    is_owner = current_user.is_authenticated and job.user_id == current_user.id
+    token = request.headers.get("X-Job-Status-Token") or request.args.get("status_token")
+    if not is_owner and (not token or not job.status_token_hash or
+                         not check_password_hash(job.status_token_hash, token)):
+        return jsonify({"success": False, "error": "Valid status token required"}), 403
     data = job.to_dict()
     data["success"] = True
     payload = job.payload or {}
@@ -2526,7 +2557,7 @@ def view_model(model_id):
 @app.route("/embed/<model_id>")
 def embed_view(model_id):
     """Minimal embed viewer for iframe integration (e-commerce, portfolios)."""
-    model = UserModel.query.get(model_id)
+    model = get_live_model(model_id)
     if not model:
         return "Model not found", 404
 
@@ -2579,7 +2610,7 @@ def embed_view(model_id):
 @app.route("/vr/<model_id>")
 def vr_view(model_id):
     """VR viewer page for a specific model using A-Frame."""
-    model = UserModel.query.get(model_id)
+    model = get_live_model(model_id)
     if not model:
         flash("Model not found", "error")
         return redirect(url_for("index"))
@@ -2791,6 +2822,8 @@ def serve_converted_file(unique_id, filename):
     # Validate unique_id is a proper UUID to prevent path traversal
     if not _UUID_RE.match(unique_id):
         app.logger.warning(f"Invalid unique_id format rejected: {unique_id}")
+        return "Not Found", 404
+    if not get_live_model(unique_id):
         return "Not Found", 404
     directory = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     app.logger.info(f"Attempting to serve file: {filename} from directory: {directory}")

@@ -91,6 +91,7 @@ class UserModel(db.Model):
 
     # Soft delete: set when moved to trash, files stay on disk until purge
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
+    edit_token_hash = db.Column(db.String(255), nullable=True)
 
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)
@@ -346,6 +347,7 @@ class ConversionJob(db.Model):
     model_id = db.Column(db.String(36), nullable=True)  # UserModel.id when done
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     error = db.Column(db.Text, nullable=True)
+    status_token_hash = db.Column(db.String(255), nullable=True)
 
     attempts = db.Column(db.Integer, nullable=False, default=0)
     max_attempts = db.Column(db.Integer, nullable=False, default=2)

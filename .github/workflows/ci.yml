@@ -22,7 +22,13 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt pytest pip-audit bandit
       - run: python -m py_compile app.py models.py worker.py
-      - run: python -m pytest -q
+      - run: python -m pytest -q --junitxml=test-results.xml
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results
+          path: test-results.xml
       - run: pip-audit -r requirements.txt
       - run: bandit -r services converters auth.py -ll
 

@@ -259,9 +259,8 @@ def metrics():
 def check_model_mutation_allowed(model_id, require_exists=True):
     """Owner guard for model mutation endpoints.
 
-    Anonymous models (user_id is None) stay editable by anyone — anonymous
-    usage is an intentional product decision. Models owned by a user can only
-    be mutated by that user. Returns a (response, status) tuple to return from
+    Anonymous models require their edit capability token. User and organization
+    models require owner/editor authorization. Returns a response tuple to return from
     the view, or None when the mutation is allowed.
     """
     body = request.get_json(silent=True) or {}
@@ -1592,7 +1591,7 @@ def upload_file():
 
         color = request.form.get("color", "#4CAF50")
         compression = request.form.get("compression")
-        if compression not in (None, "none", "meshopt"):
+        if compression not in (None, "none", "meshopt", "draco"):
             return jsonify({"success": False, "error": "Invalid compression mode"}), 400
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
 
@@ -1915,7 +1914,7 @@ def batch_upload_models():
                 "color": "#FFFFFF",
                 "max_dimension": None,
                 "source_unit": request.form.get("sourceUnit"),
-                "compression": request.form.get("compression") if request.form.get("compression") in ("none", "meshopt") else None,
+                "compression": request.form.get("compression") if request.form.get("compression") in ("none", "meshopt", "draco") else None,
                 "user_id": user_id,
                 "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
             }

@@ -78,3 +78,20 @@ def test_meshopt_can_be_forced_per_upload(monkeypatch):
     assert root.stat().st_size == 20
     assert not glb_optimizer.optimize_glb(str(root), enabled=False)
     root.unlink(missing_ok=True)
+
+
+def test_draco_can_be_selected_per_upload(monkeypatch):
+    root = Path(".test-draco.glb").resolve()
+    root.write_bytes(b"x" * 100)
+    monkeypatch.setattr(glb_optimizer, "_resolve_gltf_transform", lambda: ["gltf-transform"])
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        Path(str(root) + ".opt.glb").write_bytes(b"z" * 25)
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(glb_optimizer.subprocess, "run", fake_run)
+    assert glb_optimizer.optimize_glb(str(root), enabled=True, mode="draco")
+    assert captured["args"][-2:] == ["--compress", "draco"]
+    root.unlink(missing_ok=True)

@@ -12,6 +12,7 @@
     "security": "npm audit --audit-level=high"
   },
   "dependencies": {
+    "@gltf-transform/cli": "^4.4.1",
     "@google/model-viewer": "^4.2.0",
     "fbx2gltf": "^0.9.7-p1",
     "gltfpack": "^1.1.0",

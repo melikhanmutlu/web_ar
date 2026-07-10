@@ -69,11 +69,22 @@ def _resolve_gltfpack():
     return None
 
 
+def _resolve_gltf_transform():
+    direct = shutil.which("gltf-transform")
+    if direct:
+        return [direct]
+    npx = shutil.which("npx")
+    if not npx and platform.system() == "Windows":
+        win_npx = r"C:\Program Files\nodejs\npx.cmd"
+        npx = win_npx if os.path.exists(win_npx) else None
+    return [npx, "gltf-transform"] if npx else None
+
+
 def is_enabled() -> bool:
     return os.environ.get("GLB_OPTIMIZE", "false").strip().lower() == "true"
 
 
-def optimize_glb(glb_path: str, timeout: int = 300, enabled=None) -> bool:
+def optimize_glb(glb_path: str, timeout: int = 300, enabled=None, mode="meshopt") -> bool:
     """Compress a GLB in place with gltfpack when GLB_OPTIMIZE=true.
 
     Returns True only if optimization ran and replaced the file with a smaller one;
@@ -87,16 +98,22 @@ def optimize_glb(glb_path: str, timeout: int = 300, enabled=None) -> bool:
     if not glb_path or not os.path.exists(glb_path):
         return False
 
-    cmd_base = _resolve_gltfpack()
+    if mode not in {"meshopt", "draco"}:
+        logger.warning("Unknown GLB compression mode: %s", mode)
+        return False
+    cmd_base = _resolve_gltf_transform() if mode == "draco" else _resolve_gltfpack()
     if not cmd_base:
-        logger.warning("GLB_OPTIMIZE is on but gltfpack is not available; skipping")
+        logger.warning("GLB_OPTIMIZE is on but the %s optimizer is not available; skipping", mode)
         return False
 
     tmp_out = glb_path + ".opt.glb"
     # -cc: meshopt compression (decoded natively by model-viewer)
     # -kn / -ke / -km: keep named nodes, extras and materials so the material editor,
     #                  hotspots and animations keep working after optimization.
-    cmd = cmd_base + ["-i", glb_path, "-o", tmp_out, "-cc", "-kn", "-ke", "-km"]
+    if mode == "draco":
+        cmd = cmd_base + ["optimize", glb_path, tmp_out, "--compress", "draco"]
+    else:
+        cmd = cmd_base + ["-i", glb_path, "-o", tmp_out, "-cc", "-kn", "-ke", "-km"]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)

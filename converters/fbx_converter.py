@@ -634,7 +634,7 @@ class FBXConverter(BaseConverter):
                     # NOTE: Draco compression disabled - it corrupts textures and geometry
                     # Ensure FBX2glTF has execute permissions
                     try:
-                        os.chmod(self.fbx2gltf_path, 0o755)
+                        os.chmod(self.fbx2gltf_path, 0o700)
                         self.log_operation(
                             f"Set execute permissions for {self.fbx2gltf_path}"
                         )

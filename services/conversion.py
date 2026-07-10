@@ -89,7 +89,8 @@ class ConversionService:
         compression = payload.get("compression")
         optimize_glb(
             output_path,
-            enabled=None if compression is None else compression == "meshopt",
+            enabled=None if compression is None else compression in {"meshopt", "draco"},
+            mode=compression if compression in {"meshopt", "draco"} else "meshopt",
         )
         if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError("Processed file missing or empty")

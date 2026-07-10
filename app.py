@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -1972,6 +1972,8 @@ def run_conversion_job(job, allow_retry=True):
         )
         if job.job_type == "lod":
             model_id = _run_lod_pipeline(job.payload, progress_callback=callback)
+        elif job.job_type in {"retopology", "texture_upscale"}:
+            model_id = _run_derived_pipeline(job.payload, progress_callback=callback)
         else:
             model_id = _run_upload_pipeline(job.payload, progress_callback=callback)
         conversion_jobs.succeed(job, model_id)
@@ -2037,6 +2039,52 @@ def _run_lod_pipeline(payload, progress_callback=None):
         db.session.commit()
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+    return model_id
+
+
+def _run_derived_pipeline(payload, progress_callback=None):
+    model_id = payload["model_id"]
+    kind = payload["kind"]
+    model = get_live_model(model_id)
+    if not model or not os.path.isfile(model.filename):
+        raise RuntimeError("Model source is unavailable")
+    report = progress_callback or (lambda *_: None)
+    model_dir = os.path.dirname(model.filename)
+    if kind == "retopology":
+        from converters.lod_generator import generate_lods
+        report(55, "Retopologizing", "Building a cleaner reduced-topology variant.")
+        temp_dir = os.path.join(model_dir, ".retopology_" + payload["job_id"])
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        try:
+            output = generate_lods(
+                model.filename, temp_dir,
+                ratios=[payload.get("ratio", 0.65)], meshopt=False,
+            )[0]
+            filename = "model_retopology.glb"
+            destination = os.path.join(model_dir, filename)
+            os.replace(output["path"], destination)
+            metadata = {"ratio": output["ratio"], "method": "gltfpack-simplify"}
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    elif kind == "texture_upscale":
+        from converters.texture_upscale import upscale_embedded_textures
+        report(55, "Upscaling textures", "Resampling embedded textures into a high-resolution variant.")
+        filename = f"model_textures_{int(payload.get('factor', 2))}x.glb"
+        destination = os.path.join(model_dir, filename)
+        temp = destination + ".tmp"
+        metadata = upscale_embedded_textures(
+            model.filename, temp, factor=payload.get("factor", 2)
+        )
+        finalize_glb(temp, search_dirs=[model_dir], strict=True)
+        os.replace(temp, destination)
+    else:
+        raise RuntimeError("Unknown derived asset kind")
+    ModelDerivedAsset.query.filter_by(model_id=model_id, kind=kind).delete()
+    db.session.add(ModelDerivedAsset(
+        model_id=model_id, kind=kind, filename=destination,
+        file_size=os.path.getsize(destination), asset_metadata=metadata,
+    ))
+    db.session.commit()
     return model_id
 
 
@@ -4002,6 +4050,60 @@ def model_exploded_asset(model_id):
     return jsonify({"success": True, "url": url_for(
         "serve_converted_file", unique_id=model_id, filename=filename
     ), "factor": factor})
+
+
+@app.route("/api/models/<model_id>/derivatives", methods=["GET", "POST"])
+@limiter.limit("20 per hour")
+def model_derivatives(model_id):
+    model = get_live_model(model_id)
+    if not model:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    if request.method == "GET":
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
+        assets = ModelDerivedAsset.query.filter_by(model_id=model_id).all()
+        return jsonify({"success": True, "assets": [{
+            "kind": asset.kind, "file_size": asset.file_size,
+            "metadata": asset.asset_metadata,
+            "url": url_for("serve_converted_file", unique_id=model_id,
+                           filename=os.path.basename(asset.filename)),
+        } for asset in assets]})
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
+    data = request.get_json(silent=True) or {}
+    kind = data.get("kind")
+    if kind not in {"retopology", "texture_upscale"}:
+        return jsonify({"success": False, "error": "Invalid derivative kind"}), 400
+    payload = {"model_id": model_id, "kind": kind}
+    if kind == "retopology":
+        try:
+            ratio = float(data.get("ratio", 0.65))
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid ratio"}), 400
+        if not 0.1 <= ratio <= 0.9:
+            return jsonify({"success": False, "error": "Ratio must be 0.1-0.9"}), 400
+        payload["ratio"] = ratio
+    else:
+        factor = data.get("factor", 2)
+        if factor not in {2, 4}:
+            return jsonify({"success": False, "error": "Factor must be 2 or 4"}), 400
+        payload["factor"] = factor
+    job_id = str(uuid.uuid4())
+    payload["job_id"] = job_id
+    status_token = secrets.token_urlsafe(32)
+    db.session.add(ConversionJob(
+        id=job_id, job_type=kind, status="pending", payload=payload,
+        user_id=model.user_id, status_token_hash=generate_password_hash(status_token),
+    ))
+    db.session.commit()
+    if not JOB_QUEUE_ENABLED:
+        _start_local_conversion(job_id)
+    return jsonify({
+        "success": True, "job_id": job_id, "status_token": status_token,
+        "status_url": url_for("upload_job_status", job_id=job_id),
+    }), 202
 
 
 # Route to serve converted model files

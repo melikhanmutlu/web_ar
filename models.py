@@ -360,6 +360,17 @@ class ModelLOD(db.Model):
         }
 
 
+class ModelDerivedAsset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    kind = db.Column(db.String(40), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    asset_metadata = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (db.UniqueConstraint('model_id', 'kind', name='uq_model_derived_kind'),)
+
+
 class CameraView(db.Model):
     """Saved camera views for 3D models"""
     id = db.Column(db.Integer, primary_key=True)

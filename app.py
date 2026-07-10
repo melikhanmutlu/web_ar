@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, ApiToken, PromptPreset, ModelVersion, ModelLOD, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, ModelVersion, ModelLOD, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -344,6 +344,28 @@ def record_model_event(model_id, event_type, metadata=None):
         event_metadata=clean_metadata or None,
     ))
     db.session.commit()
+
+
+@app.before_request
+def resolve_custom_domain():
+    hostname = request.host.split(":", 1)[0].strip().lower().rstrip(".")
+    g.custom_domain = OrganizationDomain.query.filter_by(hostname=hostname).filter(
+        OrganizationDomain.verified_at.isnot(None)
+    ).first()
+    if g.custom_domain and request.endpoint == "index" and request.method == "GET":
+        organization = g.custom_domain.organization
+        models = UserModel.query.filter(
+            UserModel.organization_id == organization.id,
+            UserModel.visibility == "public",
+            UserModel.deleted_at.is_(None),
+        ).order_by(UserModel.upload_date.desc()).all()
+        branding = DEFAULT_VIEWER_SETTINGS["branding"]
+        if models:
+            branding = resolved_viewer_settings(models[0])["branding"]
+        return render_template(
+            "custom_domain.html", organization=organization,
+            models=models, branding=branding,
+        )
 
 
 # Register blueprints
@@ -3369,6 +3391,91 @@ def organization_member_api(organization_id, user_id):
     target.role = role
     db.session.commit()
     return jsonify({"success": True, "role": role})
+
+
+@app.route("/api/organizations/<int:organization_id>/domains", methods=["GET", "POST"])
+@login_required
+def organization_domains_api(organization_id):
+    if not _organization_membership(organization_id, {"owner", "admin"}):
+        return jsonify({"success": False, "error": "Organization admin role required"}), 403
+    if request.method == "GET":
+        domains = OrganizationDomain.query.filter_by(organization_id=organization_id).all()
+        return jsonify({"success": True, "domains": [{
+            "id": domain.id, "hostname": domain.hostname,
+            "verified": domain.verified_at is not None,
+            "verified_at": domain.verified_at.isoformat() if domain.verified_at else None,
+            "dns_record": {
+                "type": "TXT", "name": f"_arvision.{domain.hostname}",
+                "value": f"arvision-verification={domain.verification_token}",
+            },
+        } for domain in domains]})
+    raw_hostname = str((request.get_json(silent=True) or {}).get("hostname", "")).strip().lower().rstrip(".")
+    try:
+        hostname = raw_hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        return jsonify({"success": False, "error": "Invalid hostname"}), 400
+    if (len(hostname) > 253 or hostname in {"localhost", "127.0.0.1"} or
+            not re.fullmatch(r"(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}", hostname)):
+        return jsonify({"success": False, "error": "A valid public hostname is required"}), 400
+    if OrganizationDomain.query.filter_by(hostname=hostname).first():
+        return jsonify({"success": False, "error": "Hostname is already registered"}), 409
+    domain = OrganizationDomain(
+        organization_id=organization_id,
+        hostname=hostname,
+        verification_token=secrets.token_urlsafe(24),
+    )
+    db.session.add(domain)
+    db.session.commit()
+    return jsonify({
+        "success": True, "id": domain.id, "hostname": hostname,
+        "dns_record": {
+            "type": "TXT", "name": f"_arvision.{hostname}",
+            "value": f"arvision-verification={domain.verification_token}",
+        },
+    }), 201
+
+
+@app.route("/api/organizations/<int:organization_id>/domains/<int:domain_id>/verify", methods=["POST"])
+@login_required
+def verify_organization_domain(organization_id, domain_id):
+    if not _organization_membership(organization_id, {"owner", "admin"}):
+        return jsonify({"success": False, "error": "Organization admin role required"}), 403
+    domain = OrganizationDomain.query.filter_by(
+        id=domain_id, organization_id=organization_id
+    ).first_or_404()
+    import requests as http_requests
+    try:
+        response = http_requests.get(
+            "https://dns.google/resolve",
+            params={"name": f"_arvision.{domain.hostname}", "type": "TXT"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        answers = response.json().get("Answer", [])
+    except Exception as exc:
+        logger.warning("Domain DNS verification failed for %s: %s", domain.hostname, exc)
+        return jsonify({"success": False, "error": "DNS lookup failed"}), 502
+    expected = f"arvision-verification={domain.verification_token}"
+    values = [str(answer.get("data", "")).strip('"').replace('" "', '') for answer in answers]
+    if expected not in values:
+        return jsonify({"success": False, "verified": False,
+                        "error": "Verification TXT record was not found"}), 409
+    domain.verified_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "verified": True, "hostname": domain.hostname})
+
+
+@app.route("/api/organizations/<int:organization_id>/domains/<int:domain_id>", methods=["DELETE"])
+@login_required
+def delete_organization_domain(organization_id, domain_id):
+    if not _organization_membership(organization_id, {"owner", "admin"}):
+        return jsonify({"success": False, "error": "Organization admin role required"}), 403
+    domain = OrganizationDomain.query.filter_by(
+        id=domain_id, organization_id=organization_id
+    ).first_or_404()
+    db.session.delete(domain)
+    db.session.commit()
+    return jsonify({"success": True})
 
 
 @app.route("/api/models/<model_id>/organization", methods=["PATCH"])

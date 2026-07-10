@@ -83,6 +83,16 @@ class OrganizationMember(db.Model):
     __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
 
 
+class OrganizationDomain(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False, index=True)
+    hostname = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    verification_token = db.Column(db.String(80), nullable=False)
+    verified_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    organization = db.relationship('Organization', backref=db.backref('domains', lazy=True, cascade='all, delete-orphan'))
+
+
 class ApiToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)

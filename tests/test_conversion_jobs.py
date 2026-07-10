@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from werkzeug.security import generate_password_hash
 
-from models import ConversionJob, db
+from models import ConversionJob, ModelAnalyticsEvent, ModelDerivedAsset, ModelLOD, ModelLike, ModelSave, UserModel, db
 from services import ConversionJobService
 from worker import claim_next_job, record_worker_heartbeat, WORKER_ID
 
@@ -70,3 +70,35 @@ def test_dead_letter_can_be_manually_requeued_with_status_token(client):
     assert job.status == "pending"
     assert job.attempts == 0
     staged.rmdir()
+
+
+def test_progress_refreshes_job_heartbeat(client):
+    service = ConversionJobService(db)
+    job = ConversionJob(id="heartbeat-job", status="processing")
+    db.session.add(job)
+    db.session.commit()
+    service.update_progress(job, progress=50, stage="Converting")
+    assert job.last_heartbeat_at is not None
+
+
+def test_model_delete_cascades_product_records(client):
+    model = UserModel(id="cascade-model", filename="unused.glb")
+    db.session.add(model)
+    db.session.flush()
+    db.session.add_all([
+        ModelAnalyticsEvent(model_id=model.id, event_type="view"),
+        ModelLOD(model_id=model.id, level=1, ratio=.5, filename="lod.glb", file_size=1),
+        ModelDerivedAsset(model_id=model.id, kind="retopology", filename="r.glb", file_size=1),
+        ModelLike(model_id=model.id, session_id="session"),
+        ModelSave(model_id=model.id, user_id=1),
+    ])
+    # ModelSave's user FK is not relevant to the model cascade assertion and
+    # SQLite's test database intentionally does not enforce that separate FK.
+    db.session.commit()
+    db.session.delete(model)
+    db.session.commit()
+    assert ModelAnalyticsEvent.query.count() == 0
+    assert ModelLOD.query.count() == 0
+    assert ModelDerivedAsset.query.count() == 0
+    assert ModelLike.query.count() == 0
+    assert ModelSave.query.count() == 0

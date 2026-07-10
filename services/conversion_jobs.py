@@ -20,6 +20,8 @@ class ConversionJobService:
         if detail is not None:
             payload["detail"] = detail
         job.payload = payload
+        if job.status == "processing":
+            job.last_heartbeat_at = datetime.utcnow()
         flag_modified(job, "payload")
         self.db.session.commit()
 

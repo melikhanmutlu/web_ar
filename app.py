@@ -1966,6 +1966,24 @@ def _start_local_conversion(job_id):
     threading.Thread(target=run_local_job, daemon=True).start()
 
 
+def _enqueue_internal_job(job_type, model_id, payload):
+    """Persist a follow-up asset job before optionally starting it locally."""
+    job_id = str(uuid.uuid4())
+    job = ConversionJob(
+        id=job_id,
+        job_type=job_type,
+        status="pending",
+        model_id=model_id,
+        user_id=payload.get("user_id"),
+        payload={**payload, "model_id": model_id, "job_id": job_id},
+    )
+    db.session.add(job)
+    db.session.commit()
+    if not JOB_QUEUE_ENABLED:
+        _start_local_conversion(job_id)
+    return job
+
+
 @app.route("/api/uploads/batch", methods=["POST"])
 @limiter.limit("10 per hour")
 def batch_upload_models():
@@ -2054,6 +2072,8 @@ def run_conversion_job(job, allow_retry=True):
             model_id = _run_lod_pipeline(job.payload, progress_callback=callback)
         elif job.job_type in {"retopology", "texture_upscale"}:
             model_id = _run_derived_pipeline(job.payload, progress_callback=callback)
+        elif job.job_type in {"thumbnail", "usdz"}:
+            model_id = _run_auxiliary_asset_pipeline(job.payload, progress_callback=callback)
         else:
             model_id = _run_upload_pipeline(job.payload, progress_callback=callback)
         conversion_jobs.succeed(job, model_id)
@@ -2165,6 +2185,31 @@ def _run_derived_pipeline(payload, progress_callback=None):
         file_size=os.path.getsize(destination), asset_metadata=metadata,
     ))
     db.session.commit()
+    return model_id
+
+
+def _run_auxiliary_asset_pipeline(payload, progress_callback=None):
+    model_id = payload["model_id"]
+    model = get_live_model(model_id)
+    if not model or not model.filename or not os.path.isfile(model.filename):
+        raise RuntimeError("Model source is unavailable")
+    report = progress_callback or (lambda *_: None)
+    if payload.get("kind") == "usdz":
+        report(55, "Preparing iOS AR", "Converting the model to USDZ.")
+        output_path = os.path.join(os.path.dirname(model.filename), "model.usdz")
+        if not convert_to_usdz(model.filename, output_path):
+            raise RuntimeError("USDZ conversion failed")
+        model.usdz_filename = output_path
+        db.session.commit()
+    elif payload.get("kind") == "thumbnail":
+        report(55, "Creating preview", "Rendering the model thumbnail.")
+        generate_thumbnail_async(model_id, model.filename, payload.get("color"))
+        output_path = os.path.join(os.path.dirname(model.filename), "thumbnail.png")
+        if not os.path.isfile(output_path):
+            raise RuntimeError("Thumbnail generation failed")
+    else:
+        raise RuntimeError("Unknown auxiliary asset kind")
+    report(95, "Publishing asset", "The generated asset is ready.")
     return model_id
 
 
@@ -2390,27 +2435,6 @@ def _run_upload_pipeline(payload, progress_callback=None):
             logger.warning(f"[upload_model - {unique_id}] Asset report failed: {e}")
             asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
 
-        # --- USDZ Conversion for iOS AR (using Blender) - ASYNC ---
-        # Start USDZ conversion in background thread to not block upload response
-        usdz_output_path = os.path.join(converted_dir, "model.usdz")
-        try:
-            report(88, "Preparing AR assets", "Starting background USDZ generation for iOS AR.")
-            logger.info(
-                f"[upload_model - {unique_id}] Starting ASYNC USDZ conversion in background"
-            )
-            usdz_thread = threading.Thread(
-                target=convert_usdz_async,
-                args=(unique_id, output_path, usdz_output_path),
-                daemon=True,
-            )
-            usdz_thread.start()
-            logger.info(f"[upload_model - {unique_id}] USDZ conversion thread started")
-        except Exception as e:
-            logger.error(
-                f"[upload_model - {unique_id}] Error starting USDZ conversion thread: {e}"
-            )
-            # Don't fail the whole upload if USDZ thread fails to start
-
         # Clean up temporary file and directory
         try:
             if temp_dir:
@@ -2611,22 +2635,17 @@ def _run_upload_pipeline(payload, progress_callback=None):
                 f"[upload_model - {unique_id}] Failed to create initial version: {version_error}"
             )
 
-        # Generate thumbnail in background thread
-        try:
-            report(97, "Creating preview", "Starting background thumbnail generation.")
-            thumb_thread = threading.Thread(
-                target=generate_thumbnail_async,
-                args=(unique_id, output_path, color if use_color else None),
-                daemon=True,
-            )
-            thumb_thread.start()
-            logger.info(
-                f"[upload_model - {unique_id}] Thumbnail generation thread started"
-            )
-        except Exception as e:
-            logger.error(
-                f"[upload_model - {unique_id}] Error starting thumbnail generation thread: {e}"
-            )
+        # Follow-up assets are durable jobs. A process restart can no longer
+        # silently lose thumbnail or iOS AR generation work.
+        report(97, "Creating previews", "Queueing thumbnail and iOS AR assets.")
+        _enqueue_internal_job(
+            "thumbnail", unique_id,
+            {"kind": "thumbnail", "color": color if use_color else None, "user_id": user_id},
+        )
+        _enqueue_internal_job(
+            "usdz", unique_id,
+            {"kind": "usdz", "user_id": user_id},
+        )
 
         return unique_id
 

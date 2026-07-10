@@ -165,6 +165,9 @@ class UserModel(db.Model):
     # Hotspots
     hotspots = db.relationship('ModelHotspot', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelHotspot.created_at')
     share_links = db.relationship('ModelShareLink', backref='model', lazy=True, cascade='all, delete-orphan')
+    analytics_events = db.relationship('ModelAnalyticsEvent', backref='model', lazy=True, cascade='all, delete-orphan')
+    lods = db.relationship('ModelLOD', backref='model', lazy=True, cascade='all, delete-orphan')
+    derived_assets = db.relationship('ModelDerivedAsset', backref='model', lazy=True, cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<UserModel {self.filename}>'
@@ -404,7 +407,7 @@ class ModelLike(db.Model):
     session_id = db.Column(db.String(128), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    model = db.relationship('UserModel', backref=db.backref('likes', lazy=True))
+    model = db.relationship('UserModel', backref=db.backref('likes', lazy=True, cascade='all, delete-orphan'))
 
 
 class ModelSave(db.Model):
@@ -413,7 +416,7 @@ class ModelSave(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    model = db.relationship('UserModel', backref=db.backref('saves', lazy=True))
+    model = db.relationship('UserModel', backref=db.backref('saves', lazy=True, cascade='all, delete-orphan'))
 
 
 class AIGenerationJob(db.Model):

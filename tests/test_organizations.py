@@ -35,7 +35,7 @@ def test_organization_rbac_allows_editor_model_mutation(client):
         json={"organization_id": organization_id},
     )
     assert assigned.status_code == 200
-    client.get("/logout")
+    client.post("/logout")
 
     client.post("/login", data={"username": editor.username, "password": "password"})
     changed = client.patch(
@@ -64,7 +64,7 @@ def test_viewer_cannot_mutate_team_model(client):
     )
     db.session.add(model)
     db.session.commit()
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": viewer.username, "password": "password"})
 
     response = client.patch(
@@ -85,7 +85,7 @@ def test_only_owner_or_admin_can_manage_members(client):
         organization_id=organization_id, user_id=editor.id, role="editor"
     ))
     db.session.commit()
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": editor.username, "password": "password"})
     response = client.post(
         f"/api/organizations/{organization_id}/members",

@@ -43,7 +43,7 @@ def test_password_share_link_grants_private_view(client):
     )
     assert response.status_code == 201
     url = response.get_json()["url"]
-    client.get("/logout")
+    client.post("/logout")
 
     path_only = "/" + url.split("/", 3)[-1]
     assert client.get(path_only).status_code == 401

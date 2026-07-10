@@ -30,7 +30,7 @@ def test_logout(client, init_database):
     ), follow_redirects=True)
     
     # Then log out
-    response = client.get('/logout', follow_redirects=True)
+    response = client.post('/logout', follow_redirects=True)
     assert response.status_code == 200
     # Should be redirected to index
     assert response.request.path == '/'

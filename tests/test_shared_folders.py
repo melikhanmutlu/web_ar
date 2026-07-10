@@ -18,7 +18,7 @@ def test_team_editor_can_manage_shared_folders_and_models(client):
         filename="unused.glb", user_id=owner.id, organization_id=organization_id,
     )
     db.session.add(model); db.session.commit()
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": editor.username, "password": "password"})
 
     created = client.post(
@@ -53,7 +53,7 @@ def test_team_viewer_cannot_create_shared_folder(client):
     db.session.add(OrganizationMember(
         organization_id=organization_id, user_id=viewer.id, role="viewer"
     )); db.session.commit()
-    client.get("/logout")
+    client.post("/logout")
     client.post("/login", data={"username": viewer.username, "password": "password"})
     assert client.post(
         f"/api/organizations/{organization_id}/folders", json={"name": "Denied"}

@@ -24,6 +24,7 @@ from flask_login import (
     current_user,
 )
 from werkzeug.utils import secure_filename
+from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import shutil
 import subprocess
@@ -35,6 +36,7 @@ import traceback
 import uuid
 import secrets
 import hashlib
+from urllib.parse import urlparse, urlsplit
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from config import *
@@ -61,6 +63,7 @@ from services import AssetQualityService, ConversionJobService, ConversionServic
 
 app = Flask(__name__)
 app.config.from_object("config")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 # Add headers to allow all origins
@@ -74,6 +77,32 @@ def after_request(response):
         response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(self), microphone=(), geolocation=(self), payment=()",
+    )
+    frame_ancestors = "'self'"
+    if request.endpoint == "embed_view" and request.view_args:
+        model = db.session.get(UserModel, request.view_args.get("model_id"))
+        domains = [
+            item.strip().lower()
+            for item in (model.embed_allowed_domains or "").split(",")
+            if item.strip()
+        ] if model else []
+        if domains:
+            frame_ancestors += " " + " ".join(f"https://{domain}" for domain in domains)
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://ajax.googleapis.com https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: blob: https:; connect-src 'self' https:; "
+        "model-src 'self' blob:; worker-src 'self' blob:; "
+        f"frame-ancestors {frame_ancestors}",
+    )
+    if request.is_secure:
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
 
@@ -82,6 +111,30 @@ def attach_request_context():
     supplied = request.headers.get("X-Request-ID", "")
     g.request_id = supplied[:128] if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", supplied) else str(uuid.uuid4())
     g.request_started_at = time.perf_counter()
+
+
+@app.before_request
+def protect_browser_writes():
+    """Reject cross-site browser writes while preserving token-based API clients.
+
+    Modern browsers send Origin on unsafe requests. Referer is the fallback for
+    older form submissions; non-browser clients without either header continue
+    to work and must still satisfy each endpoint's auth/capability checks.
+    """
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    supplied = request.headers.get("Origin") or request.headers.get("Referer")
+    if not supplied:
+        return None
+    source = urlsplit(supplied)
+    expected = urlsplit(request.host_url)
+    source_port = source.port or (443 if source.scheme == "https" else 80)
+    expected_port = expected.port or (443 if expected.scheme == "https" else 80)
+    if (source.scheme, source.hostname, source_port) != (
+        expected.scheme, expected.hostname, expected_port
+    ):
+        return jsonify({"success": False, "error": "Cross-site request rejected"}), 403
+    return None
 
 
 # Initialize directories
@@ -342,7 +395,6 @@ def record_model_event(model_id, event_type, metadata=None):
     """Record coarse product analytics without storing an IP address."""
     if event_type not in ANALYTICS_EVENT_TYPES:
         raise ValueError("Unsupported analytics event")
-    from urllib.parse import urlparse
     analytics_id = session.get("_analytics_id")
     if not analytics_id:
         analytics_id = secrets.token_urlsafe(18)

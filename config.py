@@ -38,6 +38,11 @@ else:
 SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY', 'dev-secret-key-change-in-production')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
+if FLASK_ENV == 'production' and SECRET_KEY == 'dev-secret-key-change-in-production':
+    raise RuntimeError('SECRET_KEY must be configured in production')
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = FLASK_ENV == 'production'
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')

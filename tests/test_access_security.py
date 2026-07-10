@@ -75,3 +75,20 @@ def test_legacy_raw_file_and_conversion_endpoints_are_gone(client):
 def test_thumbnail_requires_live_database_model(client):
     missing = "66666666-6666-6666-6666-666666666666"
     assert client.get(f"/thumbnail/{missing}").status_code == 404
+
+
+def test_cross_site_browser_writes_are_rejected(client):
+    response = client.post(
+        "/upload_model",
+        headers={"Origin": "https://attacker.example"},
+    )
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "Cross-site request rejected"
+
+
+def test_security_headers_and_post_only_logout(client):
+    response = client.get("/")
+    assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Permissions-Policy"]
+    assert client.get("/logout").status_code == 405

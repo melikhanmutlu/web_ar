@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Model comparison — arvision</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
+    <style>
+        *{box-sizing:border-box}body{margin:0;background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif}
+        header{padding:14px 20px;display:flex;justify-content:space-between;border-bottom:1px solid #334155}
+        main{display:grid;grid-template-columns:1fr 1fr;height:calc(100vh - 58px)}
+        section{position:relative;border-right:1px solid #334155}section:last-child{border:0}
+        model-viewer{width:100%;height:100%;background:#111827}.label{position:absolute;z-index:2;left:12px;top:12px;background:#0f172acc;padding:8px 10px;border-radius:6px}
+        .stats{display:block;font-size:11px;color:#94a3b8;margin-top:3px}@media(max-width:700px){main{grid-template-columns:1fr;height:auto}section{height:48vh;border-right:0;border-bottom:1px solid #334155}}
+    </style>
+</head>
+<body>
+<header><strong>Model comparison</strong><label><input id="sync" type="checkbox" checked> Sync cameras</label></header>
+<main>
+    {% for side, model, filename in [('left', left, left_file), ('right', right, right_file)] %}
+    <section><div class="label">{{ model.display_name or model.original_filename }}<span class="stats">{{ model.faces or '—' }} triangles · {{ model.file_size|filesizeformat if model.file_size else '—' }}</span></div>
+    <model-viewer id="{{ side }}" src="{{ url_for('serve_converted_file', unique_id=model.id, filename=filename) }}" camera-controls environment-image="neutral" shadow-intensity="1" interaction-prompt="none"></model-viewer></section>
+    {% endfor %}
+</main>
+<script>
+const left=document.getElementById('left'),right=document.getElementById('right'),sync=document.getElementById('sync');let updating=false;
+function bind(source,target){source.addEventListener('camera-change',()=>{if(!sync.checked||updating)return;updating=true;target.cameraOrbit=source.getCameraOrbit().toString();target.cameraTarget=source.getCameraTarget().toString();target.fieldOfView=source.getFieldOfView()+'deg';requestAnimationFrame(()=>updating=false);});}
+bind(left,right);bind(right,left);
+</script>
+</body></html>

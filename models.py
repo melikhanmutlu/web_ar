@@ -454,6 +454,18 @@ class PromptPreset(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class MaterialPreset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    color = db.Column(db.String(7), nullable=False, default='#ffffff')
+    metalness = db.Column(db.Float, nullable=False, default=0.0)
+    roughness = db.Column(db.Float, nullable=False, default=0.5)
+    opacity = db.Column(db.Float, nullable=False, default=1.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ConversionJob(db.Model):
     """DB-backed conversion job queue (academic_ar pattern).
 

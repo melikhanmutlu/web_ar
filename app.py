@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -245,9 +245,17 @@ def check_model_mutation_allowed(model_id, require_exists=True):
              session.get(f"model_edit_token:{model_id}"))
     actor_id = current_user.id if current_user.is_authenticated else None
     grant = session.get("model_share_grants", {}).get(model_id)
+    model = db.session.get(UserModel, model_id)
+    organization_can_edit = False
+    if actor_id and model and model.organization_id:
+        membership = OrganizationMember.query.filter_by(
+            organization_id=model.organization_id, user_id=actor_id
+        ).first()
+        organization_can_edit = bool(membership and membership.role in {"owner", "admin", "editor"})
     _, decision = model_access.mutation_decision(
         model_id, actor_id=actor_id, edit_token=token,
-        share_can_edit=grant == "edit", require_exists=require_exists
+        share_can_edit=grant == "edit", organization_can_edit=organization_can_edit,
+        require_exists=require_exists
     )
     if not decision.allowed:
         return jsonify({"success": False, "error": decision.error}), decision.status
@@ -264,8 +272,16 @@ def get_live_model(model_id):
 def check_model_view_allowed(model_id):
     actor_id = current_user.id if current_user.is_authenticated else None
     grants = session.get("model_share_grants", {})
+    model = db.session.get(UserModel, model_id)
+    organization_member = bool(
+        actor_id and model and model.organization_id and
+        OrganizationMember.query.filter_by(
+            organization_id=model.organization_id, user_id=actor_id
+        ).first()
+    )
     _, decision = model_access.view_decision(
-        model_id, actor_id=actor_id, has_share_grant=model_id in grants
+        model_id, actor_id=actor_id, has_share_grant=model_id in grants,
+        organization_member=organization_member,
     )
     if not decision.allowed:
         return decision
@@ -2959,6 +2975,122 @@ def update_model_sharing(model_id):
     model.visibility = visibility
     db.session.commit()
     return jsonify({"success": True, "visibility": model.visibility})
+
+
+def _organization_membership(organization_id, roles=None):
+    if not current_user.is_authenticated:
+        return None
+    membership = OrganizationMember.query.filter_by(
+        organization_id=organization_id, user_id=current_user.id
+    ).first()
+    if roles and (not membership or membership.role not in roles):
+        return None
+    return membership
+
+
+@app.route("/api/organizations", methods=["GET", "POST"])
+@login_required
+def organizations_api():
+    if request.method == "GET":
+        memberships = OrganizationMember.query.filter_by(user_id=current_user.id).all()
+        return jsonify({"success": True, "organizations": [
+            {"id": item.organization.id, "name": item.organization.name,
+             "slug": item.organization.slug, "role": item.role}
+            for item in memberships
+        ]})
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()[:120]
+    if not name:
+        return jsonify({"success": False, "error": "Organization name is required"}), 400
+    base = slugify(name)[:120] or "organization"
+    candidate = base
+    while Organization.query.filter_by(slug=candidate).first():
+        candidate = f"{base[:110]}-{secrets.token_hex(4)}"
+    organization = Organization(name=name, slug=candidate, created_by=current_user.id)
+    db.session.add(organization)
+    db.session.flush()
+    db.session.add(OrganizationMember(
+        organization_id=organization.id, user_id=current_user.id, role="owner"
+    ))
+    db.session.commit()
+    return jsonify({"success": True, "organization": {
+        "id": organization.id, "name": organization.name, "slug": organization.slug,
+        "role": "owner",
+    }}), 201
+
+
+@app.route("/api/organizations/<int:organization_id>/members", methods=["GET", "POST"])
+@login_required
+def organization_members_api(organization_id):
+    membership = _organization_membership(organization_id)
+    if not membership:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    if request.method == "GET":
+        members = OrganizationMember.query.filter_by(organization_id=organization_id).all()
+        return jsonify({"success": True, "members": [
+            {"user_id": item.user_id, "username": item.user.username,
+             "email": item.user.email, "role": item.role}
+            for item in members
+        ]})
+    if membership.role not in {"owner", "admin"}:
+        return jsonify({"success": False, "error": "Admin role required"}), 403
+    data = request.get_json(silent=True) or {}
+    role = data.get("role", "viewer")
+    if role not in {"admin", "editor", "viewer"}:
+        return jsonify({"success": False, "error": "Invalid role"}), 400
+    user = User.query.filter(db.func.lower(User.email) == str(data.get("email", "")).strip().lower()).first()
+    if not user:
+        return jsonify({"success": False, "error": "Registered user not found"}), 404
+    existing = OrganizationMember.query.filter_by(
+        organization_id=organization_id, user_id=user.id
+    ).first()
+    if existing:
+        existing.role = role
+    else:
+        db.session.add(OrganizationMember(
+            organization_id=organization_id, user_id=user.id, role=role
+        ))
+    db.session.commit()
+    return jsonify({"success": True, "user_id": user.id, "role": role}), 201
+
+
+@app.route("/api/organizations/<int:organization_id>/members/<int:user_id>", methods=["PATCH", "DELETE"])
+@login_required
+def organization_member_api(organization_id, user_id):
+    actor = _organization_membership(organization_id, {"owner", "admin"})
+    if not actor:
+        return jsonify({"success": False, "error": "Admin role required"}), 403
+    target = OrganizationMember.query.filter_by(
+        organization_id=organization_id, user_id=user_id
+    ).first_or_404()
+    if target.role == "owner":
+        return jsonify({"success": False, "error": "Owner membership cannot be changed"}), 409
+    if request.method == "DELETE":
+        db.session.delete(target)
+        db.session.commit()
+        return jsonify({"success": True})
+    role = (request.get_json(silent=True) or {}).get("role")
+    if role not in {"admin", "editor", "viewer"}:
+        return jsonify({"success": False, "error": "Invalid role"}), 400
+    target.role = role
+    db.session.commit()
+    return jsonify({"success": True, "role": role})
+
+
+@app.route("/api/models/<model_id>/organization", methods=["PATCH"])
+@login_required
+def assign_model_organization(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    if model.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Only the model owner can assign a team"}), 403
+    organization_id = (request.get_json(silent=True) or {}).get("organization_id")
+    if organization_id is not None and not _organization_membership(
+        int(organization_id), {"owner", "admin"}
+    ):
+        return jsonify({"success": False, "error": "Organization admin role required"}), 403
+    model.organization_id = int(organization_id) if organization_id is not None else None
+    db.session.commit()
+    return jsonify({"success": True, "organization_id": model.organization_id})
 
 
 @app.route("/api/models/<model_id>/share-links", methods=["POST"])

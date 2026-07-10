@@ -13,6 +13,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     models = db.relationship('UserModel', backref='user', lazy=True)
     folders = db.relationship('Folder', backref='user', lazy=True)
+    organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -63,6 +64,25 @@ class Folder(db.Model):
     def __repr__(self):
         return f'<Folder {self.name}>'
 
+class Organization(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    slug = db.Column(db.String(140), unique=True, nullable=False, index=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    members = db.relationship('OrganizationMember', backref='organization', lazy=True, cascade='all, delete-orphan')
+    models = db.relationship('UserModel', backref='organization', lazy=True)
+
+
+class OrganizationMember(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False, default='viewer')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
+
+
 class UserModel(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # Changed to String to support UUID
     filename = db.Column(db.String(255), nullable=False)
@@ -78,6 +98,7 @@ class UserModel(db.Model):
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     folder_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
     
     # Scale tracking
     original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload

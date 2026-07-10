@@ -21,7 +21,8 @@ class ModelAccessService:
         return self.model_type.query.filter_by(id=model_id, deleted_at=None).first()
 
     def mutation_decision(
-        self, model_id, *, actor_id=None, edit_token=None, share_can_edit=False, require_exists=True
+        self, model_id, *, actor_id=None, edit_token=None, share_can_edit=False,
+        organization_can_edit=False, require_exists=True
     ):
         model = self.model_type.query.get(model_id)
         if model is None:
@@ -31,7 +32,7 @@ class ModelAccessService:
         if model.deleted_at is not None:
             return model, AccessDecision(False, 410, "Model is in trash")
         if model.user_id is not None:
-            if share_can_edit:
+            if share_can_edit or organization_can_edit:
                 return model, AccessDecision(True)
             if actor_id != model.user_id:
                 return model, AccessDecision(False, 403, "Forbidden: you do not own this model")
@@ -43,10 +44,12 @@ class ModelAccessService:
                 return model, AccessDecision(False, 403, "Valid edit token required")
         return model, AccessDecision(True)
 
-    def view_decision(self, model_id, *, actor_id=None, has_share_grant=False):
+    def view_decision(self, model_id, *, actor_id=None, has_share_grant=False,
+                      organization_member=False):
         model = self.model_type.query.get(model_id)
         if model is None or model.deleted_at is not None:
             return model, AccessDecision(False, 404, "Model not found")
-        if model.visibility == "private" and actor_id != model.user_id and not has_share_grant:
+        if (model.visibility == "private" and actor_id != model.user_id and
+                not has_share_grant and not organization_member):
             return model, AccessDecision(False, 403, "Private model")
         return model, AccessDecision(True)

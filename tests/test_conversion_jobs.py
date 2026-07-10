@@ -15,6 +15,9 @@ def test_conversion_job_retries_with_backoff_then_dead_letters(client):
 
     service.start(job)
     assert job.attempts == 1
+    previous_heartbeat = job.last_heartbeat_at
+    service.heartbeat(job)
+    assert job.last_heartbeat_at >= previous_heartbeat
     assert service.fail(job, RuntimeError("converter crashed"), allow_retry=True)
     assert job.status == "pending"
     assert job.next_attempt_at > datetime.utcnow()

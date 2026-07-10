@@ -67,3 +67,35 @@ def test_expired_share_link_is_rejected(client):
     db.session.commit()
     assert client.get("/s/anything").status_code == 404
     path.unlink(missing_ok=True)
+
+
+def test_revoked_share_link_invalidates_existing_session_grant(client):
+    path = Path("test-revoked.glb").resolve()
+    path.write_bytes(b"glTF")
+    _, model = _owner_and_model(path)
+    token = "revocable-secret"
+    import hashlib
+    link = ModelShareLink(
+        model_id=model.id,
+        token_digest=hashlib.sha256(token.encode()).hexdigest(),
+        permission="view",
+    )
+    db.session.add(link)
+    db.session.commit()
+
+    opened = client.get(f"/s/{token}")
+    assert opened.status_code == 302
+    assert client.get(f"/view/{model.id}").status_code != 403
+    link.revoked_at = datetime.utcnow()
+    db.session.commit()
+    assert client.get(f"/view/{model.id}").status_code == 403
+    path.unlink(missing_ok=True)
+
+
+def test_private_model_metadata_requires_view_grant(client):
+    path = Path("test-private-metadata.glb").resolve()
+    path.write_bytes(b"glTF")
+    _, model = _owner_and_model(path)
+    assert client.get(f"/api/versions/{model.id}").status_code == 403
+    assert client.get(f"/api/models/{model.id}/hotspots").status_code == 403
+    assert client.get(f"/api/models/{model.id}/camera-views").status_code == 403

@@ -5,6 +5,7 @@ from flask import (
     Flask,
     request,
     jsonify,
+    send_file,
     send_from_directory,
     render_template,
     redirect,
@@ -268,7 +269,7 @@ def check_model_mutation_allowed(model_id, require_exists=True):
              request.args.get("edit_token") or body.get("edit_token") or
              session.get(f"model_edit_token:{model_id}"))
     actor_id = current_user.id if current_user.is_authenticated else None
-    grant = session.get("model_share_grants", {}).get(model_id)
+    grant = _active_share_grant(model_id)
     model = db.session.get(UserModel, model_id)
     organization_can_edit = False
     if actor_id and model and model.organization_id:
@@ -295,7 +296,7 @@ def get_live_model(model_id):
 
 def check_model_view_allowed(model_id):
     actor_id = current_user.id if current_user.is_authenticated else None
-    grants = session.get("model_share_grants", {})
+    grant = _active_share_grant(model_id)
     model = db.session.get(UserModel, model_id)
     organization_member = bool(
         actor_id and model and model.organization_id and
@@ -304,12 +305,34 @@ def check_model_view_allowed(model_id):
         ).first()
     )
     _, decision = model_access.view_decision(
-        model_id, actor_id=actor_id, has_share_grant=model_id in grants,
+        model_id, actor_id=actor_id, has_share_grant=grant is not None,
         organization_member=organization_member,
     )
     if not decision.allowed:
         return decision
     return None
+
+
+def _active_share_grant(model_id):
+    """Resolve a session grant against the current share-link state.
+
+    Storing only a permission in the session made revoked and expired links
+    effective until the browser session ended. Grants now retain the link id
+    and are revalidated on every protected model operation.
+    """
+    grants = dict(session.get("model_share_grants", {}))
+    grant = grants.get(model_id)
+    if not isinstance(grant, dict) or not grant.get("link_id"):
+        if grant is not None:
+            grants.pop(model_id, None)
+            session["model_share_grants"] = grants
+        return None
+    link = db.session.get(ModelShareLink, grant["link_id"])
+    if not link or link.model_id != model_id or not link.is_active:
+        grants.pop(model_id, None)
+        session["model_share_grants"] = grants
+        return None
+    return link.permission
 
 
 ANALYTICS_EVENT_TYPES = {"view", "embed_view", "ar_launch", "download", "share", "qr_open"}
@@ -1739,6 +1762,12 @@ def upload_model():
 
     temp_dir = None  # Initialize temp_dir
     try:
+        compression = request.form.get("compression")
+        if compression not in (None, "none", "meshopt", "draco"):
+            return jsonify({"success": False, "error": "Invalid compression mode"}), 400
+        edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
+        status_token = secrets.token_urlsafe(32)
+
         # Get form data
         # Handle both string and boolean values for useColor
         use_color_raw = request.form.get("useColor", "false")
@@ -3840,7 +3869,7 @@ def open_model_share_link(token):
                 return render_template("share_password.html", token=token), 401
             return jsonify({"success": False, "error": "Invalid password"}), 403
     grants = dict(session.get("model_share_grants", {}))
-    grants[link.model_id] = link.permission
+    grants[link.model_id] = {"link_id": link.id}
     session["model_share_grants"] = grants
     return redirect(url_for("view_model", model_id=link.model_id))
 
@@ -5542,6 +5571,9 @@ def get_versions(model_id):
     try:
         if not get_live_model(model_id):
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
         versions = get_version_history(model_id)
         return jsonify(
             {
@@ -5617,6 +5649,9 @@ def download_version(model_id, version_number):
     try:
         if not get_live_model(model_id):
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()
@@ -5651,6 +5686,9 @@ def get_hotspots(model_id):
         model = get_live_model(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
 
         hotspots = ModelHotspot.query.filter_by(model_id=model_id).order_by(ModelHotspot.created_at).all()
         return jsonify({
@@ -5790,6 +5828,9 @@ def get_camera_views(model_id):
     try:
         if not get_live_model(model_id):
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
         views = CameraView.query.filter_by(model_id=model_id).order_by(CameraView.created_at).all()
         return jsonify({"success": True, "views": [v.to_dict() for v in views]})
     except Exception as e:

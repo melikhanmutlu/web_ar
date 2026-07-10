@@ -1,13 +1,44 @@
 import io
+from pathlib import Path
 
-def test_upload_without_login(client):
+import app as app_module
+from models import ConversionJob, UserModel, db
+
+def test_upload_without_login_creates_trackable_job(client, monkeypatch):
+    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
     data = {
         'file': (io.BytesIO(b"dummy stl content"), 'test.stl')
     }
     response = client.post('/upload_model', data=data, content_type='multipart/form-data', follow_redirects=True)
-    
-    # Should be allowed even without login
-    assert response.status_code in [200, 202, 400, 500] # Async queue returns 202.
+
+    assert response.status_code == 202
+    payload = response.get_json()
+    assert payload["status_token"]
+    assert payload["edit_token"]
+    assert db.session.get(ConversionJob, payload["job_id"]) is not None
+    app_module.shutil.rmtree(
+        Path(app_module.app.config["TEMP_FOLDER"]) / payload["job_id"],
+        ignore_errors=True,
+    )
+
+
+def test_owner_can_download_model(client, init_database):
+    client.post('/login', data={'username': 'testuser', 'password': 'testpassword'})
+    model_id = '77777777-7777-7777-7777-777777777777'
+    model_dir = Path(app_module.app.config['CONVERTED_FOLDER']) / model_id
+    model_dir.mkdir(parents=True, exist_ok=True)
+    path = model_dir / 'model.glb'
+    path.write_bytes(b'glTF')
+    db.session.add(UserModel(
+        id=model_id, filename=str(path.resolve()), user_id=init_database.id,
+        display_name='test-model',
+    ))
+    db.session.commit()
+
+    response = client.get(f'/download/{model_id}')
+    assert response.status_code == 200
+    assert response.data == b'glTF'
+    app_module.shutil.rmtree(model_dir, ignore_errors=True)
 
 def test_upload_invalid_file_extension(client, init_database):
     # Log in first

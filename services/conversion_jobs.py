@@ -44,7 +44,6 @@ class ConversionJobService:
     def heartbeat(self, job):
         job.last_heartbeat_at = datetime.utcnow()
         self.db.session.commit()
-        self.record(job, "completed", f"Model {model_id} is ready")
 
     def succeed(self, job, model_id):
         job.model_id = model_id

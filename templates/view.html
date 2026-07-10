@@ -3103,8 +3103,16 @@ void main() {
             savedViews.forEach((v, i) => {
                 const div = document.createElement('div');
                 div.className = 'tp-list-item';
-                div.innerHTML = '<button class="load-view-btn" style="background:none;border:none;color:var(--color-gray-200);font-size:0.72rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">' + v.name + '</button>' +
-                    '<button class="delete-view-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>';
+                const loadButton = document.createElement('button');
+                loadButton.className = 'load-view-btn';
+                loadButton.style.cssText = 'background:none;border:none;color:var(--color-gray-200);font-size:0.72rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;';
+                loadButton.textContent = v.name;
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-view-btn';
+                deleteButton.style.cssText = 'background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;';
+                deleteButton.setAttribute('aria-label', 'Delete camera view');
+                deleteButton.textContent = '×';
+                div.append(loadButton, deleteButton);
                 div.querySelector('.load-view-btn').addEventListener('click', () => {
                     if (v._orbit) {
                         modelViewer.cameraOrbit = v._orbit.toString();
@@ -3216,8 +3224,15 @@ void main() {
             const div = document.createElement('div');
             div.className = 'tp-list-item';
             div.dataset.hotspotId = name;
-            div.innerHTML = '<span style="font-size:0.72rem;color:var(--color-gray-200);">' + label + '</span>' +
-                '<button class="delete-hotspot-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>';
+            const labelElement = document.createElement('span');
+            labelElement.style.cssText = 'font-size:0.72rem;color:var(--color-gray-200);';
+            labelElement.textContent = label;
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-hotspot-btn';
+            deleteButton.style.cssText = 'background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;';
+            deleteButton.setAttribute('aria-label', 'Delete hotspot');
+            deleteButton.textContent = '×';
+            div.append(labelElement, deleteButton);
             div.querySelector('.delete-hotspot-btn').addEventListener('click', () => {
                 // Delete from DB
                 fetch('/api/models/' + modelId + '/hotspots/' + name, { method: 'DELETE' })

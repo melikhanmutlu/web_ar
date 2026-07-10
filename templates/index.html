@@ -109,6 +109,20 @@
             <!-- Apply Color -->
             <div class="av-card">
                 <div class="av-card-row">
+                    <div>
+                        <div class="av-card-title">Web Compression</div>
+                        <p class="av-card-desc">Meshopt reduces download size; choose None when the model must remain editable.</p>
+                    </div>
+                    <select id="compression" name="compression" class="av-select">
+                        <option value="none" selected>None (editable)</option>
+                        <option value="meshopt">Meshopt (smaller)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Apply Color -->
+            <div class="av-card">
+                <div class="av-card-row">
                     <label class="av-switch-label">
                         <span class="av-switch">
                             <input type="checkbox" id="useColor" name="useColor" value="true">
@@ -511,6 +525,8 @@
             // Source unit for unitless STL/OBJ (ignored by the backend for other types)
             const sourceUnitSelect = document.getElementById('sourceUnit');
             if (sourceUnitSelect) formData.append('sourceUnit', sourceUnitSelect.value);
+            const compressionSelect = document.getElementById('compression');
+            if (compressionSelect) formData.append('compression', compressionSelect.value);
 
             console.log('Upload settings:', {
                 useColor: shouldApplyColor,

@@ -330,6 +330,25 @@ class ModelVersion(db.Model):
         return self.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
 
+class ModelLOD(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    level = db.Column(db.Integer, nullable=False)
+    ratio = db.Column(db.Float, nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    file_size = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (db.UniqueConstraint('model_id', 'level', name='uq_model_lod_level'),)
+
+    def to_dict(self):
+        return {
+            'level': self.level,
+            'ratio': self.ratio,
+            'filename': self.filename,
+            'file_size': self.file_size,
+        }
+
+
 class CameraView(db.Model):
     """Saved camera views for 3D models"""
     id = db.Column(db.Integer, primary_key=True)

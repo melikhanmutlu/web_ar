@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, ApiToken, PromptPreset, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, ApiToken, PromptPreset, ModelVersion, ModelLOD, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -1565,6 +1565,9 @@ def upload_file():
             use_color = bool(use_color_raw)
 
         color = request.form.get("color", "#4CAF50")
+        compression = request.form.get("compression")
+        if compression not in (None, "none", "meshopt"):
+            return jsonify({"success": False, "error": "Invalid compression mode"}), 400
         logger.info(f"Color settings - useColor: {use_color}, color: {color}")
 
         # Get texture removal setting (for FBX)
@@ -1780,6 +1783,7 @@ def upload_model():
             "color": color,
             "max_dimension": max_dimension,
             "source_unit": request.form.get("sourceUnit"),
+            "compression": compression,
             "user_id": current_user.id if current_user.is_authenticated else None,
             "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
         }
@@ -1885,6 +1889,7 @@ def batch_upload_models():
                 "color": "#FFFFFF",
                 "max_dimension": None,
                 "source_unit": request.form.get("sourceUnit"),
+                "compression": request.form.get("compression") if request.form.get("compression") in ("none", "meshopt") else None,
                 "user_id": user_id,
                 "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
             }
@@ -1936,12 +1941,13 @@ def run_conversion_job(job, allow_retry=True):
         detail="The model has been received and the converter is starting.",
     )
     try:
-        model_id = _run_upload_pipeline(
-            job.payload,
-            progress_callback=lambda progress, stage, detail: update_conversion_progress(
-                job, progress=progress, stage=stage, detail=detail
-            ),
+        callback = lambda progress, stage, detail: update_conversion_progress(
+            job, progress=progress, stage=stage, detail=detail
         )
+        if job.job_type == "lod":
+            model_id = _run_lod_pipeline(job.payload, progress_callback=callback)
+        else:
+            model_id = _run_upload_pipeline(job.payload, progress_callback=callback)
         conversion_jobs.succeed(job, model_id)
         update_conversion_progress(
             job,
@@ -1972,6 +1978,40 @@ def run_conversion_job(job, allow_retry=True):
                     logger.error(
                         f"[conversion_job - {job.id}] staged cleanup failed: {cleanup_error}"
                     )
+
+
+def _run_lod_pipeline(payload, progress_callback=None):
+    from converters.lod_generator import generate_lods
+    model_id = payload["model_id"]
+    model = get_live_model(model_id)
+    if not model or not model.filename or not os.path.isfile(model.filename):
+        raise RuntimeError("Model source is unavailable")
+    report = progress_callback or (lambda *_: None)
+    report(50, "Generating LODs", "Simplifying geometry into streaming variants.")
+    model_dir = os.path.dirname(model.filename)
+    temp_dir = os.path.join(model_dir, ".lod_" + payload.get("job_id", secrets.token_hex(4)))
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    try:
+        outputs = generate_lods(
+            model.filename,
+            temp_dir,
+            ratios=payload.get("ratios", [0.5, 0.25, 0.1]),
+            meshopt=bool(payload.get("meshopt", True)),
+        )
+        report(85, "Publishing LODs", "Writing LOD manifest and assets.")
+        ModelLOD.query.filter_by(model_id=model_id).delete()
+        for output in outputs:
+            destination = os.path.join(model_dir, output["filename"])
+            os.replace(output["path"], destination)
+            db.session.add(ModelLOD(
+                model_id=model_id,
+                level=output["level"], ratio=output["ratio"],
+                filename=destination, file_size=output["file_size"],
+            ))
+        db.session.commit()
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+    return model_id
 
 
 def _run_upload_pipeline(payload, progress_callback=None):
@@ -2121,7 +2161,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
         # Optional, fail-safe GLB compression (no-op unless GLB_OPTIMIZE=true)
         try:
             report(72, "Optimizing GLB", "Checking compression and viewer compatibility.")
-            optimize_glb(output_path)
+            compression = payload.get("compression")
+            optimize_glb(
+                output_path,
+                enabled=None if compression is None else compression == "meshopt",
+            )
         except Exception as e:
             logger.warning(
                 f"[upload_model - {unique_id}] GLB optimization skipped: {e}"
@@ -3639,6 +3683,60 @@ def get_model_validation(model_id):
         except Exception as exc:
             return jsonify({"success": False, "error": f"Validation failed: {exc}"}), 422
     return jsonify({"success": True, "report": report})
+
+
+@app.route("/api/models/<model_id>/lods", methods=["GET", "POST"])
+@limiter.limit("20 per hour")
+def model_lods(model_id):
+    model = get_live_model(model_id)
+    if not model:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    if request.method == "GET":
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
+        lods = ModelLOD.query.filter_by(model_id=model_id).order_by(ModelLOD.level).all()
+        return jsonify({"success": True, "lods": [{
+            **lod.to_dict(),
+            "url": url_for("serve_converted_file", unique_id=model_id,
+                           filename=os.path.basename(lod.filename)),
+        } for lod in lods]})
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
+    data = request.get_json(silent=True) or {}
+    ratios = data.get("ratios", [0.5, 0.25, 0.1])
+    if not isinstance(ratios, list) or not 1 <= len(ratios) <= 5:
+        return jsonify({"success": False, "error": "Provide 1-5 LOD ratios"}), 400
+    try:
+        ratios = [float(value) for value in ratios]
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid LOD ratios"}), 400
+    if any(value < 0.01 or value >= 1 for value in ratios):
+        return jsonify({"success": False, "error": "LOD ratios must be between 0.01 and 1"}), 400
+    if ratios != sorted(ratios, reverse=True):
+        return jsonify({"success": False, "error": "LOD ratios must be descending"}), 400
+    job_id = str(uuid.uuid4())
+    status_token = secrets.token_urlsafe(32)
+    job = ConversionJob(
+        id=job_id,
+        job_type="lod",
+        status="pending",
+        payload={"job_id": job_id, "model_id": model_id, "ratios": ratios,
+                 "meshopt": bool(data.get("meshopt", True))},
+        user_id=model.user_id,
+        status_token_hash=generate_password_hash(status_token),
+        max_attempts=2,
+    )
+    db.session.add(job)
+    db.session.commit()
+    if not JOB_QUEUE_ENABLED:
+        _start_local_conversion(job_id)
+    return jsonify({
+        "success": True, "job_id": job_id, "status": "pending",
+        "status_token": status_token,
+        "status_url": url_for("upload_job_status", job_id=job_id),
+    }), 202
 
 
 # Route to serve converted model files

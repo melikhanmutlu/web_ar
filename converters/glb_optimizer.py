@@ -73,14 +73,16 @@ def is_enabled() -> bool:
     return os.environ.get("GLB_OPTIMIZE", "false").strip().lower() == "true"
 
 
-def optimize_glb(glb_path: str, timeout: int = 300) -> bool:
+def optimize_glb(glb_path: str, timeout: int = 300, enabled=None) -> bool:
     """Compress a GLB in place with gltfpack when GLB_OPTIMIZE=true.
 
     Returns True only if optimization ran and replaced the file with a smaller one;
     False otherwise (disabled, unavailable, errored, or not smaller). The original
     file is always preserved on any non-success path.
     """
-    if not is_enabled():
+    if enabled is None:
+        enabled = is_enabled()
+    if not enabled:
         return False
     if not glb_path or not os.path.exists(glb_path):
         return False

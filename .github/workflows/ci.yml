@@ -20,10 +20,32 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r requirements.txt pytest pip-audit
+      - run: pip install -r requirements.txt pytest pip-audit bandit
       - run: python -m py_compile app.py models.py worker.py
       - run: python -m pytest -q
       - run: pip-audit -r requirements.txt
+      - run: bandit -r services converters auth.py -ll
+
+  frontend-and-e2e:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_KEY: ci-secret-not-for-production
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: pip install -r requirements.txt
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run security
+      - run: npm run test:e2e
 
   migration-check:
     runs-on: ubuntu-latest

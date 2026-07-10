@@ -55,7 +55,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
-from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
+from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService, configure_json_logging, initialize_external_observability
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -215,7 +215,7 @@ def healthz():
     except Exception:
         logger.exception("Database health check failed")
         return jsonify({"status": "unhealthy", "database": "down"}), 503
-    result = {"status": "ok", "database": "up"}
+    result = {"status": "ok", "database": "up", "observability": OBSERVABILITY_STATUS}
     if os.environ.get("JOB_QUEUE", "false").lower() in ("true", "1", "yes"):
         cutoff = datetime.utcnow() - timedelta(
             seconds=int(os.environ.get("WORKER_HEALTH_MAX_AGE_SECONDS", "90"))
@@ -379,6 +379,8 @@ logging.basicConfig(
     handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+configure_json_logging()
+OBSERVABILITY_STATUS = initialize_external_observability(app)
 
 # Database bootstrap (migration-aware).
 # Once an alembic_version table exists, Alembic (flask db upgrade in the

@@ -6,7 +6,10 @@
   "scripts": {
     "start": "python app.py",
     "test": "python -m pytest -q",
-    "check": "python -m py_compile app.py models.py worker.py"
+    "check": "python -m py_compile app.py models.py worker.py",
+    "lint": "node --check static/viewer.js && node --check static/js/my_models.js",
+    "test:e2e": "node node_modules/@playwright/test/cli.js test",
+    "security": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
@@ -16,6 +19,7 @@
     "three": "^0.182.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "tailwindcss": "^3.3.3"
   },
   "engines": {

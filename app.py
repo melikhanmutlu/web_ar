@@ -13,6 +13,7 @@ from flask import (
     session,
     make_response,
     abort,
+    g,
 )
 from flask_login import (
     LoginManager,
@@ -64,7 +65,22 @@ app.config.from_object("config")
 # Add headers to allow all origins
 @app.after_request
 def after_request(response):
+    request_id = getattr(g, "request_id", None)
+    if request_id:
+        response.headers["X-Request-ID"] = request_id
+    started = getattr(g, "request_started_at", None)
+    if started is not None:
+        response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     return response
+
+
+@app.before_request
+def attach_request_context():
+    supplied = request.headers.get("X-Request-ID", "")
+    g.request_id = supplied[:128] if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", supplied) else str(uuid.uuid4())
+    g.request_started_at = time.perf_counter()
 
 
 # Initialize directories
@@ -152,6 +168,42 @@ def ratelimit_handler(e):
     return jsonify(
         {"success": False, "error": f"Rate limit exceeded: {e.description}"}
     ), 429
+
+
+@app.route("/healthz")
+def healthz():
+    """Liveness/readiness probe including database connectivity."""
+    try:
+        db.session.execute(db.text("SELECT 1"))
+    except Exception:
+        logger.exception("Database health check failed")
+        return jsonify({"status": "unhealthy", "database": "down"}), 503
+    return jsonify({"status": "ok", "database": "up"})
+
+
+@app.route("/metrics")
+def metrics():
+    """Small Prometheus-compatible operational surface without user data."""
+    states = dict(
+        db.session.query(ConversionJob.status, db.func.count(ConversionJob.id))
+        .group_by(ConversionJob.status).all()
+    )
+    lines = [
+        "# HELP arvision_conversion_jobs Conversion jobs by current state",
+        "# TYPE arvision_conversion_jobs gauge",
+    ]
+    for state in ("pending", "processing", "completed", "failed"):
+        lines.append(f'arvision_conversion_jobs{{status="{state}"}} {states.get(state, 0)}')
+    completed = ConversionJob.query.filter(
+        ConversionJob.finished_at.isnot(None), ConversionJob.started_at.isnot(None)
+    ).all()
+    durations = [(j.finished_at - j.started_at).total_seconds() for j in completed[-100:]]
+    lines.extend([
+        "# HELP arvision_conversion_duration_seconds Average duration of recent conversions",
+        "# TYPE arvision_conversion_duration_seconds gauge",
+        f"arvision_conversion_duration_seconds {sum(durations) / len(durations) if durations else 0:.3f}",
+    ])
+    return "\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"}
 
 
 def check_model_mutation_allowed(model_id, require_exists=True):

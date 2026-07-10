@@ -54,6 +54,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
+from services import ModelAccessService, StorageService
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -141,6 +142,9 @@ limiter = Limiter(
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
 )
 
+model_access = ModelAccessService(UserModel)
+storage = StorageService(CONVERTED_FOLDER, UPLOAD_FOLDER, TEMP_FOLDER)
+
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
@@ -157,35 +161,24 @@ def check_model_mutation_allowed(model_id, require_exists=True):
     be mutated by that user. Returns a (response, status) tuple to return from
     the view, or None when the mutation is allowed.
     """
-    model = UserModel.query.get(model_id)
-    if model is None:
-        if require_exists:
-            return jsonify({"success": False, "error": "Model not found"}), 404
-        return None
-    if model.deleted_at is not None:
-        return jsonify({"success": False, "error": "Model is in trash"}), 410
-    if model.user_id is not None:
-        is_owner = (
-            current_user.is_authenticated and current_user.id == model.user_id
-        )
-        if not is_owner:
-            return jsonify(
-                {"success": False, "error": "Forbidden: you do not own this model"}
-            ), 403
-    elif model.edit_token_hash:
-        body = request.get_json(silent=True) or {}
-        token = (request.headers.get("X-Model-Edit-Token") or
-                 request.args.get("edit_token") or body.get("edit_token") or
-                 session.get(f"model_edit_token:{model_id}"))
-        if not token or not check_password_hash(model.edit_token_hash, token):
-            return jsonify({"success": False, "error": "Valid edit token required"}), 403
+    body = request.get_json(silent=True) or {}
+    token = (request.headers.get("X-Model-Edit-Token") or
+             request.args.get("edit_token") or body.get("edit_token") or
+             session.get(f"model_edit_token:{model_id}"))
+    actor_id = current_user.id if current_user.is_authenticated else None
+    _, decision = model_access.mutation_decision(
+        model_id, actor_id=actor_id, edit_token=token, require_exists=require_exists
+    )
+    if not decision.allowed:
+        return jsonify({"success": False, "error": decision.error}), decision.status
+    if token:
         session[f"model_edit_token:{model_id}"] = token
     return None
 
 
 def get_live_model(model_id):
     """Find a model only when it is not in trash."""
-    return UserModel.query.filter_by(id=model_id, deleted_at=None).first()
+    return model_access.live(model_id)
 
 
 # Register blueprints

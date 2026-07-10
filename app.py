@@ -2347,6 +2347,8 @@ def retry_upload_job(job_id):
 
 @app.route("/convert", methods=["POST"])
 def convert():
+    return jsonify({"success": False, "error": "Legacy conversion endpoint removed; use /upload_model"}), 410
+
     try:
         logger.info("Starting model conversion process")
         data = request.get_json()
@@ -3112,6 +3114,12 @@ def serve_thumbnail(unique_id):
     import io
     import base64
 
+    if not get_live_model(unique_id):
+        return "Model not found", 404
+    denied = check_model_view_allowed(unique_id)
+    if denied:
+        return "Model not found", 404
+
     thumbnail_path = os.path.join(
         app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.png"
     )
@@ -3362,6 +3370,9 @@ def get_converted_file(filename):
         if not model:
             app.logger.error(f"Model not found for file: {filename}")
             return "File not found", 404
+        denied = check_model_view_allowed(model.id)
+        if denied:
+            return "File not found", 404
 
         # Check if file exists
         if not os.path.exists(model.filename):
@@ -3480,6 +3491,8 @@ def update_model_color():
 @app.route("/temp/<filename>")
 def get_temp_file(filename):
     """Serve temporary files (like QR codes)."""
+    return "Legacy temporary-file endpoint removed", 410
+
     try:
         temp_path = os.path.join(app.config["CONVERTED_FOLDER"], filename)
         if os.path.exists(temp_path):
@@ -3495,6 +3508,8 @@ def get_temp_file(filename):
 @app.route("/qr/<filename>")
 def get_qr_code(filename):
     """Serve QR code files."""
+    return "Legacy QR endpoint removed", 410
+
     try:
         return send_from_directory(app.config["CONVERTED_FOLDER"], filename)
     except Exception as e:
@@ -4311,7 +4326,7 @@ def slice_model():
             ), 400
 
         # Owner guard (models without a DB record are treated as anonymous)
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
@@ -4492,7 +4507,7 @@ def get_versions(model_id):
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     try:
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
@@ -4514,7 +4529,7 @@ def restore_model_version(model_id, version_number):
 def delete_model_version(model_id, version_number):
     """Delete a specific version"""
     try:
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
@@ -4641,7 +4656,7 @@ def create_hotspot(model_id):
 def delete_hotspot(model_id, hotspot_id):
     """Delete a specific hotspot"""
     try:
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
@@ -4664,7 +4679,7 @@ def delete_hotspot(model_id, hotspot_id):
 def delete_all_hotspots(model_id):
     """Delete all hotspots for a model"""
     try:
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
@@ -4756,7 +4771,7 @@ def create_camera_view(model_id):
 def delete_camera_view(model_id, view_id):
     """Delete a camera view"""
     try:
-        guard = check_model_mutation_allowed(model_id, require_exists=False)
+        guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 

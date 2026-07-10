@@ -52,3 +52,26 @@ def test_conversion_status_requires_token(client):
         headers={"X-Job-Status-Token": "status-secret"},
     )
     assert response.status_code == 200
+
+
+def test_unregistered_model_cannot_use_mutation_endpoints(client):
+    missing = "55555555-5555-5555-5555-555555555555"
+    response = client.post(
+        "/slice_model",
+        json={
+            "model_id": missing,
+            "planes": [{"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0]}],
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_legacy_raw_file_and_conversion_endpoints_are_gone(client):
+    assert client.post("/convert", json={"modelId": "anything"}).status_code == 410
+    assert client.get("/temp/anything").status_code == 410
+    assert client.get("/qr/anything").status_code == 410
+
+
+def test_thumbnail_requires_live_database_model(client):
+    missing = "66666666-6666-6666-6666-666666666666"
+    assert client.get(f"/thumbnail/{missing}").status_code == 404

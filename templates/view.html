@@ -1564,6 +1564,22 @@ void main() {
                 });
             });
 
+            window.applySectionPreset = async function(axis, percent, side) {
+                const toggle = document.querySelector('.slicer-axis-toggle[data-axis="' + axis + '"]');
+                if (!toggle) return;
+                if (!toggle.checked) {
+                    toggle.checked = true;
+                    toggle.dispatchEvent(new Event('change', {bubbles: true}));
+                    await new Promise(resolve => setTimeout(resolve, 120));
+                }
+                const slider = document.querySelector('.slicer-slider[data-axis="' + axis + '"]');
+                if (!slider) return;
+                const min = parseFloat(slider.min), max = parseFloat(slider.max);
+                slider.value = min + (max - min) * ((Number(percent) + 100) / 200);
+                slider.dispatchEvent(new Event('input', {bubbles: true}));
+                document.querySelector('.slicer-side-btn[data-axis="' + axis + '"][data-side="' + side + '"]')?.click();
+            };
+
             // Reset button
             document.getElementById('slicerReset')?.addEventListener('click', () => {
                 disableAllClipping();
@@ -1731,27 +1747,65 @@ void main() {
 
     <!-- Model Viewer -->
     <div class="viewer-shell relative h-screen">
-        <div class="viewer-stage absolute inset-0" style="z-index: 1;">
+        <div class="viewer-stage absolute inset-0" style="z-index: 1;background:{{ viewer_settings.background_color }};">
             <model-viewer
                 id="modelViewer"
                 src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
                 {% if usdz_filename %}ios-src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
-                shadow-intensity="1.45"
+                shadow-intensity="{{ viewer_settings.shadow_intensity }}"
                 shadow-softness="0.72"
-                exposure="0.96"
+                exposure="{{ viewer_settings.exposure }}"
+                environment-image="{{ viewer_settings.environment }}"
                 tone-mapping="neutral"
                 ar-scale="auto"
                 ar-modes="webxr scene-viewer quick-look"
                 camera-controls
-                camera-orbit="36deg 70deg auto"
-                field-of-view="24deg"
+                camera-orbit="{{ viewer_settings.camera_orbit }}"
+                field-of-view="{{ viewer_settings.field_of_view }}"
+                {% if viewer_settings.auto_rotate %}auto-rotate auto-rotate-delay="{{ viewer_settings.auto_rotate_delay }}"{% endif %}
                 interaction-prompt="none"
                 ar
                 ar-placement="floor"
                 xr-environment
             >
             </model-viewer>
+            {% if viewer_settings.show_dimensions %}
+            <button id="measureToolButton" type="button" style="position:absolute;left:16px;top:72px;z-index:8;padding:8px 12px;border:1px solid rgba(255,255,255,.25);background:rgba(15,23,42,.82);color:white;font-size:12px;cursor:pointer;">Measure</button>
+            <div id="measureToolResult" style="position:absolute;left:16px;top:112px;z-index:8;padding:7px 10px;background:rgba(15,23,42,.82);color:white;font:12px monospace;display:none;">Select two points</div>
+            {% endif %}
         </div>
+
+        {% if viewer_settings.show_dimensions %}
+        <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const viewer = document.getElementById('modelViewer');
+            const button = document.getElementById('measureToolButton');
+            const result = document.getElementById('measureToolResult');
+            let active = false;
+            let points = [];
+            button?.addEventListener('click', () => {
+                active = !active; points = [];
+                button.textContent = active ? 'Measuring…' : 'Measure';
+                result.style.display = active ? 'block' : 'none';
+                result.textContent = 'Select two points';
+            });
+            viewer?.addEventListener('click', (event) => {
+                if (!active || typeof viewer.positionAndNormalFromPoint !== 'function') return;
+                const hit = viewer.positionAndNormalFromPoint(event.clientX, event.clientY);
+                if (!hit?.position) return;
+                points.push(hit.position);
+                if (points.length === 2) {
+                    const [a, b] = points;
+                    const meters = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+                    result.textContent = `${(meters * 100).toFixed(2)} cm (${meters.toFixed(3)} m)`;
+                    points = [];
+                } else {
+                    result.textContent = 'Select the second point';
+                }
+            });
+        });
+        </script>
+        {% endif %}
 
         <!-- Bottom Left Controls -->
         <!-- Hidden color picker (moved to material editor context) -->
@@ -2051,6 +2105,13 @@ void main() {
                     <i data-lucide="chevron-down" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="slicerPanel">
+                    {% if viewer_settings.section_presets %}
+                    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+                        {% for preset in viewer_settings.section_presets %}
+                        <button type="button" class="tp-btn-full" style="width:auto;padding:4px 7px;" onclick="window.applySectionPreset('{{ preset.axis }}', {{ preset.value }}, '{{ preset.side }}')">{{ preset.name }}</button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
                     <p id="slicerPreviewWarn" class="tp-note hidden" style="margin-bottom:0.5rem;color:#f59e0b;">Live preview isn't available in this browser — the slice will still apply correctly when you press Apply.</p>
 

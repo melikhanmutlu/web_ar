@@ -7,7 +7,7 @@
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js"></script>
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: {{ viewer_settings.background_color }}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
         model-viewer {
             width: 100%; height: 100%;
             --poster-color: transparent;
@@ -17,7 +17,7 @@
         /* AR button */
         .embed-ar-btn {
             position: absolute; bottom: 12px; right: 12px;
-            background: rgba(255,255,255,0.95); color: #1a1a2e;
+            background: {{ viewer_settings.branding.primary_color }}; color: {{ viewer_settings.background_color }};
             border: none; border-radius: 8px; padding: 8px 14px;
             font-size: 13px; font-weight: 600; cursor: pointer;
             display: flex; align-items: center; gap: 6px;
@@ -51,26 +51,28 @@
         id="viewer"
         src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
         {% if usdz_filename %}ios-src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
-        shadow-intensity="1.2"
+        shadow-intensity="{{ viewer_settings.shadow_intensity }}"
         shadow-softness="0.8"
-        exposure="0.96"
+        exposure="{{ viewer_settings.exposure }}"
+        environment-image="{{ viewer_settings.environment }}"
         tone-mapping="neutral"
         camera-controls
-        camera-orbit="30deg 70deg auto"
-        field-of-view="24deg"
+        camera-orbit="{{ viewer_settings.camera_orbit }}"
+        field-of-view="{{ viewer_settings.field_of_view }}"
         interaction-prompt="none"
-        {% if ar %}ar ar-scale="auto" ar-placement="floor" ar-modes="webxr scene-viewer quick-look" xr-environment{% endif %}
+        {% if ar and viewer_settings.show_ar %}ar ar-scale="auto" ar-placement="floor" ar-modes="webxr scene-viewer quick-look" xr-environment{% endif %}
+        {% if viewer_settings.auto_rotate %}auto-rotate auto-rotate-delay="{{ viewer_settings.auto_rotate_delay }}"{% endif %}
         {% if autoplay %}autoplay{% endif %}
         loading="eager"
     ></model-viewer>
 
-    {% if model_dimensions %}
+    {% if model_dimensions and viewer_settings.show_dimensions %}
     <div class="embed-dims">
         {{ model_dimensions.width }} x {{ model_dimensions.height }} x {{ model_dimensions.depth }} cm
     </div>
     {% endif %}
 
-    {% if ar %}
+    {% if ar and viewer_settings.show_ar %}
     <button class="embed-ar-btn" id="arBtn" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -81,13 +83,18 @@
     </button>
     {% endif %}
 
-    <a class="embed-brand" href="/view/{{ model.id }}" target="_blank">Powered by ARVision</a>
+    {% if not viewer_settings.branding.hide_powered_by %}
+    <a class="embed-brand" href="/view/{{ model.id }}" target="_blank">
+        {% if viewer_settings.branding.logo_url %}<img src="{{ viewer_settings.branding.logo_url }}" alt="" style="height:18px;vertical-align:middle;margin-right:5px;">{% endif %}
+        Powered by {{ viewer_settings.branding.name }}
+    </a>
+    {% endif %}
 
     <script>
         const viewer = document.getElementById('viewer');
         const arBtn = document.getElementById('arBtn');
 
-        {% if ar %}
+        {% if ar and viewer_settings.show_ar %}
         viewer.addEventListener('load', () => {
             if (viewer.canActivateAR) {
                 arBtn.style.display = 'flex';

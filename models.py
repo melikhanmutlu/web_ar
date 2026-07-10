@@ -140,6 +140,7 @@ class UserModel(db.Model):
     embed_allowed_domains = db.Column(db.Text, nullable=True)
     validation_report = db.Column(db.JSON, nullable=True)
     seo_metadata = db.Column(db.JSON, nullable=True)
+    viewer_settings = db.Column(db.JSON, nullable=True)
 
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)

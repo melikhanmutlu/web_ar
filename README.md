@@ -1,97 +1,56 @@
-# Web AR Uygulaması
+# ARVision
 
-3D modelleri web üzerinden görüntülemek ve AR deneyimi sunmak için geliştirilmiş bir web uygulaması.
+ARVision converts, optimizes, hosts and presents 3D models in the browser and mobile AR. It includes private sharing, organization roles, version history, annotations, LOD and derivative generation, analytics, API tokens and AI-assisted 3D generation.
 
-## Sistem Gereklilikleri
+## Requirements
 
-### Zorunlu Yazılımlar
-- Python 3.8 veya daha yeni bir sürüm
-  - İndirme linki: https://www.python.org/downloads/
-  - **ÖNEMLİ**: Kurulum sırasında "Add Python to PATH" seçeneğini işaretlemeyi unutmayın!
-- Node.js 14.x veya daha yeni bir sürüm
-  - İndirme linki: https://nodejs.org/
-  - LTS (Long Term Support) sürümünü indirmeniz önerilir
+- Python 3.12
+- Node.js 20 or newer
+- PostgreSQL for production
+- FBX2glTF, Assimp and Blender for the full conversion feature set
 
-### Tarayıcı Desteği
-- Modern bir web tarayıcısı (Chrome, Firefox, Edge vb.)
-- WebGL desteği
-- WebXR desteği (AR özelliği için)
+## Local setup
 
-## Kurulum
+```bash
+python -m venv venv
+pip install -r requirements.txt
+npm ci
+flask db upgrade
+python app.py
+```
 
-### Otomatik Kurulum (Önerilen)
-1. Zip dosyasını istediğiniz bir klasöre çıkarın
-2. `install.cmd` dosyasını çalıştırın
-3. Kurulum tamamlandıktan sonra `start_server.cmd` ile sunucuyu başlatın
-4. Tarayıcınızda `http://localhost:5000` adresine gidin
+Copy `.env.example` to `.env` and provide a development `SECRET_KEY`. Never use the example value in production.
 
-### Manuel Kurulum
-Eğer otomatik kurulum çalışmazsa, aşağıdaki adımları takip edin:
+To exercise the durable queue locally:
 
-1. Python virtual environment oluşturun:
-   ```bash
-   python -m venv venv
-   ```
+```bash
+set JOB_QUEUE=true
+python worker.py
+```
 
-2. Virtual environment'ı aktifleştirin:
-   - Windows:
-     ```bash
-     venv\Scripts\activate
-     ```
-   - Linux/Mac:
-     ```bash
-     source venv/bin/activate
-     ```
+Run the web process in a second terminal.
 
-3. Python paketlerini yükleyin:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Quality gates
 
-4. Node.js paketlerini yükleyin:
-   ```bash
-   npm install
-   ```
+```bash
+python -m pytest -q
+npm run lint
+npm run security
+npm run test:e2e
+python -m pip_audit -r requirements.txt
+python -m bandit -r services converters auth.py -ll
+```
 
-5. obj2gltf'i global olarak yükleyin:
-   ```bash
-   npm install -g obj2gltf
-   ```
+The test suite includes a real GLB upload and conversion happy path, access-policy regression tests, queue retry/heartbeat tests and desktop/mobile browser smoke tests.
 
-6. Veritabanını oluşturun:
-   ```bash
-   flask db upgrade
-   ```
+## Production
 
-7. Sunucuyu başlatın:
-   ```bash
-   python app.py
-   ```
+- Set `FLASK_ENV=production` and a strong, unique `SECRET_KEY`.
+- Set `DATABASE_URL` to PostgreSQL.
+- Mount persistent storage and configure the `WEB_AR_*_DIR` variables.
+- Set `JOB_QUEUE=true` and run `worker.py` as a separate process.
+- Configure `METRICS_TOKEN` before exposing `/metrics`.
+- Use Redis through `RATELIMIT_STORAGE_URI` when running multiple web instances.
+- Apply `flask db upgrade` before accepting traffic.
 
-## Kullanım
-
-1. Web tarayıcınızda `http://localhost:5000` adresine gidin
-2. Hesap oluşturun veya giriş yapın
-3. OBJ formatındaki 3D modelinizi yükleyin
-4. Model otomatik olarak GLB formatına dönüştürülecek
-5. Modeli web üzerinde görüntüleyin veya AR deneyimi için QR kodu kullanın
-
-## Sorun Giderme
-
-### Python Bulunamadı Hatası
-- Python'un PATH'e eklendiğinden emin olun
-- Python kurulumunu "Add Python to PATH" seçeneği ile tekrar yapın
-- Bilgisayarınızı yeniden başlatın
-
-### Node.js Paket Yükleme Hataları
-- Node.js'in doğru şekilde kurulduğundan emin olun
-- npm cache'ini temizleyin: `npm cache clean --force`
-- Bilgisayarınızı yeniden başlatın
-
-### Veritabanı Hataları
-- `instance` klasörünü silin ve `flask db upgrade` komutunu tekrar çalıştırın
-- Tüm migrations dosyalarının mevcut olduğundan emin olun
-
-## Lisans
-
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için `LICENSE` dosyasına bakın.
+Railway/Nixpacks and Docker configurations are included. See [ARCHITECTURE.md](ARCHITECTURE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) for additional details.

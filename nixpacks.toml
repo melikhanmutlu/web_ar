@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip", "python311Packages.virtualenv", "nodejs_20", "blender", "assimp"]
+nixPkgs = ["python312", "python312Packages.pip", "python312Packages.virtualenv", "nodejs_20", "blender", "assimp"]
 
 [phases.install]
 cmds = [

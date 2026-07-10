@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import json
 from flask import (
@@ -26,12 +26,13 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, CameraView, AIGenerationJob, ConversionJob
+from models import db, User, UserModel, Folder, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob
 from auth import auth
 import re
 import traceback
 import uuid
 import secrets
+import hashlib
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from config import *
@@ -166,8 +167,10 @@ def check_model_mutation_allowed(model_id, require_exists=True):
              request.args.get("edit_token") or body.get("edit_token") or
              session.get(f"model_edit_token:{model_id}"))
     actor_id = current_user.id if current_user.is_authenticated else None
+    grant = session.get("model_share_grants", {}).get(model_id)
     _, decision = model_access.mutation_decision(
-        model_id, actor_id=actor_id, edit_token=token, require_exists=require_exists
+        model_id, actor_id=actor_id, edit_token=token,
+        share_can_edit=grant == "edit", require_exists=require_exists
     )
     if not decision.allowed:
         return jsonify({"success": False, "error": decision.error}), decision.status
@@ -179,6 +182,17 @@ def check_model_mutation_allowed(model_id, require_exists=True):
 def get_live_model(model_id):
     """Find a model only when it is not in trash."""
     return model_access.live(model_id)
+
+
+def check_model_view_allowed(model_id):
+    actor_id = current_user.id if current_user.is_authenticated else None
+    grants = session.get("model_share_grants", {})
+    _, decision = model_access.view_decision(
+        model_id, actor_id=actor_id, has_share_grant=model_id in grants
+    )
+    if not decision.allowed:
+        return decision
+    return None
 
 
 # Register blueprints
@@ -2329,6 +2343,13 @@ def view_model(model_id):
     if model.deleted_at is not None:
         flash("This model is in the trash. Restore it from My Models to view it.", "error")
         return redirect(url_for("index"))
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        abort(denied.status)
+    if request.args.get("edit_token"):
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            abort(403)
 
     # Increment view count
     model.view_count = (model.view_count or 0) + 1
@@ -2513,12 +2534,15 @@ def view_model(model_id):
     # Owner's other models for gallery (up to 9, excluding current)
     owner_models = []
     if model.user_id:
-        owner_models = (
-            UserModel.query.filter(
+        owner_query = UserModel.query.filter(
                 UserModel.user_id == model.user_id,
                 UserModel.id != model_id,
                 UserModel.deleted_at.is_(None),
             )
+        if not (current_user.is_authenticated and current_user.id == model.user_id):
+            owner_query = owner_query.filter(UserModel.visibility == "public")
+        owner_models = (
+            owner_query
             .order_by(UserModel.upload_date.desc())
             .limit(9)
             .all()
@@ -2559,6 +2583,17 @@ def embed_view(model_id):
     model = get_live_model(model_id)
     if not model:
         return "Model not found", 404
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return denied.error, denied.status
+
+    allowed_domains = [d.strip().lower() for d in (model.embed_allowed_domains or "").split(",") if d.strip()]
+    if allowed_domains:
+        from urllib.parse import urlparse
+        origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+        hostname = (urlparse(origin).hostname or "").lower()
+        if not any(hostname == d or hostname.endswith("." + d) for d in allowed_domains):
+            return "Embedding domain is not allowed", 403
 
     if not model.filename or not os.path.exists(model.filename):
         return "Model file not found", 404
@@ -2613,6 +2648,9 @@ def vr_view(model_id):
     if not model:
         flash("Model not found", "error")
         return redirect(url_for("index"))
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        abort(denied.status)
 
     if not model.filename or not os.path.exists(model.filename):
         flash("Converted model file not found", "error")
@@ -2655,6 +2693,9 @@ def vr_view(model_id):
 @app.route("/api/models/<model_id>/like", methods=["POST"])
 def toggle_like(model_id):
     model = UserModel.query.get_or_404(model_id)
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"error": denied.error}), denied.status
     if current_user.is_authenticated:
         existing = ModelLike.query.filter_by(
             model_id=model_id, user_id=current_user.id
@@ -2694,6 +2735,9 @@ def toggle_like(model_id):
 @login_required
 def toggle_save(model_id):
     model = UserModel.query.get_or_404(model_id)
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"error": denied.error}), denied.status
     existing = ModelSave.query.filter_by(
         model_id=model_id, user_id=current_user.id
     ).first()
@@ -2710,6 +2754,9 @@ def toggle_save(model_id):
 @app.route("/api/models/<model_id>/share", methods=["POST"])
 def track_share(model_id):
     model = UserModel.query.get_or_404(model_id)
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"error": denied.error}), denied.status
     model.share_count = (model.share_count or 0) + 1
     db.session.commit()
     return jsonify({"shares": model.share_count})
@@ -2718,6 +2765,9 @@ def track_share(model_id):
 @app.route("/api/models/<model_id>/track-download", methods=["POST"])
 def track_download(model_id):
     model = UserModel.query.get_or_404(model_id)
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"error": denied.error}), denied.status
     model.download_count = (model.download_count or 0) + 1
     db.session.commit()
     return jsonify({"downloads": model.download_count})
@@ -2738,6 +2788,101 @@ def update_model_metadata(model_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/models/<model_id>/sharing", methods=["PATCH"])
+@login_required
+def update_model_sharing(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    if model.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    visibility = data.get("visibility", model.visibility)
+    if visibility not in {"private", "unlisted", "public"}:
+        return jsonify({"success": False, "error": "Invalid visibility"}), 400
+    domains = data.get("embed_allowed_domains")
+    if domains is not None:
+        if not isinstance(domains, list) or len(domains) > 50:
+            return jsonify({"success": False, "error": "Domains must be a list"}), 400
+        cleaned = []
+        for domain in domains:
+            domain = str(domain).strip().lower()
+            if domain and re.fullmatch(r"(?:[a-z0-9-]+\.)*[a-z0-9-]+", domain):
+                cleaned.append(domain)
+            elif domain:
+                return jsonify({"success": False, "error": f"Invalid domain: {domain}"}), 400
+        model.embed_allowed_domains = ",".join(sorted(set(cleaned))) or None
+    model.visibility = visibility
+    db.session.commit()
+    return jsonify({"success": True, "visibility": model.visibility})
+
+
+@app.route("/api/models/<model_id>/share-links", methods=["POST"])
+@login_required
+def create_model_share_link(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    if model.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    data = request.get_json(silent=True) or {}
+    permission = data.get("permission", "view")
+    if permission not in {"view", "edit"}:
+        return jsonify({"success": False, "error": "Invalid permission"}), 400
+    expires_in = data.get("expires_in_hours", 168)
+    try:
+        expires_in = int(expires_in) if expires_in is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid expiry"}), 400
+    if expires_in is not None and not 1 <= expires_in <= 24 * 365:
+        return jsonify({"success": False, "error": "Expiry must be between 1 hour and 1 year"}), 400
+    token = secrets.token_urlsafe(32)
+    password = data.get("password")
+    link = ModelShareLink(
+        model_id=model_id,
+        token_digest=hashlib.sha256(token.encode()).hexdigest(),
+        permission=permission,
+        password_hash=generate_password_hash(str(password)) if password else None,
+        expires_at=datetime.utcnow() + timedelta(hours=expires_in) if expires_in else None,
+    )
+    db.session.add(link)
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "id": link.id,
+        "permission": permission,
+        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+        "url": url_for("open_model_share_link", token=token, _external=True),
+    }), 201
+
+
+@app.route("/api/models/<model_id>/share-links/<int:link_id>", methods=["DELETE"])
+@login_required
+def revoke_model_share_link(model_id, link_id):
+    model = UserModel.query.get_or_404(model_id)
+    if model.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    link = ModelShareLink.query.filter_by(id=link_id, model_id=model_id).first_or_404()
+    link.revoked_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route("/s/<token>", methods=["GET", "POST"])
+@limiter.limit("30 per minute")
+def open_model_share_link(token):
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    link = ModelShareLink.query.filter_by(token_digest=digest).first()
+    if not link or not link.is_active or link.model.deleted_at is not None:
+        abort(404)
+    if link.password_hash:
+        password = (request.get_json(silent=True) or {}).get("password") or request.form.get("password")
+        if not password or not check_password_hash(link.password_hash, password):
+            if request.method == "GET":
+                return render_template("share_password.html", token=token), 401
+            return jsonify({"success": False, "error": "Invalid password"}), 403
+    grants = dict(session.get("model_share_grants", {}))
+    grants[link.model_id] = link.permission
+    session["model_share_grants"] = grants
+    return redirect(url_for("view_model", model_id=link.model_id))
+
+
 @app.route("/api/models/<model_id>/bounds")
 def get_model_bounds(model_id):
     """Get model bounding box for slicer"""
@@ -2746,6 +2891,9 @@ def get_model_bounds(model_id):
         model = UserModel.query.get(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
 
         # Check if model file exists
         if not model.filename or not os.path.exists(model.filename):
@@ -2823,6 +2971,9 @@ def serve_converted_file(unique_id, filename):
         app.logger.warning(f"Invalid unique_id format rejected: {unique_id}")
         return "Not Found", 404
     if not get_live_model(unique_id):
+        return "Not Found", 404
+    denied = check_model_view_allowed(unique_id)
+    if denied:
         return "Not Found", 404
     directory = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     app.logger.info(f"Attempting to serve file: {filename} from directory: {directory}")

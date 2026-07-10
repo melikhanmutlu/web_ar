@@ -92,6 +92,8 @@ class UserModel(db.Model):
     # Soft delete: set when moved to trash, files stay on disk until purge
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     edit_token_hash = db.Column(db.String(255), nullable=True)
+    visibility = db.Column(db.String(20), nullable=False, default="unlisted", index=True)
+    embed_allowed_domains = db.Column(db.Text, nullable=True)
 
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)
@@ -104,6 +106,7 @@ class UserModel(db.Model):
     
     # Hotspots
     hotspots = db.relationship('ModelHotspot', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelHotspot.created_at')
+    share_links = db.relationship('ModelShareLink', backref='model', lazy=True, cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<UserModel {self.filename}>'
@@ -129,6 +132,23 @@ class UserModel(db.Model):
         if not self.upload_date:
             return 'Unknown'
         return self.upload_date.strftime('%Y-%m-%d %H:%M')
+
+
+class ModelShareLink(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    token_digest = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    permission = db.Column(db.String(10), nullable=False, default='view')
+    password_hash = db.Column(db.String(255), nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and (
+            self.expires_at is None or self.expires_at > datetime.utcnow()
+        )
 
 
 class ModelHotspot(db.Model):

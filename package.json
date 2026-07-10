@@ -7,7 +7,7 @@
     "start": "python app.py",
     "test": "python -m pytest -q",
     "check": "python -m py_compile app.py models.py worker.py",
-    "lint": "node --check static/viewer.js && node --check static/js/my_models.js",
+    "lint": "node --check static/viewer.js && node --check static/js/my_models.js && python scripts/check_inline_js.py",
     "test:e2e": "node node_modules/@playwright/test/cli.js test",
     "security": "npm audit --audit-level=high"
   },

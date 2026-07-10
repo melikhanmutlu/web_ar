@@ -452,6 +452,8 @@ def resolve_custom_domain():
 
 # Register blueprints
 app.register_blueprint(auth)
+app.view_functions["auth.login"] = limiter.limit("10 per minute")(app.view_functions["auth.login"])
+app.view_functions["auth.register"] = limiter.limit("5 per hour")(app.view_functions["auth.register"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
@@ -2616,6 +2618,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
             file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
             upload_date=datetime.utcnow(),
             color=color if use_color else None,
+            display_name=os.path.splitext(
+                payload.get("client_filename", original_filename)
+            )[0][:255],
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0
@@ -4099,8 +4104,11 @@ def model_lods(model_id):
         ratios = [float(value) for value in ratios]
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "Invalid LOD ratios"}), 400
-    if any(value < 0.01 or value >= 1 for value in ratios):
+    if any(not math.isfinite(value) or value < 0.01 or value >= 1 for value in ratios):
         return jsonify({"success": False, "error": "LOD ratios must be between 0.01 and 1"}), 400
+    meshopt = data.get("meshopt", True)
+    if not isinstance(meshopt, bool):
+        return jsonify({"success": False, "error": "meshopt must be a boolean"}), 400
     if ratios != sorted(ratios, reverse=True):
         return jsonify({"success": False, "error": "LOD ratios must be descending"}), 400
     job_id = str(uuid.uuid4())
@@ -4110,7 +4118,7 @@ def model_lods(model_id):
         job_type="lod",
         status="pending",
         payload={"job_id": job_id, "model_id": model_id, "ratios": ratios,
-                 "meshopt": bool(data.get("meshopt", True))},
+                  "meshopt": meshopt},
         user_id=model.user_id,
         status_token_hash=generate_password_hash(status_token),
         max_attempts=2,
@@ -4148,7 +4156,7 @@ def model_exploded_asset(model_id):
         factor = float((request.get_json(silent=True) or {}).get("factor", 0.35))
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "Invalid explosion factor"}), 400
-    if not 0.05 <= factor <= 2.0:
+    if not math.isfinite(factor) or not 0.05 <= factor <= 2.0:
         return jsonify({"success": False, "error": "Explosion factor must be 0.05-2.0"}), 400
     try:
         scene = trimesh.load(model.filename, force="scene")
@@ -4608,7 +4616,7 @@ def download_model(model_id):
         return send_file(
             file_path,
             as_attachment=True,
-            download_name=model.original_filename,
+            download_name=f"{model.display_name or 'model'}.glb",
             mimetype="application/octet-stream",
         )
     except Exception as e:
@@ -4616,16 +4624,18 @@ def download_model(model_id):
         return "Dosya indirilirken bir hata oluştu", 500
 
 
-@app.route("/api/model-info/<int:model_id>")
+@app.route("/api/model-info/<model_id>")
 @login_required
 def get_model_info_api(model_id):
     session = Session(db.engine)
     model = session.get(UserModel, model_id)
+    if model is None or model.deleted_at is not None:
+        return jsonify({"error": "Model not found"}), 404
     if model.user_id != current_user.id:
         flash("Bu modele erişim izniniz yok.", "error")
         return redirect(url_for("auth.profile"))
 
-    model_info = get_file_info(model.file_path)
+    model_info = get_file_info(model.filename)
     if model_info is None:
         return jsonify({"error": "Model not found"}), 404
 
@@ -4652,31 +4662,31 @@ def update_model_color():
                 {"success": False, "error": "Model not found or unauthorized"}
             ), 404
 
-        # Update the model's color in database
-        model.color = color
-        db.session.commit()
-
-        # Find source file in upload directory
-        upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], model_id)
-        if not os.path.isdir(upload_subdir):
-            return jsonify(
-                {"success": False, "error": "Upload directory not found"}
-            ), 404
-
-        source_files = os.listdir(upload_subdir)
-        if not source_files:
-            return jsonify({"success": False, "error": "Source file not found"}), 404
-
-        input_path = os.path.join(upload_subdir, source_files[0])
-        output_path = os.path.join(
-            app.config["CONVERTED_FOLDER"], model_id, "model.glb"
-        )
-
-        # Re-convert the model with the new color
         try:
-            convert_model_new(input_path, output_path, color=color)
+            color = validate_color(color)
+            output_path = model.filename
+            temp_output = output_path + ".color.tmp.glb"
+            if not modify_glb(
+                output_path,
+                temp_output,
+                {"material": {"color": color, "tint_textures": False}},
+            ):
+                return jsonify({"success": False, "error": "Failed to update model color"}), 500
+            os.replace(temp_output, output_path)
+            model.color = color
+            model.validation_report = asset_quality.inspect(output_path)
+            db.session.commit()
+            create_version(
+                model_id=model_id,
+                operation_type="material",
+                operation_details={"color": color},
+                comment="Updated model color",
+            )
             return jsonify({"success": True}), 200
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
         except Exception as e:
+            db.session.rollback()
             logger.error(f"Error converting model with new color: {str(e)}")
             return jsonify(
                 {"success": False, "error": "Failed to update model color"}
@@ -5142,7 +5152,8 @@ def server_error(e):
 
 
 def check_model_files():
-    """Check if model files exist and update database accordingly."""
+    """Report missing model storage without deleting durable metadata."""
+    session = None
     try:
         session = Session(db.engine)
         models = session.query(UserModel).all()
@@ -5152,24 +5163,19 @@ def check_model_files():
             converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
             upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
 
-            # If neither directory exists, delete the model from database
+            # Storage can be temporarily unavailable during a volume remount.
+            # Never turn a transient filesystem outage into permanent DB loss.
             if not os.path.exists(converted_dir) and not os.path.exists(upload_dir):
-                logger.info(
-                    f"Files for model {model.id} not found, removing from database"
+                logger.warning(
+                    f"Files for model {model.id} are currently unavailable"
                 )
-                session.delete(model)
-
-        session.commit()
     except Exception as e:
         logger.error(f"Error checking model files: {str(e)}")
-        session.rollback()
-
-
-@app.before_request
-def before_request():
-    """Run before each request to ensure database is in sync with files."""
-    if request.endpoint == "my_models":
-        check_model_files()
+        if session:
+            session.rollback()
+    finally:
+        if session:
+            session.close()
 
 
 @app.route("/apply_modifications", methods=["POST"])
@@ -5262,9 +5268,13 @@ def download_modified(model_id, filename):
 def get_model_dimensions(model_id):
     """Get model dimensions in meters"""
     try:
-        if not get_live_model(model_id):
+        model = get_live_model(model_id)
+        if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
-        glb_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
+        glb_path = model.filename
 
         if not os.path.exists(glb_path):
             return jsonify({"success": False, "error": "Model not found"}), 404
@@ -5405,7 +5415,10 @@ def save_modifications():
                 # Update database
                 model = UserModel.query.get(model_id)
                 if model:
-                    model.dimensions = new_dims
+                    model.bounds = json.dumps({
+                        "extents": [new_dims["x"], new_dims["y"], new_dims["z"]],
+                        "max": new_dims["max"],
+                    })
 
                     # Update cumulative scale if scale was applied
                     if (
@@ -5472,11 +5485,15 @@ def save_modifications():
 def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
     try:
-        if not get_live_model(model_id):
+        model = get_live_model(model_id)
+        if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
         from mesh_slicer import get_mesh_bounds as get_bounds
 
-        model_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.glb")
+        model_path = model.filename
 
         if not os.path.exists(model_path):
             return jsonify({"success": False, "error": "Model not found"}), 404

@@ -24,3 +24,9 @@ def test_external_observability_is_safe_when_not_configured(client, monkeypatch)
     assert initialize_external_observability(client.application) == {
         "sentry": False, "opentelemetry": False
     }
+
+
+def test_json_formatter_escapes_unicode_for_legacy_consoles():
+    record = logging.LogRecord("test", logging.INFO, __file__, 1, "✅ ready", (), None)
+    rendered = JsonLogFormatter().format(record)
+    assert "\\u2705" in rendered

@@ -24,14 +24,21 @@ class JsonLogFormatter(logging.Formatter):
             pass
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False, default=str)
+        return json.dumps(payload, ensure_ascii=True, default=str)
 
 
 def configure_json_logging():
+    root = logging.getLogger()
+    for handler in root.handlers:
+        stream = getattr(handler, "stream", None)
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="backslashreplace")
+            except (OSError, ValueError):
+                pass
     if os.environ.get("LOG_FORMAT", "text").lower() != "json":
         return False
     formatter = JsonLogFormatter()
-    root = logging.getLogger()
     for handler in root.handlers:
         handler.setFormatter(formatter)
     return True

@@ -99,4 +99,6 @@ def test_private_model_metadata_requires_view_grant(client):
     assert client.get(f"/api/versions/{model.id}").status_code == 403
     assert client.get(f"/api/models/{model.id}/hotspots").status_code == 403
     assert client.get(f"/api/models/{model.id}/camera-views").status_code == 403
+    assert client.get(f"/get_model_dimensions/{model.id}").status_code == 403
+    assert client.get(f"/get_mesh_bounds/{model.id}").status_code == 403
     path.unlink(missing_ok=True)

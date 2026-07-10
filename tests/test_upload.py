@@ -2,6 +2,7 @@ import io
 from pathlib import Path
 
 import app as app_module
+import trimesh
 from models import ConversionJob, Folder, User, UserModel, db
 
 def test_upload_without_login_creates_trackable_job(client, monkeypatch):
@@ -20,6 +21,33 @@ def test_upload_without_login_creates_trackable_job(client, monkeypatch):
         Path(app_module.app.config["TEMP_FOLDER"]) / payload["job_id"],
         ignore_errors=True,
     )
+
+
+def test_glb_upload_completes_the_real_pipeline(client, monkeypatch):
+    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
+    response = client.post(
+        '/upload_model',
+        data={'file': (io.BytesIO(source), 'box.glb'), 'compression': 'none'},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 202
+    payload = response.get_json()
+    job = db.session.get(ConversionJob, payload['job_id'])
+
+    app_module.run_conversion_job(job, allow_retry=False)
+    db.session.refresh(job)
+    assert job.status == 'completed'
+    model = db.session.get(UserModel, payload['job_id'])
+    assert model is not None
+    assert model.display_name == 'box'
+    assert Path(model.filename).is_file()
+    assert model.validation_report is not None
+    assert client.get(
+        f"/api/upload-jobs/{job.id}",
+        headers={"X-Job-Status-Token": payload["status_token"]},
+    ).get_json()["viewer_url"] == f"/view/{model.id}"
+    app_module.shutil.rmtree(Path(model.filename).parent, ignore_errors=True)
 
 
 def test_owner_can_download_model(client, init_database):

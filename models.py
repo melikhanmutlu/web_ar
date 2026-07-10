@@ -83,6 +83,29 @@ class OrganizationMember(db.Model):
     __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
 
 
+class ApiToken(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    token_prefix = db.Column(db.String(16), nullable=False, index=True)
+    token_digest = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    scopes = db.Column(db.String(500), nullable=False, default='models:read')
+    expires_at = db.Column(db.DateTime, nullable=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and (
+            self.expires_at is None or self.expires_at > datetime.utcnow()
+        )
+
+    def has_scope(self, scope):
+        return scope in set((self.scopes or '').split(','))
+
+
 class UserModel(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # Changed to String to support UUID
     filename = db.Column(db.String(255), nullable=False)

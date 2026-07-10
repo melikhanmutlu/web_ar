@@ -35,7 +35,6 @@ else:
     FBX2GLTF_PATH = os.path.join(TOOLS_DIR, 'FBX2glTF')
 
 # Flask Configuration
-SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY', 'dev-secret-key-change-in-production')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
 if FLASK_ENV == 'production' and SECRET_KEY == 'dev-secret-key-change-in-production':
@@ -43,6 +42,25 @@ if FLASK_ENV == 'production' and SECRET_KEY == 'dev-secret-key-change-in-product
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = FLASK_ENV == 'production'
 SESSION_COOKIE_SAMESITE = 'Lax'
+
+# SECRET_KEY signs session cookies and CSRF tokens — a known/default value lets
+# anyone forge sessions and impersonate users. Fail fast in production rather
+# than silently falling back to a public dev key. Production is detected via
+# FLASK_ENV, Railway's injected env, or the presence of a managed DATABASE_URL.
+_SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY')
+_IS_PRODUCTION = (
+    FLASK_ENV == 'production'
+    or bool(os.environ.get('RAILWAY_ENVIRONMENT'))
+    or bool(os.environ.get('DATABASE_URL'))
+)
+if not _SECRET_KEY:
+    if _IS_PRODUCTION:
+        raise RuntimeError(
+            "SECRET_KEY (or WEB_AR_SECRET_KEY) must be set in production. "
+            "Refusing to start with a default signing key."
+        )
+    _SECRET_KEY = 'dev-secret-key-change-in-production'
+SECRET_KEY = _SECRET_KEY
 
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -67,7 +85,7 @@ SQLALCHEMY_ENGINE_OPTIONS = {
 
 # Dosya limitleri ve izinler
 MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 100 * 1024 * 1024))  # 100MB default
-ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf', 'zip'}
+ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf', 'zip', 'step', 'stp'}
 BATCH_UPLOAD_MAX_FILES = int(os.getenv('BATCH_UPLOAD_MAX_FILES', 10))
 ZIP_MAX_ENTRIES = int(os.getenv('ZIP_MAX_ENTRIES', 500))
 
@@ -75,9 +93,27 @@ ZIP_MAX_ENTRIES = int(os.getenv('ZIP_MAX_ENTRIES', 500))
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
 MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')
 MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-5')
+# Image generation model for the optional pre-processing step (text-to-image /
+# image-to-image before image-to-3D).
+MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')
 # Per-user daily generation quota (each generation costs Meshy credits = money).
 AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
 METRICS_TOKEN = os.getenv('METRICS_TOKEN', '')
+
+# SEO / canonical site config. SITE_URL is env-var-driven (never derived from
+# the request Host header) because the production domain is expected to move
+# off the current Railway subdomain to a custom domain later — canonical
+# links, the sitemap, and OG/Twitter URLs must stay stable across that move.
+SITE_URL = os.getenv('SITE_URL', 'https://webar.up.railway.app').rstrip('/')
+# Google Search Console HTML-tag ownership verification value (just the
+# content="..." string). Leave empty until a GSC property exists.
+GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
+# Whether /view/<id> (the canonical model-viewer page) is indexable by search
+# engines. Default noindex — UserModel has no is_public/visibility field, so
+# there's no per-model opt-in yet; every uploaded model would become
+# Google-searchable if this were on. /embed/<id> and /vr/<id> always stay
+# noindex regardless of this flag (see _seo_robots_for_model_page in app.py).
+SEO_INDEX_MODEL_PAGES = os.getenv('SEO_INDEX_MODEL_PAGES', 'false').lower() == 'true'
 
 # Klasörleri oluştur
 def create_directories():

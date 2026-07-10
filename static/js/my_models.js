@@ -35,19 +35,23 @@ function updateSelectionUI() {
     const count = selectedModels.size;
     const deleteBtn = document.getElementById('deleteSelectedBtn');
     const moveBtn = document.getElementById('moveSelectedBtn');
+    const restoreBtn = document.getElementById('restoreSelectedBtn');
     const selectionCount = document.getElementById('selectionCount');
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
 
     // Update count badge
     selectionCount.textContent = `${count} selected`;
 
-    // Show/hide bulk action buttons
+    // Show/hide bulk action buttons (moveBtn/restoreBtn are mutually
+    // exclusive depending on whether this is the trash view)
     if (count > 0) {
         deleteBtn.classList.remove('hidden');
         moveBtn?.classList.remove('hidden');
+        restoreBtn?.classList.remove('hidden');
     } else {
         deleteBtn.classList.add('hidden');
         moveBtn?.classList.add('hidden');
+        restoreBtn?.classList.add('hidden');
     }
     
     // Update select all checkbox
@@ -76,21 +80,35 @@ window.toggleModelSelection = function(event, modelId, cardElement) {
     
     // In selection mode, toggle selection
     if (event.target.tagName !== 'BUTTON' && event.target.tagName !== 'A') {
-        event.preventDefault();
         event.stopPropagation();
-        
+
         const checkbox = cardElement.querySelector('.model-checkbox');
-        
-        if (selectedModels.has(modelId)) {
-            selectedModels.delete(modelId);
-            cardElement.classList.remove('selected');
-            if (checkbox) checkbox.checked = false;
-        } else {
+        const isCheckboxClick = event.target === checkbox;
+
+        // Clicking elsewhere on the card has no native toggle to fight —
+        // prevent the default (text selection etc.) and drive everything
+        // ourselves. A direct checkbox click already toggled `.checked`
+        // natively before this handler runs; calling preventDefault() here
+        // would trigger the checkbox's "canceled activation steps" right
+        // after we return, silently reverting our own `checked` assignment
+        // below and leaving the box looking unchecked despite the selection
+        // having actually registered — so let the native toggle stand and
+        // just read it as the source of truth instead.
+        if (!isCheckboxClick) {
+            event.preventDefault();
+        }
+        const nowSelected = isCheckboxClick ? checkbox.checked : !selectedModels.has(modelId);
+
+        if (nowSelected) {
             selectedModels.add(modelId);
             cardElement.classList.add('selected');
             if (checkbox) checkbox.checked = true;
+        } else {
+            selectedModels.delete(modelId);
+            cardElement.classList.remove('selected');
+            if (checkbox) checkbox.checked = false;
         }
-        
+
         updateSelectionUI();
     }
 }
@@ -171,7 +189,7 @@ async function deleteForever(modelId) {
             body: JSON.stringify({ permanent: true })
         });
         if (!response.ok) throw new Error('Delete failed');
-        document.querySelector(`.trash-row[data-model-id="${modelId}"]`)?.remove();
+        document.querySelector(`.model-card[data-model-id="${modelId}"]`)?.remove();
         displayToast('Model permanently deleted', 'success');
     } catch (error) {
         console.error('Error:', error);
@@ -227,6 +245,47 @@ async function deleteSelectedModels() {
     } catch (error) {
         console.error('Error:', error);
         displayToast('Failed to delete models', 'error');
+    }
+}
+
+async function restoreSelectedModels() {
+    if (selectedModels.size === 0) return;
+
+    try {
+        const response = await fetch('/restore_selected_models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_ids: Array.from(selectedModels) })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'Failed to restore models');
+        displayToast(`Restored ${selectedModels.size} model(s)`, 'success');
+        setTimeout(() => location.reload(), 600);
+    } catch (error) {
+        console.error('Error:', error);
+        displayToast(error.message || 'Failed to restore models', 'error');
+    }
+}
+
+async function deleteForeverSelected() {
+    if (selectedModels.size === 0) return;
+
+    const confirmed = confirm(`Permanently delete ${selectedModels.size} selected model(s)? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+        const response = await fetch('/delete_selected_models', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model_ids: Array.from(selectedModels) })
+        });
+        const data = await response.json();
+        if (!data.success) throw new Error(data.message || 'Failed to delete models');
+        displayToast(data.message || 'Models permanently deleted', 'success');
+        setTimeout(() => location.reload(), 600);
+    } catch (error) {
+        console.error('Error:', error);
+        displayToast(error.message || 'Failed to delete models', 'error');
     }
 }
 
@@ -534,6 +593,10 @@ function copyModelLink(modelId) {
 // Navigation Functions
 function navigateToFolder(folderId) {
     window.location.href = `/my_models/${folderId}`;
+}
+
+function navigateToTrash() {
+    window.location.href = '/my_models/trash';
 }
 
 function navigateBack() {

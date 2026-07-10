@@ -4,7 +4,13 @@
     <!-- Meta Tags and Title -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Model Viewer - ARVision</title>
+    {% include '_security_head.html' %}
+    {% set seo_title = display_name + ' — ARVision' %}
+    {% set seo_description = (model.description or (display_name + ' — view this 3D model in augmented reality on ARVision.')) | truncate(160) %}
+    {% set seo_canonical = SITE_URL + url_for('view_model', model_id=model_id) %}
+    {% set seo_og_image = SITE_URL + url_for('serve_thumbnail', unique_id=model_unique_id) %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,7 +20,7 @@
 
 
     <!-- QR Code library -->
-    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
 
     <!-- Lucide Icons (pinned to avoid breaking changes from @latest) -->
     <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
@@ -84,11 +90,6 @@
         #rightSidebar { position: fixed; top: 50%; right: var(--spacing-lg); transform: translateY(-50%); width: 20rem; max-height: calc(100vh - var(--spacing-2xl)); overflow-y: auto; transition: transform 0.3s ease; }
         #rightSidebar.sidebar-collapsed { transform: translateX(calc(100% + var(--spacing-lg))); }
 
-        #sidebarToggle { position: absolute; left: -2rem; top: 50%; transform: translateY(-50%); width: 2rem; height: 3.5rem; background: var(--color-gray-100); border: 1px solid var(--color-gray-200); border-right: none; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 30; transition: background 0.2s; }
-        .dark #sidebarToggle { background: var(--color-gray-800); border-color: var(--color-gray-700); }
-        #sidebarToggle:hover { background: var(--color-gray-200); }
-        .dark #sidebarToggle:hover { background: var(--color-gray-700); }
-
         #saveChangesWrapper { position: sticky; bottom: 0; flex-shrink: 0; z-index: 5; padding-top: 2px; }
         .modal-overlay { background-color: rgba(0, 0, 0, 0.7); transition: opacity 0.3s ease; }
         .modal-container { transform: scale(0.95); opacity: 0; transition: all 0.3s ease; }
@@ -130,7 +131,6 @@
         #rightSidebar.info-hidden { opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }
         #rightSidebar.showcase-sidebar { gap: 0; padding-right: 0 !important; scrollbar-width: none; }
         #rightSidebar.showcase-sidebar::-webkit-scrollbar { display: none; }
-        #rightSidebar.showcase-sidebar #sidebarToggle { display: none; }
 
         /* Tools Panel body — ensure moved content inherits dark theme */
         #toolsPanelBody .showcase-content { padding-right: 0; margin-top: 0; overflow: visible; }
@@ -138,7 +138,6 @@
         .showcase-card { display: flex; flex-direction: column; height: auto; padding: var(--spacing-xl); background: var(--color-gray-900); color: var(--color-gray-200); border: 1px solid var(--color-gray-700); overflow: hidden; transition: opacity 0.2s ease, transform 0.2s ease; }
         .showcase-card.is-collapsed { opacity: 0; pointer-events: none; transform: translateX(var(--spacing-lg)); }
 
-        .showcase-collapsed-pill { display: none !important; }
         #rightSidebar.info-hidden .showcase-card { opacity: 0; pointer-events: none; }
 
         .showcase-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-md); padding-bottom: var(--spacing-sm); }
@@ -242,6 +241,19 @@
         .tp-section-body { display: none; padding: 0.6rem 0.85rem 0.75rem; }
         .tp-section-body.is-open { display: block; }
 
+        /* ── Tools Panel navigation: menu (all headers) ↔ detail (one section, full height) ── */
+        #toolsDetailBack { display: none; align-items: center; gap: 0.5rem; padding: 0.55rem 0.85rem; border-bottom: 1px solid var(--color-gray-700); flex-shrink: 0; }
+        #toolsDetailBack.is-visible { display: flex; }
+        .tools-detail-back-btn { display: flex; align-items: center; gap: 0.2rem; background: none; border: none; color: var(--color-gray-400); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; padding: 0.15rem 0.3rem 0.15rem 0.1rem; margin-left: -0.1rem; }
+        .tools-detail-back-btn:hover { color: var(--color-gray-200); }
+        .tools-detail-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-gray-200); border-left: 1px solid var(--color-gray-700); padding-left: 0.6rem; }
+
+        /* Menu mode: only header rows show, every section body stays closed regardless of is-open */
+        #toolsSections[data-active-section=""] .tp-section-body { display: none !important; }
+        /* Detail mode: only the active section (header hidden, body shown full-width) renders; siblings vanish */
+        #toolsSections:not([data-active-section=""]) .tp-section:not(.is-active) { display: none; }
+        #toolsSections:not([data-active-section=""]) .tp-section.is-active > .tp-section-header { display: none; }
+
         .tp-field { margin-bottom: 0.55rem; }
         .tp-field:last-child { margin-bottom: 0; }
         .tp-label { display: block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-gray-500); margin-bottom: 0.2rem; }
@@ -260,10 +272,18 @@
         .tp-btn-full:hover { background: var(--color-gray-700); color: var(--color-gray-200); }
         .tp-btn-sm { display: inline-flex; align-items: center; justify-content: center; gap: 0.2rem; padding: 0.25rem 0.45rem; background: var(--color-gray-800); border: 1px solid var(--color-gray-700); color: var(--color-gray-400); font-size: 0.65rem; font-weight: 600; cursor: pointer; transition: background 0.12s; }
         .tp-btn-sm:hover { background: var(--color-gray-700); color: var(--color-gray-200); }
+        .tp-view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+        .tp-view-grid .tp-btn-sm { padding: 0.4rem 0.3rem; }
         .tp-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; padding: 0.45rem 0.7rem; background: var(--color-gray-200); border: 1px solid var(--color-gray-300); color: var(--color-gray-900); font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: background 0.12s; }
         .tp-btn-primary:hover { background: var(--color-white); }
         .tp-note { font-size: 0.65rem; color: var(--color-gray-500); font-style: italic; margin-top: 0.2rem; }
         .tp-checkbox { width: 0.85rem; height: 0.85rem; accent-color: var(--color-gray-200); cursor: pointer; }
+
+        /* Rig & Animate: curated preset picker */
+        .rig-anim-grid { max-height: 11rem; overflow-y: auto; border: 1px solid var(--color-gray-700); padding: 0.4rem; }
+        .rig-anim-category { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-gray-500); margin: 0.35rem 0 0.15rem; }
+        .rig-anim-category:first-child { margin-top: 0; }
+        .rig-anim-item { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; color: var(--color-gray-300); cursor: pointer; }
 
         /* Dimensions block */
         .tp-dims { padding: 0.45rem 0.55rem; background: var(--color-gray-800); border: 1px solid var(--color-gray-700); margin-bottom: 0.55rem; }
@@ -293,8 +313,6 @@
         .tp-save-bar { padding: 0.65rem 0.85rem; border-top: 1px solid var(--color-gray-700); background: var(--color-gray-900); }
 
         .bottom-right-controls { display: flex; align-items: center; gap: 0.25rem; }
-        .tb-btn.is-liked, .tb-btn.is-saved { color: var(--color-gray-900); }
-        .dark .tb-btn.is-liked, .dark .tb-btn.is-saved { color: var(--color-gray-200); }
         #toolsPanelToggle.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
         .dark #toolsPanelToggle.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
@@ -419,14 +437,6 @@
                 display: block;
             }
 
-            #sidebarToggle {
-                display: inline-flex;
-                top: var(--spacing-md);
-                left: auto;
-                right: var(--spacing-lg);
-                transform: none;
-            }
-
             /* Toolbar: fixed bottom, horizontal icons */
             .toolbar-shell {
                 position: fixed !important;
@@ -502,10 +512,6 @@
             .showcase-sidebar {
                 width: 100vw !important;
                 max-width: 100vw !important;
-            }
-
-            #sidebarToggle {
-                display: none;
             }
 
             .toolbar-shell {
@@ -587,17 +593,6 @@
             const viewerStage = document.querySelector('.viewer-stage');
             const fullscreenButton = document.querySelector('#fullscreenButton');
             const downloadButton = document.querySelector('#downloadButton');
-            const colorPicker = document.querySelector('#colorPicker');
-            const hexInput = document.querySelector('#hexInput');
-            const resetColorButton = document.querySelector('#resetColor');
-            const resetViewButton = document.querySelector('#resetView');
-            const qrButton = document.querySelector('#qrButton');
-            const qrModal = document.querySelector('#qrModal');
-            const closeQrModal = document.querySelector('#closeQrModal');
-            const arButton = document.querySelector('#arButton');
-            const arModal = document.querySelector('#arModal');
-            const closeArModal = document.querySelector('#closeArModal');
-            const showQrFromAr = document.querySelector('#showQrFromAr');
             const screenshotButton = document.getElementById('screenshotButton');
             const modelInfoButton = document.querySelector('#modelInfoButton');
             const modelInfoModal = document.querySelector('#modelInfoModal');
@@ -631,24 +626,15 @@
                 }
             });
 
-            // Store initial camera settings
-            let initialCameraOrbit = null;
-            let initialFieldOfView = null;
-            let initialCameraTarget = null;
-            let isColorApplied = false;
-
-            // Store initial camera settings when model loads
             modelViewer?.addEventListener('load', () => {
-                initialCameraOrbit = modelViewer.cameraOrbit;
-                initialFieldOfView = modelViewer.fieldOfView;
-                initialCameraTarget = modelViewer.cameraTarget;
                 // Pre-initialize slicer internals (delay to let model-viewer finish setup)
                 // Uses window. prefix because discoverInternals is defined in a separate scope
                 setTimeout(() => {
                     if (typeof window._slicerDiscoverInternals === 'function') {
                         window._slicerDiscoverInternals();
-                        setTimeout(() => window._slicerDiscoverInternals?.(), 1000);
-                        setTimeout(() => window._slicerDiscoverInternals?.(), 3000);
+                        window._buildLayersList?.();
+                        setTimeout(() => { window._slicerDiscoverInternals?.(); window._buildLayersList?.(); }, 1000);
+                        setTimeout(() => { window._slicerDiscoverInternals?.(); window._buildLayersList?.(); }, 3000);
                     }
                 }, 500);
             });
@@ -683,7 +669,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = modelUrl.split('/').pop() || 'model.glb';
+                    a.download = {{ (display_name ~ '.glb') | tojson }};
                     
                     document.body.appendChild(a);
                     a.click();
@@ -700,144 +686,11 @@
                 }
             });
 
-            // Like button
-            document.getElementById('likeButton')?.addEventListener('click', async () => {
-                try {
-                    const resp = await fetch('/api/models/{{ model_id }}/like', { method: 'POST' });
-                    const data = await resp.json();
-                    const btn = document.getElementById('likeButton');
-                    if (data.liked) {
-                        btn.classList.add('is-liked');
-                    } else {
-                        btn.classList.remove('is-liked');
-                    }
-                } catch (e) { console.error('Like error:', e); }
-            });
-
-            // Save/Bookmark button
-            document.getElementById('saveModelButton')?.addEventListener('click', async () => {
-                try {
-                    const resp = await fetch('/api/models/{{ model_id }}/save', { method: 'POST' });
-                    if (resp.status === 401) { alert('Please login to save models.'); return; }
-                    const data = await resp.json();
-                    const btn = document.getElementById('saveModelButton');
-                    if (data.saved) {
-                        btn.classList.add('is-saved');
-                    } else {
-                        btn.classList.remove('is-saved');
-                    }
-                } catch (e) { console.error('Save error:', e); }
-            });
-
-            // Share button
-            document.getElementById('shareButton')?.addEventListener('click', async () => {
-                try {
-                    if (navigator.share) {
-                        await navigator.share({ title: document.querySelector('.showcase-title')?.textContent || 'Model', url: window.location.href });
-                    } else {
-                        await navigator.clipboard.writeText(window.location.href);
-                        const btn = document.getElementById('shareButton');
-                        btn.title = 'Link copied!';
-                        setTimeout(() => { btn.title = 'Share'; }, 2000);
-                    }
-                    await fetch('/api/models/{{ model_id }}/share', { method: 'POST' });
-                } catch (e) { if (e.name !== 'AbortError') console.error('Share error:', e); }
-            });
-
-            // Color picker functionality
-            function rgb2hex(rgb) {
-                if (!rgb) return '#FFFFFF';
-                const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-                if (!match) return '#FFFFFF';
-                return `#${match.slice(1).map(n => parseInt(n, 10).toString(16).padStart(2, '0')).join('')}`;
-            }
-
-            function setViewerBackgroundColor(color) {
-                if (!viewerStage) return;
-                viewerStage.style.background = color;
-            }
-
-            colorPicker?.addEventListener('input', (event) => {
-                try {
-                    const color = event.target.value;
-                    setViewerBackgroundColor(color);
-                    hexInput.value = color.toUpperCase();
-                    isColorApplied = true;
-                } catch (error) {
-                    console.error('Color picker error:', error);
-                }
-            });
-
-            hexInput?.addEventListener('input', (event) => {
-                try {
-                    let color = event.target.value;
-                    if (!color.startsWith('#')) {
-                        color = '#' + color;
-                    }
-                    if (/^#[0-9A-F]{6}$/i.test(color)) {
-                        setViewerBackgroundColor(color);
-                        colorPicker.value = color.toUpperCase();
-                        hexInput.value = color.toUpperCase();
-                        isColorApplied = true;
-                    }
-                } catch (error) {
-                    console.error('Hex input error:', error);
-                }
-            });
-
-            // Reset color button handler
-            resetColorButton?.addEventListener('click', () => {
-                try {
-                    setViewerBackgroundColor('#FFFFFF');
-                    colorPicker.value = '#FFFFFF';
-                    hexInput.value = '#FFFFFF';
-                    isColorApplied = false;
-                } catch (error) {
-                    console.error('Reset color error:', error);
-                }
-            });
-
-            function toggleDarkMode() {
-                document.documentElement.classList.remove('dark');
-                localStorage.theme = 'light';
-                setViewerBackgroundColor('#FFFFFF');
-                colorPicker.value = '#FFFFFF';
-                hexInput.value = '#FFFFFF';
-            }
-
-            // Panel Toggling logic
-            window.togglePanel = function(panelId) {
-                const panel = document.getElementById(panelId);
-                const icon = document.getElementById(panelId + 'Icon');
-                if (!panel) return;
-
-                if (panel.classList.contains('open')) {
-                    // Closing: lock to current height first, then animate to 0
-                    panel.style.maxHeight = panel.scrollHeight + 'px';
-                    panel.classList.remove('open');
-                    requestAnimationFrame(() => requestAnimationFrame(() => {
-                        panel.style.maxHeight = '0';
-                    }));
-                    if (icon) icon.style.transform = 'rotate(0deg)';
-                } else {
-                    // Opening: animate to content height
-                    panel.classList.add('open');
-                    panel.style.maxHeight = panel.scrollHeight + 'px';
-                    if (icon) icon.style.transform = 'rotate(180deg)';
-                    // After animation, remove restriction so dynamic content (AJAX etc.) shows fully
-                    const onEnd = () => {
-                        if (panel.classList.contains('open')) panel.style.maxHeight = 'none';
-                        panel.removeEventListener('transitionend', onEnd);
-                    };
-                    panel.addEventListener('transitionend', onEnd);
-                }
-            };
-
+            // The viewer is a light-only page; the stage default in CSS is
+            // gray-100, but the viewer has always rendered on white.
             document.documentElement.classList.remove('dark');
             localStorage.theme = 'light';
-            setViewerBackgroundColor('#FFFFFF');
-            colorPicker.value = '#FFFFFF';
-            hexInput.value = '#FFFFFF';
+            if (viewerStage) viewerStage.style.background = '#FFFFFF';
 
             // Screenshot functionality
             screenshotButton?.addEventListener('click', async () => {
@@ -859,6 +712,9 @@
         });
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Bare `modelViewer` references below used to resolve only through
+            // the id="modelViewer" named-element global — bind it explicitly.
+            const modelViewer = document.querySelector('model-viewer');
             // Get modal elements
             const arButton = document.querySelector('#arButton');
             const qrButton = document.querySelector('#qrButton');
@@ -866,12 +722,10 @@
             const qrModal = document.querySelector('#qrModal');
             const closeArModal = document.querySelector('#closeArModal');
             const closeQrModal = document.querySelector('#closeQrModal');
-            const showQrFromAr = document.querySelector('#showQrFromAr');
             let qrcode = null;
 
             // Function to check if AR is supported
             function isARSupported() {
-                const modelViewer = document.querySelector('model-viewer');
                 return modelViewer && modelViewer.canActivateAR;
             }
 
@@ -900,7 +754,7 @@
                 document.getElementById('arButton')?.classList.remove('is-active');
             }
 
-            document.getElementById('closeArModal')?.addEventListener('click', hideArModal);
+            // Close on overlay click (the close button itself is wired below)
             document.getElementById('arModal')?.addEventListener('click', function(e) {
                 if (e.target === this) hideArModal();
             });
@@ -952,10 +806,6 @@
             qrButton?.addEventListener('click', showQRModal);
             closeArModal?.addEventListener('click', hideArModal);
             closeQrModal?.addEventListener('click', hideQRModal);
-            showQrFromAr?.addEventListener('click', () => {
-                hideArModal();
-                showQRModal();
-            });
 
             // ===== USDZ STATUS CHECK (iOS AR) =====
             (function checkUsdzStatus() {
@@ -1187,7 +1037,6 @@
 
             const _patchedMaterials = new Set();
             const _originalSides = new Map();  // Store original material.side for restore
-            const _shaderRefs = [];
 
             // Global clip plane uniforms (shared across all materials)
             const _clipUniforms = {
@@ -1219,9 +1068,6 @@
                     shader.uniforms.slicerPlaneNZ = _clipUniforms.slicerPlaneNZ;
                     shader.uniforms.slicerPlaneD = _clipUniforms.slicerPlaneD;
                     shader.uniforms.slicerNumPlanes = _clipUniforms.slicerNumPlanes;
-
-                    // Store reference for uniform updates
-                    _shaderRefs.push(shader);
 
                     // Vertex shader: pass world-space position to fragment
                     // Uses modelMatrix to match the coordinate system of
@@ -1403,6 +1249,340 @@ void main() {
                 _renderPumpId = requestAnimationFrame(pump);
             }
 
+            // A backgrounded tab gets no rAF, but on return the pump must resume
+            // (and if the browser DOES keep ticking rAF, don't render unseen
+            // frames at full speed forever while a preview is just left open).
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    if (_renderPumpId) { cancelAnimationFrame(_renderPumpId); _renderPumpId = null; }
+                } else if (isClippingEnabled) {
+                    startRenderPump();
+                }
+            });
+
+            // Cross-script-block hooks: the annotations code (separate scope)
+            // needs to know whether a clip preview is active, and the material
+            // editor re-applies clipping after material changes so recompiled/
+            // replaced materials regain the clip shader patch.
+            window._slicerClippingActive = () => isClippingEnabled;
+            window._reapplyClipping = () => { if (isClippingEnabled) applyClippingPlanes(); };
+
+            // ===== LAYERS PANEL (visibility, per-layer color, explode) =====
+            // Reuses the THREE internals discovered above for the slicer —
+            // no server round-trip needed to enumerate a model's parts.
+            let modelLayers = [];
+            let layersBuiltForModel = false;
+            let layersExplodeDiagonal = 1;
+
+            function getMvMaterialsForLayers() {
+                try { return document.querySelector('model-viewer')?.model?.materials || []; } catch (e) { return []; }
+            }
+
+            function layersRgbToHex(r, g, b) {
+                const c = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+                return '#' + c(r) + c(g) + c(b);
+            }
+
+            function layersHexToRgb(hex) {
+                hex = hex.replace('#', '');
+                return [
+                    parseInt(hex.substring(0, 2), 16) / 255,
+                    parseInt(hex.substring(2, 4), 16) / 255,
+                    parseInt(hex.substring(4, 6), 16) / 255
+                ];
+            }
+
+            async function buildLayersList() {
+                if (layersBuiltForModel) return;
+                if (!discoverInternals() || !_mvScene) return;
+
+                const meshes = [];
+                _mvScene.traverse(child => {
+                    if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
+                        meshes.push(child);
+                    }
+                });
+
+                // A single-part model (e.g. any STL — always flattened to one mesh
+                // by the converter) has nothing to break into layers.
+                if (meshes.length <= 1) return;
+
+                layersBuiltForModel = true;
+                _mvScene.updateMatrixWorld(true);
+
+                const mvMats = getMvMaterialsForLayers();
+                await Promise.all(mvMats.map(m => { try { return m.ensureLoaded ? m.ensureLoaded() : null; } catch (e) { return null; } }));
+
+                // Count how many layers reference each material NAME so a color
+                // change can target the public per-material API when a material
+                // belongs to exactly one layer, and safely fall back to cloning
+                // the THREE material when several layers share one material.
+                const matNameCounts = {};
+                meshes.forEach(mesh => {
+                    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                    const matName = mat?.name || '';
+                    if (matName) matNameCounts[matName] = (matNameCounts[matName] || 0) + 1;
+                });
+
+                // World-space bounds of the whole model (union of every mesh's
+                // local bbox corners transformed to world space) — used to scale
+                // the explode offsets and to derive each layer's explode direction.
+                let worldMin = [Infinity, Infinity, Infinity];
+                let worldMax = [-Infinity, -Infinity, -Infinity];
+                meshes.forEach(mesh => {
+                    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+                    const bb = mesh.geometry.boundingBox;
+                    for (let xi = 0; xi <= 1; xi++) for (let yi = 0; yi <= 1; yi++) for (let zi = 0; zi <= 1; zi++) {
+                        const corner = new _InternalVector3(
+                            xi ? bb.max.x : bb.min.x,
+                            yi ? bb.max.y : bb.min.y,
+                            zi ? bb.max.z : bb.min.z
+                        ).applyMatrix4(mesh.matrixWorld);
+                        worldMin[0] = Math.min(worldMin[0], corner.x); worldMax[0] = Math.max(worldMax[0], corner.x);
+                        worldMin[1] = Math.min(worldMin[1], corner.y); worldMax[1] = Math.max(worldMax[1], corner.y);
+                        worldMin[2] = Math.min(worldMin[2], corner.z); worldMax[2] = Math.max(worldMax[2], corner.z);
+                    }
+                });
+                const modelCenter = new _InternalVector3(
+                    (worldMin[0] + worldMax[0]) / 2,
+                    (worldMin[1] + worldMax[1]) / 2,
+                    (worldMin[2] + worldMax[2]) / 2
+                );
+                const dx = worldMax[0] - worldMin[0], dy = worldMax[1] - worldMin[1], dz = worldMax[2] - worldMin[2];
+                layersExplodeDiagonal = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+
+                const occurrenceCounts = {};
+                modelLayers = meshes.map((mesh, idx) => {
+                    const rawNodeName = mesh.name || '';
+                    const occurrence = occurrenceCounts[rawNodeName] || 0;
+                    occurrenceCounts[rawNodeName] = occurrence + 1;
+                    const displayName = mesh.name || mesh.parent?.name || ('Layer ' + (idx + 1));
+
+                    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+                    const matName = mat?.name || '';
+                    const isExclusive = !!matName && matNameCounts[matName] === 1;
+                    const mvMaterial = isExclusive ? (mvMats.find(m => m.name === matName) || null) : null;
+
+                    let origColorHex = '#ffffff';
+                    try {
+                        if (mvMaterial) {
+                            const cf = mvMaterial.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                            origColorHex = layersRgbToHex(cf[0], cf[1], cf[2]);
+                        } else if (mat && mat.color) {
+                            origColorHex = '#' + mat.color.getHexString();
+                        }
+                    } catch (e) { /* material not loaded yet — keep default swatch */ }
+
+                    const localCenter = new _InternalVector3(
+                        (mesh.geometry.boundingBox.min.x + mesh.geometry.boundingBox.max.x) / 2,
+                        (mesh.geometry.boundingBox.min.y + mesh.geometry.boundingBox.max.y) / 2,
+                        (mesh.geometry.boundingBox.min.z + mesh.geometry.boundingBox.max.z) / 2
+                    );
+                    const worldCenter = localCenter.clone().applyMatrix4(mesh.matrixWorld);
+                    const dirWorld = worldCenter.clone().sub(modelCenter).normalize();
+
+                    return {
+                        node: mesh,
+                        rawNodeName: rawNodeName,
+                        occurrence: occurrence,
+                        name: displayName,
+                        origVisible: mesh.visible,
+                        origLocalPos: mesh.position.clone(),
+                        origWorldPos: new _InternalVector3().setFromMatrixPosition(mesh.matrixWorld),
+                        dirWorld: dirWorld,
+                        matMode: mvMaterial ? 'exclusive' : 'clone',
+                        mvMaterial: mvMaterial,
+                        origColorHex: origColorHex,
+                        colorChanged: false
+                    };
+                });
+
+                renderLayersList();
+
+                // An active AnimationMixer overwrites node transforms every
+                // frame, so explode (which offsets node.position) can't coexist
+                // with playback — disable the slider on animated models instead
+                // of showing an effect that instantly snaps back.
+                const mv = document.querySelector('model-viewer');
+                const hasAnims = (mv?.availableAnimations || []).length > 0;
+                const explodeSliderEl = document.getElementById('explodeSlider');
+                const explodeAnimNoteEl = document.getElementById('explodeAnimNote');
+                if (hasAnims) {
+                    explodeSliderEl?.setAttribute('disabled', 'disabled');
+                    explodeAnimNoteEl?.classList.remove('hidden');
+                } else {
+                    explodeSliderEl?.removeAttribute('disabled');
+                    explodeAnimNoteEl?.classList.add('hidden');
+                }
+            }
+
+            function renderLayersList() {
+                const container = document.getElementById('layersContainer');
+                const list = document.getElementById('layersList');
+                if (!list || !container) return;
+                if (modelLayers.length === 0) { container.classList.add('hidden'); return; }
+                container.classList.remove('hidden');
+
+                list.innerHTML = '';
+                modelLayers.forEach((layer, i) => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0.35rem;background:var(--color-gray-800);border:1px solid var(--color-gray-700);';
+                    row.innerHTML =
+                        '<button type="button" class="layer-vis-btn" data-idx="' + i + '" style="background:none;border:none;color:var(--color-gray-300);cursor:pointer;display:flex;padding:0;">' +
+                            '<i data-lucide="eye" class="layer-eye-on' + (layer.node.visible ? '' : ' hidden') + '" style="width:0.85rem;height:0.85rem;"></i>' +
+                            '<i data-lucide="eye-off" class="layer-eye-off' + (layer.node.visible ? ' hidden' : '') + '" style="width:0.85rem;height:0.85rem;"></i>' +
+                        '</button>' +
+                        '<span style="flex:1;font-size:0.72rem;color:var(--color-gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + window.escapeHtml(layer.name) + '</span>' +
+                        '<input type="color" class="tp-color-swatch layer-color-input" data-idx="' + i + '" value="' + layer.origColorHex + '" style="width:1.6rem;height:1.6rem;padding:0;">';
+                    list.appendChild(row);
+                });
+                if (window.lucide?.createIcons) lucide.createIcons();
+
+                list.querySelectorAll('.layer-vis-btn').forEach(btn => {
+                    btn.addEventListener('click', () => toggleLayerVisibility(parseInt(btn.dataset.idx, 10)));
+                });
+                list.querySelectorAll('.layer-color-input').forEach(inp => {
+                    inp.addEventListener('input', (e) => applyLayerColor(parseInt(inp.dataset.idx, 10), e.target.value));
+                });
+            }
+
+            function toggleLayerVisibility(i) {
+                const layer = modelLayers[i];
+                if (!layer) return;
+                layer.node.visible = !layer.node.visible;
+                const btn = document.querySelector('.layer-vis-btn[data-idx="' + i + '"]');
+                btn?.querySelector('.layer-eye-on')?.classList.toggle('hidden', !layer.node.visible);
+                btn?.querySelector('.layer-eye-off')?.classList.toggle('hidden', layer.node.visible);
+                forceModelViewerRender();
+            }
+
+            function applyLayerColor(i, hex) {
+                const layer = modelLayers[i];
+                if (!layer) return;
+                layer.colorChanged = true;
+                const rgb = layersHexToRgb(hex);
+                if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                    try {
+                        const currentAlpha = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
+                        layer.mvMaterial.pbrMetallicRoughness.setBaseColorFactor([rgb[0], rgb[1], rgb[2], currentAlpha]);
+                    } catch (e) { console.warn('[Layers] color apply failed', e); }
+                } else {
+                    // Material shared by multiple layers (or not publicly
+                    // addressable) — clone it client-side once so recoloring
+                    // this layer can never bleed into a sibling layer.
+                    const mesh = layer.node;
+                    if (!mesh.userData._layerMaterialCloned) {
+                        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : mesh.material.clone();
+                        mesh.userData._layerMaterialCloned = true;
+                    }
+                    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                    mats.forEach(m => { if (m.color) { m.color.setRGB(rgb[0], rgb[1], rgb[2]); m.needsUpdate = true; } });
+                    // A cloned material can lose the slicer's clip-shader patch —
+                    // same reasoning as the global material editor (see markMaterialChanged).
+                    window._reapplyClipping?.();
+                }
+                forceModelViewerRender();
+            }
+
+            function applyExplode(t) {
+                modelLayers.forEach(layer => {
+                    if (!layer.node.parent) return;
+                    const worldTarget = layer.origWorldPos.clone().add(
+                        layer.dirWorld.clone().multiplyScalar(t * layersExplodeDiagonal * 0.5)
+                    );
+                    const parentInv = new _InternalMatrix4().copy(layer.node.parent.matrixWorld).invert();
+                    layer.node.position.copy(worldTarget.applyMatrix4(parentInv));
+                });
+                _mvScene.updateMatrixWorld(true);
+                forceModelViewerRender();
+            }
+
+            document.getElementById('explodeSlider')?.addEventListener('input', (e) => {
+                const t = parseFloat(e.target.value);
+                const explodeValueEl = document.getElementById('explodeValue');
+                if (explodeValueEl) explodeValueEl.textContent = Math.round(t * 100) + '%';
+                if (t > 0) {
+                    const mv = document.querySelector('model-viewer');
+                    if ((mv?.availableAnimations || []).length > 0) mv.pause();
+                }
+                applyExplode(t);
+                document.getElementById('saveExplodedLayout')?.classList.toggle('hidden', t <= 0);
+            });
+
+            document.getElementById('resetLayers')?.addEventListener('click', () => {
+                modelLayers.forEach(layer => {
+                    layer.node.visible = layer.origVisible;
+                    layer.node.position.copy(layer.origLocalPos);
+                    layer.colorChanged = false;
+                    const rgb = layersHexToRgb(layer.origColorHex);
+                    if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                        try {
+                            const alpha = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
+                            layer.mvMaterial.pbrMetallicRoughness.setBaseColorFactor([rgb[0], rgb[1], rgb[2], alpha]);
+                        } catch (e) { /* not loaded */ }
+                    } else if (layer.node.userData._layerMaterialCloned) {
+                        const mats = Array.isArray(layer.node.material) ? layer.node.material : [layer.node.material];
+                        mats.forEach(m => { if (m.color) { m.color.setRGB(rgb[0], rgb[1], rgb[2]); m.needsUpdate = true; } });
+                    }
+                });
+                _mvScene.updateMatrixWorld(true);
+                const explodeSliderEl = document.getElementById('explodeSlider');
+                const explodeValueEl = document.getElementById('explodeValue');
+                if (explodeSliderEl) explodeSliderEl.value = 0;
+                if (explodeValueEl) explodeValueEl.textContent = '0%';
+                document.getElementById('saveExplodedLayout')?.classList.add('hidden');
+                renderLayersList();
+                window._reapplyClipping?.();
+                forceModelViewerRender();
+            });
+
+            // Called from the "Save Exploded Layout" button (separate script
+            // scope) to bake the CURRENT explode offsets as permanent node
+            // translations. Unlike _layersGatherMods, this is never included
+            // in the default Save & Apply to AR payload — explode only
+            // becomes permanent when the user explicitly asks for it.
+            window._layersGatherExplodeMods = function() {
+                const t = parseFloat(document.getElementById('explodeSlider')?.value || 0);
+                if (!modelLayers.length || !(t > 0)) return null;
+                const positions = modelLayers.map(layer => ({
+                    name: layer.rawNodeName,
+                    occurrence: layer.occurrence,
+                    translation: [layer.node.position.x, layer.node.position.y, layer.node.position.z]
+                }));
+                return { positions: positions };
+            };
+
+            // Called from the save-changes flow (separate script scope) to
+            // collect per-layer state to persist into the GLB. Returns null
+            // when nothing was changed from the model's loaded state.
+            window._layersGatherMods = function() {
+                if (!modelLayers.length) return null;
+                const hidden = [];
+                const colors = [];
+                modelLayers.forEach(layer => {
+                    if (!layer.node.visible) {
+                        hidden.push({ name: layer.rawNodeName, occurrence: layer.occurrence });
+                    }
+                    if (layer.colorChanged) {
+                        let hex = layer.origColorHex;
+                        try {
+                            if (layer.matMode === 'exclusive' && layer.mvMaterial) {
+                                const cf = layer.mvMaterial.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                                hex = layersRgbToHex(cf[0], cf[1], cf[2]);
+                            } else {
+                                const mat = Array.isArray(layer.node.material) ? layer.node.material[0] : layer.node.material;
+                                if (mat?.color) hex = '#' + mat.color.getHexString();
+                            }
+                        } catch (e) { /* keep original hex */ }
+                        colors.push({ name: layer.rawNodeName, occurrence: layer.occurrence, color: layersHexToRgb(hex) });
+                    }
+                });
+                if (!hidden.length && !colors.length) return null;
+                return { hidden: hidden, colors: colors };
+            };
+
+            window._buildLayersList = buildLayersList;
+
             function disableAllClipping() {
                 for (const axis of ['x', 'y', 'z']) {
                     slicerAxes[axis].enabled = false;
@@ -1520,6 +1700,19 @@ void main() {
                         modelViewer.cameraOrbit = '36deg 70deg auto';
                         modelViewer.fieldOfView = '24deg';
                         modelViewer.cameraTarget = 'auto auto auto';
+
+                        // The clip planes are computed from the SAVED model's
+                        // bounds, but an unsaved transform preview (scale/rotate
+                        // sliders) moves the geometry in world space — the
+                        // preview would cut in the wrong place while the actual
+                        // server slice stays in the model's own frame. Reset the
+                        // preview so what you see is what gets cut.
+                        window._resetTransformPreview?.();
+
+                        // Shader clipping only HIDES geometry — raycasts still hit
+                        // the clipped-away surfaces, so hotspot placement while a
+                        // slice preview is active lands pins on invisible faces.
+                        window._disableHotspotMode?.();
                     }
 
                     updateAxisPlane(axis);
@@ -1649,54 +1842,11 @@ void main() {
                 }
             });
 
-            // Modal Open/Close logic
-            const openModal = (modal) => {
-                if (!modal) return;
-                modal.classList.remove('hidden');
-                modal.style.display = 'flex';
-                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
-                if (container) setTimeout(() => container.classList.add('active'), 10);
-            };
-
-            const closeModal = (modal) => {
-                if (!modal) return;
-                const container = modal.querySelector('.bg-white, .dark\\:bg-gray-800');
-                if (container) container.classList.remove('active');
-                setTimeout(() => {
-                    modal.classList.add('hidden');
-                    modal.style.display = 'none';
-                }, 300);
-            };
-
-            document.getElementById('qrButton')?.addEventListener('click', () => {
-                const qrModal = document.getElementById('qrModal');
-                openModal(qrModal);
-                const qrContainer = document.getElementById('qrcode');
-                if (qrContainer) {
-                    qrContainer.innerHTML = '';
-                    new QRCode(qrContainer, {
-                        text: window.location.href,
-                        width: 256,
-                        height: 256
-                    });
-                }
-            });
-
-            document.getElementById('closeQrModal')?.addEventListener('click', () => {
-                closeModal(document.getElementById('qrModal'));
-            });
-            
-            document.getElementById('modelInfoButton')?.addEventListener('click', () => {
-                openModal(document.getElementById('modelInfoModal'));
-            });
-
-            document.getElementById('closeModalButton')?.addEventListener('click', () => {
-                closeModal(document.getElementById('modelInfoModal'));
-            });
-
-            document.getElementById('closeModalFooterButton')?.addEventListener('click', () => {
-                closeModal(document.getElementById('modelInfoModal'));
-            });
+            // NOTE: QR modal open/close lives above (showQRModal/hideQRModal,
+            // `.show`-class based — the CSS uses `display:none !important`, so
+            // an inline-style mechanism can't drive this modal). The model-info
+            // modal handlers live in the first script block. A second wiring of
+            // both existed here and double-fired every open/close.
         });
     </script>
 
@@ -1721,13 +1871,6 @@ void main() {
     </script>
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
-    <!-- Collapsed Info Pill (visible when showcase card is collapsed) -->
-    {% set display_name_pill = (model.filename | replace('\\', '/')).split('/')[-1].rsplit('.', 1)[0] if model.filename else 'Model' %}
-    <button id="showcaseCollapsedPill" class="showcase-collapsed-pill" type="button" aria-label="Expand model info">
-        <span class="pill-name">{{ display_name_pill }}</span>
-        <i data-lucide="menu"></i>
-    </button>
-
     <!-- Header -->
     <div class="top-header">
         <div class="brand-shell">
@@ -1737,8 +1880,9 @@ void main() {
             <a href="/" class="showcase-nav-link">home</a>
             {% if current_user.is_authenticated %}
             <a href="/my_models" class="showcase-nav-link">my models</a>
-            <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline;margin:0;">
-                <button type="submit" class="showcase-nav-link" style="background:none;border:0;cursor:pointer;padding:0;">log out</button>
+            <form method="POST" action="{{ url_for('auth.logout') }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;padding:0;font:inherit;">log out</button>
             </form>
             {% else %}
             <a href="{{ url_for('auth.login') }}" class="showcase-nav-link login-pill">login</a>
@@ -1826,13 +1970,6 @@ void main() {
         </script>
         {% endif %}
 
-        <!-- Bottom Left Controls -->
-        <!-- Hidden color picker (moved to material editor context) -->
-        <div id="hiddenColorPicker" style="display:none;">
-            <input type="color" id="colorPicker" class="w-5 h-5 rounded cursor-pointer">
-            <input type="text" id="hexInput" class="px-1.5 py-0.5 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white text-xs w-16" placeholder="#FFFFFF">
-            <button id="resetColor" class="px-1.5 py-0.5 text-[10px] bg-gray-200/50 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400">Reset</button>
-        </div>
 
         <!-- Portfolio Tagline -->
         <div class="portfolio-tagline hidden xl:block">
@@ -1847,11 +1984,6 @@ void main() {
 
         <!-- Right Side Panels -->
         <div id="rightSidebar" class="showcase-sidebar absolute right-3 top-12 bottom-12 z-20 flex flex-col gap-1.5 overflow-y-auto" style="max-width: 360px; width: 360px; scrollbar-width: thin; padding-right: 2px;">
-
-            <!-- Sidebar Toggle Tab -->
-            <button id="sidebarToggle" title="Toggle panel">
-                <i data-lucide="chevron-right"></i>
-            </button>
 
             <div class="showcase-card">
                 <div class="showcase-header">
@@ -1957,20 +2089,40 @@ void main() {
             </div>
             <div id="toolsPanelBody">
 
-            <div class="showcase-content">
+            <div id="toolsDetailBack">
+                <button type="button" id="toolsDetailBackBtn" class="tools-detail-back-btn">
+                    <i data-lucide="chevron-left" style="width:0.9rem;height:0.9rem;"></i>
+                    Tools
+                </button>
+                <span id="toolsDetailTitle" class="tools-detail-title"></span>
+            </div>
+
+            <div class="showcase-content" id="toolsSections" data-active-section="">
 
             <!-- ─── VIEW ─── -->
-            <div class="tp-section">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+            <div class="tp-section" id="viewContainer">
+                <button class="tp-section-header">
                     <i data-lucide="rotate-ccw" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>View</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
-                <div class="tp-section-body is-open">
+                <div class="tp-section-body">
                     <button id="resetCamera" class="tp-btn-full">
                         <i data-lucide="rotate-ccw" style="width:0.8rem;height:0.8rem;"></i>
                         Reset Camera
                     </button>
+
+                    <div class="tp-field" style="margin-top:0.5rem;">
+                        <label class="tp-label">Camera Presets</label>
+                        <div class="tp-view-grid">
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="90">Front</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="180" data-phi="90">Back</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="90" data-phi="90">Right</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="-90" data-phi="90">Left</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="0.01">Top</button>
+                            <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="179.99">Bottom</button>
+                        </div>
+                    </div>
 
                     <!-- Animation (hidden if no animations) -->
                     <div id="animationPanel" class="hidden" style="margin-top:0.5rem;">
@@ -1999,10 +2151,10 @@ void main() {
 
             <!-- ─── MATERIAL ─── -->
             <div class="tp-section" id="materialContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="palette" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Material</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="materialPanel">
                     <div class="tp-field">
@@ -2050,12 +2202,42 @@ void main() {
                 </div>
             </div>
 
+            <!-- ─── LAYERS ─── -->
+            <div class="tp-section hidden" id="layersContainer">
+                <button class="tp-section-header">
+                    <i data-lucide="layers" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Layers</span>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body" id="layersPanel">
+                    <div id="layersList" style="display:flex;flex-direction:column;gap:0.3rem;"></div>
+                    <div class="tp-field" style="margin-top:0.5rem;">
+                        <div class="tp-slider-row">
+                            <label class="tp-label">Explode</label>
+                            <span id="explodeValue" class="tp-val">0%</span>
+                        </div>
+                        <input type="range" id="explodeSlider" min="0" max="1" step="0.01" value="0" class="tp-range">
+                        <p id="explodeAnimNote" class="tp-note hidden">Explode is disabled while an animation is playing.</p>
+                    </div>
+                    <button id="resetLayers" class="tp-btn-full">Reset Layers</button>
+                    {% if can_edit %}
+                    <button id="saveExplodedLayout" class="tp-btn-full hidden" style="margin-top:0.35rem;color:#fbbf24;">
+                        <i data-lucide="expand" style="width:0.75rem;height:0.75rem;"></i>
+                        Save Exploded Layout
+                    </button>
+                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
+                    {% else %}
+                    <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>
+                    {% endif %}
+                </div>
+            </div>
+
             <!-- ─── TRANSFORM ─── -->
             <div class="tp-section" id="transformContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="move-3d" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Transform</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="transformPanel">
                     <!-- Dimensions -->
@@ -2092,36 +2274,42 @@ void main() {
 
             <!-- ─── ANNOTATIONS ─── -->
             <div class="tp-section" id="annotationsContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="map-pin" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Annotations</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="annotationsPanel">
                     <div class="tp-field" style="padding-bottom:0.5rem;border-bottom:1px solid var(--color-gray-700);margin-bottom:0.5rem;">
                         <label class="tp-label">Camera Views</label>
+                        {% if can_edit %}
                         <button id="saveCameraView" class="tp-btn-full">Save Current View</button>
+                        {% endif %}
                         <div id="cameraViewsList" style="margin-top:0.35rem;max-height:6rem;overflow-y:auto;">
                             <p class="tp-note">No saved views</p>
                         </div>
                     </div>
                     <div class="tp-field" style="padding-bottom:0.5rem;border-bottom:1px solid var(--color-gray-700);margin-bottom:0.5rem;">
                         <label class="tp-label">Hotspots</label>
+                        {% if can_edit %}
                         <button id="toggleHotspotMode" class="tp-btn-full">Click Model to Add Hotspot</button>
+                        {% endif %}
                         <div id="hotspotsList" style="margin-top:0.35rem;max-height:10rem;overflow-y:auto;">
                             <p class="tp-note">No hotspots yet</p>
                         </div>
                     </div>
+                    {% if can_edit %}
                     <button id="clearAnnotations" class="tp-btn-full" style="color:var(--color-gray-400);">Clear All</button>
+                    {% endif %}
                 </div>
             </div>
 
             <!-- ─── SLICER ─── -->
             <div class="tp-section" id="slicerContainer">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+                <button class="tp-section-header">
                     <i data-lucide="scissors" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>Slicer</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body" id="slicerPanel">
                     {% if viewer_settings.section_presets %}
@@ -2199,21 +2387,27 @@ void main() {
 
                     <div style="display:flex;gap:0.35rem;margin-top:0.6rem;">
                         <button id="slicerReset" class="tp-btn-full" style="flex:1;">Reset</button>
+                        {% if can_edit %}
                         <button id="slicerApply" class="tp-btn-primary" style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.3rem;">
                             <svg id="slicerSpinner" class="hidden" style="width:0.75rem;height:0.75rem;animation:spin 0.6s linear infinite;flex-shrink:0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
                             <i data-lucide="scissors" style="width:0.7rem;height:0.7rem;"></i> Apply Slice
                         </button>
+                        {% endif %}
                     </div>
+                    {% if can_edit %}
                     <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Permanently cuts the model as a new version</p>
+                    {% else %}
+                    <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Preview only — you don't own this model</p>
+                    {% endif %}
                 </div>
             </div>
 
             <!-- ─── HISTORY ─── -->
-            <div class="tp-section">
-                <button class="tp-section-header" onclick="this.classList.toggle('is-open');this.nextElementSibling.classList.toggle('is-open')">
+            <div class="tp-section" id="historyContainer">
+                <button class="tp-section-header">
                     <i data-lucide="clock" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
                     <span>History</span>
-                    <i data-lucide="chevron-down" class="tp-chevron"></i>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
@@ -2226,8 +2420,40 @@ void main() {
                 </div>
             </div>
 
+            {% if is_owner %}
+            <!-- ─── AI RIG & ANIMATE ─── -->
+            <div class="tp-section" id="rigAnimateSection">
+                <button class="tp-section-header">
+                    <i data-lucide="user" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Rig &amp; Animate (AI)</span>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body">
+                    <p class="tp-note" style="margin:0 0 0.5rem;">Auto-rig this model and apply animations. Uses AI credits; works best on textured humanoid models.</p>
+                    <div class="tp-field">
+                        <label class="tp-label">Height (meters)</label>
+                        <input type="number" id="rigHeight" class="tp-input" min="0.05" max="10" step="0.01" value="1.7">
+                    </div>
+                    <div class="tp-field">
+                        <label class="tp-label">Animations (up to 10) — <span id="rigAnimCount">0/10</span></label>
+                        <div id="rigAnimationGrid" class="rig-anim-grid"><p class="tp-note">Loading animation presets…</p></div>
+                    </div>
+                    <button id="startRigBtn" class="tp-btn-full" style="margin-top:0.5rem;">
+                        <i data-lucide="sparkles" style="width:0.8rem;height:0.8rem;"></i>
+                        Start Rig &amp; Animate
+                    </button>
+                    <div id="rigStatus" class="hidden" style="margin-top:0.5rem;">
+                        <div class="progress-bar-container"><div class="progress-bar" id="rigProgressBar"></div></div>
+                        <p class="tp-note" id="rigStatusText">Starting…</p>
+                    </div>
+                    <p id="rigError" class="tp-note hidden" style="color:#ef4444;"></p>
+                </div>
+            </div>
+            {% endif %}
+
             </div><!-- /.showcase-content -->
 
+            {% if can_edit %}
             <!-- Save Changes (sticky bottom) -->
             <div id="saveChangesWrapper">
                 <div class="tp-save-bar">
@@ -2237,6 +2463,7 @@ void main() {
                     </button>
                 </div>
             </div><!-- /saveChangesWrapper -->
+            {% endif %}
 
             </div><!-- /#toolsPanelBody -->
         </div><!-- /#toolsPanel -->
@@ -2245,6 +2472,7 @@ void main() {
         <!-- Bottom-right Toolbar -->
         <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
             <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
+            <button id="modelInfoButton" class="tb-btn" title="Details"><i data-lucide="file-text"></i></button>
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
@@ -2275,7 +2503,7 @@ void main() {
                         <i data-lucide="zap"></i>
                         <div class="flex-1">
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">File Name</p>
-                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.filename.split('/')[-1] if model.filename else 'Unknown' }}</p>
+                            <p class="mt-1 text-sm text-gray-900 dark:text-white break-all">{{ model.original_filename }}</p>
                         </div>
                     </div>
 
@@ -2433,10 +2661,26 @@ void main() {
     // Global initialization state variables (must be accessible from all script blocks)
     let materialEditorInitialized = false;
     let transformEditorInitialized = false;
+    // Set when the user actually touches a material control. Saving sends
+    // mat[0]'s values and the backend applies them to EVERY material, so a
+    // save must never include a material block the user didn't ask for —
+    // on a multi-material model that would silently overwrite materials
+    // 1..N with material 0's appearance.
+    let materialDirty = false;
+    function markMaterialChanged() {
+        materialDirty = true;
+        // If a slice preview is active, re-patch materials: a material change
+        // can recompile/replace the THREE material and lose the clip shader.
+        window._reapplyClipping?.();
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         const modelViewer = document.querySelector('model-viewer');
         const modelId = '{{ model_unique_id }}';
+        // Mirrors the backend's check_model_mutation_allowed: owner, or an
+        // anonymous model. Mutating UI (version restore/delete etc.) is only
+        // built when the server would actually accept the mutation.
+        const CAN_EDIT = {{ can_edit | tojson }};
 
         // ===================================================================
         // RESET CAMERA
@@ -2448,6 +2692,68 @@ void main() {
             modelViewer.cameraTarget = 'auto auto auto';
         });
 
+        // ===================================================================
+        // CAMERA PRESETS (Front / Back / Left / Right / Top / Bottom)
+        // ===================================================================
+        // Keeps the model's current zoom (radius) — only theta/phi change —
+        // so switching presets doesn't reset how close the user zoomed in.
+        document.querySelectorAll('.camera-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!modelViewer) return;
+                const theta = btn.dataset.theta;
+                const phi = btn.dataset.phi;
+                let radius = 'auto';
+                try {
+                    const current = modelViewer.getCameraOrbit?.();
+                    if (current && current.radius) radius = current.radius + 'm';
+                } catch (e) { /* keep auto */ }
+                modelViewer.cameraOrbit = theta + 'deg ' + phi + 'deg ' + radius;
+            });
+        });
+
+        // ===================================================================
+        // TOOLS PANEL NAVIGATION (menu list ↔ full-height section detail)
+        // ===================================================================
+        (function() {
+            const sectionsRoot = document.getElementById('toolsSections');
+            const backBar = document.getElementById('toolsDetailBack');
+            const backBtn = document.getElementById('toolsDetailBackBtn');
+            const titleEl = document.getElementById('toolsDetailTitle');
+            if (!sectionsRoot) return;
+
+            function allSections() {
+                return Array.from(sectionsRoot.querySelectorAll(':scope > .tp-section'));
+            }
+
+            function showToolsMenu() {
+                sectionsRoot.dataset.activeSection = '';
+                allSections().forEach(sec => {
+                    sec.classList.remove('is-active');
+                    sec.querySelector(':scope > .tp-section-header')?.classList.remove('is-open');
+                    sec.querySelector(':scope > .tp-section-body')?.classList.remove('is-open');
+                });
+                backBar?.classList.remove('is-visible');
+                document.getElementById('toolsPanelBody')?.scrollTo?.(0, 0);
+            }
+
+            function showToolsDetail(sectionEl) {
+                if (!sectionEl) return;
+                sectionsRoot.dataset.activeSection = sectionEl.id || 'active';
+                allSections().forEach(sec => sec.classList.toggle('is-active', sec === sectionEl));
+                sectionEl.querySelector(':scope > .tp-section-header')?.classList.add('is-open');
+                sectionEl.querySelector(':scope > .tp-section-body')?.classList.add('is-open');
+                if (titleEl) titleEl.textContent = sectionEl.querySelector(':scope > .tp-section-header span')?.textContent || '';
+                backBar?.classList.add('is-visible');
+                document.getElementById('toolsPanelBody')?.scrollTo?.(0, 0);
+            }
+
+            allSections().forEach(sec => {
+                sec.querySelector(':scope > .tp-section-header')?.addEventListener('click', () => showToolsDetail(sec));
+            });
+            backBtn?.addEventListener('click', showToolsMenu);
+
+            window._toolsShowMenu = showToolsMenu;
+        })();
 
         // ===================================================================
         // SIDEBAR TOGGLE
@@ -2514,6 +2820,10 @@ void main() {
                 if (isCardCollapsed) expandCard();
                 else collapseCard();
             };
+            // The toolbar Info button must be able to bring the card back after
+            // it was collapsed via its X — openInfo() only clears `info-hidden`,
+            // which left an `is-collapsed` card invisible with no way to expand.
+            window._expandShowcaseCard = expandCard;
 
             // Mobile fab should also expand card if collapsed
             mobileFab?.addEventListener('click', () => {
@@ -2734,6 +3044,7 @@ void main() {
                 const hex = e.target.value;
                 if (matColorHex) matColorHex.value = hex.toUpperCase();
                 applyMaterialColor(hex);
+                markMaterialChanged();
             });
 
             matColorHex?.addEventListener('input', (e) => {
@@ -2742,6 +3053,7 @@ void main() {
                 if (/^#[0-9A-F]{6}$/i.test(hex)) {
                     if (matColor) matColor.value = hex;
                     applyMaterialColor(hex);
+                    markMaterialChanged();
                 }
             });
 
@@ -2751,6 +3063,7 @@ void main() {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setMetallicFactor(val);
                 });
+                markMaterialChanged();
             });
 
             roughnessSlider?.addEventListener('input', (e) => {
@@ -2759,6 +3072,7 @@ void main() {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setRoughnessFactor(val);
                 });
+                markMaterialChanged();
             });
 
             opacitySlider?.addEventListener('input', (e) => {
@@ -2773,6 +3087,7 @@ void main() {
                         mat.setAlphaMode('OPAQUE');
                     }
                 });
+                markMaterialChanged();
             });
 
             // Texture upload
@@ -2793,6 +3108,7 @@ void main() {
                         mat.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, cf[3]]);
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     });
+                    markMaterialChanged();
                     // Sync color pickers with the reset tint
                     if (matColor) matColor.value = '#ffffff';
                     if (matColorHex) matColorHex.value = '#FFFFFF';
@@ -2859,6 +3175,10 @@ void main() {
                 if (opacitySlider) { opacitySlider.value = 1; if (opacityValue) opacityValue.textContent = '1.0'; }
                 if (texturePreview) texturePreview.classList.add('hidden');
                 if (textureUpload) textureUpload.value = '';
+                // Back at the model's saved appearance — nothing material-wise
+                // left to persist, so a later save must not send a material block.
+                materialDirty = false;
+                window._reapplyClipping?.();
             });
 
             materialEditorInitialized = true;
@@ -3003,7 +3323,7 @@ void main() {
                 applyTransform();
             });
 
-            resetTransform?.addEventListener('click', () => {
+            function resetTransformPreview() {
                 if (scaleSlider) scaleSlider.value = 1;
                 if (scaleInput) scaleInput.value = '1.0';
                 if (rotateXSlider) rotateXSlider.value = 0;
@@ -3015,34 +3335,26 @@ void main() {
                 // Apply the reset values to the actual THREE.js scene (applyTransform
                 // reads the sliders and calls forceModelViewerRefresh internally).
                 applyTransform();
-            });
+            }
+
+            resetTransform?.addEventListener('click', resetTransformPreview);
+
+            // The slicer (separate script block) neutralizes any unsaved
+            // transform preview when a clip axis is enabled \u2014 its clip planes
+            // are computed from the SAVED model's bounds, so a live scale/
+            // rotation preview would make the cut appear in the wrong place.
+            window._resetTransformPreview = () => {
+                const active =
+                    parseFloat(scaleSlider?.value || 1) !== 1 ||
+                    parseFloat(rotateXSlider?.value || 0) !== 0 ||
+                    parseFloat(rotateYSlider?.value || 0) !== 0 ||
+                    parseFloat(rotateZSlider?.value || 0) !== 0;
+                if (!active) return;
+                resetTransformPreview();
+            };
 
             transformEditorInitialized = true;
         }
-
-        // Apply initial rotation if stored
-        {% if applied_rotation %}
-        (function() {
-            const rot = {{ applied_rotation | tojson }};
-            if (rot) {
-                const rx = rot.x || 0;
-                const ry = rot.y || 0;
-                const rz = rot.z || 0;
-                const _rxSlider = document.getElementById('rotateXSlider');
-                const _rySlider = document.getElementById('rotateYSlider');
-                const _rzSlider = document.getElementById('rotateZSlider');
-                const _rxVal = document.getElementById('rotateXValue');
-                const _ryVal = document.getElementById('rotateYValue');
-                const _rzVal = document.getElementById('rotateZValue');
-                if (_rxSlider) { _rxSlider.value = rx; if (_rxVal) _rxVal.textContent = rx + '\u00B0'; }
-                if (_rySlider) { _rySlider.value = ry; if (_ryVal) _ryVal.textContent = ry + '\u00B0'; }
-                if (_rzSlider) { _rzSlider.value = rz; if (_rzVal) _rzVal.textContent = rz + '\u00B0'; }
-                // Apply the stored rotation to the actual THREE.js scene once the model
-                // has loaded (the scene is not available until then).
-                modelViewer?.addEventListener('load', () => applyTransform(), { once: true });
-            }
-        })();
-        {% endif %}
 
         // ===================================================================
         // ANNOTATIONS PANEL
@@ -3105,16 +3417,8 @@ void main() {
             savedViews.forEach((v, i) => {
                 const div = document.createElement('div');
                 div.className = 'tp-list-item';
-                const loadButton = document.createElement('button');
-                loadButton.className = 'load-view-btn';
-                loadButton.style.cssText = 'background:none;border:none;color:var(--color-gray-200);font-size:0.72rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;';
-                loadButton.textContent = v.name;
-                const deleteButton = document.createElement('button');
-                deleteButton.className = 'delete-view-btn';
-                deleteButton.style.cssText = 'background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;';
-                deleteButton.setAttribute('aria-label', 'Delete camera view');
-                deleteButton.textContent = '×';
-                div.append(loadButton, deleteButton);
+                div.innerHTML = '<button class="load-view-btn" style="background:none;border:none;color:var(--color-gray-200);font-size:0.72rem;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">' + escapeHtml(v.name) + '</button>' +
+                    (CAN_EDIT ? '<button class="delete-view-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>' : '');
                 div.querySelector('.load-view-btn').addEventListener('click', () => {
                     if (v._orbit) {
                         modelViewer.cameraOrbit = v._orbit.toString();
@@ -3128,7 +3432,7 @@ void main() {
                         if (v.fov) modelViewer.fieldOfView = v.fov + 'deg';
                     }
                 });
-                div.querySelector('.delete-view-btn').addEventListener('click', () => {
+                div.querySelector('.delete-view-btn')?.addEventListener('click', () => {
                     const viewId = v.id;
                     if (viewId) {
                         fetch('/api/models/' + modelId + '/camera-views/' + viewId, { method: 'DELETE' })
@@ -3153,16 +3457,43 @@ void main() {
         loadCameraViewsFromDB();
 
         // Hotspot mode
-        toggleHotspotMode?.addEventListener('click', () => {
-            hotspotMode = !hotspotMode;
+        function setHotspotMode(on) {
+            hotspotMode = on;
+            if (!toggleHotspotMode) return;
             toggleHotspotMode.textContent = hotspotMode ? 'Hotspot Mode: ON (click model)' : 'Click Model to Add Hotspot';
             toggleHotspotMode.style.background = hotspotMode ? 'var(--color-gray-200)' : '';
             toggleHotspotMode.style.color = hotspotMode ? 'var(--color-gray-900)' : '';
             toggleHotspotMode.classList.toggle('text-white', hotspotMode);
+        }
+        // The slicer (separate script block) turns hotspot mode off when a clip
+        // axis is enabled: the preview only *hides* geometry via shader discard,
+        // so clicks would still land hotspots on invisible, clipped-away surfaces.
+        window._disableHotspotMode = () => setHotspotMode(false);
+
+        toggleHotspotMode?.addEventListener('click', () => {
+            if (!hotspotMode && window._slicerClippingActive?.()) {
+                alert('Hotspots can\'t be placed while a slice preview is active — reset the slicer first.');
+                return;
+            }
+            setHotspotMode(!hotspotMode);
+        });
+
+        // model-viewer fires `click` on pointerup even after an orbit drag —
+        // without this, every rotate gesture in hotspot mode ended with an
+        // unwanted "add hotspot" prompt. Only a genuine tap (little to no
+        // pointer travel) may place a hotspot.
+        let _hotspotPointerDown = null;
+        modelViewer?.addEventListener('pointerdown', (e) => {
+            _hotspotPointerDown = { x: e.clientX, y: e.clientY };
         });
 
         modelViewer?.addEventListener('click', (e) => {
             if (!hotspotMode) return;
+            if (_hotspotPointerDown) {
+                const dx = e.clientX - _hotspotPointerDown.x;
+                const dy = e.clientY - _hotspotPointerDown.y;
+                if ((dx * dx + dy * dy) > 36) return; // >6px travel = drag, not a tap
+            }
             const rect = modelViewer.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
@@ -3197,17 +3528,20 @@ void main() {
         });
 
         function renderHotspotOnViewer(name, label, pos, norm) {
+            // Names are generated as 'hotspot-<ts>' already — model-viewer only
+            // needs the slot to start with "hotspot-", so don't double the prefix.
+            const slot = name.startsWith('hotspot-') ? name : 'hotspot-' + name;
             const hotspot = document.createElement('button');
-            hotspot.slot = 'hotspot-' + name;
+            hotspot.slot = slot;
             hotspot.className = 'hotspot-dot';
             hotspot.dataset.position = pos.x + 'm ' + pos.y + 'm ' + pos.z + 'm';
             if (norm) hotspot.dataset.normal = norm.x + 'm ' + norm.y + 'm ' + norm.z + 'm';
             hotspot.dataset.visibility = 'visible';
             hotspot.style.cssText = 'background:rgba(76,175,80,0.9);color:white;border:2px solid white;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
-            hotspot.textContent = ++document.querySelectorAll('.hotspot-dot').length || hotspotCount;
+            hotspot.textContent = document.querySelectorAll('.hotspot-dot').length + 1;
 
             const annotation = document.createElement('div');
-            annotation.slot = 'hotspot-' + name;
+            annotation.slot = slot;
             annotation.className = 'hotspot-annotation';
             annotation.style.cssText = 'background:rgba(0,0,0,0.75);color:white;padding:4px 10px;border-radius:6px;font-size:11px;white-space:nowrap;pointer-events:none;margin-top:-40px;';
             annotation.textContent = label;
@@ -3226,16 +3560,9 @@ void main() {
             const div = document.createElement('div');
             div.className = 'tp-list-item';
             div.dataset.hotspotId = name;
-            const labelElement = document.createElement('span');
-            labelElement.style.cssText = 'font-size:0.72rem;color:var(--color-gray-200);';
-            labelElement.textContent = label;
-            const deleteButton = document.createElement('button');
-            deleteButton.className = 'delete-hotspot-btn';
-            deleteButton.style.cssText = 'background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;';
-            deleteButton.setAttribute('aria-label', 'Delete hotspot');
-            deleteButton.textContent = '×';
-            div.append(labelElement, deleteButton);
-            div.querySelector('.delete-hotspot-btn').addEventListener('click', () => {
+            div.innerHTML = '<span style="font-size:0.72rem;color:var(--color-gray-200);">' + escapeHtml(label) + '</span>' +
+                (CAN_EDIT ? '<button class="delete-hotspot-btn" style="background:none;border:none;color:var(--color-gray-500);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.7rem;height:0.7rem;"></i></button>' : '');
+            div.querySelector('.delete-hotspot-btn')?.addEventListener('click', () => {
                 // Delete from DB
                 fetch('/api/models/' + modelId + '/hotspots/' + name, { method: 'DELETE' })
                 .then(r => r.json())
@@ -3274,10 +3601,16 @@ void main() {
 
         clearAnnotations?.addEventListener('click', () => {
             if (!confirm('Clear all annotations and hotspots?')) return;
-            // Delete all hotspots from DB
-            fetch('/api/models/' + modelId + '/hotspots', { method: 'DELETE' })
-            .then(r => r.json())
-            .then(data => {
+            // Camera views only have a per-id DELETE route; clearing them just
+            // client-side made them reappear on the next page load.
+            const viewDeletes = savedViews
+                .filter(v => v.id)
+                .map(v => fetch('/api/models/' + modelId + '/camera-views/' + v.id, { method: 'DELETE' }).catch(() => {}));
+            Promise.all([
+                fetch('/api/models/' + modelId + '/hotspots', { method: 'DELETE' }).then(r => r.json()),
+                ...viewDeletes,
+            ])
+            .then(([data]) => {
                 if (!data.success) { console.error('Failed to clear hotspots:', data.error); return; }
                 savedViews = [];
                 renderCameraViews();
@@ -3285,7 +3618,7 @@ void main() {
                 modelViewer?.querySelectorAll('[slot^="hotspot-"]').forEach(el => el.remove());
                 if (hotspotsList) hotspotsList.innerHTML = '<p class="tp-note">No hotspots yet</p>';
             })
-            .catch(err => console.error('Error clearing hotspots:', err));
+            .catch(err => console.error('Error clearing annotations:', err));
         });
 
         // ===================================================================
@@ -3318,19 +3651,19 @@ void main() {
                         div.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem;">' +
                             '<div style="display:flex;align-items:center;gap:0.35rem;">' +
                             '<span style="font-weight:700;font-size:0.72rem;color:var(--color-gray-200);">v' + v.version_number + '</span>' +
-                            '<span class="tp-version-badge">' + v.operation_type + '</span>' +
+                            '<span class="tp-version-badge">' + escapeHtml(v.operation_type) + '</span>' +
                             '</div>' +
-                            '<span style="font-size:0.6rem;color:var(--color-gray-500);">' + (v.created_at || '') + '</span>' +
+                            '<span style="font-size:0.6rem;color:var(--color-gray-500);">' + escapeHtml(v.created_at || '') + '</span>' +
                             '</div>' +
-                            (v.comment ? '<p style="font-size:0.68rem;color:var(--color-gray-500);margin-bottom:0.2rem;">' + v.comment + '</p>' : '') +
+                            (v.comment ? '<p style="font-size:0.68rem;color:var(--color-gray-500);margin-bottom:0.2rem;">' + escapeHtml(v.comment) + '</p>' : '') +
                             (v.file_size_formatted ? '<p style="font-size:0.6rem;color:var(--color-gray-500);margin-bottom:0.3rem;">Size: ' + v.file_size_formatted + '</p>' : '') +
                             '<div style="display:flex;gap:3px;">' +
-                            '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' +
+                            (CAN_EDIT ? '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' : '') +
                             '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' +
-                            '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' +
+                            (CAN_EDIT ? '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' : '') +
                             '</div>';
 
-                        div.querySelector('.restore-btn').addEventListener('click', async () => {
+                        div.querySelector('.restore-btn')?.addEventListener('click', async () => {
                             if (!confirm('Restore to version ' + v.version_number + '? Current model will be replaced.')) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/restore/' + v.version_number, { method: 'POST' });
@@ -3344,7 +3677,7 @@ void main() {
                             window.open('/api/versions/' + modelId + '/download/' + v.version_number, '_blank');
                         });
 
-                        div.querySelector('.delete-btn').addEventListener('click', async () => {
+                        div.querySelector('.delete-btn')?.addEventListener('click', async () => {
                             if (!confirm('Delete version ' + v.version_number + '?')) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/delete/' + v.version_number, { method: 'DELETE' });
@@ -3368,6 +3701,132 @@ void main() {
 
         loadVersions();
         refreshVersions?.addEventListener('click', loadVersions);
+
+        {% if is_owner %}
+        // ===================================================================
+        // AI RIG & ANIMATE
+        // ===================================================================
+        (function () {
+            const rigModelId = '{{ model.id }}';
+            const grid = document.getElementById('rigAnimationGrid');
+            const countLabel = document.getElementById('rigAnimCount');
+            const startBtn = document.getElementById('startRigBtn');
+            const statusBox = document.getElementById('rigStatus');
+            const progressBar = document.getElementById('rigProgressBar');
+            const statusText = document.getElementById('rigStatusText');
+            const errorBox = document.getElementById('rigError');
+            if (!grid || !startBtn) return;
+
+            const MAX_ANIMATIONS = 10;
+            let selected = [];
+
+            function updateCount() {
+                countLabel.textContent = selected.length + '/' + MAX_ANIMATIONS;
+            }
+
+            fetch('/static/data/meshy_animation_presets.json')
+                .then(r => r.json())
+                .then(data => {
+                    grid.innerHTML = '';
+                    (data.categories || []).forEach(cat => {
+                        const heading = document.createElement('div');
+                        heading.className = 'rig-anim-category';
+                        heading.textContent = cat.name;
+                        grid.appendChild(heading);
+                        (cat.actions || []).forEach(action => {
+                            const label = document.createElement('label');
+                            label.className = 'rig-anim-item';
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'tp-checkbox';
+                            checkbox.value = action.id;
+                            checkbox.addEventListener('change', () => {
+                                if (checkbox.checked) {
+                                    if (selected.length >= MAX_ANIMATIONS) {
+                                        checkbox.checked = false;
+                                        return;
+                                    }
+                                    selected.push(action.id);
+                                } else {
+                                    selected = selected.filter(id => id !== action.id);
+                                }
+                                updateCount();
+                            });
+                            label.appendChild(checkbox);
+                            label.appendChild(document.createTextNode(' ' + action.label));
+                            grid.appendChild(label);
+                        });
+                    });
+                })
+                .catch(() => {
+                    grid.innerHTML = '<p class="tp-note">Failed to load animation presets.</p>';
+                });
+
+            function setRigProgress(pct, msg) {
+                progressBar.style.width = pct + '%';
+                if (msg) statusText.textContent = msg;
+            }
+
+            startBtn.addEventListener('click', async () => {
+                errorBox.classList.add('hidden'); errorBox.textContent = '';
+                const height = parseFloat(document.getElementById('rigHeight').value);
+                if (!height || height < 0.05 || height > 10) {
+                    errorBox.textContent = 'Enter a valid height (0.05–10 meters).';
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+                if (!selected.length) {
+                    errorBox.textContent = 'Select at least one animation.';
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+
+                startBtn.disabled = true;
+                statusBox.classList.remove('hidden');
+                setRigProgress(2, 'Starting…');
+
+                try {
+                    const r = await fetch('/api/models/' + rigModelId + '/rig', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ height_meters: height, animation_action_ids: selected })
+                    });
+                    const d = await r.json();
+                    if (!d.success) throw new Error(d.error || 'Failed to start');
+                    const jobId = d.job_id;
+
+                    const STAGE_LABELS = {
+                        remeshing: 'Reducing polygon count…',
+                        rigging: 'Rigging…',
+                        animating: 'Applying animations…',
+                        finalizing: 'Saving result…'
+                    };
+                    let done = false, tries = 0;
+                    while (!done && tries < 200) {
+                        await new Promise(res => setTimeout(res, 2500));
+                        tries++;
+                        const sr = await fetch('/api/rig-jobs/' + jobId + '/status');
+                        const sd = await sr.json();
+                        if (!sd.success) throw new Error(sd.error || 'Status check failed');
+                        setRigProgress(Math.max(2, sd.progress || 0), STAGE_LABELS[sd.stage] || 'Working…');
+                        if (sd.status === 'ready' && sd.viewer_url) {
+                            setRigProgress(100, 'Done');
+                            window.location.href = sd.viewer_url;
+                            done = true;
+                        } else if (sd.status === 'failed') {
+                            throw new Error(sd.error || 'Rigging failed');
+                        }
+                    }
+                    if (!done) throw new Error('Timed out. Please try again.');
+                } catch (e) {
+                    errorBox.textContent = e.message;
+                    errorBox.classList.remove('hidden');
+                } finally {
+                    startBtn.disabled = false;
+                }
+            });
+        })();
+        {% endif %}
 
         // ===================================================================
         // INLINE EDIT — Title & Description (owner only)
@@ -3431,9 +3890,13 @@ void main() {
         function gatherModifications() {
             const mods = {};
 
-            // Material modifications (guard against not-yet-loaded materials)
+            // Material modifications — ONLY when the user actually touched a
+            // material control. The backend applies this single value set to
+            // every material in the GLB, so sending mat[0]'s current state on
+            // an untouched save (e.g. transform-only) would permanently
+            // overwrite all other materials on a multi-material model.
             const mats = getMaterials();
-            if (mats.length > 0) {
+            if (materialDirty && mats.length > 0) {
                 try {
                     const mat = mats[0];
                     const cf = mat.pbrMetallicRoughness?.baseColorFactor;
@@ -3444,13 +3907,12 @@ void main() {
                         opacity: cf ? cf[3] : 1
                     };
                 } catch (e) { /* material not loaded — skip material mods */ }
-
-                // Include texture if one was uploaded
-                const _textureUpload = document.getElementById('textureUpload');
-                if (_textureUpload?.files?.length > 0) {
-                    if (!mods.material) mods.material = {};
-                    mods.material._pendingTextureFile = _textureUpload.files[0];
-                }
+            }
+            // A pending texture upload is a material change in its own right.
+            const _textureUpload = document.getElementById('textureUpload');
+            if (_textureUpload?.files?.length > 0) {
+                if (!mods.material) mods.material = {};
+                mods.material._pendingTextureFile = _textureUpload.files[0];
             }
 
             // Transform modifications
@@ -3464,6 +3926,13 @@ void main() {
                     scale: scale,
                     rotation: { x: rx, y: ry, z: rz }
                 };
+            }
+
+            // Layer visibility/color — gathered from the Layers panel's own
+            // scope (separate <script> block, see window._layersGatherMods).
+            const layerMods = window._layersGatherMods?.();
+            if (layerMods) {
+                mods.layers = layerMods;
             }
 
             return mods;
@@ -3513,6 +3982,63 @@ void main() {
             }
         });
 
+        // ===================================================================
+        // SAVE EXPLODED LAYOUT — separate from Save & Apply to AR: bakes the
+        // current explode offsets as permanent node translations. Also
+        // includes any other pending changes (material/transform/layers)
+        // via the same gatherModifications(), so it's a superset save.
+        // ===================================================================
+        const saveExplodedBtn = document.getElementById('saveExplodedLayout');
+        saveExplodedBtn?.addEventListener('click', async () => {
+            const explodeMods = window._layersGatherExplodeMods?.();
+            if (!explodeMods) {
+                alert('Drag Explode above 0% first, then save the layout.');
+                return;
+            }
+            if (!confirm('This permanently moves the exploded parts in the saved model, including in AR. Continue?')) {
+                return;
+            }
+
+            const modifications = gatherModifications();
+            modifications.explode = explodeMods;
+
+            const defaultExplodeButtonMarkup = saveExplodedBtn.innerHTML;
+            saveExplodedBtn.disabled = true;
+            saveExplodedBtn.innerHTML = '<i data-lucide="circle"></i> Saving...';
+
+            try {
+                if (modifications.material?._pendingTextureFile) {
+                    const file = modifications.material._pendingTextureFile;
+                    const base64 = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                    modifications.material.texture = base64;
+                    delete modifications.material._pendingTextureFile;
+                }
+
+                const response = await fetch('/save_modifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId, modifications })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert('Save failed: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Save exploded layout error:', err);
+                alert('Failed to save exploded layout.');
+            } finally {
+                saveExplodedBtn.disabled = false;
+                saveExplodedBtn.innerHTML = defaultExplodeButtonMarkup;
+            }
+        });
+
         // Initialize editors
         if (!materialEditorInitialized) initMaterialEditor();
         if (!transformEditorInitialized) initTransformEditor();
@@ -3535,6 +4061,10 @@ void main() {
         function openInfo() {
             document.getElementById('rightSidebar')?.classList.remove('info-hidden');
             document.getElementById('infoToggleBtn')?.classList.add('is-active');
+            // Also un-collapse the card if it was closed via its X button —
+            // otherwise the sidebar becomes visible but the card stays at
+            // opacity 0 and the Info button appears to do nothing.
+            window._expandShowcaseCard?.();
             closeTools();
         }
 

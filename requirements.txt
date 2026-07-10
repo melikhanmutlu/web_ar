@@ -4,8 +4,11 @@ Flask-Login==0.6.3
 Flask-Migrate==4.0.5
 Werkzeug==3.1.6
 trimesh==4.0.5
+cascadio==0.0.17
 mapbox-earcut>=1.1.0
 shapely==2.1.2
+scipy==1.11.4
+networkx==3.2.1
 pygltflib==1.16.1
 # trimesh 4.0.5 still uses ndarray.ptp(), removed by NumPy 2.0.
 numpy>=1.26.4,<2

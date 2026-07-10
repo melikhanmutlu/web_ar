@@ -17,6 +17,7 @@ from flask import (
     abort,
     g,
 )
+from flask_wtf.csrf import CSRFProtect
 from flask_login import (
     LoginManager,
     login_user,
@@ -30,8 +31,11 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat, RigAnimationJob
 from auth import auth
+from admin import admin_bp
+from model_cleanup import purge_model_completely
+from site_settings import get_setting, setting_bool, setting_int
 import re
 import traceback
 import uuid
@@ -42,12 +46,13 @@ from urllib.parse import urlparse, urlsplit
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from config import *
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import qrcode
 from slugify import slugify
 import trimesh
-from converters import OBJConverter, FBXConverter, STLConverter
+from converters import OBJConverter, FBXConverter, STLConverter, STEPConverter
 from converters.glb_optimizer import optimize_glb
 from converters.glb_quality import finalize_glb
 import numpy as np
@@ -59,6 +64,7 @@ from version_manager import (
     get_version_history,
     restore_version,
     delete_version,
+    version_path,
 )
 from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService, configure_json_logging, initialize_external_observability
 
@@ -67,7 +73,8 @@ app.config.from_object("config")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
-# Add headers to allow all origins
+# Baseline security headers on every response. X-Frame-Options is intentionally
+# omitted because /embed/<id> is designed to be iframed by third parties.
 @app.after_request
 def after_request(response):
     request_id = getattr(g, "request_id", None)
@@ -168,6 +175,12 @@ app.config["TEMP_FOLDER"] = TEMP_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 app.config["ALLOWED_EXTENSIONS"] = ALLOWED_EXTENSIONS
 
+# NOTE: UPLOAD_FOLDER/CONVERTED_FOLDER/TEMP_FOLDER/QR_FOLDER and the limits come
+# from config.py via `from config import *`. They are storage-root aware (they
+# respect the Railway volume mount). They are deliberately NOT redefined here to
+# dirname-relative paths — doing so previously made the module globals diverge
+# from app.config and wrote data to the ephemeral container filesystem.
+
 
 @app.context_processor
 def upload_capabilities():
@@ -182,6 +195,10 @@ def upload_capabilities():
 
 # Initialize extensions
 db.init_app(app)
+# CSRF protection for all state-changing requests. Token is bound to the session
+# (no hard time limit) so long-lived viewer/editor pages don't fail mutations.
+app.config.setdefault("WTF_CSRF_TIME_LIMIT", None)
+csrf = CSRFProtect(app)
 migrate = Migrate(app, db)
 
 # Initialize login manager
@@ -192,7 +209,11 @@ login_manager.login_view = "auth.login"
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    if user is not None and not user.is_active:
+        # Deactivated accounts lose their live sessions on the next request.
+        return None
+    return user
 
 
 # Rate limiting — keyed by user id when logged in, client IP otherwise.
@@ -456,6 +477,12 @@ def resolve_custom_domain():
 
 # Register blueprints
 app.register_blueprint(auth)
+app.register_blueprint(admin_bp)
+limiter.limit("120 per minute")(admin_bp)
+
+# auth.py can't import `limiter` itself (it's imported before `limiter` exists
+# in this module, so that would be circular) — apply IP-based brute-force
+# throttling here instead, on top of the per-account lockout in models.py.
 app.view_functions["auth.login"] = limiter.limit(
     "10 per minute", methods=["POST"]
 )(app.view_functions["auth.login"])
@@ -545,6 +572,48 @@ if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in ("1", "true", "yes"):
                 logger.warning(f"Alembic stamp skipped: {e}")
 
 
+import click
+
+
+@app.cli.command("make-admin")
+@click.argument("email")
+def make_admin_command(email):
+    """Grant admin panel access to the user with the given email."""
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        click.echo(f"No user found with email {email}")
+        raise SystemExit(1)
+    user.is_admin = True
+    db.session.commit()
+    click.echo(f"{user.username} <{user.email}> is now an admin")
+
+
+# Promote ADMIN_EMAILS (comma-separated) on boot — idempotent, covers deploys
+# where a shell isn't handy. Wrapped defensively: on a legacy DB the is_admin
+# column may not exist until `flask db upgrade` has run. The project owner is
+# always promoted so the panel has an admin out of the box; add more via the
+# ADMIN_EMAILS env var.
+_DEFAULT_ADMIN_EMAILS = ["melikhanmutlu@gmail.com"]
+_admin_emails = _DEFAULT_ADMIN_EMAILS + [
+    e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+]
+if _admin_emails and os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
+    "1",
+    "true",
+    "yes",
+):
+    with app.app_context():
+        try:
+            for _user in User.query.filter(User.email.in_(_admin_emails)).all():
+                if not _user.is_admin:
+                    _user.is_admin = True
+                    logger.info(f"ADMIN_EMAILS: promoted {_user.email} to admin")
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.warning(f"ADMIN_EMAILS promotion skipped: {e}")
+
+
 def allowed_file(filename):
     return (
         "." in filename
@@ -571,10 +640,10 @@ def get_file_info(file_path):
         # For 3D models, get additional information
         if file_ext[1:] in app.config["ALLOWED_EXTENSIONS"]:
             try:
-                # For FBX files, we can't get mesh information directly
-                if file_ext == ".fbx":
+                # For FBX/STEP files, we can't get mesh information directly
+                if file_ext in (".fbx", ".step", ".stp"):
                     logger.info(
-                        "FBX file detected - mesh information will be updated after conversion"
+                        f"{file_ext} file detected - mesh information will be updated after conversion"
                     )
                     return info
 
@@ -710,6 +779,10 @@ def apply_size_limit(mesh, max_size_meters=0.35):
         )
         return mesh  # Return unmodified if not Scene or Trimesh
 
+    if bounds is None:
+        logger.warning("apply_size_limit: model has no geometry. Skipping scaling.")
+        return mesh
+
     # Calculate current dimensions
     dimensions = bounds[1] - bounds[0]
     # Handle potential NaN or Inf values in dimensions gracefully
@@ -775,6 +848,8 @@ def convert_model_new(input_file, output_path=None, color=None):
             converter = STLConverter()
         elif file_ext == ".obj":
             converter = OBJConverter()
+        elif file_ext in (".step", ".stp"):
+            converter = STEPConverter()
         elif file_ext in (".glb", ".gltf"):
             # Direct copy/re-export for GLB/GLTF
             try:
@@ -943,6 +1018,8 @@ def convert_to_glb(file_path):
             converter = STLConverter()
         elif file_ext == "fbx":
             converter = FBXConverter()
+        elif file_ext in ("step", "stp"):
+            converter = STEPConverter()
         else:
             logger.error(f"No converter available for {file_ext}")
             return None
@@ -1179,9 +1256,9 @@ def cleanup_missing_models():
 
         for model in models:
             # Check if the original uploaded file exists
-            if not os.path.exists(model.file_path):
+            if not model.filename or not os.path.exists(model.filename):
                 logger.info(
-                    f"Model {model.id} ({model.original_filename}) file not found at: {model.file_path}"
+                    f"Model {model.id} ({model.original_filename}) file not found at: {model.filename}"
                 )
                 try:
                     # Also try to delete the converted file if it exists
@@ -1306,7 +1383,62 @@ def init_app_dependencies():
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("index.html")
+    import ai_generator
+    ai_remove_lighting_supported = ai_generator.supports_remove_lighting()
+    ai_quota = None
+    if current_user.is_authenticated:
+        exceeded, used, limit = _ai_quota_state(current_user.id)
+        ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+    return render_template("index.html",
+                            ai_remove_lighting_supported=ai_remove_lighting_supported,
+                            ai_quota=ai_quota)
+
+
+# Static pages listed in sitemap.xml. Extend this as new marketing/landing
+# pages are added. Model pages (/view, /embed, /vr) are deliberately not
+# enumerated here — see _seo_robots_for_model_page() for whether they're
+# indexable at all, and an unbounded number of user-uploaded models would
+# need a paginated sitemap index, which is future work.
+SITEMAP_STATIC_ENDPOINTS = ["index"]
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    """Hand-rolled robots.txt — no dependency needed for a few lines.
+    Deliberately has no Disallow for HTML pages that use meta-tag noindex
+    (/view, /embed, /vr, /login, ...): Googlebot must be able to crawl a
+    page to see its noindex tag, and blocking the crawl instead can leave a
+    bare URL indexed with no snippet if it has external backlinks. Only
+    non-HTML/closed areas that never rely on that mechanism are disallowed.
+    """
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin/",
+        "Disallow: /api/",
+        "",
+        f"Sitemap: {SITE_URL}{url_for('sitemap_xml')}",
+    ]
+    return app.response_class(response="\n".join(lines) + "\n", status=200, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    """Hand-rolled XML sitemap (no flask-sitemap dependency needed for a
+    handful of URLs). Lists SITEMAP_STATIC_ENDPOINTS only."""
+    from xml.sax.saxutils import escape as xml_escape
+
+    entries = [
+        f"  <url>\n    <loc>{xml_escape(SITE_URL + url_for(endpoint))}</loc>\n  </url>"
+        for endpoint in SITEMAP_STATIC_ENDPOINTS
+    ]
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(entries)
+        + "\n</urlset>\n"
+    )
+    return app.response_class(response=body, status=200, mimetype="application/xml")
 
 
 def convert_to_usdz(input_glb_path, output_usdz_path):
@@ -1344,6 +1476,13 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
                         blender_exec = p
                         break
 
+        # Blender writes to a temp path first, then we atomically rename onto
+        # output_usdz_path — this runs in a daemon thread (see
+        # refresh_usdz_after_edit) that can be killed mid-write by a deploy;
+        # without this, a kill mid-export permanently corrupts an existing
+        # model's USDZ with nothing to ever regenerate it.
+        temp_usdz_path = f"{output_usdz_path}.tmp{os.getpid()}"
+
         # Construct command
         cmd = [
             blender_exec,
@@ -1352,7 +1491,7 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             blender_script,
             "--",
             input_glb_path,
-            output_usdz_path,
+            temp_usdz_path,
         ]
 
         logger.info(f"Running Blender command: {cmd}")
@@ -1366,17 +1505,28 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             timeout=300,  # 5 minute timeout
         )
 
-        if process.returncode == 0 and os.path.exists(output_usdz_path):
+        if process.returncode == 0 and os.path.exists(temp_usdz_path):
+            os.replace(temp_usdz_path, output_usdz_path)
             logger.info(f"USDZ conversion successful: {output_usdz_path}")
             return True
         else:
             logger.warning(f"USDZ conversion failed. Return code: {process.returncode}")
             logger.warning(f"Stdout: {process.stdout}")
             logger.warning(f"Stderr: {process.stderr}")
+            if os.path.exists(temp_usdz_path):
+                try:
+                    os.remove(temp_usdz_path)
+                except OSError:
+                    pass
             return False
 
     except Exception as e:
         logger.error(f"Error during USDZ conversion: {e}")
+        if os.path.exists(temp_usdz_path):
+            try:
+                os.remove(temp_usdz_path)
+            except OSError:
+                pass
         return False
 
 
@@ -1411,6 +1561,45 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
         logger.error(f"[USDZ Async - {model_id}] Error in background conversion: {e}")
 
 
+def refresh_usdz_after_edit(model_id, glb_path):
+    """Regenerate the iOS USDZ in the background after model.glb is rewritten.
+
+    Quick Look serves the USDZ (ios-src), not the GLB — without this, scale/
+    material/slice edits show up in the viewer and on Android but iPhone AR
+    keeps placing the model at its original size and look.
+    """
+    usdz_path = os.path.join(app.config["CONVERTED_FOLDER"], model_id, "model.usdz")
+    try:
+        threading.Thread(
+            target=convert_usdz_async,
+            args=(model_id, glb_path, usdz_path),
+            daemon=True,
+        ).start()
+        logger.info(f"[usdz-refresh - {model_id}] Regeneration thread started")
+    except Exception as e:
+        logger.error(f"[usdz-refresh - {model_id}] Failed to start thread: {e}")
+
+
+def _atomic_replace(dest_path, tmp_path):
+    """Atomically move a fully-written temp file onto dest_path.
+
+    Thumbnail/USDZ generation runs in daemon threads that a deploy can kill
+    mid-write; writing straight to dest_path would leave a permanently
+    corrupt file behind (nothing ever re-checks an existing file for
+    validity). Writing to tmp_path first and renaming here means dest_path
+    only ever holds a complete file.
+    """
+    try:
+        os.replace(tmp_path, dest_path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
+
+
 def generate_thumbnail_async(model_id, input_glb_path, color=None):
     """
     Background task to generate a thumbnail image for a 3D model.
@@ -1429,6 +1618,15 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
         if os.path.exists(thumbnail_path):
             logger.info(
                 f"[Thumbnail Async - {model_id}] Thumbnail already exists, skipping"
+            )
+            return
+
+        # First choice: render the actual geometry (software rasterizer, no GPU)
+        from converters.thumbnail_render import render_thumbnail
+
+        if render_thumbnail(input_glb_path, thumbnail_path):
+            logger.info(
+                f"[Thumbnail Async - {model_id}] Real 3D thumbnail rendered"
             )
             return
 
@@ -1490,7 +1688,9 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                 )
 
             # Save thumbnail
-            img.save(thumbnail_path, "PNG")
+            tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+            img.save(tmp_thumbnail_path, "PNG")
+            _atomic_replace(thumbnail_path, tmp_thumbnail_path)
             logger.info(
                 f"[Thumbnail Async - {model_id}] Thumbnail generated from 3D model"
             )
@@ -1543,8 +1743,10 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                     bytestring=svg_content.encode(), output_width=256, output_height=256
                 )
 
-                with open(thumbnail_path, "wb") as f:
+                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+                with open(tmp_thumbnail_path, "wb") as f:
                     f.write(png_data)
+                _atomic_replace(thumbnail_path, tmp_thumbnail_path)
 
                 logger.info(
                     f"[Thumbnail Async - {model_id}] Thumbnail generated from SVG (PNG)"
@@ -1607,9 +1809,10 @@ def get_usdz_status(model_id):
         usdz_ready = False
         usdz_filename = None
 
-        if model.usdz_filename and os.path.exists(model.usdz_filename):
+        usdz_path = model.usdz_path
+        if usdz_path and os.path.exists(usdz_path):
             usdz_ready = True
-            usdz_filename = os.path.basename(model.usdz_filename)
+            usdz_filename = os.path.basename(usdz_path)
         else:
             # Also check the converted directory for usdz files
             converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
@@ -1629,6 +1832,43 @@ def get_usdz_status(model_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _check_upload_size_limit():
+    """Admin-configurable upload cap (max_upload_mb setting). The env-derived
+    MAX_CONTENT_LENGTH stays the hard ceiling enforced by Werkzeug; this only
+    lowers the effective limit at runtime. Returns a response tuple or None."""
+    max_mb = setting_int("max_upload_mb", 0)
+    if max_mb and request.content_length and request.content_length > max_mb * 1024 * 1024:
+        return jsonify({"error": f"File exceeds the {max_mb} MB upload limit"}), 413
+    return None
+
+
+def _check_storage_quota():
+    """Admin-configurable per-user storage cap (storage_quota_mb setting).
+
+    Anonymous uploads (user_id is None) aren't tracked to anyone's quota —
+    consistent with my_models.html's storage view, which is per-account.
+    request.content_length is an approximation of the incoming file size
+    (matches the same approximation _check_upload_size_limit already makes).
+    Returns a response tuple or None.
+    """
+    if not current_user.is_authenticated:
+        return None
+    quota_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+    if not quota_mb:
+        return None
+    used = (
+        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+        .filter(UserModel.user_id == current_user.id)
+        .scalar()
+    )
+    incoming = request.content_length or 0
+    if used + incoming > quota_mb * 1024 * 1024:
+        return jsonify(
+            {"error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin."}
+        ), 413
+    return None
+
+
 @app.route("/upload", methods=["POST"])
 @limiter.limit("30 per hour")
 def upload_file():
@@ -1638,6 +1878,13 @@ def upload_file():
 
     try:
         logger.info("Starting upload process")
+
+        size_guard = _check_upload_size_limit()
+        if size_guard is not None:
+            return size_guard
+        quota_guard = _check_storage_quota()
+        if quota_guard is not None:
+            return quota_guard
 
         if "file" not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
@@ -1760,6 +2007,9 @@ def upload_file():
             if remove_textures:
                 converter.remove_textures = True
                 logger.info("FBX texture removal enabled")
+        elif file_extension in (".step", ".stp"):
+            # STEP carries real units; cascadio converts to meters directly
+            converter = STEPConverter()
         else:
             return jsonify({"error": "Unsupported file format"}), 400
 
@@ -1821,6 +2071,13 @@ def upload_progress():
 @limiter.limit("30 per hour")
 def upload_model():
     """Upload and convert 3D model. Works with or without login."""
+    size_guard = _check_upload_size_limit()
+    if size_guard is not None:
+        return size_guard
+    quota_guard = _check_storage_quota()
+    if quota_guard is not None:
+        return quota_guard
+
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -1978,6 +2235,11 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
     "1",
     "yes",
 )
+
+# A conversion still in "processing" past this many seconds is assumed dead
+# (e.g. its worker was OOM-killed) and is failed by the status endpoint so the
+# UI recovers instead of spinning forever. FBX2glTF itself has a 300s timeout.
+UPLOAD_STALL_SECONDS = int(os.environ.get("UPLOAD_STALL_SECONDS", "360"))
 
 
 def _start_local_conversion(job_id):
@@ -2254,6 +2516,15 @@ def _run_upload_pipeline(payload, progress_callback=None):
     source_unit = payload.get("source_unit")
     user_id = payload.get("user_id")
 
+    # Staged source must still exist. Requeued/stale jobs (e.g. picked up
+    # after a redeploy) often point at a temp file that was already cleaned
+    # up; fail fast and clearly instead of cascading into assimp "Could not
+    # import file!" and an FBX2glTF cwd FileNotFoundError.
+    if not temp_file_path or not os.path.exists(temp_file_path):
+        raise RuntimeError(
+            "Source file is no longer available — please re-upload the model."
+        )
+
     converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], unique_id)
     os.makedirs(converted_dir, exist_ok=True)
     output_path = os.path.join(converted_dir, "model.glb")
@@ -2289,6 +2560,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
             converter.set_source_unit(source_unit or "cm")
         elif file_extension == ".fbx":
             converter = FBXConverter()
+        elif file_extension in (".step", ".stp"):
+            # STEP carries real units; cascadio converts to meters directly
+            converter = STEPConverter()
         elif file_extension in (".glb", ".gltf"):
             # GLB is already the target format; GLTF can be loaded+exported as GLB
             converter = None  # No converter needed, handle directly below
@@ -2636,6 +2910,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
             validation_report=asset_report,
             vertices=(asset_report or {}).get("vertices"),
             faces=(asset_report or {}).get("triangles"),
+            source_filename=str(payload.get("client_filename", original_filename))[:255],
         )
         db.session.add(model)
         db.session.commit()
@@ -2695,6 +2970,27 @@ def upload_job_status(job_id):
     if not is_owner and (not token or not job.status_token_hash or
                          not check_password_hash(job.status_token_hash, token)):
         return jsonify({"success": False, "error": "Valid status token required"}), 403
+
+    # Inline conversions run in a gunicorn worker thread. If that worker is
+    # OOM-killed mid-conversion (large/complex FBX), the row is orphaned in
+    # "processing" forever and the UI spins at the last percent. There is no
+    # worker.py in inline mode to requeue it, so fail it here once it's clearly
+    # stalled — the frontend already renders job.status == 'failed'.
+    if job.status == "processing":
+        ref = job.started_at or job.created_at
+        if ref and (datetime.utcnow() - ref).total_seconds() > UPLOAD_STALL_SECONDS:
+            job.status = "failed"
+            job.error = (
+                "Conversion stalled — the file may be too large or complex for "
+                "the server to process (it can run out of memory). Try a smaller "
+                "or decimated model."
+            )
+            job.finished_at = datetime.utcnow()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
     data = job.to_dict()
     data["success"] = True
     payload = job.payload or {}
@@ -2750,6 +3046,10 @@ def convert():
         model_id = data["modelId"]
         selected_color = data.get("selectedColor", "#FFFFFF")
 
+        guard = check_model_mutation_allowed(model_id)
+        if guard is not None:
+            return guard
+
         # Find original file in upload subfirectory
         upload_subdir = os.path.join(app.config["UPLOAD_FOLDER"], model_id)
         if not os.path.isdir(upload_subdir):
@@ -2799,6 +3099,22 @@ def convert():
         return jsonify({"error": str(e)}), 500
 
 
+def _seo_robots_for_model_page(is_canonical=False):
+    """Single source of truth for whether a model page (/view, /embed, /vr)
+    is indexable. Flip config.SEO_INDEX_MODEL_PAGES to change it for every
+    model's canonical /view/<id> page at once — that's the only call site
+    that can ever return "index, follow". /embed/<id> and /vr/<id> are
+    alternate renderings of the same content (an iframe-embed viewer and a
+    VR viewer) and always stay noindex, always deferring to /view/<id> via
+    their <link rel="canonical">, independent of this flag — mirrors how
+    YouTube's /embed/<id> stays noindex while /watch?v=<id> is indexed, and
+    avoids sending mixed index+cross-canonical signals on the same page.
+    """
+    if is_canonical and SEO_INDEX_MODEL_PAGES:
+        return "index, follow"
+    return "noindex, follow"
+
+
 @app.route("/view/<model_id>")
 def view_model(model_id):
     """View a specific model."""
@@ -2827,9 +3143,14 @@ def view_model(model_id):
     db.session.commit()
     record_model_event(model_id, "view")
 
-    # Check if converted file exists
-    if not model.filename or not os.path.exists(model.filename):
-        app.logger.error(f"Converted GLB file not found at path: {model.filename}")
+    # Check if converted file exists. glb_path resolves from the CURRENT
+    # CONVERTED_FOLDER — the absolute path stored in model.filename goes stale
+    # when the storage root moves between deploys (e.g. a Railway volume is
+    # attached or its mount path changes), which used to strand every old
+    # model behind this redirect even though its file still existed.
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
+        app.logger.error(f"Converted GLB file not found at path: {glb_path}")
         flash("Converted model file not found", "error")
         return redirect(url_for("index"))
 
@@ -2860,7 +3181,7 @@ def view_model(model_id):
             import trimesh
             import numpy as np
 
-            mesh = trimesh.load(model.filename)
+            mesh = trimesh.load(glb_path)
             app.logger.info(f"Loaded mesh type: {type(mesh)}")
 
             # Get extents based on mesh type
@@ -2868,8 +3189,13 @@ def view_model(model_id):
                 # Prefer scene.bounds which includes node transforms (AABB of entire scene)
                 # This fixes FBX2glTF cases where geometry is at origin but transforms are in nodes
                 bounds = mesh.bounds
-                extents = bounds[1] - bounds[0]
-                app.logger.info(f"Scene extents from scene.bounds (AABB): {extents}")
+                # An empty/degenerate model has bounds=None — don't 500 the viewer.
+                if bounds is None:
+                    app.logger.warning("Model has no geometry; extents default to 0")
+                    extents = np.zeros(3)
+                else:
+                    extents = bounds[1] - bounds[0]
+                    app.logger.info(f"Scene extents from scene.bounds (AABB): {extents}")
 
                 # If bounds also gives zero, try dump(concatenate=True) as fallback
                 if max(extents) <= 0.001:
@@ -2919,8 +3245,8 @@ def view_model(model_id):
 
     # Parse the path to get unique_id and actual filename for URL generation
     try:
-        full_path = model.filename
-        app.logger.info(f"Model full path from DB: {full_path}")
+        full_path = glb_path
+        app.logger.info(f"Model full path: {full_path}")
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
 
         if full_path.startswith(converted_folder_abs):
@@ -2946,12 +3272,9 @@ def view_model(model_id):
 
         # Check for USDZ file
         usdz_actual_filename = None
-        if (
-            hasattr(model, "usdz_filename")
-            and model.usdz_filename
-            and os.path.exists(model.usdz_filename)
-        ):
-            usdz_actual_filename = os.path.basename(model.usdz_filename)
+        usdz_path = model.usdz_path
+        if usdz_path and os.path.exists(usdz_path):
+            usdz_actual_filename = os.path.basename(usdz_path)
             app.logger.info(f"Found USDZ file: {usdz_actual_filename}")
 
     except Exception as e:
@@ -2961,21 +3284,6 @@ def view_model(model_id):
         app.logger.error(tb.format_exc())
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
-
-    # Get last applied rotation from latest version
-    applied_rotation = {"x": 0, "y": 0, "z": 0}
-    if model.versions:
-        latest_version = model.versions[0]  # Already ordered by created_at desc
-        if (
-            latest_version.operation_details
-            and "transform" in latest_version.operation_details
-        ):
-            transform_details = latest_version.operation_details["transform"]
-            if "rotation" in transform_details:
-                applied_rotation = transform_details["rotation"]
-                app.logger.info(
-                    f"Found applied rotation in version {latest_version.version_number}: {applied_rotation}"
-                )
 
     # Social data
     owner_username = model.user.username if model.user else "anonymous"
@@ -3021,10 +3329,14 @@ def view_model(model_id):
         )
 
     # Derive display name
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
     is_owner = current_user.is_authenticated and model.user_id == current_user.id
+    # Anonymous models (user_id None) are editable by anyone by design — this
+    # mirrors check_model_mutation_allowed, so edit UI is only rendered for
+    # viewers whose mutations the backend would actually accept.
+    can_edit = is_owner or model.user_id is None
 
     response = make_response(render_template(
         "view.html",
@@ -3035,7 +3347,6 @@ def view_model(model_id):
         usdz_filename=usdz_actual_filename,
         model_dimensions=model_dimensions,
         cumulative_scale=model.cumulative_scale or 1.0,
-        applied_rotation=applied_rotation,
         owner_username=owner_username,
         like_count=like_count,
         is_liked=is_liked,
@@ -3044,6 +3355,8 @@ def view_model(model_id):
         display_name=display_name,
         is_owner=is_owner,
         viewer_settings=resolved_viewer_settings(model),
+        can_edit=can_edit,
+        seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
@@ -3069,12 +3382,13 @@ def embed_view(model_id):
             return "Embedding domain is not allowed", 403
     record_model_event(model_id, "embed_view", {"autoplay": request.args.get("autoplay", "0")})
 
-    if not model.filename or not os.path.exists(model.filename):
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
         return "Model file not found", 404
 
     # Parse path
     try:
-        full_path = model.filename
+        full_path = glb_path
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
         relative_path = os.path.relpath(full_path, converted_folder_abs)
         parts = os.path.normpath(relative_path).split(os.sep)
@@ -3085,8 +3399,9 @@ def embed_view(model_id):
 
     # Check USDZ
     usdz_actual_filename = None
-    if model.usdz_filename and os.path.exists(model.usdz_filename):
-        usdz_actual_filename = os.path.basename(model.usdz_filename)
+    usdz_path = model.usdz_path
+    if usdz_path and os.path.exists(usdz_path):
+        usdz_actual_filename = os.path.basename(usdz_path)
 
     # Dimensions
     model_dimensions = None
@@ -3113,6 +3428,7 @@ def embed_view(model_id):
         autoplay=request.args.get("autoplay", "0") == "1",
         ar=request.args.get("ar", "1") != "0",
         viewer_settings=resolved_viewer_settings(model),
+        seo_robots=_seo_robots_for_model_page(),
     )
 
 
@@ -3127,13 +3443,14 @@ def vr_view(model_id):
     if denied:
         abort(denied.status)
 
-    if not model.filename or not os.path.exists(model.filename):
+    glb_path = model.glb_path
+    if not glb_path or not os.path.exists(glb_path):
         flash("Converted model file not found", "error")
         return redirect(url_for("index"))
 
-    # Parse unique_id and actual_filename from model.filename (same logic as view_model)
+    # Parse unique_id and actual_filename from the live path (same logic as view_model)
     try:
-        full_path = model.filename
+        full_path = glb_path
         converted_folder_abs = os.path.abspath(app.config["CONVERTED_FOLDER"])
         if full_path.startswith(converted_folder_abs):
             relative_path = os.path.relpath(full_path, converted_folder_abs)
@@ -3150,8 +3467,8 @@ def vr_view(model_id):
         flash("Error processing model path.", "error")
         return redirect(url_for("index"))
 
-    filename_base = (model.filename.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
-                     if model.filename else "Model")
+    filename_base = (model.original_filename.rsplit(".", 1)[0]
+                     if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
 
     response = make_response(render_template(
@@ -3160,6 +3477,7 @@ def vr_view(model_id):
         model_unique_id=model_unique_id,
         actual_filename=actual_filename,
         display_name=display_name,
+        seo_robots=_seo_robots_for_model_page(),
     ))
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -4001,8 +4319,10 @@ def get_model_bounds(model_id):
         if denied:
             return jsonify({"success": False, "error": denied.error}), denied.status
 
-        # Check if model file exists
-        if not model.filename or not os.path.exists(model.filename):
+        # Check if model file exists (live path — the stored one goes stale
+        # when the storage root moves between deploys)
+        glb_path = model.glb_path
+        if not glb_path or not os.path.exists(glb_path):
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
         # Try to get bounds from database first
@@ -4029,7 +4349,7 @@ def get_model_bounds(model_id):
         try:
             import trimesh
 
-            mesh = trimesh.load(model.filename, force="scene")
+            mesh = trimesh.load(glb_path, force="scene")
 
             # Get bounds
             if isinstance(mesh, trimesh.Scene):
@@ -4366,6 +4686,15 @@ def serve_thumbnail(unique_id):
         )
 
         if os.path.exists(model_path):
+            # First choice: render the actual geometry (software rasterizer)
+            from converters.thumbnail_render import render_thumbnail
+
+            if render_thumbnail(model_path, thumbnail_path):
+                return send_from_directory(
+                    os.path.join(app.config["CONVERTED_FOLDER"], unique_id),
+                    "thumbnail.png",
+                )
+
             try:
                 import trimesh
                 import numpy as np
@@ -4425,8 +4754,10 @@ def serve_thumbnail(unique_id):
                         anchor="mm",
                     )
 
-                # Save thumbnail
-                img.save(thumbnail_path, "PNG")
+                # Save thumbnail (via temp file + atomic rename — see _atomic_replace)
+                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
+                img.save(tmp_thumbnail_path, "PNG")
+                _atomic_replace(thumbnail_path, tmp_thumbnail_path)
                 return send_from_directory(
                     os.path.join(app.config["CONVERTED_FOLDER"], unique_id),
                     "thumbnail.png",
@@ -4470,6 +4801,7 @@ def serve_thumbnail(unique_id):
             svg_path = os.path.join(
                 app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.svg"
             )
+            os.makedirs(os.path.dirname(svg_path), exist_ok=True)
             with open(svg_path, "w", encoding="utf-8") as f:
                 f.write(svg_content)
 
@@ -4490,9 +4822,6 @@ def serve_thumbnail(unique_id):
 
 
 TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
-# Per-user storage quota. 1 GB for everyone for now; when paid plans land
-# this becomes a per-plan value (the env var stays as the global default).
-STORAGE_QUOTA_BYTES = int(os.getenv("STORAGE_QUOTA_MB", 1024)) * 1024 * 1024
 
 
 def _purge_expired_trash(user_id):
@@ -4512,6 +4841,23 @@ def _purge_expired_trash(user_id):
     if expired:
         db.session.commit()
         app.logger.info(f"Purged {len(expired)} expired trash models for user {user_id}")
+
+
+def _storage_usage_for(user_id):
+    """Bytes used across all of a user's models, including trash (still on disk)."""
+    return (
+        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+        .filter(UserModel.user_id == user_id)
+        .scalar()
+    )
+
+
+def _storage_quota_bytes():
+    return (
+        setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
+        * 1024
+        * 1024
+    )
 
 
 @app.route("/my_models")
@@ -4547,23 +4893,13 @@ def my_models(folder_id=None):
                 m.id for m in folder_q.order_by(UserModel.upload_date.desc()).limit(4).all()
             ]
 
-        # Trash (all folders) — shown only on the root view
-        trash_models = []
+        # Trash shows up as its own "folder" card — only need the count here,
+        # the dedicated /my_models/trash view renders the actual list.
+        trash_count = 0
         if not folder_id:
-            trash_models = (
-                UserModel.query.filter(
-                    UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
-                )
-                .order_by(UserModel.deleted_at.desc())
-                .all()
-            )
-
-        # Storage usage across all of the user's models (incl. trash — still on disk)
-        storage_used = (
-            db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-            .filter(UserModel.user_id == current_user.id)
-            .scalar()
-        )
+            trash_count = UserModel.query.filter(
+                UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
+            ).count()
 
         return render_template(
             "my_models.html",
@@ -4572,14 +4908,47 @@ def my_models(folder_id=None):
             current_folder=current_folder,
             folder_model_counts=folder_model_counts,
             folder_previews=folder_previews,
-            trash_models=trash_models,
+            trash_view=False,
+            trash_count=trash_count,
             trash_retention_days=TRASH_RETENTION_DAYS,
-            storage_used=storage_used,
-            storage_quota=STORAGE_QUOTA_BYTES,
+            storage_used=_storage_usage_for(current_user.id),
+            storage_quota=_storage_quota_bytes(),
         )
     except Exception as e:
         app.logger.error(f"Error in my_models: {str(e)}")
         return redirect("/")
+
+
+@app.route("/my_models/trash")
+@login_required
+def my_models_trash():
+    try:
+        _purge_expired_trash(current_user.id)
+
+        trashed_models = (
+            UserModel.query.filter(
+                UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
+            )
+            .order_by(UserModel.deleted_at.desc())
+            .all()
+        )
+
+        return render_template(
+            "my_models.html",
+            folders=[],
+            models=trashed_models,
+            current_folder=None,
+            folder_model_counts={},
+            folder_previews={},
+            trash_view=True,
+            trash_count=len(trashed_models),
+            trash_retention_days=TRASH_RETENTION_DAYS,
+            storage_used=_storage_usage_for(current_user.id),
+            storage_quota=_storage_quota_bytes(),
+        )
+    except Exception as e:
+        app.logger.error(f"Error in my_models_trash: {str(e)}")
+        return redirect(url_for("my_models"))
 
 
 @app.route("/converted/<path:filename>")
@@ -4624,6 +4993,9 @@ def download_model(model_id):
         if model is None or model.deleted_at is not None:
             return "Model not found", 404
 
+        if model is None:
+            return "Dosya bulunamadı", 404
+
         # Check if user owns this model
         if model.user_id != current_user.id:
             return "Unauthorized", 403
@@ -4632,10 +5004,11 @@ def download_model(model_id):
         if not os.path.exists(file_path):
             return "Dosya bulunamadı", 404
 
+        base_name = os.path.splitext(model.original_filename)[0] or model_id
         return send_file(
             file_path,
             as_attachment=True,
-            download_name=f"{model.display_name or 'model'}.glb",
+            download_name=f"{model.display_name or base_name}.glb",
             mimetype="application/octet-stream",
         )
     except Exception as e:
@@ -4643,6 +5016,8 @@ def download_model(model_id):
         return "Dosya indirilirken bir hata oluştu", 500
 
 
+# Model ids are UUID strings — the old <int:model_id> converter could never
+# match a real id, so this route was unreachable as written.
 @app.route("/api/model-info/<model_id>")
 @login_required
 def get_model_info_api(model_id):
@@ -4654,7 +5029,7 @@ def get_model_info_api(model_id):
         flash("Bu modele erişim izniniz yok.", "error")
         return redirect(url_for("auth.profile"))
 
-    model_info = get_file_info(model.filename)
+    model_info = get_file_info(model.glb_path)
     if model_info is None:
         return jsonify({"error": "Model not found"}), 404
 
@@ -4767,28 +5142,10 @@ def delete_model(model_id):
                 logger.error(f"Database error trashing model {model_id}: {str(e)}")
                 return jsonify({"error": "Database error"}), 500
 
-        # Permanent delete: remove files then the row
+        # Permanent delete: files + engagement rows + model row (shared helper;
+        # file errors are logged and tolerated inside purge_model_completely)
         try:
-            # Delete files in converted folder
-            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], str(model_id))
-            if os.path.exists(converted_dir):
-                shutil.rmtree(converted_dir)
-                logger.info(f"Deleted converted directory: {converted_dir}")
-
-            # Delete files in uploads folder
-            upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], str(model_id))
-            if os.path.exists(upload_dir):
-                shutil.rmtree(upload_dir)
-                logger.info(f"Deleted upload directory: {upload_dir}")
-
-        except Exception as e:
-            logger.error(f"Error deleting files for model {model_id}: {str(e)}")
-            logger.error(traceback.format_exc())
-            # Continue to delete from database even if file deletion fails
-
-        # Delete from database
-        try:
-            session.delete(model)
+            purge_model_completely(session, model)
             session.commit()
             logger.info(f"Deleted model {model_id} from database")
             return jsonify({"success": True}), 200
@@ -4822,20 +5179,7 @@ def delete_all_models():
         # Delete files for each model
         for model in models:
             try:
-                # Delete files in converted folder
-                converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
-                if os.path.exists(converted_dir):
-                    shutil.rmtree(converted_dir)
-                    logger.info(f"Deleted converted directory: {converted_dir}")
-
-                # Delete files in uploads folder
-                upload_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
-                if os.path.exists(upload_dir):
-                    shutil.rmtree(upload_dir)
-                    logger.info(f"Deleted upload directory: {upload_dir}")
-
-                # Delete from database
-                session.delete(model)
+                purge_model_completely(session, model)
                 deleted_count += 1
 
             except Exception as e:
@@ -4882,20 +5226,7 @@ def delete_selected_models():
             return jsonify({"success": False, "message": "No valid models found"})
 
         for model in models:
-            # Delete the model files
-            model_dir = os.path.join(app.config["UPLOAD_FOLDER"], model.id)
-            converted_dir = os.path.join(app.config["CONVERTED_FOLDER"], model.id)
-
-            try:
-                if os.path.exists(model_dir):
-                    shutil.rmtree(model_dir)
-                if os.path.exists(converted_dir):
-                    shutil.rmtree(converted_dir)
-            except Exception as e:
-                app.logger.error(f"Error deleting files for model {model.id}: {e}")
-
-            # Delete from database
-            db.session.delete(model)
+            purge_model_completely(db.session, model)
 
         db.session.commit()
         return jsonify(
@@ -5063,6 +5394,46 @@ def restore_model(model_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/restore_selected_models", methods=["POST"])
+@login_required
+def restore_selected_models():
+    """Bulk-restore trashed models back to the active library."""
+    try:
+        data = request.get_json()
+        model_ids = data.get("model_ids", [])
+
+        if not model_ids:
+            return jsonify({"success": False, "error": "No models selected"}), 400
+
+        models = UserModel.query.filter(
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
+        ).all()
+
+        if len(models) != len(model_ids):
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Some models were not found or do not belong to you",
+                }
+            ), 403
+
+        for model in models:
+            model.deleted_at = None
+            # Its folder may have been deleted while the model sat in trash
+            if model.folder_id and not Folder.query.get(model.folder_id):
+                model.folder_id = None
+
+        db.session.commit()
+        return jsonify(
+            {"success": True, "message": f"Successfully restored {len(models)} models"}
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error restoring models: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to restore models"}), 500
+
+
 @app.route("/rename_folder/<int:folder_id>", methods=["POST"])
 @login_required
 def rename_folder(folder_id):
@@ -5180,6 +5551,47 @@ def check_model_files():
             session.close()
 
 
+@app.before_request
+def before_request():
+    """Per-request hook.
+
+    Previously this ran check_model_files() on every /my_models load — an
+    O(N) full-table scan + filesystem stat that *deleted* model rows (including
+    other users') whenever a directory looked missing. A transient volume mount
+    hiccup could mass-delete models. That destructive sweep has been removed
+    from the request path; check_model_files() remains available for an
+    explicit offline/maintenance job.
+
+    Now enforces the admin-controlled maintenance mode: admins and the
+    admin/login/static paths stay reachable, everything else gets a 503.
+    """
+    if setting_bool("maintenance_mode", False):
+        exempt = request.path.startswith(
+            ("/admin", "/login", "/logout", "/static", "/favicon.ico",
+             "/robots.txt", "/sitemap.xml")
+        )
+        is_admin = current_user.is_authenticated and getattr(
+            current_user, "is_admin", False
+        )
+        if not exempt and not is_admin:
+            return render_template("maintenance.html"), 503
+    return None
+
+
+@app.context_processor
+def inject_announcement():
+    """Admin-set announcement banner, rendered by base.html on every page."""
+    return {"announcement_text": get_setting("announcement_text", "") or ""}
+
+
+@app.context_processor
+def inject_seo_defaults():
+    """Site-wide SEO context (SITE_URL for absolute canonical/OG URLs,
+    GOOGLE_SITE_VERIFICATION for the GSC verification meta tag) — available
+    in every template without each route passing them explicitly."""
+    return {"SITE_URL": SITE_URL, "GOOGLE_SITE_VERIFICATION": GOOGLE_SITE_VERIFICATION}
+
+
 @app.route("/apply_modifications", methods=["POST"])
 def apply_modifications():
     """Apply material and transform modifications to GLB model"""
@@ -5194,7 +5606,7 @@ def apply_modifications():
             ), 400
 
         guard = check_model_mutation_allowed(model_id)
-        if guard:
+        if guard is not None:
             return guard
 
         logger.info(f"[apply_modifications] Model ID: {model_id}")
@@ -5244,6 +5656,13 @@ def apply_modifications():
 @app.route("/download_modified/<model_id>/<filename>")
 def download_modified(model_id, filename):
     """Download modified GLB file"""
+    # Owner guard + reject path traversal in the filename.
+    guard = check_model_mutation_allowed(model_id)
+    if guard is not None:
+        return guard
+    if os.path.basename(filename) != filename:
+        logger.warning(f"[download_modified] Unsafe filename rejected: {filename}")
+        return "Not Found", 404
     try:
         guard = check_model_mutation_allowed(model_id)
         if guard:
@@ -5268,7 +5687,12 @@ def download_modified(model_id, filename):
 
 @app.route("/get_model_dimensions/<model_id>")
 def get_model_dimensions(model_id):
-    """Get model dimensions in meters"""
+    """Get model dimensions in meters.
+
+    Read-only: no ownership guard. The viewer page calls this for every
+    visitor, and the same dimensions are already server-rendered publicly —
+    the old mutation guard just made non-owners 403 for data they can see.
+    """
     try:
         model = get_live_model(model_id)
         if not model:
@@ -5276,7 +5700,7 @@ def get_model_dimensions(model_id):
         denied = check_model_view_allowed(model_id)
         if denied:
             return jsonify({"success": False, "error": denied.error}), denied.status
-        glb_path = model.filename
+        glb_path = model.glb_path
 
         if not os.path.exists(glb_path):
             return jsonify({"success": False, "error": "Model not found"}), 404
@@ -5285,10 +5709,12 @@ def get_model_dimensions(model_id):
         mesh = trimesh.load(glb_path, force="scene")
 
         # Get bounding box
-        if isinstance(mesh, trimesh.Scene):
-            bounds = mesh.bounds
-        else:
-            bounds = mesh.bounds
+        bounds = mesh.bounds
+
+        # Empty/degenerate model → report zeros instead of crashing.
+        if bounds is None:
+            return jsonify({"success": True, "dimensions": {
+                "width": 0.0, "height": 0.0, "depth": 0.0, "max": 0.0}})
 
         # Calculate dimensions (in meters, assuming GLB units are meters)
         dimensions = bounds[1] - bounds[0]
@@ -5398,6 +5824,10 @@ def save_modifications():
                 f"[save_modifications] Successfully replaced model.glb with modified version"
             )
 
+            # Keep iOS AR in sync: Quick Look uses the USDZ, so it must be
+            # rebuilt from the freshly modified GLB.
+            refresh_usdz_after_edit(model_id, current_model_path)
+
             # Update database dimensions after modifications
             try:
                 mesh = trimesh.load(current_model_path, force="scene")
@@ -5414,7 +5844,10 @@ def save_modifications():
                     "max": round(float(max(dimensions) * 100), 2),
                 }
 
-                # Update database
+                # Update database. UserModel stores dimensions in the `bounds`
+                # JSON-string column as {"extents": [x,y,z], "max": m} (cm) —
+                # this is the shape view_model reads. Writing model.dimensions
+                # (no such column) silently dropped the update.
                 model = UserModel.query.get(model_id)
                 if model:
                     model.bounds = json.dumps({
@@ -5486,6 +5919,9 @@ def save_modifications():
 @app.route("/get_mesh_bounds/<model_id>")
 def api_get_mesh_bounds_route(model_id):
     """Get mesh bounding box for slicer"""
+    guard = check_model_mutation_allowed(model_id)
+    if guard is not None:
+        return guard
     try:
         model = get_live_model(model_id)
         if not model:
@@ -5561,10 +5997,11 @@ def slice_model():
             # Maybe model_id is the full filename from database
             model = UserModel.query.get(model_id)
             if model and model.filename:
-                # Extract folder from filename (e.g., "converted/uuid/model.glb" -> "uuid")
-                parts = model.filename.split("/")
-                if len(parts) >= 2:
-                    folder_id = parts[1]
+                # model.filename is the full storage path "<CONVERTED_FOLDER>/<uuid>/model.glb"
+                # (CONVERTED_FOLDER is absolute, so splitting on "/" and indexing
+                # doesn't recover the uuid — take the parent directory's basename instead).
+                folder_id = os.path.basename(os.path.dirname(model.filename))
+                if folder_id:
                     input_path = os.path.join(
                         app.config["CONVERTED_FOLDER"], folder_id, "model.glb"
                     )
@@ -5626,6 +6063,21 @@ def slice_model():
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )
 
+            # Re-run the same GLB quality pass upload does: patches any
+            # primitive that slicing left materialless with a default PBR
+            # material and re-asserts doubleSided, since nothing else does
+            # this after a slice (idempotent — never touches existing artwork).
+            quality_warnings = []
+            try:
+                quality_warnings = finalize_glb(input_path, search_dirs=[os.path.dirname(input_path)])
+                for w in quality_warnings:
+                    logger.warning(f"[slice_model] GLB quality: {w}")
+            except Exception as e:
+                logger.warning(f"[slice_model] GLB quality pass skipped: {e}")
+
+            # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
+            refresh_usdz_after_edit(model_id, input_path)
+
             # Update dimensions in database
             try:
                 import trimesh
@@ -5648,7 +6100,13 @@ def slice_model():
 
                 model = UserModel.query.get(model_id)
                 if model:
-                    model.dimensions = new_dims
+                    # Persist to the `bounds` column in the shape view_model reads.
+                    model.bounds = json.dumps(
+                        {
+                            "extents": [new_dims["x"], new_dims["y"], new_dims["z"]],
+                            "max": new_dims["max"],
+                        }
+                    )
                     db.session.commit()
                     logger.info(f"[slice_model] Updated dimensions: {new_dims}")
 
@@ -5668,18 +6126,25 @@ def slice_model():
             except Exception as version_error:
                 logger.error(f"[slice_model] Failed to create version: {version_error}")
 
+            # Surface near-flat results, lost materials, or GLB quality issues
+            # so the UI can warn the user instead of a silently degraded model.
+            warnings = []
+            if slice_result.get("degenerate"):
+                warnings.append(
+                    "The slice result is nearly flat — one dimension is almost zero. "
+                    "Check the kept side / slider position."
+                )
+            if slice_result.get("material_warning"):
+                warnings.append(slice_result["material_warning"])
+            warnings.extend(quality_warnings)
+
             response = {
                 "success": True,
                 "message": "Model sliced successfully",
                 "backup": os.path.basename(backup_path),
             }
-            # Surface near-flat results so the UI can warn the user instead of
-            # silently producing a degenerate model.
-            if slice_result.get("degenerate"):
-                response["warning"] = (
-                    "The slice result is nearly flat — one dimension is almost zero. "
-                    "Check the kept side / slider position."
-                )
+            if warnings:
+                response["warning"] = " ".join(warnings)
             return jsonify(response)
         else:
             logger.error("[slice_model] Slicing failed")
@@ -5730,6 +6195,7 @@ def get_versions(model_id):
 
 
 @app.route("/api/versions/<model_id>/restore/<int:version_number>", methods=["POST"])
+@limiter.limit("60 per minute")
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     try:
@@ -5739,6 +6205,11 @@ def restore_model_version(model_id, version_number):
 
         success = restore_version(model_id, version_number)
         if success:
+            # The restored GLB replaced model.glb — rebuild the iOS USDZ too.
+            glb_path = os.path.join(
+                app.config["CONVERTED_FOLDER"], model_id, "model.glb"
+            )
+            refresh_usdz_after_edit(model_id, glb_path)
             return jsonify(
                 {"success": True, "message": f"Restored to version {version_number}"}
             )
@@ -5752,6 +6223,7 @@ def restore_model_version(model_id, version_number):
 
 
 @app.route("/api/versions/<model_id>/delete/<int:version_number>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_model_version(model_id, version_number):
     """Delete a specific version"""
     try:
@@ -5775,22 +6247,21 @@ def delete_model_version(model_id, version_number):
 def download_version(model_id, version_number):
     """Download a specific version"""
     try:
-        if not get_live_model(model_id):
-            return jsonify({"success": False, "error": "Model not found"}), 404
-        denied = check_model_view_allowed(model_id)
-        if denied:
-            return jsonify({"success": False, "error": denied.error}), denied.status
+        guard = check_model_mutation_allowed(model_id)
+        if guard is not None:
+            return guard
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()
         if not version:
             return jsonify({"success": False, "error": "Version not found"}), 404
 
-        if not os.path.exists(version.filename):
+        version_file = version_path(version)
+        if not os.path.exists(version_file):
             return jsonify({"success": False, "error": "Version file not found"}), 404
 
-        directory = os.path.dirname(version.filename)
-        filename = os.path.basename(version.filename)
+        directory = os.path.dirname(version_file)
+        filename = os.path.basename(version_file)
 
         return send_from_directory(
             directory,
@@ -5830,6 +6301,7 @@ def get_hotspots(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots", methods=["POST"])
+@limiter.limit("60 per minute")
 def create_hotspot(model_id):
     """Create a new hotspot on a model"""
     try:
@@ -5885,6 +6357,7 @@ def create_hotspot(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots/<hotspot_id>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_hotspot(model_id, hotspot_id):
     """Delete a specific hotspot"""
     try:
@@ -5908,6 +6381,7 @@ def delete_hotspot(model_id, hotspot_id):
 
 
 @app.route("/api/models/<model_id>/hotspots", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_all_hotspots(model_id):
     """Delete all hotspots for a model"""
     try:
@@ -5925,6 +6399,7 @@ def delete_all_hotspots(model_id):
 
 
 @app.route("/api/models/<model_id>/hotspots/visibility", methods=["PATCH"])
+@limiter.limit("60 per minute")
 def toggle_hotspots_visibility(model_id):
     """Toggle hotspot visibility for a model"""
     try:
@@ -5967,6 +6442,7 @@ def get_camera_views(model_id):
 
 
 @app.route("/api/models/<model_id>/camera-views", methods=["POST"])
+@limiter.limit("60 per minute")
 def create_camera_view(model_id):
     """Save a camera view"""
     try:
@@ -6003,6 +6479,7 @@ def create_camera_view(model_id):
 
 
 @app.route("/api/models/<model_id>/camera-views/<int:view_id>", methods=["DELETE"])
+@limiter.limit("60 per minute")
 def delete_camera_view(model_id, view_id):
     """Delete a camera view"""
     try:
@@ -6129,6 +6606,7 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
             "description": seo_description,
             "keywords": ["3D model", "AR", "AI generated", source],
         },
+        source=source,
     )
     db.session.add(model)
     db.session.commit()
@@ -6153,13 +6631,83 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
     return model
 
 
+_AI_TOPOLOGY_CHOICES = {"quad", "triangle"}
+_AI_SYMMETRY_CHOICES = {"off", "auto", "on"}
+_AI_POSE_MODE_CHOICES = {"a-pose", "t-pose"}
+_AI_ORIGIN_AT_CHOICES = {"bottom", "center"}
+
+
+def _parse_ai_options(raw):
+    """Whitelist-parse the client-supplied 'options' sub-dict for a generation
+    request. The raw client dict is never passed through to ai_generator --
+    each field is extracted and validated individually here."""
+    raw = raw if isinstance(raw, dict) else {}
+    out = {}
+    negative_prompt = (raw.get("negative_prompt") or "").strip()
+    if negative_prompt:
+        out["negative_prompt"] = negative_prompt[:600]
+    seed = raw.get("seed")
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        out["seed"] = seed
+    if raw.get("topology") in _AI_TOPOLOGY_CHOICES:
+        out["topology"] = raw["topology"]
+    target_polycount = raw.get("target_polycount")
+    if isinstance(target_polycount, int) and not isinstance(target_polycount, bool):
+        out["target_polycount"] = target_polycount
+    if raw.get("symmetry_mode") in _AI_SYMMETRY_CHOICES:
+        out["symmetry_mode"] = raw["symmetry_mode"]
+    if isinstance(raw.get("moderation"), bool):
+        out["moderation"] = raw["moderation"]
+    if raw.get("pose_mode") in _AI_POSE_MODE_CHOICES:
+        out["pose_mode"] = raw["pose_mode"]
+    if raw.get("origin_at") in _AI_ORIGIN_AT_CHOICES:
+        out["origin_at"] = raw["origin_at"]
+    if raw.get("remove_lighting") is True:
+        out["remove_lighting"] = True
+    texture_prompt = (raw.get("texture_prompt") or "").strip()
+    if texture_prompt:
+        out["texture_prompt"] = texture_prompt[:600]
+    return out
+
+
+def _stash_texture_reference(job_id, data_uri):
+    """Persist a refine-stage texture reference image to a temp file so it
+    survives between the initial request and the later async refine call
+    (texture_prompt/texture_image_url only apply once refine starts).
+    Never stored inline as base64 in the DB. Cleaned up by the reconciliation
+    sweep alongside abandoned jobs."""
+    if not isinstance(data_uri, str) or not data_uri.startswith("data:image/"):
+        return None
+    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_texture")
+    os.makedirs(tmp_dir, exist_ok=True)
+    path = os.path.join(tmp_dir, f"{job_id}.txt")
+    with open(path, "w") as f:
+        f.write(data_uri)
+    return path
+
+
+def _load_texture_reference(path):
+    if not path or not os.path.exists(path):
+        return None
+    with open(path, "r") as f:
+        return f.read()
+
+
 def _ai_quota_state(user_id):
+    """Counts both AIGenerationJob and RigAnimationJob rows -- rigging and
+    animation spend real Meshy credits exactly like text/image generation,
+    so an admin setting ai_daily_limit to 0 to disable Meshy usage entirely
+    must also cover it."""
     from datetime import timedelta
     since = datetime.utcnow() - timedelta(days=1)
-    limit = app.config.get("AI_GEN_DAILY_LIMIT", 10)
+    # Admin-editable override; falls back to the env default when unset.
+    limit = setting_int("ai_daily_limit", app.config.get("AI_GEN_DAILY_LIMIT", 10))
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,
+    ).count() + RigAnimationJob.query.filter(
+        RigAnimationJob.user_id == user_id,
+        RigAnimationJob.created_at >= since,
     ).count()
     return (count >= limit), count, limit
 
@@ -6358,8 +6906,29 @@ def _resolve_prompt_preset(preset_id, prompt):
     return preset.prompt_template.replace("{prompt}", prompt), preset.id
 
 
+def _claim_ai_stage(job_id, expect_stage, new_stage):
+    """Atomically move a job between stages with UPDATE ... WHERE stage=...
+
+    The state machine is advanced by client polls; two concurrent polls of
+    the same job (multiple tabs/devices) could otherwise both see a finished
+    preview and both call start_refine — burning duplicate Meshy credits —
+    or both finalize and register duplicate models. Exactly one poll wins
+    this claim; the loser just reports current progress.
+    """
+    claimed = AIGenerationJob.query.filter_by(
+        id=job_id, stage=expect_stage
+    ).update({"stage": new_stage}, synchronize_session=False)
+    db.session.commit()
+    return bool(claimed)
+
+
 def _finalize_ai_job(job, task):
-    """Download finished GLB (+USDZ), register as model, mark job ready."""
+    """Download finished GLB (+USDZ), register as model, mark job ready.
+
+    Pure job-mutation + commit (no HTTP response built here) -- shared by the
+    client-poll route, the webhook receiver and the reconciliation sweep.
+    Returns the created UserModel, or None if Meshy returned no GLB (job is
+    marked failed in that case instead)."""
     import ai_generator
 
     model_urls = task.get("model_urls") or {}
@@ -6368,8 +6937,7 @@ def _finalize_ai_job(job, task):
         job.status = "failed"
         job.error = "Generation finished but returned no GLB"
         db.session.commit()
-        resp = job.to_dict(); resp["success"] = True
-        return jsonify(resp)
+        return None
 
     tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_" + job.id)
     os.makedirs(tmp_dir, exist_ok=True)
@@ -6398,9 +6966,98 @@ def _finalize_ai_job(job, task):
     job.progress = 100
     job.model_id = model.id
     db.session.commit()
-    resp = job.to_dict(); resp["success"] = True
-    resp["viewer_url"] = url_for("view_model", model_id=model.id)
-    return jsonify(resp)
+    return model
+
+
+def _advance_ai_job(job):
+    """Advance a 'generating' AIGenerationJob by one step using whatever
+    Meshy task state is available right now: poll the active Meshy task, and
+    if it just finished, either kick off the next stage (preview -> refine)
+    or finalize (download + register the model).
+
+    Shared by the client-poll route (generate_3d_status), the Meshy webhook
+    receiver, and worker.py's reconciliation sweep -- all three call this
+    identically, so the existing _claim_ai_stage atomic claim prevents any
+    two of them from double-starting a refine or double-registering a model
+    for the same job (e.g. a webhook firing while a browser tab is also
+    polling). Mutates and commits `job`; raises on transient failures
+    (ai_generator.MeshyError etc.) so callers can decide how to react
+    (poll route -> 502 to the client, sweep/webhook -> log and move on).
+    """
+    import ai_generator
+
+    if job.status in ("ready", "failed"):
+        return
+
+    if job.kind == "image":
+        if job.stage == "image":
+            t = ai_generator.get_task("image", job.meshy_image_id)
+            job.progress = min(99, t["progress"])
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "image", "finalizing"):
+                    db.session.refresh(job)  # another poll is finalizing
+                else:
+                    try:
+                        _finalize_ai_job(job, t)
+                        return
+                    except Exception:
+                        # let the next poll retry the download/registration
+                        _claim_ai_stage(job.id, "finalizing", "image")
+                        raise
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Generation failed"
+    else:
+        if job.stage == "preview":
+            t = ai_generator.get_task("text", job.meshy_preview_id)
+            job.progress = min(49, t["progress"] // 2)
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "preview", "refining"):
+                    db.session.refresh(job)  # another poll started refine
+                else:
+                    job_options = job.options or {}
+                    texture_image_url = _load_texture_reference(job.texture_ref)
+                    try:
+                        refine_id = ai_generator.start_refine(
+                            job.meshy_preview_id,
+                            texture_prompt=job_options.get("texture_prompt"),
+                            texture_image_url=texture_image_url,
+                            moderation=job_options.get("moderation"),
+                            remove_lighting=job_options.get("remove_lighting"))
+                    except Exception:
+                        # release the claim so the next poll retries
+                        _claim_ai_stage(job.id, "refining", "preview")
+                        raise
+                    job.meshy_refine_id = refine_id
+                    job.stage = "refine"
+                    job.progress = 50
+                    if job.texture_ref:
+                        try:
+                            os.remove(job.texture_ref)
+                        except OSError:
+                            pass
+                        job.texture_ref = None
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Preview failed"
+        elif job.stage == "refine":
+            t = ai_generator.get_task("text", job.meshy_refine_id)
+            job.progress = min(99, 50 + t["progress"] // 2)
+            if t["status"] == ai_generator.SUCCEEDED:
+                if not _claim_ai_stage(job.id, "refine", "finalizing"):
+                    db.session.refresh(job)
+                else:
+                    try:
+                        _finalize_ai_job(job, t)
+                        return
+                    except Exception:
+                        _claim_ai_stage(job.id, "finalizing", "refine")
+                        raise
+            elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+                job.status = "failed"
+                job.error = t.get("task_error") or "Texturing failed"
+
+    db.session.commit()
 
 
 @app.route("/api/generate-3d", methods=["POST"])
@@ -6424,6 +7081,7 @@ def generate_3d():
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()
+    options = _parse_ai_options(data.get("options"))
     job_id = str(uuid.uuid4())
     try:
         parent_job_id = data.get("parent_job_id")
@@ -6434,14 +7092,27 @@ def generate_3d():
             if not parent:
                 return jsonify({"success": False, "error": "Parent generation not found"}), 404
         if mode == "image":
-            image = (data.get("image") or "").strip()
+            image_task = data.get("image_task")
+            if isinstance(image_task, dict):
+                # an AI-generated image from the pre-processing step,
+                # resolved server-side from its Meshy task id
+                image = _resolve_image_task(image_task)
+            else:
+                image = (data.get("image") or "").strip()
             if not image.startswith("data:image/"):
                 return jsonify({"success": False,
                                 "error": "A valid image (jpg/png) is required."}), 400
-            task_id = ai_generator.start_image_to_3d(image)
+            task_id = ai_generator.start_image_to_3d(
+                image, topology=options.get("topology"),
+                target_polycount=options.get("target_polycount"),
+                symmetry_mode=options.get("symmetry_mode"),
+                moderation=options.get("moderation"),
+                pose_mode=options.get("pose_mode"),
+                origin_at=options.get("origin_at"),
+                remove_lighting=options.get("remove_lighting"))
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
                                   stage="image", meshy_image_id=task_id,
-                                  status="generating", progress=0,
+                                  status="generating", progress=0, options=options,
                                   parent_job_id=parent_job_id)
         else:
             prompt = (data.get("prompt") or "").strip()
@@ -6452,12 +7123,21 @@ def generate_3d():
                                 "error": "A text prompt is required."}), 400
             prompt, custom_preset_id = _resolve_prompt_preset(data.get("preset_id"), prompt)
             prompt = prompt[:600]
-            task_id = ai_generator.start_text_to_3d(prompt)
+            task_id = ai_generator.start_text_to_3d(
+                prompt, negative_prompt=options.get("negative_prompt"),
+                seed=options.get("seed"), topology=options.get("topology"),
+                target_polycount=options.get("target_polycount"),
+                symmetry_mode=options.get("symmetry_mode"),
+                moderation=options.get("moderation"))
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="text",
                                   prompt=prompt, stage="preview", meshy_preview_id=task_id,
-                                  status="generating", progress=0,
+                                  status="generating", progress=0, options=options,
                                   parent_job_id=parent_job_id,
                                   preset_id=custom_preset_id)
+        texture_image_url = (data.get("options") or {}).get("texture_image_url") \
+            if isinstance(data.get("options"), dict) else None
+        if texture_image_url:
+            job.texture_ref = _stash_texture_reference(job_id, texture_image_url)
         db.session.add(job)
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
@@ -6484,45 +7164,276 @@ def generate_3d_status(job_id):
     if job.user_id != current_user.id:
         return jsonify({"success": False, "error": "Unauthorized"}), 403
 
-    if job.status in ("ready", "failed", "finalizing"):
-        resp = job.to_dict(); resp["success"] = True
-        if job.status == "ready" and job.model_id:
-            resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
-        return jsonify(resp)
+    if job.status not in ("ready", "failed"):
+        try:
+            _advance_ai_job(job)
+        except ai_generator.MeshyError as e:
+            return jsonify({"success": False, "error": str(e)}), 502
+        except Exception as e:
+            logger.error(f"[generate-3d] status error: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "Status check failed."}), 500
+
+    resp = job.to_dict(); resp["success"] = True
+    if job.status == "ready" and job.model_id:
+        resp["viewer_url"] = url_for("view_model", model_id=job.model_id)
+        resp["model_glb_url"] = url_for("serve_converted_file", unique_id=job.model_id,
+                                        filename="model.glb")
+    return jsonify(resp)
+
+
+@app.route("/api/webhooks/meshy", methods=["POST"])
+@csrf.exempt
+@limiter.limit("120 per minute")
+def meshy_webhook():
+    """Receive Meshy task-status-change events.
+
+    Meshy webhooks are configured account-wide (one fixed URL) -- there is no
+    per-task callback_url for text/image-to-3d, so this endpoint cannot carry
+    a per-job secret. It is therefore treated purely as a "wake up and
+    re-check" signal: only task_id is trusted from the payload, and the job's
+    real state is always re-fetched from Meshy via _advance_ai_job, never
+    read out of the request body. Always returns 200 -- including for an
+    unknown or already-finished job -- so the endpoint never leaks which
+    task_ids are valid/in-flight to an unauthenticated caller.
+    """
+    payload = request.get_json(silent=True) or {}
+    task_id = payload.get("id") or payload.get("task_id")
+    if not task_id:
+        return jsonify({"ok": True}), 200
+
+    job = AIGenerationJob.query.filter(
+        or_(
+            AIGenerationJob.meshy_preview_id == task_id,
+            AIGenerationJob.meshy_refine_id == task_id,
+            AIGenerationJob.meshy_image_id == task_id,
+        )
+    ).first()
+    if not job or job.status in ("ready", "failed"):
+        return jsonify({"ok": True}), 200
 
     try:
-        if job.kind == "image":
-            t = ai_generator.get_task("image", job.meshy_image_id)
-            job.progress = min(99, t["progress"])
-            if t["status"] == ai_generator.SUCCEEDED:
-                job.status = "finalizing"
-                db.session.commit()
-                return _finalize_ai_job(job, t)
-            if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                job.status = "failed"
-                job.error = t.get("task_error") or "Generation failed"
-        else:
-            if job.stage == "preview":
-                t = ai_generator.get_task("text", job.meshy_preview_id)
-                job.progress = min(49, t["progress"] // 2)
-                if t["status"] == ai_generator.SUCCEEDED:
-                    job.meshy_refine_id = ai_generator.start_refine(job.meshy_preview_id)
-                    job.stage = "refine"
-                    job.progress = 50
-                elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                    job.status = "failed"
-                    job.error = t.get("task_error") or "Preview failed"
-            elif job.stage == "refine":
-                t = ai_generator.get_task("text", job.meshy_refine_id)
-                job.progress = min(99, 50 + t["progress"] // 2)
-                if t["status"] == ai_generator.SUCCEEDED:
-                    job.status = "finalizing"
-                    db.session.commit()
-                    return _finalize_ai_job(job, t)
-                if t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-                    job.status = "failed"
-                    job.error = t.get("task_error") or "Texturing failed"
+        _advance_ai_job(job)
+    except Exception as e:
+        logger.warning(f"[meshy-webhook] advance failed for job {job.id}: {e}")
+    return jsonify({"ok": True}), 200
+
+
+# --------------------------------------------------------------------------- #
+#  Rigging + Animation (Meshy) -- applies to any existing model, uploaded or
+#  AI-generated, not just "one prompt -> one generation".
+# --------------------------------------------------------------------------- #
+def _claim_rig_stage(job_id, expect_stage, new_stage):
+    """Same atomic-claim pattern as _claim_ai_stage, against RigAnimationJob."""
+    claimed = RigAnimationJob.query.filter_by(
+        id=job_id, stage=expect_stage
+    ).update({"stage": new_stage}, synchronize_session=False)
+    db.session.commit()
+    return bool(claimed)
+
+
+def _finalize_rig_job(job, task):
+    """Download the finished animated GLB, register it as a new UserModel
+    (the source model is left untouched), mark the job ready. Pure
+    job-mutation + commit, mirrors _finalize_ai_job's shape."""
+    import ai_generator
+
+    model_urls = task.get("model_urls") or {}
+    glb_url = model_urls.get("glb")
+    if not glb_url:
+        job.status = "failed"
+        job.error = "Animation finished but returned no GLB"
         db.session.commit()
+        return None
+
+    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "rig_" + job.id)
+    os.makedirs(tmp_dir, exist_ok=True)
+    glb_tmp = os.path.join(tmp_dir, "model.glb")
+    ai_generator.download(glb_url, glb_tmp)
+
+    source_model = UserModel.query.get(job.model_id)
+    model = register_glb_as_model(
+        glb_tmp, user_id=job.user_id, source="ai-rig-animate",
+        prompt=(source_model.display_name if source_model else None),
+    )
+    try:
+        shutil.rmtree(tmp_dir)
+    except Exception:
+        pass
+
+    job.status = "ready"
+    job.progress = 100
+    job.result_model_id = model.id
+    db.session.commit()
+    return model
+
+
+def _advance_rig_job(job):
+    """Advance a 'generating' RigAnimationJob by one step (remesh? -> rig ->
+    animate -> finalize). Mirrors _advance_ai_job's shape and guarantees:
+    shared by the client-poll route and worker.py's reconciliation sweep, and
+    protected against double-processing by the same atomic-claim pattern."""
+    import ai_generator
+
+    if job.status in ("ready", "failed"):
+        return
+
+    if job.stage == "remeshing":
+        t = ai_generator.get_remesh_task(job.meshy_remesh_id)
+        job.progress = min(19, t["progress"] // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            glb_url = (t.get("model_urls") or {}).get("glb")
+            if not glb_url:
+                job.status = "failed"
+                job.error = "Remesh finished but returned no GLB"
+            elif not _claim_rig_stage(job.id, "remeshing", "rigging"):
+                db.session.refresh(job)  # another poll started rigging
+            else:
+                try:
+                    # The remeshed GLB's URL comes straight from Meshy's own
+                    # response (not client input), so handing it back to
+                    # Meshy as model_url carries no SSRF risk.
+                    rig_id = ai_generator.start_rig(model_url=glb_url,
+                                                    height_meters=job.height_meters)
+                except Exception:
+                    _claim_rig_stage(job.id, "rigging", "remeshing")
+                    raise
+                job.meshy_rig_id = rig_id
+                job.stage = "rigging"
+                job.progress = 20
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Remesh failed"
+
+    elif job.stage == "rigging":
+        t = ai_generator.get_rig_task(job.meshy_rig_id)
+        job.progress = min(59, 20 + t["progress"] * 2 // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            if not _claim_rig_stage(job.id, "rigging", "animating"):
+                db.session.refresh(job)  # another poll started animating
+            else:
+                try:
+                    animate_id = ai_generator.start_animate(
+                        job.meshy_rig_id, job.animation_action_ids)
+                except Exception:
+                    _claim_rig_stage(job.id, "animating", "rigging")
+                    raise
+                job.meshy_animate_id = animate_id
+                job.stage = "animating"
+                job.progress = 60
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Rigging failed"
+
+    elif job.stage == "animating":
+        t = ai_generator.get_animate_task(job.meshy_animate_id)
+        job.progress = min(99, 60 + t["progress"] * 2 // 5)
+        if t["status"] == ai_generator.SUCCEEDED:
+            if not _claim_rig_stage(job.id, "animating", "finalizing"):
+                db.session.refresh(job)
+            else:
+                try:
+                    _finalize_rig_job(job, t)
+                    return
+                except Exception:
+                    _claim_rig_stage(job.id, "finalizing", "animating")
+                    raise
+        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
+            job.status = "failed"
+            job.error = t.get("task_error") or "Animation failed"
+
+    db.session.commit()
+
+
+@app.route("/api/models/<model_id>/rig", methods=["POST"])
+@login_required
+@limiter.limit("6 per minute")
+def rig_model(model_id):
+    """Start a Meshy auto-rig (+ animate) job for an existing model (upload
+    or AI-generated). height_meters + up to 10 animation_action_ids are
+    collected up front so rig->animate runs as one chained job."""
+    import ai_generator
+
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
+
+    if not ai_generator.is_configured():
+        return jsonify({"success": False,
+                        "error": "AI generation is not configured on this server."}), 503
+
+    exceeded, count, limit = _ai_quota_state(current_user.id)
+    if exceeded:
+        return jsonify({"success": False,
+                        "error": f"Daily generation limit reached ({limit}). Try again tomorrow."}), 429
+
+    model = UserModel.query.get(model_id)
+    data = request.get_json(silent=True) or {}
+
+    try:
+        height_meters = float(data.get("height_meters"))
+        if not (0.05 <= height_meters <= 10):
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({"success": False,
+                        "error": "A valid height_meters (0.05-10) is required."}), 400
+
+    action_ids = data.get("animation_action_ids")
+    if not isinstance(action_ids, list) or not action_ids:
+        return jsonify({"success": False, "error": "At least one animation is required."}), 400
+    try:
+        action_ids = [int(a) for a in action_ids][:10]
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid animation selection."}), 400
+
+    # AI-generated models can reference their originating Meshy task directly;
+    # plain uploads have no such task and go through model_url instead.
+    ai_job = AIGenerationJob.query.filter_by(model_id=model_id).first()
+    input_task_id = None
+    if ai_job:
+        input_task_id = ai_job.meshy_refine_id or ai_job.meshy_image_id or ai_job.meshy_preview_id
+
+    faces = model.faces
+    if faces is None:
+        try:
+            import trimesh
+            mesh = trimesh.load(model.glb_path)
+            if isinstance(mesh, trimesh.Scene):
+                faces = sum(len(g.faces) for g in mesh.geometry.values()
+                           if hasattr(g, "faces"))
+            else:
+                faces = len(mesh.faces)
+        except Exception as e:
+            logger.warning(f"[rig] face count check failed: {e}")
+            faces = None
+
+    job_id = str(uuid.uuid4())
+    try:
+        if faces is not None and faces > ai_generator.RIG_MAX_FACES:
+            if not input_task_id:
+                return jsonify({"success": False, "error":
+                    f"This model has too many polygons for rigging (max "
+                    f"{ai_generator.RIG_MAX_FACES:,}) and automatic "
+                    f"reduction is only available for AI-generated models."}), 400
+            remesh_id = ai_generator.start_remesh(input_task_id)
+            job = RigAnimationJob(id=job_id, model_id=model_id, user_id=current_user.id,
+                                  height_meters=height_meters, animation_action_ids=action_ids,
+                                  meshy_remesh_id=remesh_id, stage="remeshing",
+                                  status="generating", progress=0)
+        else:
+            if input_task_id:
+                rig_id = ai_generator.start_rig(input_task_id=input_task_id,
+                                                height_meters=height_meters)
+            else:
+                model_url = url_for("serve_converted_file", unique_id=model.id,
+                                    filename="model.glb", _external=True)
+                rig_id = ai_generator.start_rig(model_url=model_url, height_meters=height_meters)
+            job = RigAnimationJob(id=job_id, model_id=model_id, user_id=current_user.id,
+                                  height_meters=height_meters, animation_action_ids=action_ids,
+                                  meshy_rig_id=rig_id, stage="rigging",
+                                  status="generating", progress=20)
+        db.session.add(job)
+        db.session.commit()
+        return jsonify({"success": True, "job_id": job_id})
     except ai_generator.MeshyError as e:
         if job.status == "finalizing":
             job.status = "failed"
@@ -6530,15 +7441,136 @@ def generate_3d_status(job_id):
             db.session.commit()
         return jsonify({"success": False, "error": str(e)}), 502
     except Exception as e:
-        logger.error(f"[generate-3d] status error: {e}", exc_info=True)
-        if job.status == "finalizing":
-            job.status = "failed"
-            job.error = "Finalization failed"
-            db.session.commit()
-        return jsonify({"success": False, "error": "Status check failed."}), 500
+        logger.error(f"[rig] start error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "Failed to start rigging."}), 500
+
+
+@app.route("/api/rig-jobs/<job_id>/status", methods=["GET"])
+@login_required
+def rig_job_status(job_id):
+    import ai_generator
+
+    job = RigAnimationJob.query.get(job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    if job.user_id != current_user.id:
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+
+    if job.status not in ("ready", "failed"):
+        try:
+            _advance_rig_job(job)
+        except ai_generator.MeshyError as e:
+            return jsonify({"success": False, "error": str(e)}), 502
+        except Exception as e:
+            logger.error(f"[rig-status] error: {e}", exc_info=True)
+            return jsonify({"success": False, "error": "Status check failed."}), 500
 
     resp = job.to_dict(); resp["success"] = True
+    if job.status == "ready" and job.result_model_id:
+        resp["viewer_url"] = url_for("view_model", model_id=job.result_model_id)
     return jsonify(resp)
+
+
+# --------------------------------------------------------------------------- #
+#  AI image pre-processing (text-to-image / image-to-image before 3D)
+#
+#  Stateless by design: image generation finishes in seconds, produces only
+#  an image, and Meshy task ids are unguessable — so the task id is handed
+#  straight to the client which polls the status proxy below. No DB rows,
+#  gunicorn multi-worker safe, and it does NOT count against the 3D daily
+#  quota (only HTTP rate limiting applies).
+# --------------------------------------------------------------------------- #
+_IMAGE_GEN_KINDS = ("t2i", "i2i")
+
+
+@app.route("/api/generate-image", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def generate_image():
+    """Start a Meshy image generation task as an optional pre-step to 3D."""
+    import ai_generator
+
+    if not ai_generator.is_configured():
+        return jsonify({"success": False,
+                        "error": "AI generation is not configured on this server."}), 503
+
+    data = request.get_json(silent=True) or {}
+    mode = (data.get("mode") or "text").strip()
+    prompt = (data.get("prompt") or "").strip()
+    try:
+        if mode == "image":
+            image = (data.get("image") or "").strip()
+            if not image.startswith("data:image/"):
+                return jsonify({"success": False,
+                                "error": "A valid image (jpg/png) is required."}), 400
+            if not prompt:
+                return jsonify({"success": False,
+                                "error": "Describe how to transform the image."}), 400
+            task_id = ai_generator.start_image_to_image(image, prompt)
+            kind = "i2i"
+        else:
+            if not prompt:
+                return jsonify({"success": False,
+                                "error": "A text prompt is required."}), 400
+            task_id = ai_generator.start_text_to_image(
+                prompt, aspect_ratio=(data.get("aspect_ratio") or "1:1"))
+            kind = "t2i"
+        return jsonify({"success": True, "task_id": task_id, "kind": kind})
+    except ai_generator.MeshyError as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+    except Exception as e:
+        logger.error(f"[generate-image] start error: {e}", exc_info=True)
+        return jsonify({"success": False, "error": "Failed to start image generation."}), 500
+
+
+@app.route("/api/generate-image/<task_id>/status", methods=["GET"])
+@login_required
+def generate_image_status(task_id):
+    """Proxy a Meshy image generation task's status to the client."""
+    import ai_generator
+
+    kind = request.args.get("kind", "t2i")
+    if kind not in _IMAGE_GEN_KINDS:
+        return jsonify({"success": False, "error": "Invalid kind."}), 400
+    try:
+        t = ai_generator.get_image_gen_task(kind, task_id)
+    except ai_generator.MeshyError as e:
+        return jsonify({"success": False, "error": str(e)}), 502
+
+    status = t.get("status")
+    if status == ai_generator.SUCCEEDED:
+        return jsonify({"success": True, "status": "ready",
+                        "progress": 100, "image_urls": t.get("image_urls") or []})
+    if status in (ai_generator.FAILED, ai_generator.CANCELED):
+        return jsonify({"success": True, "status": "failed",
+                        "error": t.get("task_error") or "Image generation failed."})
+    return jsonify({"success": True, "status": "generating",
+                    "progress": t.get("progress") or 0})
+
+
+def _resolve_image_task(image_task):
+    """Turn a {kind, task_id, index} reference into a data URI.
+
+    The 3D step never accepts raw URLs from the client (SSRF); the image is
+    re-resolved from Meshy by task id and downloaded server-side because
+    Meshy output links expire.
+    """
+    import ai_generator
+
+    kind = (image_task.get("kind") or "").strip()
+    task_id = (image_task.get("task_id") or "").strip()
+    try:
+        index = int(image_task.get("index", 0))
+    except (TypeError, ValueError):
+        index = -1
+    if kind not in _IMAGE_GEN_KINDS or not task_id or index < 0:
+        raise ai_generator.MeshyError("Invalid image task reference.")
+
+    t = ai_generator.get_image_gen_task(kind, task_id)
+    urls = t.get("image_urls") or []
+    if t.get("status") != ai_generator.SUCCEEDED or index >= len(urls):
+        raise ai_generator.MeshyError("The selected image is not ready.")
+    return ai_generator.fetch_image_as_data_uri(urls[index])
 
 
 if __name__ == "__main__":
@@ -6546,6 +7578,6 @@ if __name__ == "__main__":
         app.logger.info("Dependencies initialized successfully")
         # Railway/Heroku için PORT environment variable
         port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", True))
+        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False))
     else:
         app.logger.error("Failed to initialize dependencies")

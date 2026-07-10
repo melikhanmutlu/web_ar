@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% include '_seo_head.html' %}
     <title>{% block title %}ARVision{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -117,6 +119,12 @@
     {% endwith %}
 
     {% block content %}{% endblock %}
+
+    {% if announcement_text %}
+    <div role="status" style="position:fixed;bottom:0;left:0;right:0;z-index:60;background:#111111;color:#ffffff;text-align:center;font-size:0.85rem;padding:0.5rem 1rem;border-top:1px solid #333333;">
+        {{ announcement_text }}
+    </div>
+    {% endif %}
 
     <script>
         function closeFlashMessage() {

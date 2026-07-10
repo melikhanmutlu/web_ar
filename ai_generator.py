@@ -45,6 +45,52 @@ def _ai_model() -> str:
     return getattr(config, "MESHY_AI_MODEL", "meshy-5")
 
 
+def supports_remove_lighting() -> bool:
+    """remove_lighting is only accepted by Meshy when ai_model is meshy-6/latest."""
+    return _ai_model() in ("meshy-6", "latest")
+
+
+# Enum values Meshy accepts for the optional quality-tuning parameters below.
+_TOPOLOGIES = {"quad", "triangle"}
+_SYMMETRY_MODES = {"off", "auto", "on"}
+_POSE_MODES = {"a-pose", "t-pose", ""}
+_ORIGIN_AT_VALUES = {"bottom", "center"}
+_MIN_POLYCOUNT, _MAX_POLYCOUNT = 100, 300000
+
+
+def _mesh_quality_params(*, topology=None, target_polycount=None,
+                          symmetry_mode=None, moderation=None) -> dict:
+    """Shared optional params accepted by both text-to-3d and image-to-3d.
+
+    Invalid/out-of-range values are silently dropped rather than raised, so a
+    stale client never turns a generation request into a hard failure.
+    """
+    out = {}
+    if topology in _TOPOLOGIES:
+        out["topology"] = topology
+    if isinstance(target_polycount, int) and _MIN_POLYCOUNT <= target_polycount <= _MAX_POLYCOUNT:
+        out["target_polycount"] = target_polycount
+    if symmetry_mode in _SYMMETRY_MODES:
+        out["symmetry_mode"] = symmetry_mode
+    if isinstance(moderation, bool):
+        out["moderation"] = moderation
+    return out
+
+
+def _require_data_uri(image_data_uri: str) -> str:
+    """Enforce that an image passed to Meshy is an inline base64 data URI.
+
+    This is the SSRF guard: never let a raw http(s) URL (which could be
+    client-supplied and point at an internal/metadata host) reach Meshy's
+    server-side fetcher. Callers that legitimately have a remote image must
+    resolve and inline it first (see fetch_image_as_data_uri).
+    """
+    value = (image_data_uri or "").strip()
+    if not value.lower().startswith("data:image/"):
+        raise MeshyError("image must be an inline data:image/* URI, not a URL")
+    return value
+
+
 def _post(url: str, payload: dict) -> dict:
     try:
         r = requests.post(url, json=payload, headers=_headers(), timeout=60)
@@ -53,7 +99,10 @@ def _post(url: str, payload: dict) -> dict:
     if r.status_code == 429:
         raise MeshyError("Meshy rate limit reached (429). Try again shortly.")
     if r.status_code >= 400:
-        raise MeshyError(f"Meshy error {r.status_code}: {r.text[:300]}")
+        # Log the upstream body server-side; never surface it to the client
+        # (it can contain provider internals / request echoes).
+        logger.error("Meshy POST %s -> %s: %s", url, r.status_code, r.text[:300])
+        raise MeshyError(f"Meshy error {r.status_code}")
     return r.json()
 
 
@@ -63,14 +112,17 @@ def _get(url: str) -> dict:
     except requests.RequestException as e:
         raise MeshyError(f"Meshy request failed: {e}")
     if r.status_code >= 400:
-        raise MeshyError(f"Meshy error {r.status_code}: {r.text[:300]}")
+        logger.error("Meshy GET %s -> %s: %s", url, r.status_code, r.text[:300])
+        raise MeshyError(f"Meshy error {r.status_code}")
     return r.json()
 
 
 # --------------------------------------------------------------------------- #
 #  Start tasks
 # --------------------------------------------------------------------------- #
-def start_text_to_3d(prompt: str) -> str:
+def start_text_to_3d(prompt: str, *, negative_prompt=None, seed=None,
+                      topology=None, target_polycount=None,
+                      symmetry_mode=None, moderation=None) -> str:
     """Stage 1 (preview): untextured mesh from a text prompt. Returns task id."""
     payload = {
         "mode": "preview",
@@ -79,6 +131,13 @@ def start_text_to_3d(prompt: str) -> str:
         "should_remesh": True,
         "target_formats": ["glb", "usdz"],
     }
+    if negative_prompt:
+        payload["negative_prompt"] = str(negative_prompt).strip()[:600]
+    if isinstance(seed, int):
+        payload["seed"] = seed
+    payload.update(_mesh_quality_params(
+        topology=topology, target_polycount=target_polycount,
+        symmetry_mode=symmetry_mode, moderation=moderation))
     data = _post(f"{_base()}/v2/text-to-3d", payload)
     task_id = data.get("result")
     if not task_id:
@@ -86,7 +145,9 @@ def start_text_to_3d(prompt: str) -> str:
     return task_id
 
 
-def start_refine(preview_task_id: str) -> str:
+def start_refine(preview_task_id: str, *, texture_prompt=None,
+                  texture_image_url=None, moderation=None,
+                  remove_lighting=None) -> str:
     """Stage 2 (refine): apply texture to a finished preview. Returns task id."""
     payload = {
         "mode": "refine",
@@ -94,6 +155,16 @@ def start_refine(preview_task_id: str) -> str:
         "enable_pbr": True,
         "target_formats": ["glb", "usdz"],
     }
+    # texture_prompt and texture_image_url are mutually exclusive on Meshy's
+    # side (texture_prompt wins if both are sent) -- only send one.
+    if texture_prompt:
+        payload["texture_prompt"] = str(texture_prompt).strip()[:600]
+    elif texture_image_url:
+        payload["texture_image_url"] = _require_data_uri(texture_image_url)
+    if isinstance(moderation, bool):
+        payload["moderation"] = moderation
+    if remove_lighting and supports_remove_lighting():
+        payload["remove_lighting"] = True
     data = _post(f"{_base()}/v2/text-to-3d", payload)
     task_id = data.get("result")
     if not task_id:
@@ -101,8 +172,11 @@ def start_refine(preview_task_id: str) -> str:
     return task_id
 
 
-def start_image_to_3d(image_data_uri: str) -> str:
-    """Image -> 3D. image_data_uri is a base64 data URI (or public URL)."""
+def start_image_to_3d(image_data_uri: str, *, topology=None, target_polycount=None,
+                       symmetry_mode=None, moderation=None, pose_mode=None,
+                       origin_at=None, remove_lighting=None) -> str:
+    """Image -> 3D. image_data_uri MUST be an inline base64 data URI."""
+    image_data_uri = _require_data_uri(image_data_uri)
     payload = {
         "image_url": image_data_uri,
         "ai_model": _ai_model(),
@@ -111,11 +185,134 @@ def start_image_to_3d(image_data_uri: str) -> str:
         "auto_size": True,  # AI estimates real-world dimensions
         "target_formats": ["glb", "usdz"],
     }
+    payload.update(_mesh_quality_params(
+        topology=topology, target_polycount=target_polycount,
+        symmetry_mode=symmetry_mode, moderation=moderation))
+    if pose_mode in _POSE_MODES and pose_mode:
+        payload["pose_mode"] = pose_mode
+    if origin_at in _ORIGIN_AT_VALUES:
+        payload["origin_at"] = origin_at
+    if remove_lighting and supports_remove_lighting():
+        payload["remove_lighting"] = True
     data = _post(f"{_base()}/v1/image-to-3d", payload)
     task_id = data.get("result")
     if not task_id:
         raise MeshyError(f"No task id in Meshy image response: {data}")
     return task_id
+
+
+# --------------------------------------------------------------------------- #
+#  Account balance
+#  Docs: https://docs.meshy.ai/en/api/balance
+# --------------------------------------------------------------------------- #
+def get_balance() -> dict:
+    """Current Meshy account credit balance."""
+    data = _get(f"{_base()}/v1/balance")
+    return {"balance": data.get("balance"), "raw": data}
+
+
+# --------------------------------------------------------------------------- #
+#  Remesh (pre-step for rigging when a model exceeds the rigging face limit)
+#  Docs: https://docs.meshy.ai/en/api/remesh
+# --------------------------------------------------------------------------- #
+def start_remesh(input_task_id: str, *, target_polycount=None, topology=None) -> str:
+    """Reduce the polycount of a prior Text/Image-to-3D task. Remesh only
+    works against a Meshy-hosted source task (input_task_id) -- there is no
+    way to remesh an arbitrary uploaded GLB, only a task Meshy already holds."""
+    payload = {"input_task_id": input_task_id, "target_formats": ["glb"]}
+    if isinstance(target_polycount, int) and _MIN_POLYCOUNT <= target_polycount <= _MAX_POLYCOUNT:
+        payload["target_polycount"] = target_polycount
+    if topology in _TOPOLOGIES:
+        payload["topology"] = topology
+    data = _post(f"{_base()}/v1/remesh", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy remesh response: {data}")
+    return task_id
+
+
+def get_remesh_task(task_id: str) -> dict:
+    data = _get(f"{_base()}/v1/remesh/{task_id}")
+    return {
+        "status": data.get("status"),
+        "progress": int(data.get("progress") or 0),
+        "model_urls": data.get("model_urls") or {},
+        "task_error": (data.get("task_error") or {}).get("message"),
+    }
+
+
+# --------------------------------------------------------------------------- #
+#  Rigging + Animation
+#  Docs: https://docs.meshy.ai/en/api/rigging ,
+#        https://docs.meshy.ai/en/api/rigging-and-animation
+# --------------------------------------------------------------------------- #
+RIG_MAX_FACES = 300000
+
+
+def start_rig(*, input_task_id=None, model_url=None, height_meters: float) -> str:
+    """Auto-rig a textured humanoid model (<= RIG_MAX_FACES). Exactly one of
+    input_task_id (a prior Meshy generation/remesh task) or model_url (a GLB
+    URL we host ourselves -- never a client-supplied URL) must be given."""
+    if not input_task_id and not model_url:
+        raise MeshyError("Rigging requires either input_task_id or model_url")
+    payload = {"height_meters": height_meters}
+    if input_task_id:
+        payload["input_task_id"] = input_task_id
+    else:
+        payload["model_url"] = model_url
+    data = _post(f"{_base()}/v1/rigging", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy rigging response: {data}")
+    return task_id
+
+
+def get_rig_task(task_id: str) -> dict:
+    data = _get(f"{_base()}/v1/rigging/{task_id}")
+    return {
+        "status": data.get("status"),
+        "progress": int(data.get("progress") or 0),
+        "model_urls": data.get("model_urls") or {},
+        "task_error": (data.get("task_error") or {}).get("message"),
+    }
+
+
+def start_animate(rig_task_id: str, animation_action_ids) -> str:
+    """Apply up to 10 preset animations (see the curated
+    static/data/meshy_animation_presets.json list) to a completed rig task.
+
+    NOTE: the exact request field Meshy expects for referencing the rig task
+    on this endpoint could not be confirmed against live docs at
+    implementation time (the docs site blocks automated fetches);
+    `rig_task_id` is our best-confidence read of the available third-party
+    references and should be verified against a live Meshy response before
+    this is relied on in production.
+    """
+    ids = [int(a) for a in (animation_action_ids or [])][:10]
+    if not ids:
+        raise MeshyError("At least one animation_action_id is required")
+    payload = {"rig_task_id": rig_task_id, "animation_action_ids": ids}
+    data = _post(f"{_base()}/v1/animations", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy animation response: {data}")
+    return task_id
+
+
+def get_animate_task(task_id: str) -> dict:
+    data = _get(f"{_base()}/v1/animations/{task_id}")
+    animations = data.get("animations") or []
+    # AR delivery only needs one playable result; if Meshy returns multiple
+    # clips (one per requested action id) we take the first for now -- the
+    # full list stays available in `raw` for a future "pick a clip" UI.
+    model_urls = animations[0].get("model_urls") or {} if animations else {}
+    return {
+        "status": data.get("status"),
+        "progress": int(data.get("progress") or 0),
+        "model_urls": model_urls,
+        "task_error": (data.get("task_error") or {}).get("message"),
+        "raw": data,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -151,3 +348,87 @@ def download(url: str, dest_path: str) -> bool:
         return True
     except requests.RequestException as e:
         raise MeshyError(f"Download failed: {e}")
+
+
+# --------------------------------------------------------------------------- #
+#  Image generation (pre-processing before 3D)
+#  Docs: https://docs.meshy.ai/en/api/text-to-image ,
+#        https://docs.meshy.ai/en/api/image-to-image
+# --------------------------------------------------------------------------- #
+_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4"}
+_MAX_IMAGE_DOWNLOAD = 12 * 1024 * 1024  # bytes
+
+
+def _image_model() -> str:
+    return getattr(config, "MESHY_IMAGE_MODEL", "nano-banana-pro")
+
+
+def start_text_to_image(prompt: str, aspect_ratio: str = "1:1") -> str:
+    """Generate reference image(s) from a text prompt. Returns task id."""
+    payload = {
+        "ai_model": _image_model(),
+        "prompt": (prompt or "").strip()[:600],
+        "aspect_ratio": aspect_ratio if aspect_ratio in _ASPECT_RATIOS else "1:1",
+    }
+    data = _post(f"{_base()}/v1/text-to-image", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy text-to-image response: {data}")
+    return task_id
+
+
+def start_image_to_image(image_data_uri: str, prompt: str) -> str:
+    """Transform an uploaded image with a prompt (e.g. remove background,
+    studio product shot). image_data_uri is a base64 data URI. Returns task id."""
+    image_data_uri = _require_data_uri(image_data_uri)
+    payload = {
+        "ai_model": _image_model(),
+        "image_url": image_data_uri,
+        "prompt": (prompt or "").strip()[:600],
+    }
+    data = _post(f"{_base()}/v1/image-to-image", payload)
+    task_id = data.get("result")
+    if not task_id:
+        raise MeshyError(f"No task id in Meshy image-to-image response: {data}")
+    return task_id
+
+
+def get_image_gen_task(kind: str, task_id: str) -> dict:
+    """kind: 't2i' (text-to-image) or 'i2i' (image-to-image)."""
+    path = "text-to-image" if kind == "t2i" else "image-to-image"
+    data = _get(f"{_base()}/v1/{path}/{task_id}")
+    return {
+        "status": data.get("status"),
+        "progress": int(data.get("progress") or 0),
+        "image_urls": data.get("image_urls") or [],
+        "task_error": (data.get("task_error") or {}).get("message"),
+    }
+
+
+def fetch_image_as_data_uri(url: str, max_bytes: int = _MAX_IMAGE_DOWNLOAD) -> str:
+    """Download a generated image and return it as a base64 data URI.
+
+    Meshy output URLs expire, so the chosen image is fetched server-side at
+    3D-generation time. Only URLs resolved from Meshy task lookups are ever
+    passed here — never client-supplied URLs.
+    """
+    import base64
+
+    try:
+        with requests.get(url, stream=True, timeout=120) as r:
+            if r.status_code >= 400:
+                raise MeshyError(f"Image download failed {r.status_code}")
+            mime = (r.headers.get("Content-Type") or "image/png").split(";")[0]
+            if not mime.startswith("image/"):
+                mime = "image/png"
+            chunks, total = [], 0
+            for chunk in r.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > max_bytes:
+                    raise MeshyError("Generated image is too large.")
+                chunks.append(chunk)
+    except requests.RequestException as e:
+        raise MeshyError(f"Image download failed: {e}")
+    return f"data:{mime};base64," + base64.b64encode(b"".join(chunks)).decode()

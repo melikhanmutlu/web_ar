@@ -13,6 +13,7 @@
         </div>
 
         <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}" class="auth-form av-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div>
                 <label for="username" class="auth-label">Username or Email</label>
                 {{ form.username(class="av-input auth-input", autocomplete="username", placeholder="you@example.com") }}

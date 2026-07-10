@@ -1,19 +1,52 @@
+import os
+
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from services.time_utils import datetime
+from datetime import timedelta
+import sqlalchemy as sa
 
 db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
+    LOCKOUT_THRESHOLD = 5
+    LOCKOUT_MINUTES = 15
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # Column stays named is_active in the DB; the attribute is renamed so the
+    # is_active property below can satisfy Flask-Login's interface.
+    is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
+    failed_login_attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    locked_until = db.Column(db.DateTime, nullable=True)
     models = db.relationship('UserModel', backref='user', lazy=True)
     folders = db.relationship('Folder', backref='user', lazy=True)
     organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def is_active(self):
+        # Flask-Login: login_user() refuses inactive users automatically.
+        return bool(self.is_active_flag)
+
+    @property
+    def is_locked(self):
+        return self.locked_until is not None and self.locked_until > datetime.utcnow()
+
+    def register_failed_login(self):
+        """Brute-force guard: lock the account for LOCKOUT_MINUTES after
+        LOCKOUT_THRESHOLD consecutive failed password attempts."""
+        self.failed_login_attempts = (self.failed_login_attempts or 0) + 1
+        if self.failed_login_attempts >= self.LOCKOUT_THRESHOLD:
+            self.locked_until = datetime.utcnow() + timedelta(minutes=self.LOCKOUT_MINUTES)
+
+    def register_successful_login(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -158,6 +191,18 @@ class UserModel(db.Model):
     view_count = db.Column(db.Integer, default=0)
     download_count = db.Column(db.Integer, default=0)
     share_count = db.Column(db.Integer, default=0)
+
+    # How this model was created: None/'' for a plain upload, or
+    # 'ai-text'/'ai-image'/'ai-rig-animate' etc. for AI-generated ones (see
+    # register_glb_as_model's `source` param). description already carries
+    # this as free text ("AI generated (...)"); this column makes it
+    # queryable for a badge/filter without string-parsing description.
+    source = db.Column(db.String(30), nullable=True)
+
+    # The user's original uploaded filename (e.g. "robot.stl"), distinct from
+    # `filename` which is the on-disk storage path (always "<uuid>/model.glb").
+    # Nullable so older rows fall back to the pre-existing (buggy) behaviour.
+    source_filename = db.Column(db.String(255), nullable=True)
     
     # Version tracking
     versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
@@ -174,7 +219,38 @@ class UserModel(db.Model):
 
     @property
     def original_filename(self):
+        if self.source_filename:
+            return self.source_filename
         return self.filename.split('/')[-1] if self.filename else 'Unknown'
+
+    # `filename`/`usdz_filename` store ABSOLUTE paths captured at creation
+    # time. The storage root can move between deploys (Railway volume mount
+    # attached/renamed, STORAGE_ROOT introduced), which strands every old row
+    # pointing at a path that no longer exists even though the file is still
+    # sitting at <current CONVERTED_FOLDER>/<id>/. Readers must resolve
+    # through these properties, which prefer the live layout and only fall
+    # back to the stored path.
+    def _live_converted_path(self, basename):
+        try:
+            from flask import current_app
+            root = current_app.config['CONVERTED_FOLDER']
+        except Exception:
+            from config import CONVERTED_FOLDER as root
+        return os.path.join(root, self.id, basename)
+
+    @property
+    def glb_path(self):
+        live = self._live_converted_path('model.glb')
+        if os.path.exists(live):
+            return live
+        return self.filename
+
+    @property
+    def usdz_path(self):
+        live = self._live_converted_path('model.usdz')
+        if os.path.exists(live):
+            return live
+        return self.usdz_filename
 
     @property
     def file_size_formatted(self):
@@ -453,6 +529,17 @@ class AIGenerationJob(db.Model):
     model_id = db.Column(db.String(36), nullable=True)     # UserModel.id once ready
     error = db.Column(db.Text, nullable=True)
 
+    # Advanced generation options chosen at request time (negative_prompt,
+    # seed, topology, target_polycount, symmetry_mode, moderation,
+    # texture_prompt, pose_mode, origin_at, remove_lighting). Kept as a
+    # single JSON blob (mirrors ConversionJob.payload) since refine is a
+    # second async call made later by the status-poll route, not at
+    # request time, so these need to survive between the two.
+    options = db.Column(db.JSON, nullable=True)
+    # Temp-file path to a user-supplied refine-stage texture reference image,
+    # if any (never stored inline as base64 -- see TEMP_FOLDER convention).
+    texture_ref = db.Column(db.String(255), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -461,6 +548,7 @@ class AIGenerationJob(db.Model):
             'job_id': self.id,
             'kind': self.kind,
             'status': self.status,
+            'stage': self.stage,
             'progress': self.progress,
             'model_id': self.model_id,
             'error': self.error,
@@ -491,6 +579,78 @@ class MaterialPreset(db.Model):
     roughness = db.Column(db.Float, nullable=False, default=0.5)
     opacity = db.Column(db.Float, nullable=False, default=1.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RigAnimationJob(db.Model):
+    """Tracks a Meshy auto-rig (+ optional animation) job applied to an
+    existing UserModel. Kept separate from AIGenerationJob: rigging applies
+    to any model (uploaded or AI-generated), not just "one prompt -> one
+    generated model", and its stage chain (remesh? -> rig -> animate) is its
+    own shape."""
+    id = db.Column(db.String(36), primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    height_meters = db.Column(db.Float, nullable=False)
+    animation_action_ids = db.Column(db.JSON, nullable=True)  # list[int], up to 10
+
+    # Meshy task ids for each stage this job goes through. meshy_remesh_id is
+    # only set when the source model exceeded the rigging face-count limit
+    # and was AI-generated (remesh needs a source Meshy task id -- it cannot
+    # remesh an arbitrary uploaded GLB).
+    meshy_remesh_id = db.Column(db.String(80), nullable=True)
+    meshy_rig_id = db.Column(db.String(80), nullable=True)
+    meshy_animate_id = db.Column(db.String(80), nullable=True)
+    stage = db.Column(db.String(20), nullable=True)  # remeshing | rigging | animating
+
+    status = db.Column(db.String(20), default='generating')  # generating | ready | failed
+    progress = db.Column(db.Integer, default=0)
+    result_model_id = db.Column(db.String(36), nullable=True)  # new UserModel once ready
+    error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'job_id': self.id,
+            'model_id': self.model_id,
+            'status': self.status,
+            'stage': self.stage,
+            'progress': self.progress,
+            'result_model_id': self.result_model_id,
+            'error': self.error,
+        }
+
+
+class SiteSetting(db.Model):
+    """Admin-editable runtime settings (key/value). Values are stored as
+    strings; typed access goes through site_settings.py, which falls back to
+    the env-derived config defaults when a key is absent."""
+    key = db.Column(db.String(64), primary_key=True)
+    value = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<SiteSetting {self.key}>'
+
+
+class AdminAuditLog(db.Model):
+    """Records every mutating action taken through the admin panel: who
+    (actor_id), what (action, a short dotted string like 'user.delete'),
+    on what (target_type/target_id), and any extra context (detail)."""
+    id = db.Column(db.Integer, primary_key=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action = db.Column(db.String(64), nullable=False, index=True)
+    target_type = db.Column(db.String(32), nullable=True)
+    target_id = db.Column(db.String(64), nullable=True)
+    detail = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    actor = db.relationship('User')
+
+    def __repr__(self):
+        return f'<AdminAuditLog {self.action} by {self.actor_id}>'
 
 
 class ConversionJob(db.Model):

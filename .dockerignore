@@ -12,3 +12,12 @@ converted
 temp
 output
 reports
+venv/
+.venv/
+node_modules/
+uploads/*
+converted/*
+temp/*
+qr_codes/*
+*.db
+tests/

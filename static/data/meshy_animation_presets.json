@@ -1,0 +1,54 @@
+{
+  "_note": "Curated subset of Meshy's animation preset library (600+ entries) for the Rig & Animate picker. Meshy does not expose a 'list presets' API, so this is a static, hand-picked list rather than a live fetch. The action ids below are illustrative placeholders and MUST be cross-checked against Meshy's Animation Library Reference (https://docs.meshy.ai/en/api/animation-library) for the exact id-to-clip mapping before this feature is relied on in production.",
+  "categories": [
+    {
+      "name": "Locomotion",
+      "actions": [
+        {"id": 0, "label": "Idle"},
+        {"id": 1, "label": "Walk"},
+        {"id": 2, "label": "Run"},
+        {"id": 3, "label": "Jog"},
+        {"id": 4, "label": "Jump"},
+        {"id": 5, "label": "Walk backward"},
+        {"id": 6, "label": "Turn left"},
+        {"id": 7, "label": "Turn right"},
+        {"id": 8, "label": "Climb"},
+        {"id": 9, "label": "Crouch walk"}
+      ]
+    },
+    {
+      "name": "Gestures",
+      "actions": [
+        {"id": 20, "label": "Wave"},
+        {"id": 21, "label": "Point"},
+        {"id": 22, "label": "Nod"},
+        {"id": 23, "label": "Shake head"},
+        {"id": 24, "label": "Salute"},
+        {"id": 25, "label": "Clap"},
+        {"id": 26, "label": "Bow"},
+        {"id": 27, "label": "Shrug"}
+      ]
+    },
+    {
+      "name": "Idle variations",
+      "actions": [
+        {"id": 40, "label": "Idle (relaxed)"},
+        {"id": 41, "label": "Idle (alert)"},
+        {"id": 42, "label": "Look around"},
+        {"id": 43, "label": "Stretch"},
+        {"id": 44, "label": "Cross arms"}
+      ]
+    },
+    {
+      "name": "Emotes",
+      "actions": [
+        {"id": 60, "label": "Dance"},
+        {"id": 61, "label": "Cheer"},
+        {"id": 62, "label": "Laugh"},
+        {"id": 63, "label": "Sit down"},
+        {"id": 64, "label": "Stand up"},
+        {"id": 65, "label": "Sit idle"}
+      ]
+    }
+  ]
+}

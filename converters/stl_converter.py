@@ -302,9 +302,12 @@ class STLConverter(BaseConverter):
             else:
                 scene = mesh
 
-            # Export as GLB
+            # Export as GLB atomically: write to a temp file then rename, so a
+            # crash/failure mid-export never leaves a truncated GLB to be served.
             self.log_operation("Exporting to GLB format")
-            scene.export(output_path)
+            tmp_output = f"{output_path}.tmp.{os.getpid()}"
+            scene.export(tmp_output, file_type="glb")
+            os.replace(tmp_output, output_path)
 
             if not os.path.exists(output_path):
                 self.handle_error("Output file was not created")

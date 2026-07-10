@@ -1,0 +1,109 @@
+{% extends "admin/base.html" %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}{{ day.isoformat() }} — arvision admin{% endblock %}
+{% block page_title %}{{ day.strftime('%B %-d, %Y') }}{% endblock %}
+
+{% block content %}
+<div class="admin-pills">
+    <a href="{{ url_for('admin.analytics_day', date_str=prev_day) }}" class="admin-pill">← {{ prev_day }}</a>
+    {% if not is_today %}
+    <a href="{{ url_for('admin.analytics_day', date_str=next_day) }}" class="admin-pill">{{ next_day }} →</a>
+    {% endif %}
+    <a href="{{ url_for('admin.analytics') }}" class="admin-pill">back to analytics</a>
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.registrations }}</div>
+        <div class="kpi-label">registrations</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.uploads }}</div>
+        <div class="kpi-label">uploads</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.ai_jobs }}</div>
+        <div class="kpi-label">ai generations</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.rig_jobs }}</div>
+        <div class="kpi-label">rig &amp; animate jobs</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.likes }}</div>
+        <div class="kpi-label">likes</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ counts.saves }}</div>
+        <div class="kpi-label">saves</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ job_status_breakdown | sum(attribute='1') }}</div>
+        <div class="kpi-label">conversion jobs</div>
+        <div class="kpi-sub">
+            {% for status, count in job_status_breakdown %}{{ status }}: {{ count }}{% if not loop.last %} · {% endif %}{% else %}none{% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">uploads</h2>
+        <ul class="admin-activity">
+            {% for model in uploads %}
+            <li>
+                <span class="title">
+                    <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
+                </span>
+                <span class="meta">{{ model.file_type }} · {{ model.upload_date.strftime('%H:%M') if model.upload_date else '' }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no uploads this day</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">registrations</h2>
+        <ul class="admin-activity">
+            {% for user in registrations %}
+            <li>
+                <span class="title"><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></span>
+                <span class="meta">{{ user.created_at.strftime('%H:%M') if user.created_at else '' }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no registrations this day</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">ai generations</h2>
+        <ul class="admin-activity">
+            {% for job in ai_jobs %}
+            <li>
+                <span class="title">{{ (job.prompt or job.kind) | truncate(48) }}</span>
+                <span class="meta">{{ badge(job.status) }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no ai generations this day</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">rig &amp; animate jobs</h2>
+        <ul class="admin-activity">
+            {% for job in rig_jobs %}
+            <li>
+                <span class="title"><a href="{{ url_for('admin.model_detail', model_id=job.model_id) }}">{{ job.model_id[:8] }}…</a></span>
+                <span class="meta">{{ badge(job.status) }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no rig jobs this day</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

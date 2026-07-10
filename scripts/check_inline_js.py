@@ -17,7 +17,10 @@ class ScriptCollector(HTMLParser):
         self.scripts = []
 
     def handle_starttag(self, tag, attrs):
-        if tag == "script" and not dict(attrs).get("src"):
+        attrs = dict(attrs)
+        script_type = (attrs.get("type") or "").strip().lower()
+        is_js_type = script_type in ("", "text/javascript", "module", "application/javascript")
+        if tag == "script" and not attrs.get("src") and is_js_type:
             self.current = []
 
     def handle_data(self, data):

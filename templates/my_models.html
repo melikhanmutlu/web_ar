@@ -10,6 +10,7 @@
             <h1 class="home-title">My Models</h1>
         </div>
         <div class="library-actions">
+            {% if not trash_view %}
             <button type="button" onclick="showCreateFolderModal()" class="library-btn">
                 <i data-lucide="folder-plus"></i>
                 New Folder
@@ -18,10 +19,21 @@
                 <i data-lucide="upload-cloud"></i>
                 Upload Model
             </button>
+            {% endif %}
             <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn">
                 <i data-lucide="check-square"></i>
                 Select
             </button>
+            {% if trash_view %}
+            <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-btn hidden">
+                <i data-lucide="undo-2"></i>
+                Restore Selected
+            </button>
+            <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-btn library-danger hidden">
+                <i data-lucide="x"></i>
+                Delete Forever
+            </button>
+            {% else %}
             <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
                 <i data-lucide="folder-input"></i>
                 Move Selected
@@ -30,6 +42,7 @@
                 <i data-lucide="trash-2"></i>
                 Delete Selected
             </button>
+            {% endif %}
             <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
                 <i data-lucide="x"></i>
                 Cancel
@@ -88,16 +101,32 @@
         {% if current_folder %}
             <span>/</span>
             <strong>{{ current_folder.name }}</strong>
+        {% elif trash_view %}
+            <span>/</span>
+            <strong>Trash</strong>
         {% endif %}
     </section>
 
-    {% if folders %}
+    {% if folders or (not trash_view and not current_folder) %}
     <section class="library-section">
         <div class="library-section-title">
             <h2>Folders</h2>
             <span>{{ folders|length }}</span>
         </div>
         <div class="library-folder-grid">
+            {% if not trash_view and not current_folder %}
+            <article class="folder-card library-folder library-folder--trash"
+                     onclick="navigateToTrash()"
+                     title="{{ trash_count }} model{{ '' if trash_count == 1 else 's' }} in trash · auto-deleted after {{ trash_retention_days }} days">
+                <div class="library-folder-icon">
+                    <i data-lucide="trash-2"></i>
+                </div>
+                <div class="library-folder-copy">
+                    <h3 class="folder-name">Trash</h3>
+                    <p>{{ trash_count }} model{{ '' if trash_count == 1 else 's' }}</p>
+                </div>
+            </article>
+            {% endif %}
             {% for folder in folders %}
             <article class="folder-card library-folder folder-drop-target"
                      data-folder-id="{{ folder.id }}"
@@ -183,6 +212,14 @@
                 <div class="library-model-body">
                     <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
                     <div class="library-card-actions">
+                        {% if trash_view %}
+                        <button type="button" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')" class="library-icon-btn" title="Restore" aria-label="Restore">
+                            <i data-lucide="undo-2"></i>
+                        </button>
+                        <button type="button" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Delete forever" aria-label="Delete forever">
+                            <i data-lucide="x"></i>
+                        </button>
+                        {% else %}
                         <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-icon-btn" title="View" aria-label="View">
                             <i data-lucide="eye"></i>
                         </button>
@@ -198,9 +235,14 @@
                         <button type="button" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Move to trash" aria-label="Move to trash">
                             <i data-lucide="trash-2"></i>
                         </button>
+                        {% endif %}
                     </div>
                     <p class="library-model-meta">
+                        {% if trash_view %}
+                        <span class="upload-date">Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }}</span>
+                        {% else %}
                         <span class="upload-date">{{ model.upload_date_formatted }}</span>
+                        {% endif %}
                         <span class="file-size">{{ model.file_size_formatted }}</span>
                     </p>
                 </div>
@@ -213,6 +255,13 @@
                 Load more
             </button>
         </div>
+        {% elif trash_view %}
+        <div class="library-empty">
+            <i data-lucide="trash-2"></i>
+            <h2>Trash is empty</h2>
+            <p>Models you move to trash appear here and are auto-deleted after {{ trash_retention_days }} days.</p>
+            <a href="{{ url_for('my_models') }}" class="btn-primary library-primary">Back to My Models</a>
+        </div>
         {% else %}
         <div class="library-empty">
             <i data-lucide="boxes"></i>
@@ -222,38 +271,6 @@
         </div>
         {% endif %}
     </section>
-
-    {% if trash_models %}
-    <section class="library-section library-trash">
-        <div class="library-section-title">
-            <h2>Trash</h2>
-            <span>{{ trash_models|length }} · auto-deleted after {{ trash_retention_days }} days</span>
-        </div>
-        <div class="trash-list">
-            {% for model in trash_models %}
-            {% set t_raw = model.display_name or model.original_filename or 'Model' %}
-            {% set t_name = t_raw.replace('\\', '/').split('/')[-1] %}
-            <div class="trash-row" data-model-id="{{ model.id }}">
-                <img class="trash-thumb" src="{{ url_for('serve_thumbnail', unique_id=model.id) }}" alt="" loading="lazy" onerror="this.style.visibility='hidden';">
-                <div class="trash-copy">
-                    <strong>{{ t_name }}</strong>
-                    <span>Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }} · {{ model.file_size_formatted }}</span>
-                </div>
-                <div class="trash-actions">
-                    <button type="button" class="library-btn" onclick="restoreModel('{{ model.id }}')">
-                        <i data-lucide="undo-2"></i>
-                        Restore
-                    </button>
-                    <button type="button" class="library-btn library-danger" onclick="deleteForever('{{ model.id }}')">
-                        <i data-lucide="x"></i>
-                        Delete forever
-                    </button>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
 </main>
 
 <div id="createFolderModal" class="modal">

@@ -1,0 +1,73 @@
+{% extends "admin/base.html" %}
+
+{% block title %}settings — arvision admin{% endblock %}
+{% block page_title %}settings{% endblock %}
+
+{% block content %}
+<div class="av-tabs" style="max-width:34rem;">
+    {% for t in tabs %}
+    <a href="{{ url_for('admin.settings', tab=t) }}" class="av-tab {% if tab == t %}is-active{% endif %}" style="text-decoration:none;text-align:center;">{{ t }}</a>
+    {% endfor %}
+</div>
+
+<form method="POST" action="{{ url_for('admin.settings', tab=tab) }}" class="admin-card admin-settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if tab == 'general' %}
+    <div class="admin-field">
+        <label class="av-switch-label">
+            <span class="av-switch">
+                <input type="checkbox" name="maintenance_mode" {% if values.maintenance_mode %}checked{% endif %}>
+                <span class="track"></span>
+                <span class="knob"></span>
+            </span>
+            <span class="av-switch-text">maintenance mode</span>
+        </label>
+        <p class="field-help">When on, visitors get a 503 maintenance page. Admins and the login page stay reachable.</p>
+    </div>
+    <div class="admin-field">
+        <label class="field-label" for="announcement_text">announcement banner</label>
+        <textarea id="announcement_text" name="announcement_text" class="av-input" rows="2"
+                  placeholder="Shown at the bottom of every public page. Leave empty to hide.">{{ values.announcement_text }}</textarea>
+    </div>
+
+    {% elif tab == 'users' %}
+    <div class="admin-field">
+        <label class="av-switch-label">
+            <span class="av-switch">
+                <input type="checkbox" name="registration_enabled" {% if values.registration_enabled %}checked{% endif %}>
+                <span class="track"></span>
+                <span class="knob"></span>
+            </span>
+            <span class="av-switch-text">registration enabled</span>
+        </label>
+        <p class="field-help">When off, the register page redirects to login and no new accounts can be created.</p>
+    </div>
+
+    {% elif tab == 'ai' %}
+    <div class="admin-field">
+        <label class="field-label" for="ai_daily_limit">daily generation limit per user</label>
+        <input type="number" id="ai_daily_limit" name="ai_daily_limit" class="av-input" min="0" max="10000"
+               value="{{ values.ai_daily_limit }}">
+        <p class="field-help">Rolling 24-hour window. Each generation costs Meshy credits. 0 disables AI generation entirely.</p>
+    </div>
+
+    {% elif tab == 'uploads' %}
+    <div class="admin-field">
+        <label class="field-label" for="max_upload_mb">max upload size (MB)</label>
+        <input type="number" id="max_upload_mb" name="max_upload_mb" class="av-input" min="1" max="{{ ceiling }}"
+               value="{{ values.max_upload_mb }}">
+        <p class="field-help">The server-wide hard ceiling is {{ ceiling }} MB (MAX_CONTENT_LENGTH); this setting can only lower it.</p>
+    </div>
+    <div class="admin-field">
+        <label class="field-label" for="storage_quota_mb">per-user storage quota (MB)</label>
+        <input type="number" id="storage_quota_mb" name="storage_quota_mb" class="av-input" min="0" max="1000000"
+               value="{{ values.storage_quota_mb }}">
+        <p class="field-help">Enforced at upload time for logged-in users (anonymous uploads aren't tracked to a quota). 0 = unlimited.</p>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="admin-btn admin-btn--primary">save settings</button>
+    <p class="field-help" style="margin-top:0.75rem;">Changes take effect within a minute (settings are cached briefly per worker).</p>
+</form>
+{% endblock %}

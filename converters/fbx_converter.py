@@ -5,13 +5,42 @@ FBX format to GLB format conversion operations using FBX2glTF.
 import os
 import subprocess
 import logging
+import contextlib
 import trimesh
 import tempfile
 import numpy as np
 import platform
 from pathlib import Path
-from .base_converter import BaseConverter, hex_to_linear_rgb
+from .base_converter import (
+    BaseConverter,
+    hex_to_linear_rgb,
+    safe_join_within,
+)
 from pygltflib import GLTF2, Image, Texture, TextureInfo, PbrMetallicRoughness
+
+
+@contextlib.contextmanager
+def _pyassimp_scene(pyassimp, path, processing=None):
+    """Load an assimp scene and guarantee release().
+
+    pyassimp builds disagree on whether load() supports the context-manager
+    protocol — several versions (incl. the 4.1.x pinned here) return a plain
+    Scene, so `with pyassimp.load(...) as scene` raises
+    'Scene object does not support the context manager protocol' and the
+    whole FBX dimension/texture/rescue path silently dies. Load explicitly,
+    yield, then always release the native scene so peak memory stays low on
+    large FBX files (which matters: this used to OOM-kill the worker).
+    """
+    scene = (pyassimp.load(path, processing=processing)
+             if processing is not None else pyassimp.load(path))
+    try:
+        yield scene
+    finally:
+        try:
+            pyassimp.release(scene)
+        except Exception:
+            pass
+
 
 
 # Inline utility functions (replacing deleted utils/)
@@ -151,7 +180,12 @@ def fix_material_transparency(gltf, log=None):
         if pbr is None:
             continue
 
-        if pbr.baseColorTexture is not None and pbr.metallicRoughnessTexture is None:
+        # Any base-color-textured material: kill the metallic sheen. metallicFactor
+        # multiplies the metallic-roughness texture's metal channel, so forcing it
+        # to 0 removes the unwanted golden/chrome look even when FBX2glTF emitted an
+        # MR texture (e.g. Sperm_Wet at ~0.4 metallic). Traditional FBX (lambert/
+        # phong) has no real metalness, so this is dialect noise, not artist intent.
+        if pbr.baseColorTexture is not None:
             metallic = pbr.metallicFactor if pbr.metallicFactor is not None else 1.0
             roughness = pbr.roughnessFactor if pbr.roughnessFactor is not None else 1.0
             if metallic > 0.2 or roughness < 0.5:
@@ -319,306 +353,45 @@ class FBXConverter(BaseConverter):
             self.log_operation("Starting FBX conversion")
 
             # FIRST: Read original FBX dimensions before conversion using pyassimp
+            # FIRST: extract FBX metadata (unit scale, embedded textures,
+            # vertices/faces for the zero-geometry rescue). This runs in a
+            # separate, memory-capped process: pyassimp.load() can allocate
+            # gigabytes on pathological FBX files and OOM-kill the whole
+            # worker. The data is auxiliary, so on any probe failure we just
+            # log a warning and let FBX2glTF do the conversion alone.
             original_dimensions = None
+            self._fbx_unit_scale = 0.01
+            self._fbx_material_textures = {}
+            self._fbx_vertices = None
+            self._fbx_faces = None
             try:
-                # Attempt to load pyassimp and the underlying library
-                _ensure_assimp_library_path()
-                import pyassimp
-                from pyassimp import postprocess
+                from . import fbx_probe
 
-                # Use context manager (with statement) for pyassimp
-                with pyassimp.load(
-                    input_path, processing=postprocess.aiProcess_Triangulate
-                ) as scene:
+                manifest = fbx_probe.run_isolated(input_path)
+                if manifest and not manifest.get("error"):
+                    self._fbx_unit_scale = manifest.get("unit_scale", 0.01)
+                    self._fbx_material_textures = manifest.get("material_textures", {}) or {}
+                    original_dimensions = manifest.get("original_dimensions")
+                    self._fbx_vertices = manifest.get("vertices")
+                    self._fbx_faces = manifest.get("faces")
                     self.log_operation(
-                        f"Scene type: {type(scene)}, has mMeshes: {hasattr(scene, 'mMeshes')}"
+                        f"FBX probe ok: unit_scale={self._fbx_unit_scale}, "
+                        f"textures={len(self._fbx_material_textures)}, "
+                        f"vertices={'yes' if self._fbx_vertices is not None else 'no'}"
                     )
-                    if hasattr(scene, "mNumMeshes"):
-                        self.log_operation(f"Number of meshes: {scene.mNumMeshes}")
-
-                    # DETECT FBX UNIT SCALE FACTOR
-                    # FBX files can use different units (mm, cm, m)
-                    # UnitScaleFactor tells us how to convert to cm, then we convert to meters
-                    self._fbx_unit_scale = 1.0  # Default: assume meters
-                    try:
-                        if hasattr(scene, 'metadata') and scene.metadata:
-                            for key in scene.metadata:
-                                if isinstance(key, bytes):
-                                    key_str = key.decode('utf-8', errors='ignore')
-                                else:
-                                    key_str = str(key)
-                                if key_str.lower() in ('unitscalefactor', 'unit_scale_factor'):
-                                    val = scene.metadata[key]
-                                    if hasattr(val, 'data'):
-                                        val = val.data
-                                    unit_scale = float(val)
-                                    # UnitScaleFactor is typically: 1.0=cm, 100.0=m, 0.1=mm
-                                    # Convert to meters: value_in_meters = value_in_fbx_units * (unit_scale / 100.0)
-                                    self._fbx_unit_scale = unit_scale / 100.0
-                                    self.log_operation(
-                                        f"FBX UnitScaleFactor: {unit_scale} -> scale to meters: {self._fbx_unit_scale}"
-                                    )
-                                    break
-                        if self._fbx_unit_scale == 1.0:
-                            self.log_operation(
-                                "No UnitScaleFactor found in FBX metadata, assuming cm (default FBX unit)"
-                            )
-                            self._fbx_unit_scale = 0.01  # Default FBX unit is cm
-                    except Exception as unit_err:
-                        self.log_operation(f"Warning: Could not read FBX unit scale: {unit_err}", "WARNING")
-                        self._fbx_unit_scale = 0.01  # Fallback: assume cm
-
-                    # EXTRACT EMBEDDED TEXTURES
-                    self._fbx_material_textures = {}
-                    extracted_texture_paths = {}  # index -> path
-
-                    if hasattr(scene, "textures") and scene.textures:
-                        self.log_operation(
-                            f"Found {len(scene.textures)} embedded textures"
-                        )
-                        texture_dir = os.path.dirname(input_path)
-
-                        for idx, texture in enumerate(scene.textures):
-                            try:
-                                # Get texture data
-                                if hasattr(texture, "achFormatHint"):
-                                    format_hint = (
-                                        texture.achFormatHint.decode("utf-8")
-                                        if isinstance(texture.achFormatHint, bytes)
-                                        else texture.achFormatHint
-                                    )
-                                    ext = f".{format_hint}" if format_hint else ".png"
-                                else:
-                                    ext = ".png"
-
-                                # Save texture to file
-                                texture_filename = f"texture_{idx}{ext}"
-                                texture_path = os.path.join(
-                                    texture_dir, texture_filename
-                                )
-
-                                if hasattr(texture, "pcData") and texture.pcData:
-                                    with open(texture_path, "wb") as f:
-                                        f.write(texture.pcData)
-                                    self.log_operation(
-                                        f"Extracted texture: {texture_filename}"
-                                    )
-                                    extracted_texture_paths[idx] = texture_path
-                            except Exception as tex_error:
-                                self.log_operation(
-                                    f"Warning: Could not extract texture {idx}: {tex_error}",
-                                    "WARNING",
-                                )
-
-                    all_vertices = []
-                    all_faces = []
-                    all_uvs = []  # Store UV coordinates
-                    all_materials = []  # Store material info
-
-                    # EXTRACT MATERIAL TEXTURE MAPPINGS
-                    if hasattr(scene, "materials"):
-                        for mat_idx, material in enumerate(scene.materials):
-                            mat_name = material.properties.get(
-                                "?mat.name", f"Material_{mat_idx}"
-                            )
-                            # Try multiple possible texture property names in pyassimp
-                            tex_file = material.properties.get("$tex.file")
-                            if not tex_file:
-                                # Try common keys for different slots
-                                for key in material.properties.keys():
-                                    if "$tex.file" in key:
-                                        tex_file = material.properties[key]
-                                        break
-
-                            if tex_file:
-                                self._fbx_material_textures[mat_name] = tex_file
-                                self.log_operation(
-                                    f"Material '{mat_name}' Texture: {tex_file}"
-                                )
-                            elif len(extracted_texture_paths) == 1 and len(scene.materials) == 1:
-                                # Single material + single embedded texture but no
-                                # property linking them: the pairing is unambiguous.
-                                self._fbx_material_textures[mat_name] = list(
-                                    extracted_texture_paths.values()
-                                )[0]
-                                self.log_operation(
-                                    f"Assigned sole extracted texture to material '{mat_name}'"
-                                )
-
-                    # Try different pyassimp API approaches
-                    # Approach 1: Direct meshes attribute (newer pyassimp)
-                    if hasattr(scene, "meshes") and scene.meshes:
-                        self.log_operation(
-                            f"Using scene.meshes (found {len(scene.meshes)} meshes)"
-                        )
-                        for mesh_idx, mesh in enumerate(scene.meshes):
-                            if hasattr(mesh, "vertices") and len(mesh.vertices) > 0:
-                                all_vertices.append(np.array(mesh.vertices))
-                                self.log_operation(
-                                    f"Added {len(mesh.vertices)} vertices from mesh {mesh_idx}"
-                                )
-
-                                # Collect UV coordinates (texture coordinates)
-                                if (
-                                    hasattr(mesh, "texturecoords")
-                                    and mesh.texturecoords is not None
-                                ):
-                                    # texturecoords[0] is the first UV channel
-                                    if (
-                                        len(mesh.texturecoords) > 0
-                                        and mesh.texturecoords[0] is not None
-                                    ):
-                                        uvs = np.array(mesh.texturecoords[0])[
-                                            :, :2
-                                        ]  # Take only U,V (ignore W)
-                                        all_uvs.append(uvs)
-                                        self.log_operation(
-                                            f"Added {len(uvs)} UV coordinates from mesh {mesh_idx}"
-                                        )
-                                    else:
-                                        all_uvs.append(None)
-                                else:
-                                    all_uvs.append(None)
-
-                                # Collect material index
-                                if hasattr(mesh, "materialindex"):
-                                    all_materials.append(mesh.materialindex)
-                                    self.log_operation(
-                                        f"Mesh {mesh_idx} uses material index: {mesh.materialindex}"
-                                    )
-                                else:
-                                    all_materials.append(None)
-
-                                # Also collect faces (triangles)
-                                if hasattr(mesh, "faces") and len(mesh.faces) > 0:
-                                    # Faces are stored as arrays of vertex indices
-                                    mesh_faces = []
-                                    for face in mesh.faces:
-                                        if len(face) >= 3:  # Triangle or polygon
-                                            # Convert to triangle indices
-                                            mesh_faces.append(
-                                                [face[0], face[1], face[2]]
-                                            )
-                                    if mesh_faces:
-                                        all_faces.append(np.array(mesh_faces))
-                                        self.log_operation(
-                                            f"Added {len(mesh_faces)} faces from mesh {mesh_idx}"
-                                        )
-                    # Approach 2: mMeshes ctypes array (older pyassimp)
-                    elif hasattr(scene, "mMeshes") and scene.mMeshes:
-                        self.log_operation(
-                            f"Using scene.mMeshes (found {scene.mNumMeshes} meshes)"
-                        )
-                        for i in range(scene.mNumMeshes):
-                            mesh = scene.mMeshes[i].contents
-                            if hasattr(mesh, "mVertices") and mesh.mNumVertices > 0:
-                                vertices = np.array(
-                                    [
-                                        [
-                                            mesh.mVertices[j].x,
-                                            mesh.mVertices[j].y,
-                                            mesh.mVertices[j].z,
-                                        ]
-                                        for j in range(mesh.mNumVertices)
-                                    ]
-                                )
-                                all_vertices.append(vertices)
-                                self.log_operation(
-                                    f"Added {mesh.mNumVertices} vertices from mesh {i}"
-                                )
-
-                    if all_vertices:
-                        combined_vertices = np.vstack(all_vertices)
-                        min_bounds = combined_vertices.min(axis=0)
-                        max_bounds = combined_vertices.max(axis=0)
-                        extents = max_bounds - min_bounds
-
-                        # Store original vertices for later use (in case GLB has zero vertices)
-                        # Note: FBX units vary (mm, cm, m) - we keep raw values and let FBX2glTF handle conversion
-                        # FBX2glTF outputs in meters, so we trust its output for final dimensions
-                        self._fbx_vertices = combined_vertices  # Keep raw units, will be scaled if needed
-                        self._fbx_raw_extents = extents  # Store raw extents for logging
-                        self.log_operation(
-                            f"Stored {len(combined_vertices)} original FBX vertices (raw units)"
-                        )
-
-                        # Store UV coordinates
-                        if all_uvs and any(uv is not None for uv in all_uvs):
-                            combined_uvs = []
-                            for idx, uv in enumerate(all_uvs):
-                                if uv is not None:
-                                    combined_uvs.append(uv)
-                                else:
-                                    # If a mesh has no UVs, create dummy UVs
-                                    combined_uvs.append(
-                                        np.zeros((len(all_vertices[idx]), 2))
-                                    )
-
-                            self._fbx_uvs = np.vstack(combined_uvs)
-                            self.log_operation(
-                                f"Stored {len(self._fbx_uvs)} UV coordinates"
-                            )
-                        else:
-                            self._fbx_uvs = None
-                            self.log_operation("No UV coordinates found in FBX")
-
-                        # Store original faces if available
-                        if all_faces:
-                            # Combine all faces, adjusting indices for combined vertex array
-                            combined_faces = []
-                            vertex_offset = 0
-                            for i, faces in enumerate(all_faces):
-                                # Adjust face indices by vertex offset
-                                adjusted_faces = faces + vertex_offset
-                                combined_faces.append(adjusted_faces)
-                                vertex_offset += len(all_vertices[i])
-
-                            self._fbx_faces = np.vstack(combined_faces)
-                            self.log_operation(
-                                f"Stored {len(self._fbx_faces)} original FBX faces for mesh creation"
-                            )
-                        else:
-                            self._fbx_faces = None
-                            self.log_operation(
-                                "No faces found in FBX, will use vertices only"
-                            )
-
-                        if max(extents) > 0.001:
-                            # Apply detected FBX unit scale to convert to meters
-                            unit_scale = getattr(self, '_fbx_unit_scale', 0.01)
-                            extents_m = extents * unit_scale
-                            self.log_operation(
-                                f"Original FBX dimensions (raw units): {extents}"
-                            )
-                            self.log_operation(
-                                f"FBX unit scale: {unit_scale}, dimensions in meters: {extents_m}"
-                            )
-                            # Store original dimensions in meters for reference
-                            # FBX2glTF output is authoritative, but this helps validate
-                            original_dimensions = {
-                                "x": float(extents_m[0]),
-                                "y": float(extents_m[1]),
-                                "z": float(extents_m[2]),
-                                "max": float(max(extents_m)),
-                                "unit_scale": unit_scale,
-                            }
-                        else:
-                            self.log_operation(
-                                f"Warning: Original FBX has zero dimensions: {extents}"
-                            )
-                    else:
-                        self.log_operation("Warning: No vertices found in FBX file")
-                        self._fbx_vertices = None
-            except (Exception, BaseException) as e:
-                import traceback
-
+                else:
+                    msg = (manifest or {}).get("error", "no manifest")
+                    self.log_operation(
+                        f"FBX metadata probe unavailable ({msg}); "
+                        "proceeding with FBX2glTF only.",
+                        "WARNING",
+                    )
+            except Exception as probe_err:
                 self.log_operation(
-                    f"Warning: pyassimp initialization failed: {str(e)}. "
-                    "FBX dimension reading and texture extraction will be skipped. "
-                    "Conversion will still proceed using FBX2glTF.",
+                    f"FBX metadata probe failed ({probe_err}); "
+                    "proceeding with FBX2glTF only.",
                     "WARNING",
                 )
-                self.log_operation(f"Traceback: {traceback.format_exc()}")
 
             # Store dimensions for later use
             self.original_dimensions = original_dimensions
@@ -632,12 +405,16 @@ class FBXConverter(BaseConverter):
                     # First convert FBX to GLB using FBX2glTF
                     # Use -i and -o parameters (based on working project)
                     # NOTE: Draco compression disabled - it corrupts textures and geometry
-                    # Ensure FBX2glTF has execute permissions
+                    # Ensure FBX2glTF has execute permissions. Only chmod when
+                    # it's actually missing the bit — doing it on every request
+                    # is wasteful and normalizes flipping a binary executable at
+                    # request time.
                     try:
-                        os.chmod(self.fbx2gltf_path, 0o700)
-                        self.log_operation(
-                            f"Set execute permissions for {self.fbx2gltf_path}"
-                        )
+                        if not os.access(self.fbx2gltf_path, os.X_OK):
+                            os.chmod(self.fbx2gltf_path, 0o755)
+                            self.log_operation(
+                                f"Set execute permissions for {self.fbx2gltf_path}"
+                            )
                     except Exception as pe:
                         self.log_operation(
                             f"Warning: Could not set execute permissions: {pe}",
@@ -661,13 +438,18 @@ class FBXConverter(BaseConverter):
                     ]
 
                     self.log_operation(f"Running command: {' '.join(cmd)}")
+                    # Only set cwd to the input's directory if it still exists —
+                    # a missing dir makes subprocess.run raise FileNotFoundError
+                    # (confusing) instead of letting FBX2glTF report cleanly.
+                    input_dir = os.path.dirname(input_path)
+                    run_cwd = input_dir if input_dir and os.path.isdir(input_dir) else None
                     result = subprocess.run(
                         cmd,
                         capture_output=True,
                         text=True,
                         check=False,
                         stdin=subprocess.DEVNULL,  # Don't wait for input
-                        cwd=os.path.dirname(input_path) or None,
+                        cwd=run_cwd,
                         timeout=300,
                     )  # 5 minute timeout
 
@@ -707,6 +489,17 @@ class FBXConverter(BaseConverter):
                     if self._rescue_zero_geometry(output_path, color, original_dimensions):
                         self.update_status("COMPLETED")
                         return True
+
+                    # If neither FBX2glTF nor the pyassimp rescue produced real
+                    # geometry, fail loudly instead of publishing an empty model
+                    # that later 500s the viewer/dimension endpoints.
+                    if not self._glb_has_geometry(output_path):
+                        self.handle_error(
+                            "Conversion produced an empty model — this FBX has no "
+                            "extractable mesh geometry (it may contain only NURBS/"
+                            "curves, cameras, lights, or animation data)."
+                        )
+                        return False
 
                     # Post-processing: Only if color or scaling needed
                     # IMPORTANT: Use pygltflib for post-processing to preserve animations
@@ -926,6 +719,20 @@ class FBXConverter(BaseConverter):
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
 
+    def _glb_has_geometry(self, glb_path: str) -> bool:
+        """True if the GLB has at least one mesh with non-zero extents."""
+        try:
+            obj = trimesh.load(glb_path)
+            bounds = getattr(obj, "bounds", None)
+            if bounds is None:
+                return False
+            extents = bounds[1] - bounds[0]
+            return bool(np.any(extents > 1e-9))
+        except Exception as e:
+            self.log_operation(f"Warning: geometry check failed: {e}", "WARNING")
+            # Be permissive on checker errors — don't fail a possibly-valid model.
+            return True
+
     def _rescue_zero_geometry(self, output_path: str, color, original_dimensions) -> bool:
         """Rebuild the GLB from pyassimp-read FBX data when FBX2glTF emitted
         degenerate (zero-extent) geometry. Returns True if a rescue happened.
@@ -1005,24 +812,21 @@ class FBXConverter(BaseConverter):
                             has_texture = True
 
                         if not has_texture:
-                            # Find the texture file
+                            # Find the texture file. tex_source comes from the
+                            # uploaded FBX's material data and may be absolute or
+                            # contain '..'; constrain every candidate to stay
+                            # within the upload dirs (no arbitrary file read).
                             texture_file = None
                             search_paths = [
-                                os.path.abspath(tex_source)
-                                if os.path.isabs(tex_source)
-                                else os.path.join(fbx_dir, tex_source),
-                                os.path.join(fbx_dir, os.path.basename(tex_source)),
-                                os.path.join(
-                                    fbx_dir, "textures", os.path.basename(tex_source)
+                                safe_join_within(fbx_dir, tex_source),
+                                safe_join_within(
+                                    os.path.join(fbx_dir, "textures"), tex_source
                                 ),
-                                os.path.join(
-                                    os.path.dirname(fbx_path),
-                                    os.path.basename(tex_source),
-                                ),
+                                safe_join_within(os.path.dirname(fbx_path), tex_source),
                             ]
 
                             for path in search_paths:
-                                if os.path.exists(path):
+                                if path and os.path.exists(path):
                                     texture_file = path
                                     break
 

@@ -53,7 +53,7 @@ def test_generation_variant_applies_preset_and_parent(client, monkeypatch):
     monkeypatch.setattr(
         ai_generator,
         "start_text_to_3d",
-        lambda prompt: captured.setdefault("prompt", prompt) or "task-id",
+        lambda prompt, **kw: captured.setdefault("prompt", prompt) or "task-id",
     )
     response = client.post("/api/generate-3d", json={
         "mode": "text",

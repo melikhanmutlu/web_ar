@@ -1,0 +1,83 @@
+{% extends "admin/base.html" %}
+{% from "admin/_day_range.html" import day_range %}
+
+{% block title %}analytics — arvision admin{% endblock %}
+{% block page_title %}analytics{% endblock %}
+
+{% block content %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ totals.likes }}</div>
+        <div class="kpi-label">total likes</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ totals.saves }}</div>
+        <div class="kpi-label">total saves</div>
+    </div>
+    {% for file_type, count in type_breakdown %}
+    <div class="kpi-card">
+        <div class="kpi-value">{{ count }}</div>
+        <div class="kpi-label">{{ file_type or 'unknown' }} models</div>
+    </div>
+    {% endfor %}
+</div>
+
+{{ day_range('admin.analytics', days, day_choices) }}
+
+<form method="GET" id="analytics-day-jump" class="admin-filters" data-base="{{ url_for('admin.analytics_day', date_str='') }}">
+    <input type="date" name="date" class="av-input" max="{{ today }}">
+    <button type="submit" class="admin-pill">go to day →</button>
+</form>
+<p class="muted" style="font-size:0.75rem;color:#999999;">click a bar in any chart below to see that day's detail.</p>
+
+{% set drill_base = url_for('admin.analytics_day', date_str='') %}
+<div class="admin-grid-2">
+    <div class="admin-card">
+        <h2 class="admin-card-title">uploads — last {{ days }} days</h2>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.uploads | tojson }}'></div>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">registrations — last {{ days }} days</h2>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.registrations | tojson }}'></div>
+    </div>
+</div>
+
+<div class="admin-grid-3">
+    <div class="admin-card">
+        <h2 class="admin-card-title">likes — last {{ days }} days</h2>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.likes | tojson }}'></div>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">ai generations — last {{ days }} days</h2>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.ai_jobs | tojson }}'></div>
+    </div>
+    <div class="admin-card">
+        <h2 class="admin-card-title">rig &amp; animate jobs — last {{ days }} days</h2>
+        <div class="admin-chart" data-drill-base="{{ drill_base }}" data-points='{{ charts.rig_jobs | tojson }}'></div>
+    </div>
+</div>
+
+<div class="admin-grid-3">
+    {% for key, label, attr in (('viewed', 'top by views', 'view_count'), ('downloaded', 'top by downloads', 'download_count'), ('shared', 'top by shares', 'share_count')) %}
+    <div class="admin-card">
+        <h2 class="admin-card-title">{{ label }}</h2>
+        <ul class="admin-activity">
+            {% for model in top[key] %}
+            <li>
+                <span class="title">
+                    <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
+                </span>
+                <span class="meta">{{ model[attr] or 0 }}</span>
+            </li>
+            {% else %}
+            <li><span class="muted">no data yet</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+</div>
+
+<p class="muted" style="font-size:0.75rem;color:#999999;">
+    views / downloads / shares are lifetime counters — per-day history isn't recorded for them.
+</p>
+{% endblock %}

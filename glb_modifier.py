@@ -11,6 +11,8 @@ from pygltflib import (
     GLTF2, Image as GLTFImage, Texture, Sampler, TextureInfo,
     Material, PbrMetallicRoughness,
 )
+import os
+import copy
 import struct
 import base64
 from PIL import Image
@@ -18,46 +20,18 @@ import io
 
 logger = logging.getLogger(__name__)
 
+# DoS guards for untrusted input.
+# Cap decoded texture bytes and total pixel count so a crafted base64 blob or a
+# "pixel bomb" image can't exhaust memory before the 2048px downscale runs.
+MAX_TEXTURE_BYTES = int(os.environ.get("MAX_TEXTURE_BYTES", 32 * 1024 * 1024))
+# Pillow uses MAX_IMAGE_PIXELS to raise DecompressionBombError; set a sane cap.
+Image.MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", 50_000_000))
+
 
 def hex_to_rgb(hex_color):
     """Convert hex color to RGB tuple (0-1 range)"""
     hex_color = hex_color.lstrip('#')
     return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
-
-
-def euler_to_rotation_matrix(rx, ry, rz):
-    """
-    Convert Euler angles (in radians, YXZ intrinsic order) to a 3x3 rotation matrix
-    Positive angles rotate clockwise when looking along the positive axis direction
-    
-    Args:
-        rx, ry, rz: Rotation angles in radians (X, Y, Z axes)
-    
-    Returns:
-        3x3 numpy rotation matrix
-    """
-    # Rotation matrices for each axis (clockwise direction)
-    # Inverted sin signs for clockwise rotation
-    Rx = np.array([
-        [1, 0, 0],
-        [0, np.cos(rx), np.sin(rx)],   # Inverted sin for clockwise
-        [0, -np.sin(rx), np.cos(rx)]
-    ])
-    
-    Ry = np.array([
-        [np.cos(ry), 0, -np.sin(ry)],  # Inverted sin for clockwise
-        [0, 1, 0],
-        [np.sin(ry), 0, np.cos(ry)]
-    ])
-    
-    Rz = np.array([
-        [np.cos(rz), np.sin(rz), 0],   # Inverted sin for clockwise
-        [-np.sin(rz), np.cos(rz), 0],
-        [0, 0, 1]
-    ])
-    
-    # YXZ intrinsic order: R = Rz * Rx * Ry
-    return Rz @ Rx @ Ry
 
 
 def apply_material_modifications(gltf, material_mods):
@@ -177,6 +151,153 @@ def apply_material_modifications(gltf, material_mods):
         except Exception:
             pass
     
+    return gltf
+
+
+def _iter_gltf_mesh_nodes(gltf):
+    """
+    Yield (node_index, node) for every node with a mesh, in the same
+    depth-first pre-order the viewer's THREE.Scene.traverse() visits them in
+    (both walk the glTF node hierarchy top-down, children in array order),
+    so layer identities line up between the client's live scene and this
+    on-disk GLTF2 object.
+    """
+    if not gltf.nodes:
+        return []
+
+    result = []
+    visited = set()
+
+    def walk(node_idx):
+        if node_idx in visited or node_idx < 0 or node_idx >= len(gltf.nodes):
+            return
+        visited.add(node_idx)
+        node = gltf.nodes[node_idx]
+        if node.mesh is not None:
+            result.append((node_idx, node))
+        for child_idx in (node.children or []):
+            walk(child_idx)
+
+    if gltf.scenes:
+        scene_idx = gltf.scene if gltf.scene is not None else 0
+        roots = gltf.scenes[scene_idx].nodes or []
+    else:
+        roots = list(range(len(gltf.nodes)))
+
+    for r in roots:
+        walk(r)
+    return result
+
+
+def _resolve_layer_node(mesh_nodes, name, occurrence):
+    """Find the Nth (0-indexed `occurrence`) mesh node named `name`."""
+    count = 0
+    for node_idx, node in mesh_nodes:
+        if (node.name or "") == (name or ""):
+            if count == occurrence:
+                return node_idx, node
+            count += 1
+    return None, None
+
+
+def apply_layer_modifications(gltf, layer_mods):
+    """
+    Apply per-layer (per-mesh-node) visibility and color overrides baked
+    from the viewer's Layers panel.
+
+    Args:
+        gltf: GLTF2 object
+        layer_mods: {
+            'hidden': [{'name': str, 'occurrence': int}, ...],
+            'colors': [{'name': str, 'occurrence': int, 'color': [r, g, b]}, ...]
+        }
+    """
+    if not gltf.nodes or not gltf.meshes:
+        return gltf
+
+    mesh_nodes = _iter_gltf_mesh_nodes(gltf)
+
+    # Recolor first: clone the primitive's material per targeted layer so a
+    # color change on one layer never bleeds into a sibling layer that
+    # happens to share the same material.
+    for entry in layer_mods.get('colors') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node is None or node.mesh is None:
+            continue
+        try:
+            color = [float(c) for c in entry['color'][:3]]
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+
+        mesh = gltf.meshes[node.mesh]
+        for prim in (mesh.primitives or []):
+            if prim.material is None or not gltf.materials:
+                continue
+            new_material = copy.deepcopy(gltf.materials[prim.material])
+            if not new_material.pbrMetallicRoughness:
+                new_material.pbrMetallicRoughness = PbrMetallicRoughness(baseColorFactor=[1.0, 1.0, 1.0, 1.0])
+            alpha = (new_material.pbrMetallicRoughness.baseColorFactor or [1.0, 1.0, 1.0, 1.0])[3]
+            new_material.pbrMetallicRoughness.baseColorFactor = color + [alpha]
+            new_material.doubleSided = True
+            gltf.materials.append(new_material)
+            prim.material = len(gltf.materials) - 1
+            logger.info(f"Applied layer color {color} to node '{node.name}' (cloned material {prim.material})")
+
+    # Hide last: detach the node from its parent's children (or the scene's
+    # root node list) so AR viewers (which load the GLB directly, not the
+    # viewer's live THREE scene) never see it either.
+    hidden_targets = set()
+    for entry in layer_mods.get('hidden') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node_idx is not None:
+            hidden_targets.add(node_idx)
+
+    if hidden_targets:
+        for node in gltf.nodes:
+            if node.children:
+                node.children = [c for c in node.children if c not in hidden_targets]
+        for scene in (gltf.scenes or []):
+            if scene.nodes:
+                scene.nodes = [n for n in scene.nodes if n not in hidden_targets]
+        logger.info(f"Hid {len(hidden_targets)} layer node(s): {sorted(hidden_targets)}")
+
+    return gltf
+
+
+def apply_explode_modifications(gltf, explode_mods):
+    """
+    Permanently bake the viewer's exploded per-layer positions (normally
+    preview-only) into each mesh node's local transform, so AR viewers
+    (which load the GLB directly) show the exploded layout too.
+
+    Args:
+        gltf: GLTF2 object
+        explode_mods: {'positions': [{'name': str, 'occurrence': int, 'translation': [x, y, z]}, ...]}
+    """
+    if not gltf.nodes:
+        return gltf
+
+    mesh_nodes = _iter_gltf_mesh_nodes(gltf)
+
+    for entry in explode_mods.get('positions') or []:
+        node_idx, node = _resolve_layer_node(mesh_nodes, entry.get('name', ''), entry.get('occurrence', 0))
+        if node is None:
+            continue
+        try:
+            translation = [float(c) for c in entry['translation'][:3]]
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+
+        if node.matrix:
+            # Column-major 4x4: elements 12-14 are the translation column,
+            # independent of whatever rotation/scale the other columns encode.
+            m = list(node.matrix)
+            m[12], m[13], m[14] = translation
+            node.matrix = m
+        else:
+            node.translation = translation
+        logger.info(f"Baked exploded position {translation} onto node '{node.name}'")
+
     return gltf
 
 
@@ -320,11 +441,19 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
         if ',' in texture_data_base64:
             texture_data_base64 = texture_data_base64.split(',')[1]
 
+        # Bound the encoded payload before decoding (base64 inflates ~4:3).
+        if len(texture_data_base64) > MAX_TEXTURE_BYTES * 4 // 3 + 1024:
+            raise ValueError("Texture payload too large")
+
         image_bytes = base64.b64decode(texture_data_base64)
+        if len(image_bytes) > MAX_TEXTURE_BYTES:
+            raise ValueError("Decoded texture too large")
         logger.info(f"Decoded texture image: {len(image_bytes)} bytes")
 
-        # Open image with PIL to optimise
+        # Open image with PIL to optimise. MAX_IMAGE_PIXELS (set at import) makes
+        # PIL raise DecompressionBombError on pixel bombs before allocating.
         img = Image.open(io.BytesIO(image_bytes))
+        img.load()  # force decode now so a bomb fails here, inside the try
         logger.info(f"Image format: {img.format}, size: {img.size}, mode: {img.mode}")
 
         if img.mode in ('RGBA', 'LA', 'P'):
@@ -429,76 +558,161 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
 
 def normalize_model_to_center(gltf):
     """
-    Normalize model by moving its center to origin (0, 0, 0)
-    This ensures consistent pivot behavior in viewer
-    
-    Note: Basis correction (Z-up to Y-up) is applied only when rotation is applied
-    via apply_transform_modifications, not during initial normalization.
-    This keeps the model in its original orientation on upload.
-    
+    Normalize model by translating its WORLD-space bounding-box center to
+    the origin. The shift is conjugated into each mesh's local frame
+    (t = −L⁻¹·center for a mesh under world matrix W = [L|t]), so models
+    whose parts are positioned by node transforms (STEP assemblies, GLB
+    uploads) keep their inter-part layout. The old local-space version
+    centered every mesh's own vertices instead, which piled all the parts
+    of an assembly on top of each other at the origin.
+
+    Normalization is cosmetic — whenever it cannot be applied safely
+    (instanced meshes under different transforms, shared vertex data,
+    compressed geometry) the model is returned UNCHANGED rather than risking
+    corruption.
+
     Returns:
         GLTF2: Modified GLTF object
     """
     logger.info("Normalizing model to center origin")
-    
-    # Calculate current center
-    center_x, center_y, center_z = calculate_model_center(gltf)
-    
+
+    import base64
+    import struct
+
     try:
-        # Move all vertices to center the model at origin
+        if not gltf.meshes:
+            return gltf
+
+        # One world matrix per mesh. Instanced meshes under differing
+        # transforms would need different shifts in the same vertex data —
+        # skip normalization for those models.
+        mesh_world = _mesh_world_matrices(gltf)
+        identity = np.eye(4)
+        mesh_w = {}
+        for mesh_idx in range(len(gltf.meshes)):
+            entries = mesh_world.get(mesh_idx)
+            ws = [w for _, w in entries] if entries else [identity]
+            for w in ws[1:]:
+                if not np.allclose(w, ws[0], atol=1e-9):
+                    logger.warning(
+                        f"Mesh {mesh_idx} instanced under differing node transforms "
+                        "— skipping center normalization"
+                    )
+                    return gltf
+            mesh_w[mesh_idx] = ws[0]
+
+        # Unique POSITION accessors (the old per-primitive loop shifted
+        # shared vertex data once per referencing primitive). An accessor
+        # shared across meshes with different transforms can't be shifted
+        # both ways — skip.
+        pos_targets = {}
         for mesh_idx, mesh in enumerate(gltf.meshes):
-            if not mesh.primitives:
-                continue
-            
-            for prim_idx, primitive in enumerate(mesh.primitives):
+            for primitive in (mesh.primitives or []):
                 if primitive.attributes is None:
                     continue
-                
-                # Get POSITION accessor
-                if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
-                    pos_accessor_idx = primitive.attributes.POSITION
-                    accessor = gltf.accessors[pos_accessor_idx]
-                    buffer_view = gltf.bufferViews[accessor.bufferView]
-                    buffer = gltf.buffers[buffer_view.buffer]
-                    
-                    # Get binary data
-                    if buffer.uri and buffer.uri.startswith('data:'):
-                        data_start = buffer.uri.find(',') + 1
-                        binary_data = base64.b64decode(buffer.uri[data_start:])
-                    elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
-                        binary_data = gltf.binary_blob()
-                    else:
-                        continue
-                    
-                    # Parse and translate vertices
-                    offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
-                    offset += accessor.byteOffset if accessor.byteOffset else 0
-                    vertex_count = accessor.count
-                    stride = buffer_view.byteStride if buffer_view.byteStride else 12
-                    
-                    new_data = bytearray(binary_data)
-                    for i in range(vertex_count):
-                        pos = offset + i * stride
-                        x, y, z = struct.unpack_from('fff', binary_data, pos)
-                        
-                        # Translate to origin
-                        x -= center_x
-                        y -= center_y
-                        z -= center_z
-                        
-                        struct.pack_into('fff', new_data, pos, x, y, z)
-                    
-                    # Update buffer
-                    if buffer.uri and buffer.uri.startswith('data:'):
-                        buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
-                    else:
-                        gltf.set_binary_blob(bytes(new_data))
-                    
-                    logger.info(f"Translated {vertex_count} vertices in mesh {mesh_idx}, primitive {prim_idx}")
-        
+                p_idx = getattr(primitive.attributes, 'POSITION', None)
+                if p_idx is None:
+                    continue
+                claimed = pos_targets.get(p_idx)
+                if claimed is not None and not np.allclose(
+                    mesh_w[claimed], mesh_w[mesh_idx], atol=1e-9
+                ):
+                    logger.warning(
+                        f"POSITION accessor {p_idx} shared across differing node "
+                        "transforms — skipping center normalization"
+                    )
+                    return gltf
+                pos_targets.setdefault(p_idx, mesh_idx)
+
+        for acc_idx in pos_targets:
+            acc = gltf.accessors[acc_idx]
+            if acc.bufferView is None or acc.componentType != 5126:
+                logger.warning(
+                    f"POSITION accessor {acc_idx} not plain float data — "
+                    "skipping center normalization"
+                )
+                return gltf
+
+        buffers_data = {}
+
+        def _buffer_bytes(buf_idx):
+            if buf_idx not in buffers_data:
+                buffer = gltf.buffers[buf_idx]
+                if buffer.uri and buffer.uri.startswith('data:'):
+                    raw = base64.b64decode(buffer.uri[buffer.uri.find(',') + 1:])
+                elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                    raw = gltf.binary_blob()
+                else:
+                    raise ValueError(f"buffer {buf_idx} has no accessible data")
+                buffers_data[buf_idx] = bytearray(raw)
+            return buffers_data[buf_idx]
+
+        def _accessor_layout(acc_idx):
+            accessor = gltf.accessors[acc_idx]
+            buffer_view = gltf.bufferViews[accessor.bufferView]
+            data = _buffer_bytes(buffer_view.buffer)
+            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
+            stride = buffer_view.byteStride if buffer_view.byteStride else 12
+            return accessor, data, offset, stride
+
+        # World-space bounding box (the old local-space scan pooled vertices
+        # across unrelated coordinate frames).
+        mins_w = [float('inf')] * 3
+        maxs_w = [float('-inf')] * 3
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx)
+            (w00, w01, w02, wt0), (w10, w11, w12, wt1), (w20, w21, w22, wt2) = mesh_w[mesh_idx][:3]
+            for i in range(accessor.count):
+                x, y, z = struct.unpack_from('fff', data, offset + i * stride)
+                wv = (w00 * x + w01 * y + w02 * z + wt0,
+                      w10 * x + w11 * y + w12 * z + wt1,
+                      w20 * x + w21 * y + w22 * z + wt2)
+                for j in range(3):
+                    if wv[j] < mins_w[j]:
+                        mins_w[j] = wv[j]
+                    if wv[j] > maxs_w[j]:
+                        maxs_w[j] = wv[j]
+        if mins_w[0] == float('inf'):
+            return gltf
+        center = (np.array(mins_w) + np.array(maxs_w)) / 2.0
+        if np.allclose(center, 0.0, atol=1e-9):
+            logger.info("Model already centered — nothing to normalize")
+            return gltf
+        logger.info(f"World-space model center: ({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})")
+
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx)
+            # World shift of -center, expressed in this mesh's local frame.
+            sx, sy, sz = -np.linalg.solve(mesh_w[mesh_idx][:3, :3], center)
+            mins = [float('inf')] * 3
+            maxs = [float('-inf')] * 3
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                x, y, z = struct.unpack_from('fff', data, pos)
+                nx, ny, nz = x + sx, y + sy, z + sz
+                struct.pack_into('fff', data, pos, nx, ny, nz)
+                for j, v in enumerate((nx, ny, nz)):
+                    if v < mins[j]:
+                        mins[j] = v
+                    if v > maxs[j]:
+                        maxs[j] = v
+            if accessor.count:
+                accessor.min = [float(v) for v in mins]
+                accessor.max = [float(v) for v in maxs]
+            logger.info(f"Translated {accessor.count} vertices in POSITION accessor {acc_idx}")
+
+        # Commit buffers only after every accessor shifted cleanly.
+        for buf_idx, data in buffers_data.items():
+            buffer = gltf.buffers[buf_idx]
+            if buffer.uri and buffer.uri.startswith('data:'):
+                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(data)).decode('utf-8')
+            else:
+                gltf.set_binary_blob(bytes(data))
+            buffer.byteLength = len(data)
+
         logger.info("✅ Model normalized to center origin")
         return gltf
-        
+
     except Exception as e:
         logger.error(f"Failed to normalize model: {e}", exc_info=True)
         return gltf
@@ -619,22 +833,75 @@ def create_rotation_matrix(rx, ry, rz):
         return Ry @ Rx @ Rz
 
 
+def _quat_to_matrix(q):
+    """glTF node rotation quaternion [x, y, z, w] -> 3x3 rotation matrix."""
+    x, y, z, w = (float(v) for v in q)
+    n = (x * x + y * y + z * z + w * w) ** 0.5 or 1.0
+    x, y, z, w = x / n, y / n, z / n, w / n
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _node_local_matrix(node):
+    """4x4 local transform of a glTF node (matrix or TRS form)."""
+    if node.matrix:
+        # glTF stores matrices column-major.
+        return np.array(node.matrix, dtype=float).reshape(4, 4).T
+    m = np.eye(4)
+    if node.rotation:
+        m[:3, :3] = _quat_to_matrix(node.rotation)
+    if node.scale:
+        m[:3, :3] = m[:3, :3] @ np.diag([float(s) for s in node.scale])
+    if node.translation:
+        m[:3, 3] = [float(t) for t in node.translation]
+    return m
+
+
+def _mesh_world_matrices(gltf):
+    """mesh index -> list of (node_idx, 4x4 world matrix) for every node
+    that instances the mesh. Meshes not referenced by any node don't appear
+    (callers treat them as identity)."""
+    world = {}
+    scene_idx = gltf.scene if gltf.scene is not None else 0
+    if not gltf.scenes or scene_idx >= len(gltf.scenes):
+        return world
+    visiting = set()
+
+    def walk(node_idx, parent):
+        if node_idx in visiting:
+            raise ValueError("cyclic node graph in GLB")
+        visiting.add(node_idx)
+        node = gltf.nodes[node_idx]
+        w = parent @ _node_local_matrix(node)
+        if node.mesh is not None:
+            world.setdefault(node.mesh, []).append((node_idx, w))
+        for child in (node.children or []):
+            walk(child, w)
+        visiting.discard(node_idx)
+
+    for root in (gltf.scenes[scene_idx].nodes or []):
+        walk(root, np.eye(4))
+    return world
+
+
 def apply_transform_modifications(gltf, transform_mods):
     """
-    Apply transform modifications to GLTF with model center as pivot
-    - Scale: Applied to mesh vertices around model center
-    - Rotation: Applied to node transforms around model center
-    
+    Apply transform modifications with the model's world-space center as
+    pivot, baked into vertex data. Node transforms are respected: for a mesh
+    under world matrix W the world-space change M is baked as W⁻¹·M·W, so
+    multi-part models whose parts are positioned by node translations scale
+    and rotate as one model instead of each part transforming around its own
+    local frame while the node offsets stay put.
+
     Args:
         gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
-    
-    # Calculate model center to use as pivot
-    center_x, center_y, center_z = calculate_model_center(gltf)
-    logger.info(f"Using model center as pivot: ({center_x:.3f}, {center_y:.3f}, {center_z:.3f})")
-    
+
     # Get rotation parameters
     rotation = transform_mods.get('rotation', {})
     rx = np.radians(float(rotation.get('x', 0)))
@@ -642,118 +909,283 @@ def apply_transform_modifications(gltf, transform_mods):
     rz = np.radians(float(rotation.get('z', 0)))
     has_rotation = (rx != 0 or ry != 0 or rz != 0)
     
-    # Calculate rotation matrix if needed
+    # Calculate rotation matrix if needed. create_rotation_matrix follows
+    # model-viewer's orientation convention (intrinsic YXZ, right-handed) so
+    # the baked result matches the live preview — the old inverted-sign
+    # "clockwise" matrix was the exact inverse and saved every rotation
+    # mirrored relative to what the preview showed.
     rotation_matrix = None
     if has_rotation:
-        rotation_matrix = euler_to_rotation_matrix(rx, ry, rz)
+        rotation_matrix = create_rotation_matrix(rx, ry, rz)
         logger.info(f"Rotation matrix calculated for ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
     
     # Apply scale and rotation to mesh vertices (permanent geometry change)
     scale_factor = float(transform_mods.get('scale', 1.0))
     
     if (scale_factor != 1.0 or has_rotation) and gltf.meshes:
-            transforms = []
-            if has_rotation:
-                transforms.append(f"rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
-            if scale_factor != 1.0:
-                transforms.append(f"scale {scale_factor}")
-            logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
-            try:
-                for mesh_idx, mesh in enumerate(gltf.meshes):
-                    if not mesh.primitives:
+        import base64
+        import struct
+
+        transforms = []
+        if has_rotation:
+            transforms.append(f"rotation ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
+        if scale_factor != 1.0:
+            transforms.append(f"scale {scale_factor}")
+        logger.info(f"Applying {' and '.join(transforms)} to mesh vertices")
+
+        # ---- Validate every target accessor up front: this bake is
+        # all-or-nothing. The old loop wrote buffers back per primitive, so
+        # one unreadable accessor mid-way (Draco/quantized geometry) left
+        # the model half-transformed — some parts scaled, the rest not.
+        # Raising here instead propagates to modify_glb, the endpoint
+        # reports the error, and the original file is never replaced. ----
+        FLOAT_COMPONENT = 5126
+        target_attr_names = ('POSITION', 'NORMAL', 'TANGENT') if has_rotation else ('POSITION',)
+        for mesh in gltf.meshes:
+            for primitive in (mesh.primitives or []):
+                if primitive.attributes is None:
+                    continue
+                for attr_name in target_attr_names:
+                    a_idx = getattr(primitive.attributes, attr_name, None)
+                    if a_idx is None:
                         continue
-                    
-                    for prim_idx, primitive in enumerate(mesh.primitives):
-                        if primitive.attributes is None:
-                            continue
-                        
-                        # Get POSITION accessor
-                        if hasattr(primitive.attributes, 'POSITION') and primitive.attributes.POSITION is not None:
-                            pos_accessor_idx = primitive.attributes.POSITION
-                            accessor = gltf.accessors[pos_accessor_idx]
-                            buffer_view = gltf.bufferViews[accessor.bufferView]
-                            buffer = gltf.buffers[buffer_view.buffer]
-                            
-                            # Get binary data
-                            import base64
-                            if buffer.uri and buffer.uri.startswith('data:'):
-                                # Data URI (embedded as base64)
-                                data_start = buffer.uri.find(',') + 1
-                                binary_data = base64.b64decode(buffer.uri[data_start:])
-                            elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
-                                # GLB binary chunk
-                                binary_data = gltf.binary_blob()
-                            else:
-                                logger.warning(f"Cannot scale: buffer {buffer_view.buffer} has no accessible data")
-                                continue
-                            
-                            # Parse vertex positions
-                            import struct
-                            offset = buffer_view.byteOffset if buffer_view.byteOffset else 0
-                            offset += accessor.byteOffset if accessor.byteOffset else 0
-                            
-                            # Read and scale vertices
-                            vertex_count = accessor.count
-                            stride = buffer_view.byteStride if buffer_view.byteStride else 12  # 3 floats
-                            
-                            new_data = bytearray(binary_data)
-                            for i in range(vertex_count):
-                                pos = offset + i * stride
-                                # Read XYZ
-                                x, y, z = struct.unpack_from('fff', binary_data, pos)
-                                
-                                # Transform around model center (pivot)
-                                # 1. Translate to origin (relative to center)
-                                x -= center_x
-                                y -= center_y
-                                z -= center_z
-                                
-                                # 2. Apply rotation (if any)
-                                if rotation_matrix is not None:
-                                    vertex = np.array([x, y, z])
-                                    rotated = rotation_matrix @ vertex
-                                    x, y, z = rotated[0], rotated[1], rotated[2]
-                                
-                                # 3. Apply scale
-                                if scale_factor != 1.0:
-                                    x *= scale_factor
-                                    y *= scale_factor
-                                    z *= scale_factor
-                                
-                                # 4. Translate back
-                                x += center_x
-                                y += center_y
-                                z += center_z
-                                
-                                # Write back
-                                struct.pack_into('fff', new_data, pos, x, y, z)
-                            
-                            # Update buffer based on type
-                            if buffer.uri and buffer.uri.startswith('data:'):
-                                # Update data URI
-                                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(new_data)).decode('utf-8')
-                            else:
-                                # Update GLB binary chunk
-                                gltf.set_binary_blob(bytes(new_data))
-                            
-                            transform_desc = []
-                            if has_rotation:
-                                transform_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
-                            if scale_factor != 1.0:
-                                transform_desc.append(f"scaled {scale_factor}x")
-                            logger.info(f"Transformed {vertex_count} vertices ({', '.join(transform_desc)}) in mesh {mesh_idx}, primitive {prim_idx}")
-                
-                result_desc = []
-                if has_rotation:
-                    result_desc.append(f"rotated ({rotation.get('x', 0)}°, {rotation.get('y', 0)}°, {rotation.get('z', 0)}°)")
-                if scale_factor != 1.0:
-                    result_desc.append(f"scaled by {scale_factor}")
-                logger.info(f"✅ Geometry transformed: {', '.join(result_desc) if result_desc else 'no changes'}")
-            except Exception as e:
-                logger.error(f"Failed to transform geometry: {e}", exc_info=True)
-    
+                    acc = gltf.accessors[a_idx]
+                    if acc.bufferView is None:
+                        raise ValueError(
+                            f"accessor {a_idx} has no bufferView (Draco/sparse-compressed "
+                            "geometry) — cannot bake transforms into this model"
+                        )
+                    if acc.componentType != FLOAT_COMPONENT:
+                        raise ValueError(
+                            f"accessor {a_idx} componentType {acc.componentType} is not "
+                            "float (quantized geometry) — cannot bake transforms into this model"
+                        )
+
+        # ---- Read each involved buffer once; every accessor mutates the
+        # same bytearray and buffers are only written back after ALL
+        # transforms succeeded. ----
+        buffers_data = {}
+
+        def _buffer_bytes(buf_idx):
+            if buf_idx not in buffers_data:
+                buffer = gltf.buffers[buf_idx]
+                if buffer.uri and buffer.uri.startswith('data:'):
+                    raw = base64.b64decode(buffer.uri[buffer.uri.find(',') + 1:])
+                elif hasattr(gltf, 'binary_blob') and gltf.binary_blob():
+                    raw = gltf.binary_blob()
+                else:
+                    raise ValueError(f"buffer {buf_idx} has no accessible data")
+                buffers_data[buf_idx] = bytearray(raw)
+            return buffers_data[buf_idx]
+
+        def _accessor_layout(acc_idx, n_floats):
+            accessor = gltf.accessors[acc_idx]
+            buffer_view = gltf.bufferViews[accessor.bufferView]
+            data = _buffer_bytes(buffer_view.buffer)
+            offset = (buffer_view.byteOffset or 0) + (accessor.byteOffset or 0)
+            stride = buffer_view.byteStride if buffer_view.byteStride else n_floats * 4
+            return accessor, data, offset, stride
+
+        N_FLOATS = {'POSITION': 3, 'NORMAL': 3, 'TANGENT': 4}
+
+        def _duplicate_accessor(acc_idx, n_floats):
+            """Fresh accessor+bufferView with a tightly-packed copy of the
+            data, appended to the accessor's buffer."""
+            from pygltflib import BufferView as GLTFBufferView
+            accessor, data, offset, stride = _accessor_layout(acc_idx, n_floats)
+            item = n_floats * 4
+            raw = bytearray()
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                raw += data[pos:pos + item]
+            while len(data) % 4:
+                data.append(0)
+            new_offset = len(data)
+            data += raw
+            src_bv = gltf.bufferViews[accessor.bufferView]
+            gltf.bufferViews.append(GLTFBufferView(
+                buffer=src_bv.buffer, byteOffset=new_offset, byteLength=len(raw),
+            ))
+            import copy as _copy
+            new_acc = _copy.deepcopy(accessor)
+            new_acc.bufferView = len(gltf.bufferViews) - 1
+            new_acc.byteOffset = 0
+            gltf.accessors.append(new_acc)
+            return len(gltf.accessors) - 1
+
+        # ---- Parts of a multi-part model are positioned by node
+        # transforms: the world-space change M must be conjugated into each
+        # mesh's local space (A = W⁻¹·M·W). Baking M directly into local
+        # vertices shrank each part in place while the node offsets stayed
+        # put, tearing the model apart. ----
+        mesh_world = _mesh_world_matrices(gltf)
+        identity = np.eye(4)
+
+        # A mesh instanced by several nodes under DIFFERENT world transforms
+        # can't satisfy them all with one set of vertices — give the extra
+        # nodes their own copy (transform-relevant accessors duplicated,
+        # indices/UV/color/material shared).
+        mesh_w = {}
+        for mesh_idx in range(len(gltf.meshes)):
+            entries = mesh_world.get(mesh_idx)
+            if not entries:
+                mesh_w[mesh_idx] = identity
+                continue
+            mesh_w[mesh_idx] = entries[0][1]
+            for node_idx, w in entries[1:]:
+                if np.allclose(w, entries[0][1], atol=1e-9):
+                    continue
+                import copy as _copy
+                new_mesh = _copy.deepcopy(gltf.meshes[mesh_idx])
+                for primitive in (new_mesh.primitives or []):
+                    if primitive.attributes is None:
+                        continue
+                    for attr_name in target_attr_names:
+                        a_idx = getattr(primitive.attributes, attr_name, None)
+                        if a_idx is not None:
+                            setattr(primitive.attributes, attr_name,
+                                    _duplicate_accessor(a_idx, N_FLOATS[attr_name]))
+                gltf.meshes.append(new_mesh)
+                new_mesh_idx = len(gltf.meshes) - 1
+                gltf.nodes[node_idx].mesh = new_mesh_idx
+                mesh_w[new_mesh_idx] = w
+                logger.info(f"Duplicated mesh {mesh_idx} for node {node_idx} (differing instance transforms)")
+
+        # ---- Collect unique target accessors. Primitives commonly share
+        # vertex data (one POSITION accessor reused by several per-material
+        # primitives) — transforming per primitive applied the change to the
+        # same bytes several times, so shared parts ended up scaled
+        # 0.1 -> 0.01 while unshared parts got 0.1. An accessor shared
+        # ACROSS meshes with different node transforms (exporters dedupe
+        # identical parts) needs a distinct copy per local-space change. ----
+        pos_targets = {}     # accessor_idx -> mesh_idx
+        attr_targets = {}    # accessor_idx -> (attr_name, mesh_idx)
+
+        def _claim(acc_idx, mesh_idx, attr_name, registry):
+            claimed = registry.get(acc_idx)
+            claimed_mesh = claimed if attr_name == 'POSITION' else (claimed[1] if claimed else None)
+            if claimed is None or np.allclose(mesh_w[claimed_mesh], mesh_w[mesh_idx], atol=1e-9):
+                return acc_idx, False
+            return _duplicate_accessor(acc_idx, N_FLOATS[attr_name]), True
+
+        for mesh_idx in range(len(gltf.meshes)):
+            for primitive in (gltf.meshes[mesh_idx].primitives or []):
+                if primitive.attributes is None:
+                    continue
+                for attr_name in target_attr_names:
+                    a_idx = getattr(primitive.attributes, attr_name, None)
+                    if a_idx is None:
+                        continue
+                    # NORMAL/TANGENT only change under rotation (uniform
+                    # scale conjugates to itself: W⁻¹·sI·W = sI).
+                    registry = pos_targets if attr_name == 'POSITION' else attr_targets
+                    new_idx, duplicated = _claim(a_idx, mesh_idx, attr_name, registry)
+                    if duplicated:
+                        setattr(primitive.attributes, attr_name, new_idx)
+                        logger.info(f"Duplicated {attr_name} accessor {a_idx} (shared across differing transforms)")
+                    if attr_name == 'POSITION':
+                        registry.setdefault(new_idx, mesh_idx)
+                    else:
+                        registry.setdefault(new_idx, (attr_name, mesh_idx))
+
+        # ---- Pivot: the model's world-space bounding-box center. A local
+        # scan would mix coordinate frames on node-positioned models. ----
+        mins_w = [float('inf')] * 3
+        maxs_w = [float('-inf')] * 3
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx, 3)
+            (w00, w01, w02, wt0), (w10, w11, w12, wt1), (w20, w21, w22, wt2) = mesh_w[mesh_idx][:3]
+            for i in range(accessor.count):
+                x, y, z = struct.unpack_from('fff', data, offset + i * stride)
+                wv = (w00 * x + w01 * y + w02 * z + wt0,
+                      w10 * x + w11 * y + w12 * z + wt1,
+                      w20 * x + w21 * y + w22 * z + wt2)
+                for j in range(3):
+                    if wv[j] < mins_w[j]:
+                        mins_w[j] = wv[j]
+                    if wv[j] > maxs_w[j]:
+                        maxs_w[j] = wv[j]
+        if mins_w[0] == float('inf'):
+            logger.warning("No readable vertices — skipping transform bake")
+            return gltf
+        center = (np.array(mins_w) + np.array(maxs_w)) / 2.0
+        logger.info(f"Using world-space model center as pivot: ({center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f})")
+
+        # World-space change: M = T(center) · R · S · T(-center)
+        linear = (rotation_matrix if rotation_matrix is not None else np.eye(3)) * scale_factor
+        M = np.eye(4)
+        M[:3, :3] = linear
+        M[:3, 3] = center - linear @ center
+
+        def _local_change(mesh_idx):
+            w = mesh_w[mesh_idx]
+            return M if np.allclose(w, identity, atol=1e-9) else np.linalg.inv(w) @ M @ w
+
+        for acc_idx, mesh_idx in pos_targets.items():
+            accessor, data, offset, stride = _accessor_layout(acc_idx, 3)
+            (a00, a01, a02, at0), (a10, a11, a12, at1), (a20, a21, a22, at2) = _local_change(mesh_idx)[:3]
+            mins = [float('inf')] * 3
+            maxs = [float('-inf')] * 3
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                x, y, z = struct.unpack_from('fff', data, pos)
+                nx = a00 * x + a01 * y + a02 * z + at0
+                ny = a10 * x + a11 * y + a12 * z + at1
+                nz = a20 * x + a21 * y + a22 * z + at2
+                struct.pack_into('fff', data, pos, nx, ny, nz)
+                for j, v in enumerate((nx, ny, nz)):
+                    if v < mins[j]:
+                        mins[j] = v
+                    if v > maxs[j]:
+                        maxs[j] = v
+
+            # POSITION min/max is what viewers frame and place the model
+            # from — stale bounds survive the bake otherwise.
+            if accessor.count:
+                accessor.min = [float(v) for v in mins]
+                accessor.max = [float(v) for v in maxs]
+            logger.info(f"Transformed {accessor.count} vertices in POSITION accessor {acc_idx}")
+
+        # Rotate NORMAL / TANGENT too — positions rotating while normals
+        # stay put leaves the baked model lit as if it never rotated.
+        # Directions transform differently from points: normals by the
+        # inverse-transpose of the linear part, tangents by the linear part
+        # itself (TANGENT is VEC4: xyz rotated, w handedness kept); both
+        # renormalized so uniform scale cancels out.
+        for acc_idx, (attr_name, mesh_idx) in attr_targets.items():
+            n_floats = N_FLOATS[attr_name]
+            accessor, data, offset, stride = _accessor_layout(acc_idx, n_floats)
+            al = _local_change(mesh_idx)[:3, :3]
+            dir_m = np.linalg.inv(al).T if attr_name == 'NORMAL' else al
+            (d00, d01, d02), (d10, d11, d12), (d20, d21, d22) = dir_m
+            fmt = f'{n_floats}f'
+            for i in range(accessor.count):
+                pos = offset + i * stride
+                vals = struct.unpack_from(fmt, data, pos)
+                x, y, z = vals[:3]
+                nx = d00 * x + d01 * y + d02 * z
+                ny = d10 * x + d11 * y + d12 * z
+                nz = d20 * x + d21 * y + d22 * z
+                norm = (nx * nx + ny * ny + nz * nz) ** 0.5
+                if norm > 1e-12:
+                    nx, ny, nz = nx / norm, ny / norm, nz / norm
+                struct.pack_into(fmt, data, pos, nx, ny, nz, *vals[3:])
+            logger.info(f"Rotated {accessor.count} {attr_name} vectors in accessor {acc_idx}")
+
+        # ---- Commit: write buffers back only now that every accessor
+        # transformed cleanly. ----
+        for buf_idx, data in buffers_data.items():
+            buffer = gltf.buffers[buf_idx]
+            if buffer.uri and buffer.uri.startswith('data:'):
+                buffer.uri = 'data:application/octet-stream;base64,' + base64.b64encode(bytes(data)).decode('utf-8')
+            else:
+                gltf.set_binary_blob(bytes(data))
+            buffer.byteLength = len(data)
+
+        logger.info(f"✅ Geometry transformed: {', '.join(transforms)}")
+
     logger.info("Transform modifications applied (rotation and scale baked into vertices)")
-    
+
     return gltf
 
 
@@ -828,11 +1260,20 @@ def modify_glb(input_path, output_path, modifications):
                     except Exception as te:
                         logger.warning(f"Could not derive texture tint from color: {te}")
                 gltf = apply_texture_modifications(gltf, mat_mods['texture'], tint_rgba=tint_rgba)
-        
+
+        # Apply per-layer visibility/color modifications
+        if 'layers' in modifications:
+            gltf = apply_layer_modifications(gltf, modifications['layers'])
+
         # Apply transform modifications
         if 'transform' in modifications:
             gltf = apply_transform_modifications(gltf, modifications['transform'])
-        
+
+        # Bake exploded layer positions (only present when the user explicitly
+        # pressed "Save Exploded Layout" — never part of a regular save)
+        if 'explode' in modifications:
+            gltf = apply_explode_modifications(gltf, modifications['explode'])
+
         # Export modified GLB
         logger.info(f"Exporting modified GLB to {output_path}")
         gltf.save(output_path)

@@ -9,6 +9,11 @@ worker simply idles.
 On PostgreSQL, jobs are claimed with FOR UPDATE SKIP LOCKED so multiple
 workers never grab the same job. SQLite (local dev) falls back to a plain
 query — run a single worker there.
+
+Also periodically reconciles AIGenerationJob rows (see
+reconcile_stale_ai_jobs) -- those otherwise only advance via client-side
+polling, so this loop is what unsticks one left behind by a closed browser
+tab, independent of ConversionJob's own queue above.
 """
 
 import logging
@@ -19,8 +24,9 @@ from datetime import timedelta
 from services.time_utils import datetime
 from sqlalchemy import or_
 
-from app import app, db, run_conversion_job
-from models import ConversionJob, WorkerHeartbeat
+from app import app, db, run_conversion_job, _advance_ai_job, _advance_rig_job
+from models import AIGenerationJob, ConversionJob, RigAnimationJob, WorkerHeartbeat
+from site_settings import set_setting
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,6 +57,18 @@ def record_worker_heartbeat(current_job_id=None):
     db.session.commit()
 
 
+# How often the loop records a liveness timestamp (site_settings-backed) so
+# the admin dashboard can show "worker last seen Ns ago" instead of only
+# inferring liveness indirectly from stale ConversionJob rows.
+HEARTBEAT_INTERVAL = 30
+# AI generations otherwise only advance via client-side polling of
+# /api/generate-3d/<job_id>/status -- a closed browser tab leaves a job stuck
+# in a non-terminal stage forever with nothing to move it along. This sweep
+# re-checks any such job server-side, independent of whether a client is
+# still watching (and independent of whether Meshy's webhook ever fires).
+AI_RECONCILE_MINUTES = int(os.environ.get("AI_RECONCILE_MINUTES", "5"))
+
+
 def claim_next_job():
     """Atomically claim the oldest pending job; returns it or None."""
     now = datetime.utcnow()
@@ -71,25 +89,92 @@ def claim_next_job():
     job.started_at = datetime.utcnow()
     job.last_heartbeat_at = job.started_at
     db.session.commit()
-    # run_conversion_job re-sets status/attempts itself; hand it a job that
-    # looks pending again so its transitions stay uniform.
+    # The DB row is now authoritatively 'processing' (so a crash before
+    # run_conversion_job is recoverable by the stale sweep). run_conversion_job
+    # owns the attempts increment and the terminal status transition; we hand it
+    # an in-memory object that looks pending so those transitions stay uniform
+    # with the inline path. The brief in-memory/DB disagreement is intentional.
     job.status = "pending"
     return job
 
 
 def requeue_stale_jobs():
-    """Put orphaned 'processing' jobs (crashed worker) back to pending."""
+    """Recover orphaned 'processing' jobs (crashed worker).
+
+    run_conversion_job increments and commits `attempts` *before* the pipeline
+    runs, so a hard crash mid-conversion still persists the attempt. We respect
+    max_attempts here: a job that keeps crashing the worker (toxic input) is
+    marked failed instead of being requeued forever (poison-pill protection).
+    """
     cutoff = datetime.utcnow() - timedelta(minutes=STALE_PROCESSING_MINUTES)
     stale = ConversionJob.query.filter(
         ConversionJob.status == "processing",
         db.func.coalesce(ConversionJob.last_heartbeat_at, ConversionJob.started_at) < cutoff,
     ).all()
     for job in stale:
-        logger.warning(f"Requeueing stale job {job.id} (started {job.started_at})")
-        job.status = "pending"
-        job.next_attempt_at = datetime.utcnow()
+        staged = (job.payload or {}).get("temp_file_path")
+        if staged and not os.path.exists(staged):
+            # The staged source is gone (e.g. cleaned up before a redeploy);
+            # retrying can only fail. Fail it directly instead of reprocessing
+            # doomed jobs on every restart (which floods the logs).
+            logger.warning(f"Stale job {job.id} source missing; marking failed")
+            job.status = "failed"
+            job.error = "Source file is no longer available — please re-upload the model."
+            job.finished_at = datetime.utcnow()
+        elif (job.attempts or 0) >= (job.max_attempts or 1):
+            logger.error(
+                f"Stale job {job.id} exhausted attempts "
+                f"({job.attempts}/{job.max_attempts}); marking failed"
+            )
+            job.status = "failed"
+            job.error = "Conversion worker crashed repeatedly on this job."
+            job.finished_at = datetime.utcnow()
+        else:
+            logger.warning(f"Requeueing stale job {job.id} (started {job.started_at})")
+            job.status = "pending"
+            job.next_attempt_at = datetime.utcnow()
     if stale:
         db.session.commit()
+
+
+def reconcile_stale_ai_jobs():
+    """Re-advance any AIGenerationJob that hasn't moved in AI_RECONCILE_MINUTES.
+
+    This is the actual fix for the "closed tab" problem -- a Meshy webhook is
+    only a latency optimization on top of this; delivery of the webhook is
+    never guaranteed (network blip, endpoint down during a deploy), so a
+    periodic sweep is the one thing that's guaranteed to eventually unstick a
+    job. Uses the exact same _advance_ai_job the client-poll route and the
+    webhook receiver use, so the existing _claim_ai_stage atomic claim keeps
+    this safe to run concurrently with either of them.
+    """
+    cutoff = datetime.utcnow() - timedelta(minutes=AI_RECONCILE_MINUTES)
+    stuck = AIGenerationJob.query.filter(
+        AIGenerationJob.status == "generating",
+        AIGenerationJob.updated_at < cutoff,
+    ).all()
+    for job in stuck:
+        try:
+            _advance_ai_job(job)
+        except Exception as e:
+            logger.warning(f"AI reconcile failed for job {job.id}: {e}")
+            db.session.rollback()
+
+
+def reconcile_stale_rig_jobs():
+    """Same reconciliation as reconcile_stale_ai_jobs, for RigAnimationJob --
+    a rig/animate job is exactly as vulnerable to a closed browser tab."""
+    cutoff = datetime.utcnow() - timedelta(minutes=AI_RECONCILE_MINUTES)
+    stuck = RigAnimationJob.query.filter(
+        RigAnimationJob.status == "generating",
+        RigAnimationJob.updated_at < cutoff,
+    ).all()
+    for job in stuck:
+        try:
+            _advance_rig_job(job)
+        except Exception as e:
+            logger.warning(f"Rig reconcile failed for job {job.id}: {e}")
+            db.session.rollback()
 
 
 def main():
@@ -99,12 +184,26 @@ def main():
     )
     last_stale_sweep = 0.0
     record_worker_heartbeat()
+    last_heartbeat = 0.0
+    last_ai_reconcile = 0.0
     while True:
         try:
+            if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:
+                try:
+                    set_setting("worker_heartbeat", datetime.utcnow().isoformat())
+                except Exception as e:
+                    logger.warning(f"Heartbeat write failed: {e}")
+                last_heartbeat = time.monotonic()
+
             if time.monotonic() - last_stale_sweep > 60:
                 requeue_stale_jobs()
                 record_worker_heartbeat()
                 last_stale_sweep = time.monotonic()
+
+            if time.monotonic() - last_ai_reconcile > 60:
+                reconcile_stale_ai_jobs()
+                reconcile_stale_rig_jobs()
+                last_ai_reconcile = time.monotonic()
 
             job = claim_next_job()
             if job is None:

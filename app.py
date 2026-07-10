@@ -91,6 +91,10 @@ def after_request(response):
         ] if model else []
         if domains:
             frame_ancestors += " " + " ".join(f"https://{domain}" for domain in domains)
+        else:
+            # Existing embed semantics allow any parent until an explicit
+            # allowlist is configured for the model.
+            frame_ancestors = "*"
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "

@@ -92,3 +92,20 @@ def test_security_headers_and_post_only_logout(client):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["Permissions-Policy"]
     assert client.get("/logout").status_code == 405
+
+
+def test_embed_frame_policy_matches_optional_allowlist(client):
+    model_id = "88888888-8888-8888-8888-888888888888"
+    path = Path("test-embed-policy.glb").resolve()
+    path.write_bytes(b"glTF")
+    model = UserModel(id=model_id, filename=str(path), visibility="unlisted")
+    db.session.add(model)
+    db.session.commit()
+    assert "frame-ancestors *" in client.get(f"/embed/{model_id}").headers[
+        "Content-Security-Policy"
+    ]
+    model.embed_allowed_domains = "shop.example"
+    db.session.commit()
+    policy = client.get(f"/embed/{model_id}").headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self' https://shop.example" in policy
+    path.unlink(missing_ok=True)

@@ -62,7 +62,9 @@ SQLALCHEMY_ENGINE_OPTIONS = {
 
 # Dosya limitleri ve izinler
 MAX_CONTENT_LENGTH = int(os.getenv('WEB_AR_MAX_CONTENT_LENGTH', 100 * 1024 * 1024))  # 100MB default
-ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf'}
+ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf', 'zip'}
+BATCH_UPLOAD_MAX_FILES = int(os.getenv('BATCH_UPLOAD_MAX_FILES', 10))
+ZIP_MAX_ENTRIES = int(os.getenv('ZIP_MAX_ENTRIES', 500))
 
 # AI 3D generation (Meshy) — server-side only, never expose the key to clients.
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')

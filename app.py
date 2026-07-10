@@ -55,7 +55,7 @@ from version_manager import (
     restore_version,
     delete_version,
 )
-from services import ConversionJobService, ModelAccessService, StorageService
+from services import ConversionJobService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -164,6 +164,11 @@ conversion_jobs = ConversionJobService(
     db,
     retry_base_seconds=int(os.environ.get("JOB_RETRY_BASE_SECONDS", "15")),
     retry_max_seconds=int(os.environ.get("JOB_RETRY_MAX_SECONDS", "900")),
+)
+upload_staging = UploadStagingService(
+    TEMP_FOLDER,
+    max_uncompressed_bytes=MAX_CONTENT_LENGTH,
+    max_archive_entries=ZIP_MAX_ENTRIES,
 )
 
 
@@ -1668,50 +1673,26 @@ def upload_model():
         unique_id = str(uuid.uuid4())
         logger.info(f"[upload_model - {unique_id}] Generated unique ID")
 
-        # Define temporary save path for uploaded file
-        temp_dir = os.path.join(app.config["TEMP_FOLDER"], unique_id)
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_file_path = os.path.join(temp_dir, original_filename)
-
-        # Save uploaded file temporarily
-        file.save(temp_file_path)
-        logger.info(
-            f"[upload_model - {unique_id}] Temporary file saved: {temp_file_path}"
+        staged = upload_staging.stage(
+            unique_id,
+            file,
+            mtl_file=request.files.get("mtl"),
+            textures=request.files.getlist("textures"),
         )
-
-        # Get file extension
-        file_extension = os.path.splitext(original_filename)[1].lower()
-
-        # Stage OBJ companion files (MTL + textures) next to the OBJ
-        mtl_path = None
-        texture_paths = []
-        if file_extension == ".obj":
-            if "mtl" in request.files:
-                mtl_file = request.files["mtl"]
-                if mtl_file and mtl_file.filename:
-                    mtl_filename = secure_filename(mtl_file.filename)
-                    mtl_path = os.path.join(temp_dir, mtl_filename)
-                    mtl_file.save(mtl_path)
-                    logger.info(
-                        f"[upload_model - {unique_id}] MTL file saved: {mtl_path}"
-                    )
-            if "textures" in request.files:
-                for texture_file in request.files.getlist("textures"):
-                    if texture_file and texture_file.filename:
-                        texture_filename = secure_filename(texture_file.filename)
-                        texture_path = os.path.join(temp_dir, texture_filename)
-                        texture_file.save(texture_path)
-                        texture_paths.append(texture_path)
-                        logger.info(
-                            f"[upload_model - {unique_id}] Texture file saved: {texture_path}"
-                        )
+        temp_dir = staged["temp_dir"]
+        temp_file_path = staged["temp_file_path"]
+        file_extension = staged["file_extension"]
+        mtl_path = staged["mtl_path"]
+        texture_paths = staged["texture_paths"]
+        original_filename = staged["original_filename"]
+        logger.info(f"[upload_model - {unique_id}] Staged {temp_file_path}")
 
         # Build job payload and persist the job. The pipeline itself runs either
         # inline (default) or in worker.py when JOB_QUEUE is enabled.
         payload = {
             "unique_id": unique_id,
             "original_filename": original_filename,
-            "client_filename": file.filename,
+            "client_filename": staged["client_filename"],
             "temp_dir": temp_dir,
             "temp_file_path": temp_file_path,
             "file_extension": file_extension,
@@ -1766,6 +1747,8 @@ def upload_model():
             }
         ), 202
 
+    except UploadStagingError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         if temp_dir and os.path.exists(temp_dir):
             try:
@@ -1784,6 +1767,74 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
     "1",
     "yes",
 )
+
+
+def _start_local_conversion(job_id):
+    def run_local_job():
+        with app.app_context():
+            queued_job = db.session.get(ConversionJob, job_id)
+            if queued_job:
+                run_conversion_job(queued_job, allow_retry=False)
+    threading.Thread(target=run_local_job, daemon=True).start()
+
+
+@app.route("/api/uploads/batch", methods=["POST"])
+@limiter.limit("10 per hour")
+def batch_upload_models():
+    """Stage several independent models and return one trackable job per file."""
+    files = [item for item in request.files.getlist("files") if item and item.filename]
+    if not files:
+        return jsonify({"success": False, "error": "No files uploaded"}), 400
+    if len(files) > BATCH_UPLOAD_MAX_FILES:
+        return jsonify({"success": False, "error": f"Maximum {BATCH_UPLOAD_MAX_FILES} files per batch"}), 400
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    jobs, errors = [], []
+    for item in files:
+        safe_name = secure_filename(item.filename)
+        if not allowed_file(safe_name):
+            errors.append({"filename": item.filename, "error": "File type not allowed"})
+            continue
+        job_id = str(uuid.uuid4())
+        edit_token = secrets.token_urlsafe(32) if user_id is None else None
+        status_token = secrets.token_urlsafe(32)
+        try:
+            staged = upload_staging.stage(job_id, item)
+            payload = {
+                **staged,
+                "unique_id": job_id,
+                "use_color": False,
+                "color": "#FFFFFF",
+                "max_dimension": None,
+                "source_unit": request.form.get("sourceUnit"),
+                "user_id": user_id,
+                "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
+            }
+            job = ConversionJob(
+                id=job_id, job_type="upload", status="pending", payload=payload,
+                user_id=user_id, status_token_hash=generate_password_hash(status_token),
+            )
+            db.session.add(job)
+            db.session.commit()
+            jobs.append({
+                "job_id": job_id,
+                "filename": item.filename,
+                "status_token": status_token,
+                "edit_token": edit_token,
+                "status_url": url_for("upload_job_status", job_id=job_id),
+            })
+            if not JOB_QUEUE_ENABLED:
+                _start_local_conversion(job_id)
+        except UploadStagingError as exc:
+            errors.append({"filename": item.filename, "error": str(exc)})
+        except Exception:
+            db.session.rollback()
+            shutil.rmtree(os.path.join(app.config["TEMP_FOLDER"], job_id), ignore_errors=True)
+            logger.exception("Batch staging failed for %s", item.filename)
+            errors.append({"filename": item.filename, "error": "Failed to stage upload"})
+
+    status = 202 if jobs else 400
+    return jsonify({"success": bool(jobs), "jobs": jobs, "errors": errors}), status
 
 
 def update_conversion_progress(job, *, progress=None, stage=None, detail=None):

@@ -139,6 +139,7 @@ class UserModel(db.Model):
     visibility = db.Column(db.String(20), nullable=False, default="unlisted", index=True)
     embed_allowed_domains = db.Column(db.Text, nullable=True)
     validation_report = db.Column(db.JSON, nullable=True)
+    seo_metadata = db.Column(db.JSON, nullable=True)
 
     # Social / engagement fields
     description = db.Column(db.Text, nullable=True)
@@ -380,6 +381,8 @@ class AIGenerationJob(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     kind = db.Column(db.String(10), nullable=False)        # 'text' | 'image'
     prompt = db.Column(db.Text, nullable=True)
+    parent_job_id = db.Column(db.String(36), db.ForeignKey('ai_generation_job.id'), nullable=True, index=True)
+    preset_id = db.Column(db.Integer, db.ForeignKey('prompt_preset.id'), nullable=True)
 
     # Meshy task ids (text is two-stage: preview -> refine)
     meshy_preview_id = db.Column(db.String(80), nullable=True)
@@ -403,7 +406,21 @@ class AIGenerationJob(db.Model):
             'progress': self.progress,
             'model_id': self.model_id,
             'error': self.error,
+            'prompt': self.prompt,
+            'parent_job_id': self.parent_job_id,
+            'preset_id': self.preset_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class PromptPreset(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    prompt_template = db.Column(db.Text, nullable=False)
+    category = db.Column(db.String(60), nullable=True, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
 class ConversionJob(db.Model):

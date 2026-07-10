@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, ApiToken, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, ApiToken, PromptPreset, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -5284,9 +5284,11 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         logger.warning(f"[register_glb] normalize skipped: {e}")
 
     # GLB quality pass (warn-only): embedded textures + PBR guarantee + validation
+    quality_warnings = []
     try:
-        for w in finalize_glb(output_path, search_dirs=[converted_dir,
-                                                        os.path.dirname(glb_path)]):
+        quality_warnings = finalize_glb(output_path, search_dirs=[converted_dir,
+                                                                  os.path.dirname(glb_path)])
+        for w in quality_warnings:
             logger.warning(f"[register_glb] GLB quality: {w}")
     except Exception as e:
         logger.warning(f"[register_glb] GLB quality pass skipped: {e}")
@@ -5329,6 +5331,16 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         except Exception as e:
             logger.warning(f"[register_glb] usdz copy failed: {e}")
 
+    try:
+        ai_asset_report = asset_quality.inspect(output_path, quality_warnings)
+    except Exception as e:
+        ai_asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
+    clean_prompt = (prompt or "").strip()
+    seo_title = (clean_prompt[:60] if clean_prompt else "AI generated 3D model")
+    seo_description = (
+        f"Interactive AR-ready 3D model generated from: {clean_prompt[:150]}"
+        if clean_prompt else "Interactive AR-ready AI generated 3D model."
+    )
     model = UserModel(
         id=unique_id,
         user_id=user_id,
@@ -5343,6 +5355,14 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         cumulative_scale=1.0,
         display_name=(prompt[:80] if prompt else None),
         description=(f"AI generated ({source})" + (f": {prompt}" if prompt else "")),
+        validation_report=ai_asset_report,
+        vertices=ai_asset_report.get("vertices"),
+        faces=ai_asset_report.get("triangles"),
+        seo_metadata={
+            "title": seo_title,
+            "description": seo_description,
+            "keywords": ["3D model", "AR", "AI generated", source],
+        },
     )
     db.session.add(model)
     db.session.commit()
@@ -5379,6 +5399,85 @@ def _ai_quota_state(user_id):
         AIGenerationJob.created_at >= since,
     ).count()
     return (count >= limit), count, limit
+
+
+SYSTEM_PROMPT_PRESETS = [
+    {"id": "system:ecommerce", "name": "E-commerce Ready", "category": "commerce",
+     "prompt_template": "{prompt}, centered product asset, clean topology, realistic PBR materials, studio-ready"},
+    {"id": "system:game", "name": "Game Asset", "category": "game",
+     "prompt_template": "{prompt}, optimized game-ready asset, clean UVs, efficient topology, PBR textures"},
+    {"id": "system:stylized", "name": "Stylized", "category": "creative",
+     "prompt_template": "{prompt}, cohesive stylized 3D design, appealing silhouette, hand-painted PBR look"},
+]
+
+
+@app.route("/api/ai/presets", methods=["GET", "POST"])
+@login_required
+def ai_prompt_presets():
+    if request.method == "GET":
+        custom = PromptPreset.query.filter_by(user_id=current_user.id).order_by(PromptPreset.created_at.desc()).all()
+        return jsonify({"success": True, "presets": SYSTEM_PROMPT_PRESETS + [{
+            "id": preset.id, "name": preset.name, "category": preset.category,
+            "prompt_template": preset.prompt_template, "custom": True,
+        } for preset in custom]})
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()[:120]
+    template = str(data.get("prompt_template", "")).strip()[:2000]
+    if not name or not template or "{prompt}" not in template:
+        return jsonify({"success": False, "error": "Name and a template containing {prompt} are required"}), 400
+    preset = PromptPreset(
+        user_id=current_user.id, name=name, prompt_template=template,
+        category=str(data.get("category", "custom"))[:60],
+    )
+    db.session.add(preset)
+    db.session.commit()
+    return jsonify({"success": True, "id": preset.id}), 201
+
+
+@app.route("/api/ai/presets/<int:preset_id>", methods=["PATCH", "DELETE"])
+@login_required
+def ai_prompt_preset(preset_id):
+    preset = PromptPreset.query.filter_by(id=preset_id, user_id=current_user.id).first_or_404()
+    if request.method == "DELETE":
+        db.session.delete(preset)
+        db.session.commit()
+        return jsonify({"success": True})
+    data = request.get_json(silent=True) or {}
+    if "name" in data:
+        preset.name = str(data["name"]).strip()[:120] or preset.name
+    if "prompt_template" in data:
+        template = str(data["prompt_template"]).strip()[:2000]
+        if "{prompt}" not in template:
+            return jsonify({"success": False, "error": "Template must contain {prompt}"}), 400
+        preset.prompt_template = template
+    if "category" in data:
+        preset.category = str(data["category"])[:60]
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@app.route("/api/ai/generations", methods=["GET"])
+@login_required
+def ai_generation_history():
+    limit = min(100, max(1, request.args.get("limit", 50, type=int)))
+    jobs = AIGenerationJob.query.filter_by(user_id=current_user.id).order_by(
+        AIGenerationJob.created_at.desc()
+    ).limit(limit).all()
+    return jsonify({"success": True, "generations": [job.to_dict() for job in jobs]})
+
+
+def _resolve_prompt_preset(preset_id, prompt):
+    if not preset_id:
+        return prompt, None
+    if isinstance(preset_id, str) and preset_id.startswith("system:"):
+        preset = next((item for item in SYSTEM_PROMPT_PRESETS if item["id"] == preset_id), None)
+        if not preset:
+            raise ValueError("Preset not found")
+        return preset["prompt_template"].replace("{prompt}", prompt), None
+    preset = PromptPreset.query.filter_by(id=int(preset_id), user_id=current_user.id).first()
+    if not preset:
+        raise ValueError("Preset not found")
+    return preset.prompt_template.replace("{prompt}", prompt), preset.id
 
 
 def _finalize_ai_job(job, task):
@@ -5446,6 +5545,13 @@ def generate_3d():
     mode = (data.get("mode") or "text").strip()
     job_id = str(uuid.uuid4())
     try:
+        parent_job_id = data.get("parent_job_id")
+        if parent_job_id:
+            parent = AIGenerationJob.query.filter_by(
+                id=parent_job_id, user_id=current_user.id
+            ).first()
+            if not parent:
+                return jsonify({"success": False, "error": "Parent generation not found"}), 404
         if mode == "image":
             image = (data.get("image") or "").strip()
             if not image.startswith("data:image/"):
@@ -5454,19 +5560,28 @@ def generate_3d():
             task_id = ai_generator.start_image_to_3d(image)
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
                                   stage="image", meshy_image_id=task_id,
-                                  status="generating", progress=0)
+                                  status="generating", progress=0,
+                                  parent_job_id=parent_job_id)
         else:
             prompt = (data.get("prompt") or "").strip()
+            if not prompt and parent_job_id:
+                prompt = parent.prompt or ""
             if not prompt:
                 return jsonify({"success": False,
                                 "error": "A text prompt is required."}), 400
+            prompt, custom_preset_id = _resolve_prompt_preset(data.get("preset_id"), prompt)
+            prompt = prompt[:600]
             task_id = ai_generator.start_text_to_3d(prompt)
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="text",
                                   prompt=prompt, stage="preview", meshy_preview_id=task_id,
-                                  status="generating", progress=0)
+                                  status="generating", progress=0,
+                                  parent_job_id=parent_job_id,
+                                  preset_id=custom_preset_id)
         db.session.add(job)
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
     except ai_generator.MeshyError as e:
         return jsonify({"success": False, "error": str(e)}), 502
     except Exception as e:

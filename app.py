@@ -27,7 +27,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, ModelVersion, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 import re
 import traceback
@@ -286,6 +286,41 @@ def check_model_view_allowed(model_id):
     if not decision.allowed:
         return decision
     return None
+
+
+ANALYTICS_EVENT_TYPES = {"view", "embed_view", "ar_launch", "download", "share", "qr_open"}
+
+
+def record_model_event(model_id, event_type, metadata=None):
+    """Record coarse product analytics without storing an IP address."""
+    if event_type not in ANALYTICS_EVENT_TYPES:
+        raise ValueError("Unsupported analytics event")
+    from urllib.parse import urlparse
+    analytics_id = session.get("_analytics_id")
+    if not analytics_id:
+        analytics_id = secrets.token_urlsafe(18)
+        session["_analytics_id"] = analytics_id
+    salt = app.config["SECRET_KEY"] or "analytics"
+    visitor_hash = hashlib.sha256(f"{salt}:{analytics_id}".encode()).hexdigest()
+    referrer = request.headers.get("Referer", "")
+    domain = (urlparse(referrer).hostname or "")[:255] or None
+    user_agent = request.headers.get("User-Agent", "").lower()
+    device = "mobile" if any(marker in user_agent for marker in ("mobile", "android", "iphone")) else "desktop"
+    clean_metadata = {}
+    for key, value in (metadata or {}).items():
+        if len(clean_metadata) >= 10:
+            break
+        if isinstance(value, (str, int, float, bool)):
+            clean_metadata[str(key)[:50]] = str(value)[:250] if isinstance(value, str) else value
+    db.session.add(ModelAnalyticsEvent(
+        model_id=model_id,
+        event_type=event_type,
+        visitor_hash=visitor_hash,
+        referrer_domain=domain,
+        device_type=device,
+        event_metadata=clean_metadata or None,
+    ))
+    db.session.commit()
 
 
 # Register blueprints
@@ -2516,6 +2551,7 @@ def view_model(model_id):
     # Increment view count
     model.view_count = (model.view_count or 0) + 1
     db.session.commit()
+    record_model_event(model_id, "view")
 
     # Check if converted file exists
     if not model.filename or not os.path.exists(model.filename):
@@ -2756,6 +2792,7 @@ def embed_view(model_id):
         hostname = (urlparse(origin).hostname or "").lower()
         if not any(hostname == d or hostname.endswith("." + d) for d in allowed_domains):
             return "Embedding domain is not allowed", 403
+    record_model_event(model_id, "embed_view", {"autoplay": request.args.get("autoplay", "0")})
 
     if not model.filename or not os.path.exists(model.filename):
         return "Model file not found", 404
@@ -2921,6 +2958,7 @@ def track_share(model_id):
         return jsonify({"error": denied.error}), denied.status
     model.share_count = (model.share_count or 0) + 1
     db.session.commit()
+    record_model_event(model_id, "share")
     return jsonify({"shares": model.share_count})
 
 
@@ -2932,7 +2970,86 @@ def track_download(model_id):
         return jsonify({"error": denied.error}), denied.status
     model.download_count = (model.download_count or 0) + 1
     db.session.commit()
+    record_model_event(model_id, "download")
     return jsonify({"downloads": model.download_count})
+
+
+@app.route("/api/models/<model_id>/events", methods=["POST"])
+@limiter.limit("120 per minute")
+def create_model_analytics_event(model_id):
+    if not get_live_model(model_id):
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"success": False, "error": denied.error}), denied.status
+    data = request.get_json(silent=True) or {}
+    event_type = data.get("event_type")
+    if event_type not in ANALYTICS_EVENT_TYPES - {"view", "embed_view"}:
+        return jsonify({"success": False, "error": "Invalid event type"}), 400
+    record_model_event(model_id, event_type, data.get("metadata"))
+    return jsonify({"success": True}), 202
+
+
+@app.route("/api/models/<model_id>/analytics", methods=["GET"])
+@login_required
+def model_analytics_summary(model_id):
+    model = UserModel.query.get_or_404(model_id)
+    authorized = model.user_id == current_user.id
+    if not authorized and model.organization_id:
+        membership = OrganizationMember.query.filter_by(
+            organization_id=model.organization_id, user_id=current_user.id
+        ).first()
+        authorized = bool(membership and membership.role in {"owner", "admin"})
+    if not authorized:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    try:
+        days = max(1, min(365, int(request.args.get("days", 30))))
+    except ValueError:
+        return jsonify({"success": False, "error": "Invalid days"}), 400
+    since = datetime.utcnow() - timedelta(days=days)
+    base = ModelAnalyticsEvent.query.filter(
+        ModelAnalyticsEvent.model_id == model_id,
+        ModelAnalyticsEvent.created_at >= since,
+    )
+    totals = dict(
+        db.session.query(ModelAnalyticsEvent.event_type, db.func.count(ModelAnalyticsEvent.id))
+        .filter(ModelAnalyticsEvent.model_id == model_id, ModelAnalyticsEvent.created_at >= since)
+        .group_by(ModelAnalyticsEvent.event_type).all()
+    )
+    unique_visitors = base.with_entities(
+        db.func.count(db.distinct(ModelAnalyticsEvent.visitor_hash))
+    ).scalar() or 0
+    timeline_rows = (
+        db.session.query(
+            db.func.date(ModelAnalyticsEvent.created_at),
+            ModelAnalyticsEvent.event_type,
+            db.func.count(ModelAnalyticsEvent.id),
+        )
+        .filter(ModelAnalyticsEvent.model_id == model_id, ModelAnalyticsEvent.created_at >= since)
+        .group_by(db.func.date(ModelAnalyticsEvent.created_at), ModelAnalyticsEvent.event_type)
+        .order_by(db.func.date(ModelAnalyticsEvent.created_at)).all()
+    )
+    timeline = [
+        {"date": str(day), "event_type": event_type, "count": count}
+        for day, event_type, count in timeline_rows
+    ]
+    referrers = [
+        {"domain": domain or "direct", "count": count}
+        for domain, count in (
+            db.session.query(ModelAnalyticsEvent.referrer_domain, db.func.count(ModelAnalyticsEvent.id))
+            .filter(ModelAnalyticsEvent.model_id == model_id, ModelAnalyticsEvent.created_at >= since)
+            .group_by(ModelAnalyticsEvent.referrer_domain)
+            .order_by(db.func.count(ModelAnalyticsEvent.id).desc()).limit(20).all()
+        )
+    ]
+    return jsonify({
+        "success": True,
+        "period_days": days,
+        "totals": totals,
+        "unique_visitors": unique_visitors,
+        "timeline": timeline,
+        "referrers": referrers,
+    })
 
 
 @app.route("/api/models/<model_id>/metadata", methods=["PATCH"])

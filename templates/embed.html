@@ -93,7 +93,13 @@
                 arBtn.style.display = 'flex';
             }
         });
-        arBtn?.addEventListener('click', () => viewer.activateAR());
+        arBtn?.addEventListener('click', () => {
+            fetch('/api/models/{{ model.id }}/events', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({event_type: 'ar_launch', metadata: {source: 'embed'}})
+            }).catch(() => {});
+            viewer.activateAR();
+        });
         {% endif %}
     </script>
 </body>

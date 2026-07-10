@@ -907,6 +907,10 @@
 
             // Function to show QR modal
             function showQRModal() {
+                fetch('/api/models/{{ model_id }}/events', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({event_type: 'qr_open'})
+                }).catch(() => {});
                 const el = document.getElementById('qrcode');
                 if (qrcode) { qrcode.clear(); el.innerHTML = ''; }
                 qrcode = new QRCode(el, {
@@ -934,6 +938,10 @@
 
             // Event Listeners
             arButton?.addEventListener('click', () => {
+                fetch('/api/models/{{ model_id }}/events', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({event_type: 'ar_launch'})
+                }).catch(() => {});
                 if (!isARSupported()) {
                     showArModal();
                 } else {

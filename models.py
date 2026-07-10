@@ -173,6 +173,17 @@ class ModelShareLink(db.Model):
         )
 
 
+class ModelAnalyticsEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    event_type = db.Column(db.String(30), nullable=False, index=True)
+    visitor_hash = db.Column(db.String(64), nullable=True, index=True)
+    referrer_domain = db.Column(db.String(255), nullable=True)
+    device_type = db.Column(db.String(20), nullable=True)
+    event_metadata = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class ModelHotspot(db.Model):
     """
     Stores hotspots (annotations) for 3D models

@@ -29,6 +29,7 @@ class Folder(db.Model):
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(db.String(100), nullable=False, unique=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
     parent_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 

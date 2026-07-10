@@ -3404,6 +3404,79 @@ def organization_member_api(organization_id, user_id):
     return jsonify({"success": True, "role": role})
 
 
+@app.route("/api/organizations/<int:organization_id>/folders", methods=["GET", "POST"])
+@login_required
+def organization_folders_api(organization_id):
+    membership = _organization_membership(organization_id)
+    if not membership:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    if request.method == "GET":
+        folders = Folder.query.filter_by(organization_id=organization_id).order_by(Folder.name).all()
+        return jsonify({"success": True, "folders": [{
+            "id": folder.id, "name": folder.name, "slug": folder.slug,
+            "parent_id": folder.parent_id,
+            "model_count": UserModel.query.filter_by(folder_id=folder.id, deleted_at=None).count(),
+        } for folder in folders]})
+    if membership.role not in {"owner", "admin", "editor"}:
+        return jsonify({"success": False, "error": "Editor role required"}), 403
+    data = request.get_json(silent=True) or {}
+    name = str(data.get("name", "")).strip()[:100]
+    if not name:
+        return jsonify({"success": False, "error": "Folder name is required"}), 400
+    parent_id = data.get("parent_id")
+    if parent_id is not None and not Folder.query.filter_by(
+        id=int(parent_id), organization_id=organization_id
+    ).first():
+        return jsonify({"success": False, "error": "Parent folder not found"}), 404
+    base = slugify(name)[:80] or "folder"
+    folder = Folder(
+        name=name,
+        slug=f"{base}-{secrets.token_hex(4)}",
+        user_id=current_user.id,
+        organization_id=organization_id,
+        parent_id=int(parent_id) if parent_id is not None else None,
+    )
+    db.session.add(folder)
+    db.session.commit()
+    return jsonify({"success": True, "folder": {
+        "id": folder.id, "name": folder.name, "parent_id": folder.parent_id,
+    }}), 201
+
+
+@app.route("/api/organizations/<int:organization_id>/folders/<int:folder_id>", methods=["PATCH", "DELETE"])
+@login_required
+def organization_folder_api(organization_id, folder_id):
+    membership = _organization_membership(organization_id, {"owner", "admin", "editor"})
+    if not membership:
+        return jsonify({"success": False, "error": "Editor role required"}), 403
+    folder = Folder.query.filter_by(id=folder_id, organization_id=organization_id).first_or_404()
+    if request.method == "DELETE":
+        UserModel.query.filter_by(folder_id=folder.id).update({"folder_id": None})
+        for child in Folder.query.filter_by(parent_id=folder.id, organization_id=organization_id).all():
+            child.parent_id = folder.parent_id
+        db.session.delete(folder)
+        db.session.commit()
+        return jsonify({"success": True})
+    name = str((request.get_json(silent=True) or {}).get("name", "")).strip()[:100]
+    if not name:
+        return jsonify({"success": False, "error": "Folder name is required"}), 400
+    folder.name = name
+    db.session.commit()
+    return jsonify({"success": True, "name": folder.name})
+
+
+@app.route("/api/organizations/<int:organization_id>/folders/<int:folder_id>/models/<model_id>", methods=["PUT", "DELETE"])
+@login_required
+def organization_folder_model_api(organization_id, folder_id, model_id):
+    if not _organization_membership(organization_id, {"owner", "admin", "editor"}):
+        return jsonify({"success": False, "error": "Editor role required"}), 403
+    folder = Folder.query.filter_by(id=folder_id, organization_id=organization_id).first_or_404()
+    model = UserModel.query.filter_by(id=model_id, organization_id=organization_id, deleted_at=None).first_or_404()
+    model.folder_id = folder.id if request.method == "PUT" else None
+    db.session.commit()
+    return jsonify({"success": True, "folder_id": model.folder_id})
+
+
 @app.route("/api/organizations/<int:organization_id>/domains", methods=["GET", "POST"])
 @login_required
 def organization_domains_api(organization_id):

@@ -140,6 +140,12 @@ def organization_folders_api(organization_id):
         id=int(parent_id), organization_id=organization_id
     ).first():
         return jsonify({"success": False, "error": "Parent folder not found"}), 404
+    if Folder.query.filter_by(
+        name=name,
+        parent_id=int(parent_id) if parent_id is not None else None,
+        organization_id=organization_id,
+    ).first():
+        return jsonify({"success": False, "error": "A folder with this name already exists"}), 409
     base = slugify(name)[:80] or "folder"
     folder = Folder(
         name=name,

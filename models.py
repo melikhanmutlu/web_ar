@@ -75,11 +75,19 @@ class User(UserMixin, db.Model):
 class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    slug = db.Column(db.String(100), nullable=False, unique=True)
+    # Slug uniqueness is scoped, not global: two users (or two orgs) may pick
+    # the same folder name. NULL organization_id/parent_id values are distinct
+    # under SQL UNIQUE semantics, so the random suffix appended at creation
+    # time remains the practical collision guard.
+    slug = db.Column(db.String(100), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='SET NULL'), nullable=True, index=True)
     parent_id = db.Column(db.Integer, db.ForeignKey('folder.id', ondelete='CASCADE'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'organization_id', 'parent_id', 'slug',
+                            name='uq_folder_scope_slug'),
+    )
 
     parent = db.relationship('Folder', remote_side=[id], backref=db.backref('subfolders', lazy=True))
     models = db.relationship('UserModel', backref='folder', lazy=True)

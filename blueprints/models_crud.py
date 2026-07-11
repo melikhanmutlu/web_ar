@@ -393,7 +393,8 @@ def create_folder():
 
         # Check if folder with same name exists in the same parent
         existing_folder = Folder.query.filter_by(
-            name=folder_name, parent_id=parent_id, user_id=current_user.id
+            name=folder_name, parent_id=parent_id, user_id=current_user.id,
+            organization_id=None
         ).first()
 
         if existing_folder:
@@ -582,6 +583,7 @@ def rename_folder(folder_id):
             Folder.name == new_name,
             Folder.parent_id == folder.parent_id,
             Folder.user_id == current_user.id,
+            Folder.organization_id.is_(None),
             Folder.id != folder.id,
         ).first()
         if duplicate:

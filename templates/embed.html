@@ -7,7 +7,7 @@
     {% set seo_title = model.display_name or 'ARVision 3D Model' %}
     {% set seo_description = (model.description or (seo_title + ' — view this 3D model in augmented reality on ARVision.')) | truncate(160) %}
     {% set seo_canonical = SITE_URL + url_for('view_model', model_id=model.id) %}
-    {% set seo_og_image = SITE_URL + url_for('serve_thumbnail', unique_id=model_unique_id) %}
+    {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>
     <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
@@ -55,8 +55,8 @@
 <body>
     <model-viewer
         id="viewer"
-        src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
-        {% if usdz_filename %}ios-src="{{ url_for('serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
+        src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+        {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
         shadow-intensity="{{ viewer_settings.shadow_intensity }}"
         shadow-softness="0.8"
         exposure="{{ viewer_settings.exposure }}"

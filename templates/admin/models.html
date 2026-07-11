@@ -79,7 +79,7 @@
                 <tr>
                     <td class="select-col"><input type="checkbox" data-row-select value="{{ model.id }}" aria-label="select model"></td>
                     <td>
-                        <img class="admin-thumb" src="{{ url_for('serve_thumbnail', unique_id=model.id) }}" alt=""
+                        <img class="admin-thumb" src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}" alt=""
                              loading="lazy"
                              onerror="this.outerHTML='<div class=&quot;admin-thumb-fallback&quot;><i data-lucide=&quot;box&quot;></i></div>'; if (window.lucide) lucide.createIcons();">
                     </td>

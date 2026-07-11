@@ -18,7 +18,7 @@
 <main>
     {% for side, model, filename in [('left', left, left_file), ('right', right, right_file)] %}
     <section><div class="label">{{ model.display_name or model.original_filename }}<span class="stats">{{ model.faces or '—' }} triangles · {{ model.file_size|filesizeformat if model.file_size else '—' }}</span></div>
-    <model-viewer id="{{ side }}" src="{{ url_for('serve_converted_file', unique_id=model.id, filename=filename) }}" camera-controls environment-image="neutral" shadow-intensity="1" interaction-prompt="none"></model-viewer></section>
+    <model-viewer id="{{ side }}" src="{{ url_for('model_files.serve_converted_file', unique_id=model.id, filename=filename) }}" camera-controls environment-image="neutral" shadow-intensity="1" interaction-prompt="none"></model-viewer></section>
     {% endfor %}
 </main>
 <script>

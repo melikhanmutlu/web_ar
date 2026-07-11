@@ -27,7 +27,7 @@
     <section class="tenant-grid" aria-label="Public 3D models">
         {% for model in models %}
         <a class="tenant-card" href="{{ url_for('view_model', model_id=model.id) }}">
-            <img src="{{ url_for('serve_thumbnail', unique_id=model.id) }}" alt="{{ model.display_name or model.original_filename }}" loading="lazy">
+            <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}" alt="{{ model.display_name or model.original_filename }}" loading="lazy">
             <div>{{ model.display_name or model.original_filename }}</div>
         </a>
         {% endfor %}

@@ -139,7 +139,7 @@
                     {% if previews %}
                     <div class="folder-collage folder-collage--{{ previews|length }}">
                         {% for mid in previews %}
-                        <img src="{{ url_for('serve_thumbnail', unique_id=mid) }}" alt="" loading="lazy" onerror="this.remove();">
+                        <img src="{{ url_for('model_files.serve_thumbnail', unique_id=mid) }}" alt="" loading="lazy" onerror="this.remove();">
                         {% endfor %}
                     </div>
                     {% else %}
@@ -197,8 +197,8 @@
                        onclick="event.stopPropagation(); toggleModelSelection(event, '{{ model.id }}', this.closest('.model-card'))">
                 <div class="selected-overlay"></div>
 
-                <div class="library-preview" data-glb="{{ url_for('serve_converted_file', unique_id=model.id, filename='model.glb') }}">
-                    <img src="{{ url_for('serve_thumbnail', unique_id=model.id) }}"
+                <div class="library-preview" data-glb="{{ url_for('model_files.serve_converted_file', unique_id=model.id, filename='model.glb') }}">
+                    <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}"
                          alt="{{ model_name }} preview"
                          loading="lazy"
                          decoding="async"

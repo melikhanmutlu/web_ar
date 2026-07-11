@@ -7,7 +7,7 @@
     {% set seo_title = 'VR — ' + display_name %}
     {% set seo_description = display_name + ' — explore this 3D model in VR on ARVision.' %}
     {% set seo_canonical = SITE_URL + url_for('view_model', model_id=model_id) %}
-    {% set seo_og_image = SITE_URL + url_for('serve_thumbnail', unique_id=model_unique_id) %}
+    {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>
 
@@ -142,7 +142,7 @@
         <!-- Model — loaded directly by URL -->
         <a-entity
             id="vrModelEntity"
-            gltf-model="url({{ url_for('serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }})"
+            gltf-model="url({{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }})"
             position="0 0 -3"
             scale="1 1 1"
             rotation="0 0 0">

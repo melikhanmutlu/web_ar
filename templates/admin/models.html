@@ -102,7 +102,7 @@
                     <td class="muted">{{ model.upload_date_formatted }}</td>
                     <td>{% if model.deleted_at %}{{ badge('trashed') }}{% else %}<span class="status-badge">active</span>{% endif %}</td>
                     <td class="actions">
-                        <a class="admin-icon-btn" href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer" aria-label="open viewer"><i data-lucide="eye"></i></a>
+                        <a class="admin-icon-btn" href="{{ url_for('viewer.view_model', model_id=model.id) }}" target="_blank" rel="noopener" title="open viewer" aria-label="open viewer"><i data-lucide="eye"></i></a>
                         {% if model.deleted_at %}
                         <button type="button" class="admin-icon-btn" title="restore" aria-label="restore model"
                                 data-action-url="{{ url_for('admin.restore_model', model_id=model.id) }}"><i data-lucide="undo-2"></i></button>

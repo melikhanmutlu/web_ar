@@ -25,7 +25,7 @@
                         <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                             <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ model.original_filename }}</h4>
                             <div class="flex space-x-2">
-                                <a href="{{ url_for('view_model', model_id=model.id) }}" 
+                                <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" 
                                    class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
                                     View
                                 </a>
@@ -43,7 +43,7 @@
 
             <!-- Upload New Model -->
             <div class="mt-6">
-                <a href="{{ url_for('index') }}" 
+                <a href="{{ url_for('main.index') }}" 
                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
                     Upload New Model
                 </a>

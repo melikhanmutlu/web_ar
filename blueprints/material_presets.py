@@ -139,7 +139,7 @@ def apply_model_material_preset(model_id):
     )
     model.validation_report = app_module.asset_quality.inspect(source)
     db.session.commit()
-    return jsonify({"success": True, "preset": preset, "viewer_url": url_for("view_model", model_id=model_id)})
+    return jsonify({"success": True, "preset": preset, "viewer_url": url_for("viewer.view_model", model_id=model_id)})
 
 
 @material_presets_bp.route("/api/ai/presets", methods=["GET", "POST"])

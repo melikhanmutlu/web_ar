@@ -7,7 +7,7 @@
     {% include '_security_head.html' %}
     {% set seo_title = display_name + ' — ARVision' %}
     {% set seo_description = (model.description or (display_name + ' — view this 3D model in augmented reality on ARVision.')) | truncate(160) %}
-    {% set seo_canonical = SITE_URL + url_for('view_model', model_id=model_id) %}
+    {% set seo_canonical = SITE_URL + url_for('viewer.view_model', model_id=model_id) %}
     {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>

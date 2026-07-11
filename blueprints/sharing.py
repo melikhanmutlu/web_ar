@@ -81,4 +81,4 @@ def open_model_share_link(token):
     grants = dict(session.get("model_share_grants", {}))
     grants[link.model_id] = {"link_id": link.id}
     session["model_share_grants"] = grants
-    return redirect(url_for("view_model", model_id=link.model_id))
+    return redirect(url_for("viewer.view_model", model_id=link.model_id))

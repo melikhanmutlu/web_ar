@@ -105,7 +105,7 @@
                 <td class="num">{{ job.progress or 0 }}%</td>
                 <td>
                     {% if job.model_id %}
-                    <a href="{{ url_for('view_model', model_id=job.model_id) }}" target="_blank" rel="noopener">view</a>
+                    <a href="{{ url_for('viewer.view_model', model_id=job.model_id) }}" target="_blank" rel="noopener">view</a>
                     {% else %}<span class="muted">—</span>{% endif %}
                 </td>
                 <td class="muted">{{ job.created_at.strftime('%m-%d %H:%M') if job.created_at else '—' }}</td>

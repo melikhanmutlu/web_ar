@@ -6,7 +6,7 @@
 
 {% block topbar_actions %}
 <a href="{{ url_for('admin.models') }}" class="admin-btn">← all models</a>
-<a href="{{ url_for('view_model', model_id=model.id) }}" target="_blank" rel="noopener" class="admin-btn">open viewer</a>
+<a href="{{ url_for('viewer.view_model', model_id=model.id) }}" target="_blank" rel="noopener" class="admin-btn">open viewer</a>
 {% endblock %}
 
 {% block content %}

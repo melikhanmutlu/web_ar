@@ -160,7 +160,7 @@ def model_integration_snippets(model_id):
     guard = check_model_mutation_allowed(model_id)
     if guard:
         return guard
-    embed_url = url_for("embed_view", model_id=model_id, _external=True)
+    embed_url = url_for("viewer.embed_view", model_id=model_id, _external=True)
     iframe = f'<iframe src="{embed_url}" width="100%" height="500" frameborder="0" allow="xr-spatial-tracking; fullscreen" loading="lazy"></iframe>'
     return jsonify({
         "success": True,

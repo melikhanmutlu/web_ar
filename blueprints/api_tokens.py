@@ -111,7 +111,7 @@ def api_v1_models():
         "id": model.id, "name": model.display_name or model.original_filename,
         "file_type": model.file_type, "file_size": model.file_size,
         "visibility": model.visibility, "organization_id": model.organization_id,
-        "viewer_url": url_for("view_model", model_id=model.id, _external=True),
+        "viewer_url": url_for("viewer.view_model", model_id=model.id, _external=True),
         "validation": model.validation_report,
     } for model in models]})
 
@@ -130,8 +130,8 @@ def api_v1_model(model_id):
         "file_type": model.file_type, "file_size": model.file_size,
         "vertices": model.vertices, "triangles": model.faces,
         "validation": model.validation_report,
-        "viewer_url": url_for("view_model", model_id=model.id, _external=True),
-        "embed_url": url_for("embed_view", model_id=model.id, _external=True),
+        "viewer_url": url_for("viewer.view_model", model_id=model.id, _external=True),
+        "embed_url": url_for("viewer.embed_view", model_id=model.id, _external=True),
     }})
 
 

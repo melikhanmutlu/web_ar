@@ -34,7 +34,7 @@ auth = Blueprint('auth', __name__)
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
     
     form = LoginForm(request.form)
     if request.method == 'POST' and form.validate():
@@ -62,7 +62,7 @@ def login():
             return redirect(url_for('auth.login'))
         next_page = request.args.get('next')
         if not next_page or urlparse(next_page).netloc != '':
-            next_page = url_for('index')
+            next_page = url_for('main.index')
         return redirect(next_page)
     
     return render_template('login.html', form=form)
@@ -70,7 +70,7 @@ def login():
 @auth.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('main.index'))
 
     if not setting_bool('registration_enabled', True):
         flash('Registration is currently disabled.', 'error')
@@ -94,7 +94,7 @@ def logout():
     # <img src=".../logout"> tag) or by link prefetchers. CSRF-protected.
     logout_user()
     flash('You have been logged out.', 'info')
-    return redirect(url_for('index'))
+    return redirect(url_for('main.index'))
 
 @auth.route('/profile')
 @login_required

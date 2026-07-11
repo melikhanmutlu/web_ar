@@ -214,8 +214,13 @@
         .measure-label { background: rgba(37, 99, 235, 0.92); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; white-space: nowrap; pointer-events: none; }
 
         /* Tools panel */
-        #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 19rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
+        #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 23rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
         #toolsPanel.is-open { display: flex; }
+        .tp-quickbar { display: flex; gap: 0.4rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--color-gray-700); flex-shrink: 0; }
+        .tp-quickbar .tp-btn-sm { flex: 1; padding: 0.45rem 0.3rem; gap: 0.3rem; }
+        .tp-quickbar .tp-btn-sm i { width: 0.75rem; height: 0.75rem; }
+        .tp-quickbar .tp-btn-sm:disabled { opacity: 0.4; cursor: default; }
+        .tp-quickbar .tp-btn-sm:disabled:hover { background: var(--color-gray-800); color: var(--color-gray-400); }
         #toolsPanelBody { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--color-gray-700) transparent; }
         #toolsPanelBody::-webkit-scrollbar { width: 4px; }
         #toolsPanelBody::-webkit-scrollbar-track { background: transparent; }
@@ -806,6 +811,13 @@
                 <span>Tools</span>
                 <button type="button" id="toolsPanelClose" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;display:flex;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
             </div>
+            <div class="tp-quickbar">
+                {% if can_edit %}
+                <button id="undoButton" class="tp-btn-sm" title="Undo (Ctrl+Z)" disabled><i data-lucide="undo-2"></i> Undo</button>
+                <button id="redoButton" class="tp-btn-sm" title="Redo (Ctrl+Shift+Z)" disabled><i data-lucide="redo-2"></i> Redo</button>
+                {% endif %}
+                <button id="resetCamera" class="tp-btn-sm" title="Reset Camera"><i data-lucide="rotate-ccw"></i> Reset View</button>
+            </div>
             <div id="toolsPanelBody">
 
             <div id="toolsDetailBack">
@@ -826,12 +838,7 @@
                     <i data-lucide="chevron-right" class="tp-chevron"></i>
                 </button>
                 <div class="tp-section-body">
-                    <button id="resetCamera" class="tp-btn-full">
-                        <i data-lucide="rotate-ccw" style="width:0.8rem;height:0.8rem;"></i>
-                        Reset Camera
-                    </button>
-
-                    <div class="tp-field" style="margin-top:0.5rem;">
+                    <div class="tp-field">
                         <label class="tp-label">Camera Presets</label>
                         <div class="tp-view-grid">
                             <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="90">Front</button>
@@ -1268,10 +1275,6 @@
         <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
             <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
             <button id="modelInfoButton" class="tb-btn" title="Details"><i data-lucide="file-text"></i></button>
-            {% if can_edit %}
-            <button id="undoButton" class="tb-btn" title="Undo (Ctrl+Z)" disabled><i data-lucide="undo-2"></i></button>
-            <button id="redoButton" class="tb-btn" title="Redo (Ctrl+Shift+Z)" disabled><i data-lucide="redo-2"></i></button>
-            {% endif %}
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
             {% if viewer_settings.show_dimensions %}
             <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>

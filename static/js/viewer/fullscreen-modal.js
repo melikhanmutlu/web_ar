@@ -4,7 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewerStage = document.querySelector('.viewer-stage');
     const fullscreenButton = document.querySelector('#fullscreenButton');
     const downloadButton = document.querySelector('#downloadButton');
-    const downloadFormatSelect = document.querySelector('#downloadFormatSelect');
+    const downloadFormatModal = document.querySelector('#downloadFormatModal');
+    const downloadFormatModalOptions = document.querySelector('#downloadFormatModalOptions');
+    const downloadFormatModalClose = document.querySelector('#downloadFormatModalClose');
     const screenshotButton = document.getElementById('screenshotButton');
     const modelInfoButton = document.querySelector('#modelInfoButton');
     const modelInfoModal = document.querySelector('#modelInfoModal');
@@ -64,13 +66,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download button handler. GLB (the default) downloads the currently
-    // loaded model straight from the viewer; any other format re-derives it
-    // on the fly server-side (geometry only -- STL/OBJ/PLY don't carry
-    // PBR materials/textures, an inherent limitation of those formats).
-    downloadButton?.addEventListener('click', async () => {
+    // Download. GLB (the default) downloads the currently loaded model
+    // straight from the viewer; any other format re-derives it on the fly
+    // server-side (geometry only -- STL/OBJ/PLY don't carry PBR materials/
+    // textures, an inherent limitation of those formats, and the backend
+    // only allows the owner to fetch them -- see blueprints/model_files.py).
+    async function downloadFormat(format) {
         try {
-            const format = downloadFormatSelect?.value || 'glb';
             const modelUrl = format === 'glb'
                 ? modelViewer.src
                 : '/api/models/' + window.VIEWER_CONFIG.modelId + '/export/' + format;
@@ -104,6 +106,52 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Download error:', error);
             alert('Failed to download model. Please try again.');
         }
+    }
+
+    const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const availableFormats = (downloadButton?.dataset.formats || 'glb').split(',');
+
+    function openDownloadFormatModal() {
+        if (!downloadFormatModal || !downloadFormatModalOptions) return;
+        downloadFormatModalOptions.innerHTML = '';
+        availableFormats.forEach((format) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn-secondary';
+            btn.style.width = '100%';
+            btn.textContent = 'Download ' + format.toUpperCase();
+            btn.addEventListener('click', () => {
+                downloadFormatModal.classList.add('hidden');
+                downloadFormat(format);
+            });
+            downloadFormatModalOptions.appendChild(btn);
+        });
+        downloadFormatModal.classList.remove('hidden');
+    }
+
+    // Desktop: hovering #downloadMenu reveals the other formats as a fan-out
+    // (CSS above), so a plain click just grabs the default (GLB). Mobile/
+    // tablet has no hover, so tapping opens a popup to choose the format.
+    downloadButton?.addEventListener('click', () => {
+        if (hoverCapable) {
+            downloadFormat('glb');
+        } else {
+            openDownloadFormatModal();
+        }
+    });
+
+    document.querySelectorAll('.download-fanout-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            downloadFormat(btn.dataset.format);
+        });
+    });
+
+    downloadFormatModalClose?.addEventListener('click', () => {
+        downloadFormatModal?.classList.add('hidden');
+    });
+    downloadFormatModal?.addEventListener('click', (e) => {
+        if (e.target === downloadFormatModal) downloadFormatModal.classList.add('hidden');
     });
 
     // The viewer is a light-only page; the stage default in CSS is

@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { isUnexpectedError, uploadCubeAndGetViewerUrl } = require('./helpers/upload');
+const { registerAndLogin } = require('./helpers/auth');
 
 // Safety net for the upcoming view.html inline-JS modularization: uploads a
 // real model, opens the viewer, and exercises the tools panel so a refactor
@@ -120,4 +121,30 @@ test('undo/redo steps a material change back and forth', async ({ page }) => {
 
   await page.locator('#redoButton').click();
   await expect(roughnessSlider).toHaveValue('0.4');
+});
+
+test('download menu shows all formats to the owner via the hover fan-out', async ({ page }) => {
+  test.setTimeout(60_000);
+  await registerAndLogin(page, 'downloadowner');
+  await uploadCubeAndGetViewerUrl(page);
+
+  const formats = await page.locator('#downloadButton').getAttribute('data-formats');
+  expect(formats.split(',').sort()).toEqual(['glb', 'obj', 'ply', 'stl']);
+  await expect(page.locator('.download-fanout-btn')).toHaveCount(4);
+});
+
+test('non-owner viewing a model only sees GLB in the download menu', async ({ page, browser }) => {
+  test.setTimeout(60_000);
+  await registerAndLogin(page, 'downloadowner2');
+  const viewerUrl = await uploadCubeAndGetViewerUrl(page);
+
+  // A fresh, logged-out context is a non-owner viewer of this (unlisted
+  // by default, so still viewable-by-link) model.
+  const otherContext = await browser.newContext();
+  const otherPage = await otherContext.newPage();
+  await otherPage.goto(viewerUrl);
+  const formats = await otherPage.locator('#downloadButton').getAttribute('data-formats');
+  expect(formats).toBe('glb');
+  await expect(otherPage.locator('.download-fanout-btn')).toHaveCount(1);
+  await otherContext.close();
 });

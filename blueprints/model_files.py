@@ -11,7 +11,11 @@ from flask import Blueprint, current_app, jsonify, request, send_file, send_from
 from flask_login import current_user, login_required
 
 from models import UserModel, db
-from services.model_permissions import check_model_view_allowed, get_live_model
+from services.model_permissions import (
+    check_model_mutation_allowed,
+    check_model_view_allowed,
+    get_live_model,
+)
 
 model_files_bp = Blueprint("model_files", __name__)
 logger = logging.getLogger(__name__)
@@ -66,9 +70,11 @@ def export_model_as(model_id, fmt):
     model = get_live_model(model_id)
     if not model:
         return jsonify({"success": False, "error": "Model not found"}), 404
-    denied = check_model_view_allowed(model_id)
-    if denied:
-        return jsonify({"success": False, "error": denied.error}), denied.status
+    # Non-GLB re-exports are owner-tier, not just view-tier: only the model's
+    # owner (or an editor the owner granted access to) can download STL/OBJ/PLY.
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
 
     glb_path = model.glb_path
     if not os.path.exists(glb_path):

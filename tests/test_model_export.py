@@ -68,3 +68,36 @@ def test_export_respects_view_permission(client):
 def test_export_missing_model_404s(client):
     resp = client.get("/api/models/does-not-exist/export/stl")
     assert resp.status_code == 404
+
+
+def test_export_denies_non_owner_even_of_a_viewable_unlisted_model(client):
+    """STL/OBJ/PLY export is owner-tier, not view-tier: an unlisted model is
+    viewable by anyone with the link, but only its owner may download the
+    non-GLB re-export (GLB itself stays open to any viewer, served by a
+    separate route that still uses the weaker view-permission check)."""
+    owner = User(username="exp-owner2", email="exp-owner2@test.com")
+    owner.set_password("testpassword123")
+    db.session.add(owner)
+    db.session.commit()
+    model_id = make_model(user_id=owner.id, visibility="unlisted")
+
+    intruder = User(username="exp-intruder", email="exp-intruder@test.com")
+    intruder.set_password("testpassword123")
+    db.session.add(intruder)
+    db.session.commit()
+    login(client, "exp-intruder", "testpassword123")
+
+    resp = client.get(f"/api/models/{model_id}/export/stl")
+    assert resp.status_code == 403
+
+
+def test_export_succeeds_for_the_owner_of_an_unlisted_model(client):
+    owner = User(username="exp-owner3", email="exp-owner3@test.com")
+    owner.set_password("testpassword123")
+    db.session.add(owner)
+    db.session.commit()
+    model_id = make_model(user_id=owner.id, visibility="unlisted")
+    login(client, "exp-owner3", "testpassword123")
+
+    resp = client.get(f"/api/models/{model_id}/export/stl")
+    assert resp.status_code == 200

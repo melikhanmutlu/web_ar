@@ -67,6 +67,21 @@ from version_manager import (
     version_path,
 )
 from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingError, UploadStagingService, configure_json_logging, initialize_external_observability
+from services.model_permissions import (
+    model_access,
+    get_live_model,
+    check_model_mutation_allowed,
+    check_model_view_allowed,
+    _active_share_grant,
+)
+from services.model_analytics import ANALYTICS_EVENT_TYPES, record_model_event
+from services.viewer_settings import DEFAULT_VIEWER_SETTINGS, resolved_viewer_settings
+from services.storage_quota import (
+    TRASH_RETENTION_DAYS,
+    _purge_expired_trash,
+    _storage_usage_for,
+    _storage_quota_bytes,
+)
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -239,7 +254,6 @@ limiter = Limiter(
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
 )
 
-model_access = ModelAccessService(UserModel)
 storage = StorageService(CONVERTED_FOLDER, UPLOAD_FOLDER, TEMP_FOLDER)
 conversion_jobs = ConversionJobService(
     db,
@@ -256,30 +270,6 @@ asset_quality = AssetQualityService(
     warning_bytes=int(os.environ.get("GLB_WARNING_BYTES", str(25 * 1024 * 1024))),
 )
 conversion_service = ConversionService(asset_quality)
-
-DEFAULT_VIEWER_SETTINGS = {
-    "environment": "neutral",
-    "background_color": "#1a1a2e",
-    "exposure": 0.96,
-    "shadow_intensity": 1.2,
-    "auto_rotate": False,
-    "auto_rotate_delay": 3000,
-    "camera_orbit": "30deg 70deg auto",
-    "field_of_view": "24deg",
-    "show_dimensions": True,
-    "show_ar": True,
-    "branding": {"name": "ARVision", "logo_url": None, "primary_color": "#ffffff", "hide_powered_by": False},
-    "section_presets": [],
-}
-
-
-def resolved_viewer_settings(model):
-    settings = dict(DEFAULT_VIEWER_SETTINGS)
-    stored = model.viewer_settings or {}
-    settings.update({key: value for key, value in stored.items() if key != "branding"})
-    settings["branding"] = {**DEFAULT_VIEWER_SETTINGS["branding"], **(stored.get("branding") or {})}
-    return settings
-
 
 @app.errorhandler(429)
 def ratelimit_handler(e):
@@ -339,118 +329,6 @@ def metrics():
         f"arvision_conversion_duration_seconds {sum(durations) / len(durations) if durations else 0:.3f}",
     ])
     return "\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"}
-
-
-def check_model_mutation_allowed(model_id, require_exists=True):
-    """Owner guard for model mutation endpoints.
-
-    Anonymous models require their edit capability token. User and organization
-    models require owner/editor authorization. Returns a response tuple to return from
-    the view, or None when the mutation is allowed.
-    """
-    body = request.get_json(silent=True) or {}
-    token = (request.headers.get("X-Model-Edit-Token") or
-             request.args.get("edit_token") or body.get("edit_token") or
-             session.get(f"model_edit_token:{model_id}"))
-    actor_id = current_user.id if current_user.is_authenticated else None
-    grant = _active_share_grant(model_id)
-    model = db.session.get(UserModel, model_id)
-    organization_can_edit = False
-    if actor_id and model and model.organization_id:
-        membership = OrganizationMember.query.filter_by(
-            organization_id=model.organization_id, user_id=actor_id
-        ).first()
-        organization_can_edit = bool(membership and membership.role in {"owner", "admin", "editor"})
-    _, decision = model_access.mutation_decision(
-        model_id, actor_id=actor_id, edit_token=token,
-        share_can_edit=grant == "edit", organization_can_edit=organization_can_edit,
-        require_exists=require_exists
-    )
-    if not decision.allowed:
-        return jsonify({"success": False, "error": decision.error}), decision.status
-    if token:
-        session[f"model_edit_token:{model_id}"] = token
-    return None
-
-
-def get_live_model(model_id):
-    """Find a model only when it is not in trash."""
-    return model_access.live(model_id)
-
-
-def check_model_view_allowed(model_id):
-    actor_id = current_user.id if current_user.is_authenticated else None
-    grant = _active_share_grant(model_id)
-    model = db.session.get(UserModel, model_id)
-    organization_member = bool(
-        actor_id and model and model.organization_id and
-        OrganizationMember.query.filter_by(
-            organization_id=model.organization_id, user_id=actor_id
-        ).first()
-    )
-    _, decision = model_access.view_decision(
-        model_id, actor_id=actor_id, has_share_grant=grant is not None,
-        organization_member=organization_member,
-    )
-    if not decision.allowed:
-        return decision
-    return None
-
-
-def _active_share_grant(model_id):
-    """Resolve a session grant against the current share-link state.
-
-    Storing only a permission in the session made revoked and expired links
-    effective until the browser session ended. Grants now retain the link id
-    and are revalidated on every protected model operation.
-    """
-    grants = dict(session.get("model_share_grants", {}))
-    grant = grants.get(model_id)
-    if not isinstance(grant, dict) or not grant.get("link_id"):
-        if grant is not None:
-            grants.pop(model_id, None)
-            session["model_share_grants"] = grants
-        return None
-    link = db.session.get(ModelShareLink, grant["link_id"])
-    if not link or link.model_id != model_id or not link.is_active:
-        grants.pop(model_id, None)
-        session["model_share_grants"] = grants
-        return None
-    return link.permission
-
-
-ANALYTICS_EVENT_TYPES = {"view", "embed_view", "ar_launch", "download", "share", "qr_open"}
-
-
-def record_model_event(model_id, event_type, metadata=None):
-    """Record coarse product analytics without storing an IP address."""
-    if event_type not in ANALYTICS_EVENT_TYPES:
-        raise ValueError("Unsupported analytics event")
-    analytics_id = session.get("_analytics_id")
-    if not analytics_id:
-        analytics_id = secrets.token_urlsafe(18)
-        session["_analytics_id"] = analytics_id
-    salt = app.config["SECRET_KEY"] or "analytics"
-    visitor_hash = hashlib.sha256(f"{salt}:{analytics_id}".encode()).hexdigest()
-    referrer = request.headers.get("Referer", "")
-    domain = (urlparse(referrer).hostname or "")[:255] or None
-    user_agent = request.headers.get("User-Agent", "").lower()
-    device = "mobile" if any(marker in user_agent for marker in ("mobile", "android", "iphone")) else "desktop"
-    clean_metadata = {}
-    for key, value in (metadata or {}).items():
-        if len(clean_metadata) >= 10:
-            break
-        if isinstance(value, (str, int, float, bool)):
-            clean_metadata[str(key)[:50]] = str(value)[:250] if isinstance(value, str) else value
-    db.session.add(ModelAnalyticsEvent(
-        model_id=model_id,
-        event_type=event_type,
-        visitor_hash=visitor_hash,
-        referrer_domain=domain,
-        device_type=device,
-        event_metadata=clean_metadata or None,
-    ))
-    db.session.commit()
 
 
 @app.before_request
@@ -4819,45 +4697,6 @@ def serve_thumbnail(unique_id):
     except Exception as e:
         app.logger.error(f"Error generating thumbnail for {unique_id}: {e}")
         return "Error generating thumbnail", 500
-
-
-TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
-
-
-def _purge_expired_trash(user_id):
-    """Permanently delete this user's trashed models older than retention."""
-    from datetime import timedelta
-
-    cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
-    expired = UserModel.query.filter(
-        UserModel.user_id == user_id, UserModel.deleted_at < cutoff
-    ).all()
-    for model in expired:
-        for base in (app.config["CONVERTED_FOLDER"], app.config["UPLOAD_FOLDER"]):
-            d = os.path.join(base, str(model.id))
-            if os.path.exists(d):
-                shutil.rmtree(d, ignore_errors=True)
-        db.session.delete(model)
-    if expired:
-        db.session.commit()
-        app.logger.info(f"Purged {len(expired)} expired trash models for user {user_id}")
-
-
-def _storage_usage_for(user_id):
-    """Bytes used across all of a user's models, including trash (still on disk)."""
-    return (
-        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-        .filter(UserModel.user_id == user_id)
-        .scalar()
-    )
-
-
-def _storage_quota_bytes():
-    return (
-        setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
-        * 1024
-        * 1024
-    )
 
 
 @app.route("/my_models")

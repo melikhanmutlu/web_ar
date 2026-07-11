@@ -59,13 +59,18 @@
             <!-- File Upload -->
             <div>
                 <div id="dropZone" class="av-dropzone">
-                    <input id="file-upload" name="file" type="file" class="hidden" accept="{{ upload_accept }}">
+                    <input id="file-upload" name="file" type="file" class="hidden" accept="{{ upload_accept }}" multiple>
                     <i data-lucide="upload-cloud" class="av-dropzone-icon"></i>
-                    <p class="av-dropzone-title">Drag &amp; drop your 3D model here</p>
-                    <p class="av-dropzone-hint">or click to browse</p>
-                    <p class="av-dropzone-formats">Supported: <strong>{{ upload_extensions | map('upper') | join(', ') }}</strong> (max. {{ upload_max_mb }}MB)</p>
+                    <p class="av-dropzone-title">Drag &amp; drop your 3D model(s) here</p>
+                    <p class="av-dropzone-hint">or click to browse — select multiple files to convert them all at once</p>
+                    <p class="av-dropzone-formats">Supported: <strong>{{ upload_extensions | map('upper') | join(', ') }}</strong> (max. {{ upload_max_mb }}MB each)</p>
                     <div id="selectedFileName" class="av-dropzone-selected hidden"></div>
                 </div>
+                <p id="batchNote" class="av-card-desc hidden" style="margin-top:0.4rem;">
+                    Multiple files selected — each is converted as its own independent job. MTL/texture
+                    attachments and per-file source unit aren't available in this mode; bundle those with
+                    their model in a ZIP instead.
+                </p>
             </div>
 
             <!-- MTL File Upload (OBJ, optional) -->
@@ -184,6 +189,10 @@
                 </div>
                 <div id="uploadResult" class="upload-result" style="display: none;"></div>
             </div>
+
+            <!-- Batch Upload Progress: one row per file, each an independent
+                 job (see submitBatchUpload / pollBatchJob below). -->
+            <div id="batchUploadList" class="hidden av-stack" style="gap:0.5rem;"></div>
 
             <!-- Submit -->
             <button type="submit" id="submitBtn" class="btn-primary" disabled>
@@ -572,21 +581,30 @@
             }
         });
 
+        const VALID_UPLOAD_EXTENSIONS = ['.obj', '.glb', '.gltf', '.fbx', '.stl', '.step', '.stp'];
+        const UPLOAD_MAX_BYTES = {{ upload_max_bytes }};
+
+        function fileExtensionOf(file) {
+            return '.' + file.name.split('.').pop().toLowerCase();
+        }
+
         function handleFiles(files) {
+            if (files.length > 1) {
+                handleMultipleFiles(files);
+                return;
+            }
             const file = files[0];
             if (file) {
                 // Check file type
-                const validExtensions = ['.obj', '.glb', '.gltf', '.fbx', '.stl', '.step', '.stp'];
-                const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+                const fileExtension = fileExtensionOf(file);
 
-                if (!validExtensions.includes(fileExtension)) {
+                if (!VALID_UPLOAD_EXTENSIONS.includes(fileExtension)) {
                     displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, STL, or STEP).');
                     return;
                 }
 
                 // Upload policy is rendered from the backend's single source of truth.
-                const maxSize = {{ upload_max_bytes }};
-                if (file.size > maxSize) {
+                if (file.size > UPLOAD_MAX_BYTES) {
                     displayError('File size exceeds {{ upload_max_mb }}MB limit. Please choose a smaller file.');
                     return;
                 }
@@ -595,6 +613,7 @@
                 const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 selectedFileName.innerHTML = `Selected: ${escapeHtml(file.name)}<br>(${fileSizeMB} MB)`;
                 selectedFileName.classList.remove('hidden');
+                document.getElementById('batchNote')?.classList.add('hidden');
 
                 // Enable submit button
                 const submitBtn = document.getElementById('submitBtn');
@@ -623,6 +642,48 @@
                     sourceUnitSelect.value = 'auto';
                 }
             }
+        }
+
+        // Multi-file selection: each file becomes its own independent
+        // conversion job via /api/uploads/batch (no MTL/texture companions,
+        // no per-file source unit -- those need the single-file form).
+        let pendingBatchFiles = [];
+        function handleMultipleFiles(fileList) {
+            const files = Array.from(fileList);
+            const valid = [];
+            const rejected = [];
+            for (const file of files) {
+                const ext = fileExtensionOf(file);
+                if (!VALID_UPLOAD_EXTENSIONS.includes(ext)) {
+                    rejected.push(`${file.name} (unsupported type)`);
+                } else if (file.size > UPLOAD_MAX_BYTES) {
+                    rejected.push(`${file.name} (exceeds {{ upload_max_mb }}MB)`);
+                } else {
+                    valid.push(file);
+                }
+            }
+
+            pendingBatchFiles = valid;
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (valid.length === 0) {
+                displayError(`No valid files selected. ${rejected.join(', ')}`);
+                if (submitBtn) submitBtn.disabled = true;
+                return;
+            }
+
+            const totalMB = (valid.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024)).toFixed(2);
+            let summary = `Selected ${valid.length} file(s) (${totalMB} MB total)`;
+            if (rejected.length > 0) summary += `<br><span class="av-text-error">Skipped: ${escapeHtml(rejected.join(', '))}</span>`;
+            selectedFileName.innerHTML = summary;
+            selectedFileName.classList.remove('hidden');
+            document.getElementById('batchNote')?.classList.remove('hidden');
+            if (submitBtn) submitBtn.disabled = false;
+
+            // Batch mode has no per-file MTL/texture/source-unit controls.
+            document.getElementById('mtlUpload')?.classList.add('hidden');
+            document.getElementById('textureUpload')?.classList.add('hidden');
+            document.getElementById('sourceUnitSection')?.classList.add('hidden');
         }
 
         function displayError(message) {
@@ -671,11 +732,163 @@
             return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
         }
 
+        // Multi-file upload: each file becomes its own independent
+        // ConversionJob via /api/uploads/batch (blueprints/upload.py), tracked
+        // with its own progress row instead of the single-file progress bar.
+        async function submitBatchUpload(files) {
+            const batchList = document.getElementById('batchUploadList');
+            const uploadStatus = document.getElementById('uploadStatus');
+            uploadStatus.classList.add('hidden');
+            uploadStatus.style.display = 'none';
+            batchList.innerHTML = '';
+            batchList.classList.remove('hidden');
+
+            const rows = new Map(); // File -> {el, statusEl, barEl}
+            files.forEach((file) => {
+                const row = document.createElement('div');
+                row.className = 'batch-row';
+                row.innerHTML = `
+                    <div class="batch-row-head">
+                        <span class="batch-row-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                        <span class="batch-row-status">Uploading…</span>
+                    </div>
+                    <div class="progress-bar-container"><div class="progress-bar" style="width:5%;"></div></div>
+                `;
+                batchList.appendChild(row);
+                rows.set(file, {
+                    el: row,
+                    statusEl: row.querySelector('.batch-row-status'),
+                    barEl: row.querySelector('.progress-bar'),
+                });
+            });
+
+            const formData = new FormData();
+            files.forEach((file) => formData.append('files', file));
+            const useColorCheckbox = document.getElementById('useColor');
+            formData.append('useColor', (useColorCheckbox && useColorCheckbox.checked) ? 'true' : 'false');
+            formData.append('color', document.getElementById('colorPicker').value);
+            const useMaxDimensionCheckbox = document.getElementById('useMaxDimension');
+            formData.append('useMaxDimension', (useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked) ? 'true' : 'false');
+            formData.append('maxDimension', document.getElementById('max-dimension').value);
+            const compressionSelect = document.getElementById('compression');
+            if (compressionSelect) formData.append('compression', compressionSelect.value);
+
+            let data;
+            try {
+                const response = await fetch('/api/uploads/batch', { method: 'POST', body: formData });
+                data = await response.json();
+                if (!response.ok && !(data.jobs && data.jobs.length)) {
+                    displayError(data.error || 'Batch upload failed.');
+                    batchList.classList.add('hidden');
+                    return;
+                }
+            } catch (err) {
+                rows.forEach(({ statusEl, barEl }) => {
+                    statusEl.textContent = 'Network error';
+                    statusEl.classList.add('is-error');
+                    barEl.classList.add('error');
+                });
+                return;
+            }
+
+            // Matched by filename -- fine for the common case of distinct
+            // names; two files sharing an identical name in one selection
+            // would both resolve to the first matching row.
+            (data.errors || []).forEach((err) => {
+                const match = [...rows.entries()].find(([file]) => file.name === err.filename);
+                if (!match) return;
+                const [, refs] = match;
+                refs.statusEl.textContent = err.error;
+                refs.statusEl.classList.add('is-error');
+                refs.barEl.classList.add('error');
+            });
+
+            (data.jobs || []).forEach((job) => {
+                const match = [...rows.entries()].find(([file]) => file.name === job.filename);
+                if (!match) return;
+                const [, refs] = match;
+                pollBatchJob(refs, job.job_id, job.status_token, job.edit_token);
+            });
+        }
+
+        // Tracks one batch row's job to completion (mirrors pollUploadJob's
+        // SSE-with-polling-fallback approach, but updates a specific row's
+        // elements instead of the single-file progress UI).
+        function pollBatchJob(refs, jobId, statusToken, editToken) {
+            const stageText = { pending: 'Queued', processing: 'Converting', completed: 'Complete', failed: 'Failed' };
+
+            function apply(job) {
+                if (!job.success) return false;
+                if (job.status === 'completed' && job.viewer_url) {
+                    const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
+                    refs.statusEl.textContent = 'Ready';
+                    refs.statusEl.classList.add('is-done');
+                    refs.barEl.style.width = '100%';
+                    const link = document.createElement('a');
+                    link.href = viewerUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.className = 'batch-row-link';
+                    link.textContent = 'View model →';
+                    refs.el.appendChild(link);
+                    return true;
+                } else if (job.status === 'failed' || job.status === 'dead_letter') {
+                    refs.statusEl.textContent = job.error || 'Conversion failed';
+                    refs.statusEl.classList.add('is-error');
+                    refs.barEl.classList.add('error');
+                    return true;
+                }
+                const progress = typeof job.progress === 'number' ? job.progress : (job.status === 'processing' ? 60 : 20);
+                refs.barEl.style.width = Math.min(progress, 96) + '%';
+                refs.statusEl.textContent = job.stage || stageText[job.status] || job.status || 'Processing';
+                return false;
+            }
+
+            function pollFallback() {
+                const poll = setInterval(() => {
+                    fetch(`/api/upload-jobs/${jobId}`, {headers: {'X-Job-Status-Token': statusToken}})
+                        .then(r => r.json())
+                        .then(job => { if (apply(job)) clearInterval(poll); })
+                        .catch(() => { /* transient network error; keep polling */ });
+                }, {{ worker_poll_interval_ms }});
+            }
+
+            if (typeof EventSource === 'undefined') {
+                pollFallback();
+                return;
+            }
+            const source = new EventSource(`/api/upload-jobs/${jobId}/stream?status_token=${encodeURIComponent(statusToken)}`);
+            let fellBack = false;
+            source.onmessage = (event) => {
+                try {
+                    const job = JSON.parse(event.data);
+                    if (apply(job)) source.close();
+                } catch (e) { /* ignore malformed event */ }
+            };
+            source.onerror = () => {
+                source.close();
+                if (!fellBack) {
+                    fellBack = true;
+                    pollFallback();
+                }
+            };
+        }
+
         // Handle form submission
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             const fileInput = document.getElementById('file-upload');
+
+            if (fileInput.files.length > 1) {
+                if (pendingBatchFiles.length === 0) {
+                    displayError('Please select at least one valid file to upload.');
+                    return;
+                }
+                submitBatchUpload(pendingBatchFiles);
+                return;
+            }
+
             const file = fileInput.files[0];
 
             if (!file) {

@@ -654,14 +654,54 @@ def complete_chunked_upload(upload_id):
 
 @upload_bp.route("/api/uploads/batch", methods=["POST"])
 def batch_upload_models():
-    """Stage several independent models and return one trackable job per file."""
+    """Stage several independent models and return one trackable job per file.
+
+    Shared options (color, max dimension, source unit, compression) apply to
+    every file in the batch -- there's no per-file customization UI, matching
+    _finalize_staged_upload's single-file option set.
+    """
     import app as app_module
+
+    size_guard = _check_upload_size_limit()
+    if size_guard is not None:
+        return size_guard
+    quota_guard = _check_storage_quota()
+    if quota_guard is not None:
+        return quota_guard
 
     files = [item for item in request.files.getlist("files") if item and item.filename]
     if not files:
         return jsonify({"success": False, "error": "No files uploaded"}), 400
     if len(files) > BATCH_UPLOAD_MAX_FILES:
         return jsonify({"success": False, "error": f"Maximum {BATCH_UPLOAD_MAX_FILES} files per batch"}), 400
+
+    compression = request.form.get("compression")
+    if compression not in (None, "none", "meshopt", "draco"):
+        return jsonify({"success": False, "error": "Invalid compression mode"}), 400
+
+    use_color_raw = request.form.get("useColor", "false")
+    use_color = use_color_raw.lower() in ("true", "1", "yes") if isinstance(use_color_raw, str) else bool(use_color_raw)
+    color = request.form.get("color", "#4CAF50")
+    try:
+        color = app_module.validate_color(color)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    use_max_dimension_raw = request.form.get("useMaxDimension")
+    use_max_dimension = use_max_dimension_raw == "true" if use_max_dimension_raw else False
+    max_dimension = None
+    if use_max_dimension:
+        max_dimension_str = request.form.get("maxDimension")
+        if max_dimension_str:
+            try:
+                max_dimension = float(max_dimension_str) / 100.0
+                if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
+                    }), 400
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid maximum dimension"}), 400
 
     user_id = current_user.id if current_user.is_authenticated else None
     jobs, errors = [], []
@@ -678,11 +718,11 @@ def batch_upload_models():
             payload = {
                 **staged,
                 "unique_id": job_id,
-                "use_color": False,
-                "color": "#FFFFFF",
-                "max_dimension": None,
+                "use_color": use_color,
+                "color": color,
+                "max_dimension": max_dimension,
                 "source_unit": request.form.get("sourceUnit"),
-                "compression": request.form.get("compression") if request.form.get("compression") in ("none", "meshopt", "draco") else None,
+                "compression": compression,
                 "user_id": user_id,
                 "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
             }

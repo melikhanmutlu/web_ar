@@ -908,6 +908,21 @@ body.selection-mode .model-card { cursor: default; }
 .av-text-error { color: var(--error); }
 .dark .av-text-error { color: var(--error-dark); }
 
+/* Batch upload: one row per file (see submitBatchUpload / pollBatchJob) */
+.batch-row { background: var(--color-gray-100); border: 1px solid var(--color-gray-200); padding: var(--spacing-md) var(--spacing-lg); }
+.dark .batch-row { background: var(--color-gray-800); border-color: var(--color-gray-700); }
+.batch-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--spacing-md); font-size: 0.85rem; }
+.batch-row-name { font-weight: 700; color: var(--color-gray-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dark .batch-row-name { color: var(--color-gray-100); }
+.batch-row-status { color: var(--color-gray-500); flex-shrink: 0; }
+.dark .batch-row-status { color: var(--color-gray-400); }
+.batch-row-status.is-error { color: var(--error); }
+.dark .batch-row-status.is-error { color: var(--error-dark); }
+.batch-row-status.is-done { color: var(--color-gray-900); font-weight: 700; }
+.dark .batch-row-status.is-done { color: var(--color-gray-100); }
+.batch-row .progress-bar-container { height: 0.35rem; margin-top: 0.4rem; }
+.batch-row-link { display: inline-block; margin-top: 0.3rem; font-size: 0.78rem; text-decoration: underline; text-underline-offset: 2px; }
+
 /* ===================================================================
    Alerts / notes / flash
    =================================================================== */

@@ -1533,16 +1533,8 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
     "yes",
 )
 
-# A conversion still in "processing" past this many seconds is assumed dead
-# (e.g. its worker was OOM-killed) and is failed by the status endpoint so the
-# UI recovers instead of spinning forever. FBX2glTF itself has a 300s timeout.
-UPLOAD_STALL_SECONDS = int(os.environ.get("UPLOAD_STALL_SECONDS", "360"))
-
-# Inline (queue-off) jobs run in daemon threads that die with the web process,
-# so a restart leaves them stuck in pending/processing with no worker to
-# requeue them. A poll that finds a heartbeat older than this restarts or
-# fails the job.
-INLINE_STALE_JOB_MINUTES = int(os.environ.get("INLINE_STALE_JOB_MINUTES", "10"))
+# UPLOAD_STALL_SECONDS and INLINE_STALE_JOB_MINUTES come from config.py
+# (via `from config import *` above).
 
 
 def _recover_interrupted_inline_job(job):

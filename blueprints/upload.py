@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from config import BATCH_UPLOAD_MAX_FILES
+from config import BATCH_UPLOAD_MAX_FILES, MAX_MODEL_DIMENSION_METERS
 from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -354,10 +354,10 @@ def upload_model():
             if max_dimension_str:
                 try:
                     max_dimension = float(max_dimension_str) / 100.0
-                    if not math.isfinite(max_dimension) or not 0 < max_dimension <= 100:
+                    if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
                         return jsonify({
                             "success": False,
-                            "error": "Maximum dimension must be greater than 0 and no more than 100 meters",
+                            "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
                         }), 400
                     app_module.logger.info(
                         f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)"

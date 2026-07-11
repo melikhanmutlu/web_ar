@@ -89,6 +89,30 @@ ALLOWED_EXTENSIONS = {'obj', 'stl', 'fbx', 'glb', 'gltf', 'zip', 'step', 'stp'}
 BATCH_UPLOAD_MAX_FILES = int(os.getenv('BATCH_UPLOAD_MAX_FILES', 10))
 ZIP_MAX_ENTRIES = int(os.getenv('ZIP_MAX_ENTRIES', 500))
 
+# Conversion job timing thresholds — inline (JOB_QUEUE=false) mode and the
+# separate worker.py process each have their own stall/recovery windows since
+# they detect different failure modes (a worker thread that's still alive but
+# stuck vs. a whole process that died).
+# A conversion still in "processing" past this many seconds is assumed dead
+# (e.g. its worker was OOM-killed) and is failed by the status endpoint so the
+# UI recovers instead of spinning forever. FBX2glTF itself has a 300s timeout.
+UPLOAD_STALL_SECONDS = int(os.getenv('UPLOAD_STALL_SECONDS', 360))
+# Inline (queue-off) jobs run in daemon threads that die with the web process,
+# so a restart leaves them stuck in pending/processing with no worker to
+# requeue them. A poll that finds a heartbeat older than this restarts or
+# fails the job.
+INLINE_STALE_JOB_MINUTES = int(os.getenv('INLINE_STALE_JOB_MINUTES', 10))
+# worker.py's own poll cadence and orphaned-job ("processing" with a crashed
+# worker) recovery window.
+WORKER_POLL_INTERVAL = float(os.getenv('WORKER_POLL_INTERVAL', 2))
+WORKER_STALE_MINUTES = int(os.getenv('WORKER_STALE_MINUTES', 30))
+
+# Model scaling limits used by the upload form's optional "max dimension"
+# clamp (values are centimeters as entered by the user; converters apply the
+# equivalent in meters).
+DEFAULT_MAX_DIMENSION_CM = float(os.getenv('DEFAULT_MAX_DIMENSION_CM', 50))
+MAX_MODEL_DIMENSION_METERS = float(os.getenv('MAX_MODEL_DIMENSION_METERS', 100))
+
 # AI 3D generation (Meshy) — server-side only, never expose the key to clients.
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
 MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')

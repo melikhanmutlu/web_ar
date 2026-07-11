@@ -25,6 +25,7 @@ from services.time_utils import datetime
 from sqlalchemy import or_
 
 from app import app, db, run_conversion_job, _advance_ai_job, _advance_rig_job
+from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
 from models import AIGenerationJob, ConversionJob, RigAnimationJob, WorkerHeartbeat
 from site_settings import set_setting
 
@@ -34,10 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker")
 
-POLL_INTERVAL = float(os.environ.get("WORKER_POLL_INTERVAL", "2"))
-# Jobs stuck in 'processing' longer than this are assumed orphaned
-# (worker crashed mid-job) and put back to pending.
-STALE_PROCESSING_MINUTES = int(os.environ.get("WORKER_STALE_MINUTES", "30"))
 WORKER_ID = os.environ.get("WORKER_ID") or f"{socket.gethostname()}:{os.getpid()}"
 
 

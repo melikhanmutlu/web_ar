@@ -127,6 +127,12 @@ AR_SCALE_WARNING_MAX_METERS = float(os.getenv('AR_SCALE_WARNING_MAX_METERS', 20)
 # against a client declaring an absurd chunk count.
 CHUNK_UPLOAD_MAX_CHUNKS = int(os.getenv('CHUNK_UPLOAD_MAX_CHUNKS', 10000))
 
+# Real-time job progress (Faz 4: SSE): how long an /api/upload-jobs/<id>/stream
+# connection is allowed to stay open before the server closes it (the client
+# falls back to polling if a job genuinely outlives this). Bounds how long a
+# sync worker thread is tied up per open stream.
+JOB_STREAM_MAX_SECONDS = int(os.getenv('JOB_STREAM_MAX_SECONDS', 600))
+
 # Email notifications (conversion completed, share link created, org invite).
 # Best-effort/fire-and-forget: SMTP_HOST unset means notifications are simply
 # not sent (dev/test default) rather than failing the request that triggers

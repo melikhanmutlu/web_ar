@@ -2833,6 +2833,9 @@ if __name__ == "__main__":
         app.logger.info("Dependencies initialized successfully")
         # Railway/Heroku için PORT environment variable
         port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False))
+        # threaded=True: a long-lived SSE connection (/api/upload-jobs/<id>/stream)
+        # would otherwise tie up this dev server's single worker for its whole
+        # duration, blocking every other request until it closes.
+        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False), threaded=True)
     else:
         app.logger.error("Failed to initialize dependencies")

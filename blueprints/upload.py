@@ -8,16 +8,22 @@ import os
 import secrets
 import shutil
 import threading
+import time
 import traceback
 import uuid
 
-from flask import Blueprint, jsonify, request, session, url_for
+from flask import Blueprint, Response, jsonify, request, session, stream_with_context, url_for
 from flask_login import current_user
 from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from config import BATCH_UPLOAD_MAX_FILES, CHUNK_UPLOAD_MAX_CHUNKS, MAX_MODEL_DIMENSION_METERS
+from config import (
+    BATCH_UPLOAD_MAX_FILES,
+    CHUNK_UPLOAD_MAX_CHUNKS,
+    JOB_STREAM_MAX_SECONDS,
+    MAX_MODEL_DIMENSION_METERS,
+)
 from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -703,20 +709,21 @@ def batch_upload_models():
     return jsonify({"success": bool(jobs), "jobs": jobs, "errors": errors}), status
 
 
-@upload_bp.route("/api/upload-jobs/<job_id>", methods=["GET"])
-def upload_job_status(job_id):
-    """Poll a conversion job. Job ids are unguessable UUIDs; status is safe to
-    expose without auth (mirrors the AI generation status endpoint)."""
-    import app as app_module
-
-    job = db.session.get(ConversionJob, job_id)
-    if not job:
-        return jsonify({"success": False, "error": "Job not found"}), 404
+def _check_job_status_auth(job):
+    """Returns None if the requester may see this job's status, or an error
+    response tuple otherwise. Accepts either page ownership or the
+    unguessable status token (header, for fetch/XHR polling, or query
+    param, since EventSource can't send custom headers for SSE)."""
     is_owner = current_user.is_authenticated and job.user_id == current_user.id
     token = request.headers.get("X-Job-Status-Token") or request.args.get("status_token")
     if not is_owner and (not token or not job.status_token_hash or
                          not check_password_hash(job.status_token_hash, token)):
         return jsonify({"success": False, "error": "Valid status token required"}), 403
+    return None
+
+
+def _build_job_status_payload(job):
+    import app as app_module
 
     app_module._recover_interrupted_inline_job(job)
 
@@ -751,7 +758,65 @@ def upload_job_status(job_id):
     data["events"] = [event.to_dict() for event in job.events[-50:]]
     if job.status == "completed" and job.model_id:
         data["viewer_url"] = url_for("viewer.view_model", model_id=job.model_id)
-    return jsonify(data)
+    return data
+
+
+@upload_bp.route("/api/upload-jobs/<job_id>", methods=["GET"])
+def upload_job_status(job_id):
+    """Poll a conversion job. Job ids are unguessable UUIDs; status is safe to
+    expose without auth (mirrors the AI generation status endpoint)."""
+    job = db.session.get(ConversionJob, job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    auth_error = _check_job_status_auth(job)
+    if auth_error:
+        return auth_error
+    return jsonify(_build_job_status_payload(job))
+
+
+@upload_bp.route("/api/upload-jobs/<job_id>/stream", methods=["GET"])
+def upload_job_status_stream(job_id):
+    """Real-time (SSE) alternative to polling /api/upload-jobs/<id>: pushes a
+    status event whenever the job changes, and closes once it reaches a
+    terminal state (or JOB_STREAM_MAX_SECONDS elapses -- the client falls
+    back to polling if a job genuinely outlives that)."""
+    import app as app_module
+
+    job = db.session.get(ConversionJob, job_id)
+    if not job:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+    auth_error = _check_job_status_auth(job)
+    if auth_error:
+        return auth_error
+
+    poll_interval = app_module.WORKER_POLL_INTERVAL if app_module.JOB_QUEUE_ENABLED else 1
+
+    def generate():
+        deadline = time.monotonic() + JOB_STREAM_MAX_SECONDS
+        last_json = None
+        while True:
+            # The conversion job is updated by a different thread/session
+            # (worker.py, or the inline background thread's own app context).
+            # Without expiring, db.session.get() would keep returning this
+            # request-scoped session's stale identity-mapped copy forever.
+            db.session.expire_all()
+            current_job = db.session.get(ConversionJob, job_id)
+            if not current_job:
+                yield 'data: {"success": false, "error": "Job not found"}\n\n'
+                return
+            payload = _build_job_status_payload(current_job)
+            payload_json = json.dumps(payload)
+            if payload_json != last_json:
+                yield f"data: {payload_json}\n\n"
+                last_json = payload_json
+            if payload["status"] in ("completed", "failed", "dead_letter"):
+                return
+            if time.monotonic() >= deadline:
+                return
+            time.sleep(poll_interval)
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @upload_bp.route("/api/upload-jobs/<job_id>/retry", methods=["POST"])

@@ -779,42 +779,74 @@
                 }, 500);
             }
 
-            // Queue mode: poll the job status endpoint until done
-            function pollUploadJob(jobId, statusToken, editToken) {
-                setProgress(Math.max(currentProgress, 45), 'Conversion queued', 'Waiting for the conversion worker to pick up the model.', 'Queued');
+            // Applies one job-status update to the progress UI. Returns true
+            // once the job reaches a terminal state (caller stops watching).
+            function applyJobUpdate(job, editToken) {
+                if (!job.success) return false;
+                const jobProgress = typeof job.progress === 'number' ? job.progress : null;
+                const nextProgress = jobProgress !== null ? jobProgress : (job.status === 'processing' ? 72 : currentProgress);
+                const stage = job.stage || stageText[job.status] || job.status || 'Processing';
+                const attempts = job.attempts ? ` Attempt ${job.attempts}.` : '';
+
+                if (job.status === 'completed' && job.viewer_url) {
+                    const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
+                    finishUpload('Model converted successfully', viewerUrl);
+                    return true;
+                } else if (job.status === 'failed' || job.status === 'dead_letter') {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Conversion failed')}</div>`;
+                    return true;
+                }
+                setProgress(
+                    Math.min(nextProgress, 96),
+                    stage,
+                    `${job.detail || 'Processing model geometry, materials, and viewer assets.'}${attempts}`,
+                    stage
+                );
+                return false;
+            }
+
+            // Falls back to 2s polling if SSE isn't available or drops --
+            // e.g. the stream hit its server-side max duration for a
+            // long-running conversion, or a proxy buffered/killed it.
+            function pollUploadJobFallback(jobId, statusToken, editToken) {
                 const poll = setInterval(() => {
                     fetch(`/api/upload-jobs/${jobId}`, {headers: {'X-Job-Status-Token': statusToken}})
                         .then(r => r.json())
-                        .then(job => {
-                            if (!job.success) return;
-                            const jobProgress = typeof job.progress === 'number' ? job.progress : null;
-                            const nextProgress = jobProgress !== null ? jobProgress : (job.status === 'processing' ? 72 : currentProgress);
-                            const stage = job.stage || stageText[job.status] || job.status || 'Processing';
-                            const attempts = job.attempts ? ` Attempt ${job.attempts}.` : '';
-
-                            if (job.status === 'completed' && job.viewer_url) {
-                                clearInterval(poll);
-                                const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
-                                finishUpload('Model converted successfully', viewerUrl);
-                            } else if (job.status === 'failed' || job.status === 'dead_letter') {
-                                clearInterval(poll);
-                                clearInterval(elapsedTimer);
-                                progressBar.classList.add('error');
-                                uploadResult.className = 'upload-result error';
-                                uploadResult.style.display = 'block';
-                                setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
-                                uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Conversion failed')}</div>`;
-                            } else {
-                                setProgress(
-                                    Math.min(nextProgress, 96),
-                                    stage,
-                                    `${job.detail || 'Processing model geometry, materials, and viewer assets.'}${attempts}`,
-                                    stage
-                                );
-                            }
-                        })
+                        .then(job => { if (applyJobUpdate(job, editToken)) clearInterval(poll); })
                         .catch(() => { /* transient network error; keep polling */ });
                 }, 2000);
+            }
+
+            // Real-time job progress (Faz 4: SSE), falling back to polling
+            // if EventSource isn't available or the connection errors out.
+            function pollUploadJob(jobId, statusToken, editToken) {
+                setProgress(Math.max(currentProgress, 45), 'Conversion queued', 'Waiting for the conversion worker to pick up the model.', 'Queued');
+
+                if (typeof EventSource === 'undefined') {
+                    pollUploadJobFallback(jobId, statusToken, editToken);
+                    return;
+                }
+
+                const source = new EventSource(`/api/upload-jobs/${jobId}/stream?status_token=${encodeURIComponent(statusToken)}`);
+                let fellBack = false;
+                source.onmessage = (event) => {
+                    try {
+                        const job = JSON.parse(event.data);
+                        if (applyJobUpdate(job, editToken)) source.close();
+                    } catch (e) { /* ignore malformed event */ }
+                };
+                source.onerror = () => {
+                    source.close();
+                    if (!fellBack && currentProgress < 100) {
+                        fellBack = true;
+                        pollUploadJobFallback(jobId, statusToken, editToken);
+                    }
+                };
             }
 
             // Large single files (no MTL/texture companions -- those still

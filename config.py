@@ -121,6 +121,12 @@ MAX_MODEL_DIMENSION_METERS = float(os.getenv('MAX_MODEL_DIMENSION_METERS', 100))
 AR_SCALE_WARNING_MIN_METERS = float(os.getenv('AR_SCALE_WARNING_MIN_METERS', 0.02))
 AR_SCALE_WARNING_MAX_METERS = float(os.getenv('AR_SCALE_WARNING_MAX_METERS', 20))
 
+# Chunked/resumable upload (large model files surviving a flaky connection).
+# Each PUT still goes through MAX_CONTENT_LENGTH, so the chunk size just
+# needs to comfortably clear that; total_chunks is capped as a sanity limit
+# against a client declaring an absurd chunk count.
+CHUNK_UPLOAD_MAX_CHUNKS = int(os.getenv('CHUNK_UPLOAD_MAX_CHUNKS', 10000))
+
 # Email notifications (conversion completed, share link created, org invite).
 # Best-effort/fire-and-forget: SMTP_HOST unset means notifications are simply
 # not sent (dev/test default) rather than failing the request that triggers

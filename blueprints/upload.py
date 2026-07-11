@@ -2,6 +2,7 @@
 upload-job flow (stage -> ConversionJob -> poll/retry), batch uploads, and
 the USDZ readiness check."""
 
+import json
 import math
 import os
 import secrets
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from config import BATCH_UPLOAD_MAX_FILES, MAX_MODEL_DIMENSION_METERS
+from config import BATCH_UPLOAD_MAX_FILES, CHUNK_UPLOAD_MAX_CHUNKS, MAX_MODEL_DIMENSION_METERS
 from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -299,6 +300,64 @@ def upload_progress():
     return jsonify({"progress": progress})
 
 
+def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimension,
+                            source_unit, compression, edit_token, status_token):
+    """Shared tail of every upload entrypoint (single-shot /upload_model and
+    the chunked-upload /complete step): build the ConversionJob payload,
+    persist it, and kick off processing (queue or inline thread)."""
+    import app as app_module
+
+    payload = {
+        "unique_id": unique_id,
+        "original_filename": staged["original_filename"],
+        "client_filename": staged["client_filename"],
+        "temp_dir": staged["temp_dir"],
+        "temp_file_path": staged["temp_file_path"],
+        "file_extension": staged["file_extension"],
+        "mtl_path": staged["mtl_path"],
+        "texture_paths": staged["texture_paths"],
+        "use_color": use_color,
+        "color": color,
+        "max_dimension": max_dimension,
+        "source_unit": source_unit,
+        "compression": compression,
+        "user_id": current_user.id if current_user.is_authenticated else None,
+        "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
+    }
+    job = ConversionJob(
+        id=unique_id,
+        job_type="upload",
+        status="pending",
+        payload=payload,
+        user_id=payload["user_id"],
+        status_token_hash=generate_password_hash(status_token),
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    if not app_module.JOB_QUEUE_ENABLED:
+        def run_local_job(job_id):
+            with app_module.app.app_context():
+                queued_job = db.session.get(ConversionJob, job_id)
+                if queued_job:
+                    app_module.run_conversion_job(queued_job, allow_retry=False)
+
+        threading.Thread(target=run_local_job, args=(unique_id,), daemon=True).start()
+
+    # Worker (queue mode) or the thread just started (inline mode) picks it
+    # up; the frontend polls the status endpoint either way.
+    return jsonify(
+        {
+            "success": True,
+            "job_id": unique_id,
+            "status": "pending",
+            "status_url": url_for("upload.upload_job_status", job_id=unique_id),
+            "status_token": status_token,
+            "edit_token": edit_token,
+        }
+    ), 202
+
+
 @upload_bp.route("/upload_model", methods=["POST"])
 def upload_model():
     """Upload and convert 3D model. Works with or without login."""
@@ -380,73 +439,14 @@ def upload_model():
             textures=request.files.getlist("textures"),
         )
         temp_dir = staged["temp_dir"]
-        temp_file_path = staged["temp_file_path"]
-        file_extension = staged["file_extension"]
-        mtl_path = staged["mtl_path"]
-        texture_paths = staged["texture_paths"]
-        original_filename = staged["original_filename"]
-        app_module.logger.info(f"[upload_model - {unique_id}] Staged {temp_file_path}")
+        app_module.logger.info(f"[upload_model - {unique_id}] Staged {staged['temp_file_path']}")
 
-        # Build job payload and persist the job. The pipeline itself runs either
-        # inline (default) or in worker.py when JOB_QUEUE is enabled.
-        payload = {
-            "unique_id": unique_id,
-            "original_filename": original_filename,
-            "client_filename": staged["client_filename"],
-            "temp_dir": temp_dir,
-            "temp_file_path": temp_file_path,
-            "file_extension": file_extension,
-            "mtl_path": mtl_path,
-            "texture_paths": texture_paths,
-            "use_color": use_color,
-            "color": color,
-            "max_dimension": max_dimension,
-            "source_unit": request.form.get("sourceUnit"),
-            "compression": compression,
-            "user_id": current_user.id if current_user.is_authenticated else None,
-            "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
-        }
-        job = ConversionJob(
-            id=unique_id,
-            job_type="upload",
-            status="pending",
-            payload=payload,
-            user_id=payload["user_id"],
-            status_token_hash=generate_password_hash(status_token),
+        return _finalize_staged_upload(
+            unique_id, staged,
+            use_color=use_color, color=color, max_dimension=max_dimension,
+            source_unit=request.form.get("sourceUnit"), compression=compression,
+            edit_token=edit_token, status_token=status_token,
         )
-        db.session.add(job)
-        db.session.commit()
-
-        if app_module.JOB_QUEUE_ENABLED:
-            # Worker picks it up; frontend polls the status endpoint.
-            return jsonify(
-                {
-                    "success": True,
-                    "job_id": unique_id,
-                    "status": "pending",
-                    "status_url": url_for("upload.upload_job_status", job_id=unique_id),
-                    "status_token": status_token,
-                    "edit_token": edit_token,
-                }
-            ), 202
-
-        def run_local_job(job_id):
-            with app_module.app.app_context():
-                queued_job = db.session.get(ConversionJob, job_id)
-                if queued_job:
-                    app_module.run_conversion_job(queued_job, allow_retry=False)
-
-        threading.Thread(target=run_local_job, args=(unique_id,), daemon=True).start()
-        return jsonify(
-            {
-                "success": True,
-                "job_id": unique_id,
-                "status": "pending",
-                "status_url": url_for("upload.upload_job_status", job_id=unique_id),
-                "status_token": status_token,
-                "edit_token": edit_token,
-            }
-        ), 202
 
     except UploadStagingError as e:
         return jsonify({"success": False, "error": str(e)}), 400
@@ -461,6 +461,185 @@ def upload_model():
         app_module.logger.error(f"[upload_model] Error in upload_model: {str(e)}")
         app_module.logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
+
+class _AssembledFileAdapter:
+    """Wraps an already-on-disk assembled file with the .filename/.save()
+    shape UploadStagingService.stage() expects from a Werkzeug FileStorage,
+    so the chunked-upload completion path can reuse it unchanged."""
+
+    def __init__(self, path, filename):
+        self.filename = filename
+        self._path = path
+
+    def save(self, dst):
+        shutil.move(self._path, str(dst))
+
+
+def _chunk_session_dir(upload_id):
+    """Resolve (and validate) a chunk session's directory. upload_id is
+    always server-generated (uuid4), but re-derive+contain the path anyway
+    rather than trust a client-echoed value blindly."""
+    import app as app_module
+
+    root = os.path.join(app_module.app.config["TEMP_FOLDER"], "chunked")
+    target = os.path.realpath(os.path.join(root, secure_filename(upload_id)))
+    if os.path.dirname(target) != os.path.realpath(root):
+        return None
+    return target
+
+
+def _read_chunk_meta(session_dir):
+    try:
+        with open(os.path.join(session_dir, "meta.json")) as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _write_chunk_meta(session_dir, meta):
+    with open(os.path.join(session_dir, "meta.json"), "w") as f:
+        json.dump(meta, f)
+
+
+@upload_bp.route("/api/uploads/chunked/init", methods=["POST"])
+def init_chunked_upload():
+    """Start a resumable upload session for one large model file (no ZIP/MTL/
+    texture companions -- those stay on the single-shot /upload_model path).
+    The client slices the file into chunks itself and PUTs each one."""
+    import app as app_module
+
+    data = request.get_json(silent=True) or {}
+    filename = secure_filename(data.get("filename") or "")
+    if not filename or not app_module.allowed_file(filename):
+        return jsonify({"success": False, "error": "Unsupported or missing filename"}), 400
+    if filename.rsplit(".", 1)[1].lower() == "zip":
+        return jsonify({"success": False, "error": "ZIP archives aren't supported for chunked upload"}), 400
+
+    try:
+        total_size = int(data.get("total_size"))
+        total_chunks = int(data.get("total_chunks"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "total_size and total_chunks must be integers"}), 400
+    if total_size <= 0 or total_chunks <= 0 or total_chunks > CHUNK_UPLOAD_MAX_CHUNKS:
+        return jsonify({"success": False, "error": "Invalid total_size/total_chunks"}), 400
+
+    max_mb = setting_int("max_upload_mb", 0)
+    if max_mb and total_size > max_mb * 1024 * 1024:
+        return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
+
+    if current_user.is_authenticated:
+        quota_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+        if quota_mb:
+            used = (
+                db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+                .filter(UserModel.user_id == current_user.id)
+                .scalar()
+            )
+            if used + total_size > quota_mb * 1024 * 1024:
+                return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
+
+    upload_id = str(uuid.uuid4())
+    session_dir = _chunk_session_dir(upload_id)
+    os.makedirs(session_dir)
+    _write_chunk_meta(session_dir, {
+        "filename": filename, "total_size": total_size,
+        "total_chunks": total_chunks, "received": [],
+    })
+    return jsonify({"success": True, "upload_id": upload_id}), 201
+
+
+@upload_bp.route("/api/uploads/chunked/<upload_id>/chunks/<int:index>", methods=["PUT"])
+def put_upload_chunk(upload_id, index):
+    """Store one chunk (raw request body). Safe to retry/re-PUT the same
+    index -- that's exactly what makes the upload resumable after a drop."""
+    session_dir = _chunk_session_dir(upload_id)
+    meta = _read_chunk_meta(session_dir) if session_dir else None
+    if not meta:
+        return jsonify({"success": False, "error": "Unknown upload_id"}), 404
+    if not 0 <= index < meta["total_chunks"]:
+        return jsonify({"success": False, "error": "Chunk index out of range"}), 400
+
+    data = request.get_data()
+    if not data:
+        return jsonify({"success": False, "error": "Empty chunk body"}), 400
+
+    with open(os.path.join(session_dir, f"chunk_{index}"), "wb") as f:
+        f.write(data)
+    if index not in meta["received"]:
+        meta["received"].append(index)
+        _write_chunk_meta(session_dir, meta)
+    return jsonify({"success": True, "received_count": len(meta["received"]), "total_chunks": meta["total_chunks"]})
+
+
+@upload_bp.route("/api/uploads/chunked/<upload_id>/status", methods=["GET"])
+def get_chunked_upload_status(upload_id):
+    """Lets the client resume after a reload: which chunks does the server
+    already have?"""
+    session_dir = _chunk_session_dir(upload_id)
+    meta = _read_chunk_meta(session_dir) if session_dir else None
+    if not meta:
+        return jsonify({"success": False, "error": "Unknown upload_id"}), 404
+    return jsonify({"success": True, **meta})
+
+
+@upload_bp.route("/api/uploads/chunked/<upload_id>/complete", methods=["POST"])
+def complete_chunked_upload(upload_id):
+    """Assemble the received chunks in order into one file, then hand off to
+    the same staging + ConversionJob pipeline /upload_model uses."""
+    import app as app_module
+
+    session_dir = _chunk_session_dir(upload_id)
+    meta = _read_chunk_meta(session_dir) if session_dir else None
+    if not meta:
+        return jsonify({"success": False, "error": "Unknown upload_id"}), 404
+    if len(meta["received"]) != meta["total_chunks"]:
+        missing = sorted(set(range(meta["total_chunks"])) - set(meta["received"]))
+        return jsonify({"success": False, "error": "Upload incomplete", "missing_chunks": missing}), 409
+
+    data = request.get_json(silent=True) or {}
+    compression = data.get("compression")
+    if compression not in (None, "none", "meshopt", "draco"):
+        return jsonify({"success": False, "error": "Invalid compression mode"}), 400
+    use_color = bool(data.get("useColor", False))
+    color = data.get("color", "#4CAF50")
+    max_dimension = None
+    if data.get("useMaxDimension"):
+        try:
+            max_dimension = float(data.get("maxDimension")) / 100.0
+            if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
+                return jsonify({
+                    "success": False,
+                    "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
+                }), 400
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid maximum dimension"}), 400
+
+    assembled_path = os.path.join(session_dir, meta["filename"])
+    try:
+        with open(assembled_path, "wb") as out:
+            for i in range(meta["total_chunks"]):
+                with open(os.path.join(session_dir, f"chunk_{i}"), "rb") as chunk:
+                    shutil.copyfileobj(chunk, out)
+        for i in range(meta["total_chunks"]):
+            os.remove(os.path.join(session_dir, f"chunk_{i}"))
+
+        edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
+        status_token = secrets.token_urlsafe(32)
+        unique_id = upload_id
+        staged = app_module.upload_staging.stage(
+            unique_id, _AssembledFileAdapter(assembled_path, meta["filename"]),
+        )
+        return _finalize_staged_upload(
+            unique_id, staged,
+            use_color=use_color, color=color, max_dimension=max_dimension,
+            source_unit=data.get("sourceUnit"), compression=compression,
+            edit_token=edit_token, status_token=status_token,
+        )
+    except UploadStagingError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    finally:
+        shutil.rmtree(session_dir, ignore_errors=True)
 
 
 @upload_bp.route("/api/uploads/batch", methods=["POST"])

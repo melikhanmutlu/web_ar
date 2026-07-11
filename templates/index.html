@@ -817,6 +817,89 @@
                 }, 2000);
             }
 
+            // Large single files (no MTL/texture companions -- those still
+            // need the single-shot multipart path) go through the chunked,
+            // resumable-within-session upload endpoint instead of one big
+            // XHR, so a dropped connection only costs the current chunk.
+            const CHUNK_THRESHOLD_BYTES = 20 * 1024 * 1024;
+            const hasCompanions = (mtlInput && mtlInput.files.length > 0) ||
+                (textureInput && textureInput.files.length > 0);
+            if (file.size > CHUNK_THRESHOLD_BYTES && !hasCompanions) {
+                uploadFileChunked(file, {
+                    useColor: shouldApplyColor,
+                    color: document.getElementById('colorPicker').value,
+                    useMaxDimension: shouldLimitDimension,
+                    maxDimension: document.getElementById('max-dimension').value,
+                    sourceUnit: sourceUnitSelect ? sourceUnitSelect.value : undefined,
+                    compression: compressionSelect ? compressionSelect.value : undefined,
+                });
+                return;
+            }
+
+            // Uploads `file` in chunks with per-chunk retry, then completes
+            // the session to hand off into the same job/polling flow as a
+            // regular upload. Only called for large, companion-free files.
+            async function uploadFileChunked(file, options) {
+                const CHUNK_SIZE = 5 * 1024 * 1024;
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+                try {
+                    const initResp = await fetch('/api/uploads/chunked/init', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: file.name, total_size: file.size, total_chunks: totalChunks }),
+                    });
+                    const initData = await initResp.json();
+                    if (!initResp.ok || !initData.success) throw new Error(initData.error || 'Could not start upload');
+                    const uploadId = initData.upload_id;
+
+                    setProgress(4, 'Uploading model', `Sending ${file.name} in ${totalChunks} chunk(s).`, 'Uploading');
+                    let uploaded = 0;
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
+                        let lastError = null;
+                        let ok = false;
+                        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+                            if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
+                            try {
+                                const chunkResp = await fetch(`/api/uploads/chunked/${uploadId}/chunks/${i}`, {
+                                    method: 'PUT', body: chunk,
+                                });
+                                if (!chunkResp.ok) throw new Error('Chunk upload failed');
+                                ok = true;
+                            } catch (err) {
+                                lastError = err;
+                            }
+                        }
+                        if (!ok) throw lastError || new Error('Chunk upload failed');
+                        uploaded += chunk.size;
+                        const uploadPercent = Math.round((uploaded / file.size) * 38);
+                        setProgress(uploadPercent, 'Uploading model', `${formatBytes(uploaded)} of ${formatBytes(file.size)} transferred.`, 'Uploading');
+                    }
+
+                    setProgress(40, 'Finalizing upload', 'Assembling chunks and starting conversion.', 'Finalizing');
+                    const completeResp = await fetch(`/api/uploads/chunked/${uploadId}/complete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(options),
+                    });
+                    const completeData = await completeResp.json();
+                    if (!completeResp.ok || !completeData.success) throw new Error(completeData.error || 'Upload failed');
+
+                    if (completeData.viewer_url) {
+                        finishUpload(completeData.message, completeData.viewer_url);
+                    } else if (completeData.job_id) {
+                        pollUploadJob(completeData.job_id, completeData.status_token, completeData.edit_token);
+                    }
+                } catch (error) {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(error.message)}</div>`;
+                }
+            }
+
             // Upload file
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload_model');

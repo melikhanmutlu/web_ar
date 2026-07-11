@@ -56,6 +56,7 @@ from blueprints.rigging import rigging_bp
 from blueprints.ai_image import ai_image_bp
 from blueprints.webhooks import webhooks_bp
 from blueprints.discover import discover_bp
+from blueprints.scenes import scenes_bp
 from model_cleanup import purge_model_completely
 from site_settings import get_setting, setting_bool, setting_int
 import re
@@ -361,6 +362,7 @@ app.register_blueprint(rigging_bp)
 app.register_blueprint(ai_image_bp)
 app.register_blueprint(webhooks_bp)
 app.register_blueprint(discover_bp)
+app.register_blueprint(scenes_bp)
 limiter.limit("120 per minute")(admin_bp)
 
 # auth.py can't import `limiter` itself (it's imported before `limiter` exists
@@ -2455,7 +2457,10 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         original_dimensions=None,
         cumulative_scale=1.0,
         display_name=(prompt[:80] if prompt else None),
-        description=(f"AI generated ({source})" + (f": {prompt}" if prompt else "")),
+        description=(
+            (f"AI generated ({source})" if source.startswith("ai") else f"Combined scene ({source})")
+            + (f": {prompt}" if prompt else "")
+        ),
         validation_report=ai_asset_report,
         vertices=ai_asset_report.get("vertices"),
         faces=ai_asset_report.get("triangles"),

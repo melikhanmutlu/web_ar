@@ -16,10 +16,35 @@
                 return modelViewer && modelViewer.canActivateAR;
             }
 
-            // Function to show AR modal with QR code
-            function showArModal() {
+            // Function to show AR modal with QR code. `reason` picks a
+            // specific title/message so a failure is explained instead of
+            // always showing the generic "not supported" copy -- WebXR/Scene
+            // Viewer/Quick Look unsupported, iOS USDZ still converting, or
+            // the AR session itself failing to start (commonly a denied
+            // camera permission).
+            const AR_MODAL_REASONS = {
+                unsupported: {
+                    title: 'AR Not Supported',
+                    message: "Your device doesn't support AR. Scan the QR code with a mobile device.",
+                },
+                usdz_not_ready: {
+                    title: 'iOS AR Still Preparing',
+                    message: 'This model is still being prepared for iOS AR. Try again in a moment, or scan the QR code to open it on another device.',
+                },
+                session_failed: {
+                    title: "AR Couldn't Start",
+                    message: 'AR failed to start -- this usually means camera access was denied, or the AR session was interrupted. Check your camera permission and try again.',
+                },
+            };
+
+            function showArModal(reason) {
                 const arModal = document.getElementById('arModal');
                 if (!arModal) return;
+                const copy = AR_MODAL_REASONS[reason] || AR_MODAL_REASONS.unsupported;
+                const titleEl = document.getElementById('arModalTitle');
+                const messageEl = document.getElementById('arModalMessage');
+                if (titleEl) titleEl.textContent = copy.title;
+                if (messageEl) messageEl.textContent = copy.message;
                 arModal.classList.add('show');
                 document.getElementById('arButton')?.classList.add('is-active');
                 const qrContainer = document.getElementById('arModalQrCode');
@@ -77,6 +102,12 @@
                 if (e.target === this) hideQRModal();
             });
 
+            // Tracked by the USDZ status check below; used to pick a
+            // reason-specific message when AR can't launch on an iOS device
+            // (Quick Look needs a converted USDZ, which lags the GLB).
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            let usdzReady = true;
+
             // Event Listeners
             arButton?.addEventListener('click', () => {
                 fetch('/api/models/' + window.VIEWER_CONFIG.modelDbId + '/events', {
@@ -84,9 +115,18 @@
                     body: JSON.stringify({event_type: 'ar_launch'})
                 }).catch(() => {});
                 if (!isARSupported()) {
-                    showArModal();
+                    showArModal(isIOS && !usdzReady ? 'usdz_not_ready' : 'unsupported');
                 } else {
                     modelViewer.activateAR();
+                }
+            });
+
+            // model-viewer fires this on every AR state transition; 'failed'
+            // covers a denied camera permission and any other session start
+            // failure the browser doesn't expose a more specific reason for.
+            modelViewer?.addEventListener('ar-status', (event) => {
+                if (event.detail && event.detail.status === 'failed') {
+                    showArModal('session_failed');
                 }
             });
 
@@ -100,6 +140,7 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data.success && !data.usdz_ready) {
+                        usdzReady = false;
                         // Show subtle indicator on AR button
                         const arBtn = document.getElementById('arButton');
                         if (arBtn) {
@@ -116,6 +157,7 @@
                                 .then(r => r.json())
                                 .then(d => {
                                     if (d.success && d.usdz_ready) {
+                                        usdzReady = true;
                                         document.getElementById('usdzBadge')?.remove();
                                         arBtn.title = 'View in AR';
                                     } else if (d.success && !d.usdz_ready) {

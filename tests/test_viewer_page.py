@@ -167,6 +167,20 @@ def test_ar_placement_setting_reflected_in_model_viewer_tag(client):
     assert 'ar-placement="ceiling"' in body
 
 
+def test_ar_error_feedback_elements_rendered(client):
+    """The AR modal must expose a title/message pair the JS can rewrite per
+    failure reason (unsupported device / iOS USDZ still converting / AR
+    session failed, e.g. denied camera permission) instead of always
+    showing a single generic message."""
+    owner = make_user("owner-ar-err", "owner-ar-err@test.com")
+    model_id, _ = make_two_material_model(user_id=owner.id)
+    login(client, "owner-ar-err", "testpassword123")
+
+    body = client.get(f"/view/{model_id}").get_data(as_text=True)
+    assert 'id="arModalTitle"' in body
+    assert 'id="arModalMessage"' in body
+
+
 def test_dimensions_endpoint_public(client):
     """/get_model_dimensions is read-only data already shown publicly on the
     page — a non-owner (anonymous) request must not 403."""

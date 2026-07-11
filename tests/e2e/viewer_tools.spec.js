@@ -80,3 +80,14 @@ test('measurement tool can be toggled on the loaded model', async ({ page }) => 
   const unexpected = errors.filter(isUnexpectedError);
   expect(unexpected, `unexpected console/page errors: ${unexpected.join('\n')}`).toEqual([]);
 });
+
+test('AR button explains why AR is unavailable on an unsupported device', async ({ page }) => {
+  // Headless Chromium has no WebXR/Scene Viewer/Quick Look support, so
+  // clicking AR here always takes the "unsupported" fallback path -- this
+  // exercises the reason-specific messaging added for mobile AR failures.
+  await uploadCubeAndGetViewerUrl(page);
+  await page.locator('#arButton').click();
+  await expect(page.locator('#arModal')).toHaveClass(/show/);
+  await expect(page.locator('#arModalTitle')).toHaveText('AR Not Supported');
+  await expect(page.locator('#arModalMessage')).toContainText('QR code');
+});

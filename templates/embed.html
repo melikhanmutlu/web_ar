@@ -113,6 +113,15 @@
             }).catch(() => {});
             viewer.activateAR();
         });
+        // Reason-specific feedback isn't practical in this compact embed
+        // surface (no modal chrome) -- a 'failed' status (commonly a denied
+        // camera permission) at least surfaces a tooltip instead of
+        // silently doing nothing.
+        viewer.addEventListener('ar-status', (event) => {
+            if (event.detail && event.detail.status === 'failed' && arBtn) {
+                arBtn.title = 'AR failed to start - check your camera permission and try again';
+            }
+        });
         {% endif %}
     </script>
 </body>

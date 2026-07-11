@@ -539,12 +539,15 @@ def upload_job_status(job_id):
                          not check_password_hash(job.status_token_hash, token)):
         return jsonify({"success": False, "error": "Valid status token required"}), 403
 
+    app_module._recover_interrupted_inline_job(job)
+
     # Inline conversions run in a gunicorn worker thread. If that worker is
     # OOM-killed mid-conversion (large/complex FBX), the row is orphaned in
     # "processing" forever and the UI spins at the last percent. There is no
     # worker.py in inline mode to requeue it, so fail it here once it's clearly
-    # stalled — the frontend already renders job.status == 'failed'.
-    if job.status == "processing":
+    # stalled — the frontend already renders job.status == 'failed'. In queue
+    # mode, worker.py's own requeue_stale_jobs() reconciliation owns this.
+    if not app_module.JOB_QUEUE_ENABLED and job.status == "processing":
         ref = job.started_at or job.created_at
         if ref and (datetime.utcnow() - ref).total_seconds() > app_module.UPLOAD_STALL_SECONDS:
             job.status = "failed"
@@ -597,6 +600,9 @@ def retry_upload_job(job_id):
     job.next_attempt_at = datetime.utcnow()
     db.session.commit()
     app_module.conversion_jobs.record(job, "manually_requeued", "Job manually returned to queue")
+    if not app_module.JOB_QUEUE_ENABLED:
+        # No worker is polling in inline mode; the retry must start its own run.
+        app_module._start_local_conversion(job.id)
     return jsonify({"success": True, "status": job.status}), 202
 
 

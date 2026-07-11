@@ -1514,6 +1514,54 @@ JOB_QUEUE_ENABLED = os.environ.get("JOB_QUEUE", "false").lower() in (
 # UI recovers instead of spinning forever. FBX2glTF itself has a 300s timeout.
 UPLOAD_STALL_SECONDS = int(os.environ.get("UPLOAD_STALL_SECONDS", "360"))
 
+# Inline (queue-off) jobs run in daemon threads that die with the web process,
+# so a restart leaves them stuck in pending/processing with no worker to
+# requeue them. A poll that finds a heartbeat older than this restarts or
+# fails the job.
+INLINE_STALE_JOB_MINUTES = int(os.environ.get("INLINE_STALE_JOB_MINUTES", "10"))
+
+
+def _recover_interrupted_inline_job(job):
+    """Restart (or fail) a job whose inline thread died with the process."""
+    if JOB_QUEUE_ENABLED or job.status not in {"pending", "processing"}:
+        return
+    last_signal = job.last_heartbeat_at or job.started_at or job.created_at
+    if not last_signal or last_signal > datetime.utcnow() - timedelta(
+        minutes=INLINE_STALE_JOB_MINUTES
+    ):
+        return
+    staged_dir = (job.payload or {}).get("temp_dir")
+    recoverable = job.job_type != "upload" or (staged_dir and os.path.isdir(staged_dir))
+    # Compare-and-set on the observed state so concurrent polls cannot both
+    # claim the recovery and start duplicate inline threads.
+    claimed = ConversionJob.query.filter(
+        ConversionJob.id == job.id,
+        ConversionJob.status == job.status,
+        ConversionJob.last_heartbeat_at == job.last_heartbeat_at,
+    ).update(
+        {
+            "status": "pending" if recoverable else "failed",
+            "last_heartbeat_at": datetime.utcnow(),
+            "next_attempt_at": datetime.utcnow() if recoverable else None,
+            "finished_at": None if recoverable else datetime.utcnow(),
+        }
+        | ({} if recoverable else {"error": "Conversion was interrupted by a server restart"})
+    )
+    db.session.commit()
+    if not claimed:
+        db.session.refresh(job)
+        return
+    db.session.refresh(job)
+    if recoverable:
+        conversion_jobs.record(
+            job, "inline_recovered", "Restarted after a server interruption"
+        )
+        _start_local_conversion(job.id)
+    else:
+        conversion_jobs.record(
+            job, "failed", "Staged upload lost in a server interruption", level="error"
+        )
+
 
 def _start_local_conversion(job_id):
     def run_local_job():

@@ -48,7 +48,10 @@ def test_worker_claim_respects_retry_schedule_and_records_heartbeat(client):
     assert heartbeat.current_job_id == "due-job"
 
 
-def test_dead_letter_can_be_manually_requeued_with_status_token(client):
+def test_dead_letter_can_be_manually_requeued_with_status_token(client, monkeypatch):
+    import app as app_module
+    restarted = []
+    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
     staged = Path(".test-dead-letter").resolve()
     staged.mkdir(exist_ok=True)
     job = ConversionJob(
@@ -69,6 +72,9 @@ def test_dead_letter_can_be_manually_requeued_with_status_token(client):
     assert response.status_code == 202
     assert job.status == "pending"
     assert job.attempts == 0
+    # Inline mode has no worker polling for pending jobs; the retry endpoint
+    # must kick off the run itself.
+    assert restarted == [job.id]
     staged.rmdir()
 
 

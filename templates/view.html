@@ -1151,6 +1151,27 @@
             </div>
 
             {% if is_owner %}
+            <!-- ─── ANALYTICS ─── -->
+            <div class="tp-section" id="analyticsContainer">
+                <button class="tp-section-header">
+                    <i data-lucide="bar-chart-2" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Analytics</span>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body">
+                    <p class="tp-note" style="margin:0 0 0.5rem;">Last 30 days</p>
+                    <div id="analyticsTotals" class="tp-dims">
+                        <p class="tp-note">Loading…</p>
+                    </div>
+                    <div style="margin-top:0.5rem;">
+                        <label class="tp-label">Top referrers</label>
+                        <div id="analyticsReferrers"><p class="tp-note">No referrer data yet</p></div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_owner %}
             <!-- ─── AI RIG & ANIMATE ─── -->
             <div class="tp-section" id="rigAnimateSection">
                 <button class="tp-section-header">
@@ -1400,6 +1421,9 @@
     {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/annotations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/versions.js') }}"></script>
+    {% if is_owner %}
+    <script src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/rig-animate.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>

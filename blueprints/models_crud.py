@@ -3,6 +3,7 @@ info, color update, soft/hard delete, move, restore, rename."""
 
 import logging
 import os
+import re
 import secrets
 import traceback
 
@@ -643,3 +644,81 @@ def move_selected_models():
         db.session.rollback()
         current_app.logger.error(f"Error moving models: {str(e)}")
         return jsonify({"success": False, "error": "Failed to move models"}), 500
+
+
+@models_crud_bp.route("/bulk_update_visibility", methods=["POST"])
+@login_required
+def bulk_update_visibility():
+    """Set sharing visibility (private/unlisted/public) on multiple models at once."""
+    try:
+        data = request.get_json()
+        model_ids = data.get("model_ids", [])
+        visibility = data.get("visibility")
+
+        if not model_ids:
+            return jsonify({"success": False, "error": "No models selected"}), 400
+        if visibility not in {"private", "unlisted", "public"}:
+            return jsonify({"success": False, "error": "Invalid visibility"}), 400
+
+        models = UserModel.query.filter(
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
+        ).all()
+        if len(models) != len(model_ids):
+            return jsonify(
+                {"success": False, "error": "Some models were not found or do not belong to you"}
+            ), 403
+
+        for model in models:
+            model.visibility = visibility
+        db.session.commit()
+        return jsonify(
+            {"success": True, "message": f"Updated visibility for {len(models)} models"}
+        )
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error bulk-updating visibility: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to update visibility"}), 500
+
+
+@models_crud_bp.route("/bulk_add_tags", methods=["POST"])
+@login_required
+def bulk_add_tags():
+    """Add one or more tags to multiple models at once (existing tags on
+    each model are kept — this only adds, matching the per-model tag editor's
+    max of 10 tags of up to 30 chars each)."""
+    try:
+        data = request.get_json()
+        model_ids = data.get("model_ids", [])
+        raw_tags = data.get("tags", [])
+
+        if not model_ids:
+            return jsonify({"success": False, "error": "No models selected"}), 400
+        if not isinstance(raw_tags, list) or not raw_tags:
+            return jsonify({"success": False, "error": "tags must be a non-empty list"}), 400
+
+        new_tags = []
+        for tag in raw_tags:
+            tag = re.sub(r"[^a-z0-9 -]", "", str(tag).strip().lower())[:30]
+            if tag and tag not in new_tags:
+                new_tags.append(tag)
+        if not new_tags:
+            return jsonify({"success": False, "error": "No valid tags provided"}), 400
+
+        models = UserModel.query.filter(
+            UserModel.id.in_(model_ids), UserModel.user_id == current_user.id
+        ).all()
+        if len(models) != len(model_ids):
+            return jsonify(
+                {"success": False, "error": "Some models were not found or do not belong to you"}
+            ), 403
+
+        for model in models:
+            existing = model.tags.split(",") if model.tags else []
+            combined = existing + [t for t in new_tags if t not in existing]
+            model.tags = ",".join(combined[:10]) or None
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Added tags to {len(models)} models"})
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error bulk-adding tags: {str(e)}")
+        return jsonify({"success": False, "error": "Failed to add tags"}), 500

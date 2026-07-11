@@ -38,6 +38,14 @@
                 <i data-lucide="folder-input"></i>
                 Move Selected
             </button>
+            <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-btn hidden">
+                <i data-lucide="eye"></i>
+                Set Visibility
+            </button>
+            <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-btn hidden">
+                <i data-lucide="tag"></i>
+                Add Tag
+            </button>
             <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-btn library-danger hidden">
                 <i data-lucide="trash-2"></i>
                 Delete Selected
@@ -340,6 +348,53 @@
         <div class="modal-footer">
             <button type="button" class="library-btn" onclick="hideMoveToFolderModal()">Cancel</button>
         </div>
+    </div>
+</div>
+
+<div id="bulkVisibilityModal" class="modal">
+    <div class="modal-content library-modal">
+        <div class="modal-header">
+            <h2>Set Visibility</h2>
+            <button type="button" class="library-icon-btn" onclick="hideBulkVisibilityModal()" aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="folder-list">
+                <button type="button" class="folder-option" onclick="applyBulkVisibility('private')">
+                    <i data-lucide="lock"></i>
+                    Private
+                </button>
+                <button type="button" class="folder-option" onclick="applyBulkVisibility('unlisted')">
+                    <i data-lucide="link"></i>
+                    Unlisted
+                </button>
+                <button type="button" class="folder-option" onclick="applyBulkVisibility('public')">
+                    <i data-lucide="globe"></i>
+                    Public
+                </button>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="library-btn" onclick="hideBulkVisibilityModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulkTagModal" class="modal">
+    <div class="modal-content library-modal">
+        <div class="modal-header">
+            <h2>Add Tag to Selected</h2>
+            <button type="button" class="library-icon-btn" onclick="hideBulkTagModal()" aria-label="Close"><i data-lucide="x"></i></button>
+        </div>
+        <form id="bulkTagForm" onsubmit="applyBulkTags(event)">
+            <div class="modal-body">
+                <label for="bulk_tags" class="auth-label">Tags (comma-separated)</label>
+                <input type="text" id="bulk_tags" name="bulk_tags" class="av-input auth-input" placeholder="furniture, blue, sale" required>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="library-btn" onclick="hideBulkTagModal()">Cancel</button>
+                <button type="submit" class="btn-primary library-primary">Add Tags</button>
+            </div>
+        </form>
     </div>
 </div>
 

@@ -36,6 +36,8 @@ function updateSelectionUI() {
     const deleteBtn = document.getElementById('deleteSelectedBtn');
     const moveBtn = document.getElementById('moveSelectedBtn');
     const restoreBtn = document.getElementById('restoreSelectedBtn');
+    const visibilityBtn = document.getElementById('visibilitySelectedBtn');
+    const tagBtn = document.getElementById('tagSelectedBtn');
     const selectionCount = document.getElementById('selectionCount');
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
 
@@ -48,10 +50,14 @@ function updateSelectionUI() {
         deleteBtn.classList.remove('hidden');
         moveBtn?.classList.remove('hidden');
         restoreBtn?.classList.remove('hidden');
+        visibilityBtn?.classList.remove('hidden');
+        tagBtn?.classList.remove('hidden');
     } else {
         deleteBtn.classList.add('hidden');
         moveBtn?.classList.add('hidden');
         restoreBtn?.classList.add('hidden');
+        visibilityBtn?.classList.add('hidden');
+        tagBtn?.classList.add('hidden');
     }
     
     // Update select all checkbox
@@ -448,6 +454,74 @@ function moveSelectedToFolder(folderId) {
     .catch(error => {
         console.error('Error:', error);
         displayToast(error.message || 'Failed to move models', 'error');
+    });
+}
+
+// Bulk visibility + tagging
+function showBulkVisibilityModal() {
+    if (selectedModels.size === 0) {
+        displayToast('Select at least one model first', 'warning');
+        return;
+    }
+    document.getElementById('bulkVisibilityModal').style.display = 'block';
+}
+
+function hideBulkVisibilityModal() {
+    document.getElementById('bulkVisibilityModal').style.display = 'none';
+}
+
+function applyBulkVisibility(visibility) {
+    fetch('/bulk_update_visibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_ids: Array.from(selectedModels), visibility })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to update visibility');
+        hideBulkVisibilityModal();
+        displayToast(`Updated visibility for ${selectedModels.size} model(s)`, 'success');
+        setTimeout(() => location.reload(), 600);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        displayToast(error.message || 'Failed to update visibility', 'error');
+    });
+}
+
+function showBulkTagModal() {
+    if (selectedModels.size === 0) {
+        displayToast('Select at least one model first', 'warning');
+        return;
+    }
+    document.getElementById('bulkTagModal').style.display = 'block';
+}
+
+function hideBulkTagModal() {
+    document.getElementById('bulkTagModal').style.display = 'none';
+}
+
+function applyBulkTags(event) {
+    event.preventDefault();
+    const raw = document.getElementById('bulk_tags').value;
+    const tags = raw.split(',').map(t => t.trim()).filter(Boolean);
+    if (tags.length === 0) return;
+
+    fetch('/bulk_add_tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_ids: Array.from(selectedModels), tags })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to add tags');
+        hideBulkTagModal();
+        displayToast(`Added tags to ${selectedModels.size} model(s)`, 'success');
+        setTimeout(() => location.reload(), 600);
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        displayToast(error.message || 'Failed to add tags', 'error');
     });
 }
 

@@ -126,7 +126,7 @@ def test_edit_ui_hidden_from_non_owner(client):
     assert 'id="saveCameraView"' not in body
     assert 'id="toggleHotspotMode"' not in body
     assert 'id="clearAnnotations"' not in body
-    assert "const CAN_EDIT = false;" in body
+    assert "canEdit: false" in body
 
 
 def test_edit_ui_rendered_for_anonymous_model(client):
@@ -139,7 +139,7 @@ def test_edit_ui_rendered_for_anonymous_model(client):
     body = resp.get_data(as_text=True)
     assert 'id="saveChanges"' in body
     assert 'id="slicerApply"' in body
-    assert "const CAN_EDIT = true;" in body
+    assert "canEdit: true" in body
 
 
 def test_edit_ui_rendered_for_owner(client):
@@ -150,7 +150,7 @@ def test_edit_ui_rendered_for_owner(client):
     resp = client.get(f"/view/{model_id}")
     body = resp.get_data(as_text=True)
     assert 'id="saveChanges"' in body
-    assert "const CAN_EDIT = true;" in body
+    assert "canEdit: true" in body
 
 
 def test_dimensions_endpoint_public(client):

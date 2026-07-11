@@ -5,7 +5,7 @@
     <nav class="top-actions" aria-label="Primary">
         <a href="{{ url_for('index') }}" class="showcase-nav-link {% if request.endpoint == 'index' %}is-active{% endif %}">home</a>
         {% if current_user.is_authenticated %}
-        <a href="{{ url_for('my_models') }}" class="showcase-nav-link {% if request.endpoint == 'my_models' %}is-active{% endif %}">my models</a>
+        <a href="{{ url_for('models_crud.my_models') }}" class="showcase-nav-link {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">my models</a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('admin.dashboard') }}" class="showcase-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">admin</a>
         {% endif %}

@@ -97,7 +97,7 @@
         <button type="button" onclick="navigateBack()" class="library-icon-btn" title="Back" aria-label="Back">
             <i data-lucide="chevron-left"></i>
         </button>
-        <a href="{{ url_for('my_models') }}">My Models</a>
+        <a href="{{ url_for('models_crud.my_models') }}">My Models</a>
         {% if current_folder %}
             <span>/</span>
             <strong>{{ current_folder.name }}</strong>
@@ -260,7 +260,7 @@
             <i data-lucide="trash-2"></i>
             <h2>Trash is empty</h2>
             <p>Models you move to trash appear here and are auto-deleted after {{ trash_retention_days }} days.</p>
-            <a href="{{ url_for('my_models') }}" class="btn-primary library-primary">Back to My Models</a>
+            <a href="{{ url_for('models_crud.my_models') }}" class="btn-primary library-primary">Back to My Models</a>
         </div>
         {% else %}
         <div class="library-empty">

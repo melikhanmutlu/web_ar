@@ -85,6 +85,16 @@
             <i data-lucide="search"></i>
             <input type="text" id="modelSearch" placeholder="Search models...">
         </div>
+        <select id="formatFilter" class="av-select library-sort">
+            <option value="">All Formats</option>
+            <option value="glb">GLB</option>
+            <option value="gltf">GLTF</option>
+            <option value="fbx">FBX</option>
+            <option value="obj">OBJ</option>
+            <option value="stl">STL</option>
+            <option value="step">STEP</option>
+            <option value="stp">STP</option>
+        </select>
         <select id="sortFilter" class="av-select library-sort">
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -187,6 +197,8 @@
                      data-model-id="{{ model.id }}"
                      data-upload-ts="{{ model.upload_date.timestamp() if model.upload_date else 0 }}"
                      data-size-bytes="{{ model.file_size or 0 }}"
+                     data-file-type="{{ (model.file_type or '') | lower }}"
+                     data-tags="{{ model.tags or '' }}"
                      onclick="toggleModelSelection(event, '{{ model.id }}', this)"
                      draggable="true"
                      ondragstart="handleDragStart(event)"
@@ -232,6 +244,9 @@
                         <button type="button" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')" class="library-icon-btn" title="Move" aria-label="Move">
                             <i data-lucide="folder-input"></i>
                         </button>
+                        <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')" class="library-icon-btn" title="Edit tags" aria-label="Edit tags">
+                            <i data-lucide="tag"></i>
+                        </button>
                         <button type="button" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Move to trash" aria-label="Move to trash">
                             <i data-lucide="trash-2"></i>
                         </button>
@@ -244,7 +259,13 @@
                         <span class="upload-date">{{ model.upload_date_formatted }}</span>
                         {% endif %}
                         <span class="file-size">{{ model.file_size_formatted }}</span>
+                        {% if model.file_type %}<span class="file-type-badge">{{ model.file_type | upper }}</span>{% endif %}
                     </p>
+                    {% if model.tags %}
+                    <div class="model-tags" data-model-id="{{ model.id }}">
+                        {% for tag in model.tags.split(',') %}<span class="model-tag-chip">{{ tag }}</span>{% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             </article>
             {% endfor %}

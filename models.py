@@ -200,6 +200,9 @@ class UserModel(db.Model):
     # User-editable display name (separate from file path)
     display_name = db.Column(db.String(255), nullable=True)
 
+    # Comma-joined lowercase tags for the my-models search/filter UI.
+    tags = db.Column(db.String(500), nullable=True)
+
     # Soft delete: set when moved to trash, files stay on disk until purge
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     edit_token_hash = db.Column(db.String(255), nullable=True)

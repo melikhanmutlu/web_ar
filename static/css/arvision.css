@@ -426,6 +426,24 @@ a { color: inherit; }
     margin: 0 0.45rem;
     color: var(--color-gray-300);
 }
+.file-type-badge {
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.model-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.35rem;
+}
+.model-tag-chip {
+    background: var(--color-gray-100);
+    color: var(--color-gray-600);
+    border-radius: 999px;
+    padding: 0.1rem 0.55rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+}
 .library-card-actions {
     display: flex;
     flex-shrink: 0;

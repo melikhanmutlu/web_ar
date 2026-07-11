@@ -573,6 +573,42 @@ function startRenameFolder(folderId) {
     });
 }
 
+// ── Edit tags (comma-separated, PATCH to the same metadata endpoint) ──
+function startEditTags(modelId) {
+    const card = document.querySelector(`.model-card[data-model-id="${modelId}"]`);
+    if (!card) return;
+    const current = (card.dataset.tags || '').split(',').filter(Boolean).join(', ');
+    const input = window.prompt('Tags (comma-separated):', current);
+    if (input === null) return; // cancelled
+    const tags = input.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    fetch(`/api/models/${modelId}/metadata`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.ok) throw new Error('Failed to update tags');
+        card.dataset.tags = (data.tags || []).join(',');
+        let tagsEl = card.querySelector('.model-tags');
+        if (!data.tags || !data.tags.length) {
+            tagsEl?.remove();
+            return;
+        }
+        if (!tagsEl) {
+            tagsEl = document.createElement('div');
+            tagsEl.className = 'model-tags';
+            tagsEl.dataset.modelId = modelId;
+            card.querySelector('.library-model-body')?.appendChild(tagsEl);
+        }
+        tagsEl.innerHTML = data.tags.map(tag =>
+            `<span class="model-tag-chip">${window.escapeHtml ? window.escapeHtml(tag) : tag}</span>`
+        ).join('');
+        displayToast('Tags updated', 'success');
+    })
+    .catch(() => displayToast('Failed to update tags', 'error'));
+}
+
 // ── Copy share link ──
 function copyModelLink(modelId) {
     const url = `${location.origin}/view/${modelId}`;
@@ -716,6 +752,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Search functionality
 const modelSearch = document.getElementById('modelSearch');
 const sortFilter = document.getElementById('sortFilter');
+const formatFilter = document.getElementById('formatFilter');
 const modelsGrid = document.getElementById('modelsGrid');
 
 // ── Batched rendering: show cards in chunks to keep first paint light ──
@@ -726,10 +763,11 @@ function applyBatch() {
     if (!modelsGrid) return;
     const cards = Array.from(modelsGrid.querySelectorAll('.model-card'));
     const loadMoreBtn = document.getElementById('loadMoreBtn');
-    const searching = modelSearch && modelSearch.value.trim() !== '';
-    if (searching) {
+    const filtering = (modelSearch && modelSearch.value.trim() !== '') ||
+        (formatFilter && formatFilter.value !== '');
+    if (filtering) {
         loadMoreBtn?.classList.add('hidden');
-        return; // filterModels controls visibility while searching
+        return; // filterModels controls visibility while filtering
     }
     cards.forEach((card, i) => {
         card.style.display = i < visibleCount ? '' : 'none';
@@ -743,22 +781,26 @@ function revealNextBatch() {
 }
 
 function filterModels() {
-    if (!modelSearch) return;
-    const searchTerm = modelSearch.value.trim().toLowerCase();
+    const searchTerm = (modelSearch?.value || '').trim().toLowerCase();
+    const format = formatFilter?.value || '';
 
     if (modelsGrid) {
-        if (searchTerm === '') {
+        if (searchTerm === '' && format === '') {
             applyBatch(); // restore batched view
         } else {
             modelsGrid.querySelectorAll('.model-card').forEach(card => {
                 const modelName = (card.querySelector('h3')?.textContent || '').toLowerCase();
-                card.style.display = modelName.includes(searchTerm) ? '' : 'none';
+                const tags = (card.dataset.tags || '').toLowerCase();
+                const matchesSearch = searchTerm === '' ||
+                    modelName.includes(searchTerm) || tags.includes(searchTerm);
+                const matchesFormat = format === '' || (card.dataset.fileType || '') === format;
+                card.style.display = (matchesSearch && matchesFormat) ? '' : 'none';
             });
             document.getElementById('loadMoreBtn')?.classList.add('hidden');
         }
     }
 
-    // Folders are searchable too
+    // Folders are searchable too (format filter doesn't apply to folders)
     document.querySelectorAll('.library-folder').forEach(card => {
         const folderName = (card.querySelector('h3')?.textContent || '').toLowerCase();
         card.style.display = (searchTerm === '' || folderName.includes(searchTerm)) ? '' : 'none';
@@ -795,6 +837,7 @@ function sortModels() {
 }
 
 modelSearch?.addEventListener('input', filterModels);
+formatFilter?.addEventListener('change', filterModels);
 sortFilter?.addEventListener('change', () => {
     localStorage.setItem('myModelsSort', sortFilter.value);
     sortModels();

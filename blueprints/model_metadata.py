@@ -28,8 +28,18 @@ def update_model_metadata(model_id):
         model.display_name = str(data["display_name"])[:255] or None
     if "description" in data:
         model.description = str(data["description"])[:2000] or None
+    if "tags" in data:
+        raw_tags = data["tags"]
+        if not isinstance(raw_tags, list):
+            return jsonify({"error": "tags must be a list of strings"}), 400
+        cleaned = []
+        for tag in raw_tags:
+            tag = re.sub(r"[^a-z0-9 -]", "", str(tag).strip().lower())[:30]
+            if tag and tag not in cleaned:
+                cleaned.append(tag)
+        model.tags = ",".join(cleaned[:10]) or None
     db.session.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "tags": (model.tags or "").split(",") if model.tags else []})
 
 
 @model_metadata_bp.route("/api/models/<model_id>/sharing", methods=["PATCH"])

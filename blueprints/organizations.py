@@ -20,6 +20,7 @@ from models import (
     db,
 )
 from services.org_membership import _organization_membership
+from services import send_email
 
 organizations_bp = Blueprint("organizations", __name__)
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ def organization_members_api(organization_id):
     existing = OrganizationMember.query.filter_by(
         organization_id=organization_id, user_id=user.id
     ).first()
+    is_new_member = existing is None
     if existing:
         if existing.role == "owner":
             return jsonify({"success": False, "error": "Owner membership cannot be changed"}), 409
@@ -90,6 +92,13 @@ def organization_members_api(organization_id):
             organization_id=organization_id, user_id=user.id, role=role
         ))
     db.session.commit()
+    if is_new_member and user.email:
+        organization = db.session.get(Organization, organization_id)
+        send_email(
+            user.email, "You've been added to an organization",
+            f"You were added to {organization.name if organization else 'an organization'} "
+            f"as {role}.",
+        )
     return jsonify({"success": True, "user_id": user.id, "role": role}), 201
 
 

@@ -53,5 +53,6 @@ The test suite includes a real GLB upload and conversion happy path, access-poli
 - Embeds: a model without an `embed_allowed_domains` allowlist is served with `frame-ancestors *` so it can be iframed anywhere — this is the intended default for public embeds. Set the per-model allowlist to restrict which sites may embed it.
 - Use Redis through `RATELIMIT_STORAGE_URI` when running multiple web instances.
 - Apply `flask db upgrade` before accepting traffic.
+- Set `SMTP_HOST` (+ `SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM_EMAIL`) to enable email notifications (conversion completed, share link created, org invite). Left unset, notifications are silently skipped — no dev/test SMTP server needed.
 
 Railway/Nixpacks and Docker configurations are included. See [ARCHITECTURE.md](ARCHITECTURE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) for additional details.

@@ -83,7 +83,7 @@ from version_manager import (
     delete_version,
     version_path,
 )
-from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability, dispatch_webhook_event
+from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability, dispatch_webhook_event, send_email
 from services.model_permissions import (
     model_access,
     get_live_model,
@@ -1614,6 +1614,16 @@ def update_conversion_progress(job, *, progress=None, stage=None, detail=None):
     )
 
 
+def _notify_user_by_email(user_id, subject, body_text):
+    """Best-effort notification helper -- see services/email.py. No-op for
+    anonymous (user_id is None) jobs/actions."""
+    if not user_id:
+        return
+    user = db.session.get(User, user_id)
+    if user and user.email:
+        send_email(user.email, subject, body_text)
+
+
 def run_conversion_job(job, allow_retry=True):
     """Run a ConversionJob through the pipeline with status transitions.
 
@@ -1651,6 +1661,15 @@ def run_conversion_job(job, allow_retry=True):
             dispatch_webhook_event("conversion.completed", job.user_id, {
                 "job_id": job.id, "model_id": model_id,
             })
+            _notify_user_by_email(
+                job.user_id, "Your model is ready",
+                # Built without url_for(): this runs from a background
+                # thread (inline/JOB_QUEUE=false mode) with only an app
+                # context pushed, not a request context, and url_for()
+                # requires one or the other (or SERVER_NAME configured).
+                f"Your model has finished converting and is ready to view:\n"
+                f"{SITE_URL}/view/{model_id}",
+            )
     except Exception as e:
         retry = conversion_jobs.fail(job, e, allow_retry=allow_retry)
         update_conversion_progress(

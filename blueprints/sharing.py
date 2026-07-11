@@ -10,6 +10,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from services.time_utils import datetime
 from models import ModelShareLink, UserModel, db
+from services import send_email
 
 sharing_bp = Blueprint("sharing", __name__)
 
@@ -42,12 +43,18 @@ def create_model_share_link(model_id):
     )
     db.session.add(link)
     db.session.commit()
+    share_url = url_for("sharing.open_model_share_link", token=token, _external=True)
+    if current_user.email:
+        send_email(
+            current_user.email, "Share link created",
+            f"A new {permission} share link was created for your model:\n{share_url}",
+        )
     return jsonify({
         "success": True,
         "id": link.id,
         "permission": permission,
         "expires_at": link.expires_at.isoformat() if link.expires_at else None,
-        "url": url_for("sharing.open_model_share_link", token=token, _external=True),
+        "url": share_url,
     }), 201
 
 

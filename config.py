@@ -113,6 +113,18 @@ WORKER_STALE_MINUTES = int(os.getenv('WORKER_STALE_MINUTES', 30))
 DEFAULT_MAX_DIMENSION_CM = float(os.getenv('DEFAULT_MAX_DIMENSION_CM', 50))
 MAX_MODEL_DIMENSION_METERS = float(os.getenv('MAX_MODEL_DIMENSION_METERS', 100))
 
+# Email notifications (conversion completed, share link created, org invite).
+# Best-effort/fire-and-forget: SMTP_HOST unset means notifications are simply
+# not sent (dev/test default) rather than failing the request that triggers
+# them. Never log SMTP_PASSWORD.
+SMTP_HOST = os.getenv('SMTP_HOST', '')
+SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
+SMTP_USERNAME = os.getenv('SMTP_USERNAME', '')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '')
+SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', 'noreply@arvision.local')
+EMAIL_NOTIFICATIONS_ENABLED = bool(SMTP_HOST) and os.getenv('EMAIL_NOTIFICATIONS_ENABLED', 'true').lower() == 'true'
+
 # AI 3D generation (Meshy) — server-side only, never expose the key to clients.
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
 MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')

@@ -85,7 +85,7 @@
                     <td class="muted">{{ v.created_at_formatted }}</td>
                     <td class="muted">{{ v.comment or '—' }}</td>
                     <td class="actions">
-                        <a class="admin-icon-btn" href="{{ url_for('download_version', model_id=model.id, version_number=v.version_number) }}" title="download" aria-label="download version {{ v.version_number }}"><i data-lucide="download"></i></a>
+                        <a class="admin-icon-btn" href="{{ url_for('versions.download_version', model_id=model.id, version_number=v.version_number) }}" title="download" aria-label="download version {{ v.version_number }}"><i data-lucide="download"></i></a>
                         <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete version"
                                 aria-label="delete version {{ v.version_number }}"
                                 data-action-url="{{ url_for('admin.delete_model_version_admin', model_id=model.id, version_number=v.version_number) }}"

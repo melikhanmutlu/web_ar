@@ -8,6 +8,7 @@ import secrets
 import traceback
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, request, send_file, url_for
+from flask_babel import gettext as _
 from flask_login import current_user, login_required
 from slugify import slugify
 from sqlalchemy.orm import Session
@@ -133,7 +134,7 @@ def download_model(model_id):
             return "Model not found", 404
 
         if model is None:
-            return "Dosya bulunamadı", 404
+            return _("File not found"), 404
 
         # Check if user owns this model
         if model.user_id != current_user.id:
@@ -141,7 +142,7 @@ def download_model(model_id):
 
         file_path = os.path.join(current_app.config["CONVERTED_FOLDER"], model_id, "model.glb")
         if not os.path.exists(file_path):
-            return "Dosya bulunamadı", 404
+            return _("File not found"), 404
 
         base_name = os.path.splitext(model.original_filename)[0] or model_id
         return send_file(
@@ -152,7 +153,7 @@ def download_model(model_id):
         )
     except Exception as e:
         logger.error(f"Error in download_model: {str(e)}")
-        return "Dosya indirilirken bir hata oluştu", 500
+        return _("An error occurred while downloading the file"), 500
 
 
 # Model ids are UUID strings — the old <int:model_id> converter could never
@@ -167,7 +168,7 @@ def get_model_info_api(model_id):
     if model is None or model.deleted_at is not None:
         return jsonify({"error": "Model not found"}), 404
     if model.user_id != current_user.id:
-        flash("Bu modele erişim izniniz yok.", "error")
+        flash(_("You don't have permission to access this model."), "error")
         return redirect(url_for("auth.profile"))
 
     model_info = app_module.get_file_info(model.glb_path)

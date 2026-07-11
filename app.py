@@ -17,6 +17,7 @@ from flask import (
     abort,
     g,
 )
+from flask_babel import gettext as _
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from flask_login import (
     LoginManager,
@@ -102,6 +103,7 @@ from services.storage_quota import (
     _storage_quota_bytes,
 )
 from services.org_membership import _organization_membership
+from services.i18n import init_babel
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -240,6 +242,8 @@ migrate = Migrate(app, db)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "auth.login"
+
+init_babel(app)
 
 
 @login_manager.user_loader
@@ -2270,14 +2274,15 @@ def _run_upload_pipeline(payload, progress_callback=None):
 
 @app.errorhandler(413)
 def too_large(e):
+    max_mb = app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
     return jsonify(
-        {"error": f"Dosya boyutu çok büyük. Maksimum dosya boyutu {app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)}MB."}
+        {"error": _("File is too large. Maximum file size is %(max_mb)sMB.", max_mb=max_mb)}
     ), 413
 
 
 @app.errorhandler(500)
 def server_error(e):
-    return jsonify({"error": "Sunucu hatası. Lütfen daha sonra tekrar deneyin."}), 500
+    return jsonify({"error": _("Server error. Please try again later.")}), 500
 
 
 def check_model_files():

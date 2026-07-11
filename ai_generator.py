@@ -174,14 +174,15 @@ def start_refine(preview_task_id: str, *, texture_prompt=None,
 
 def start_image_to_3d(image_data_uri: str, *, topology=None, target_polycount=None,
                        symmetry_mode=None, moderation=None, pose_mode=None,
-                       origin_at=None, remove_lighting=None) -> str:
+                       origin_at=None, remove_lighting=None, should_texture=True) -> str:
     """Image -> 3D. image_data_uri MUST be an inline base64 data URI."""
     image_data_uri = _require_data_uri(image_data_uri)
+    should_texture = should_texture is not False
     payload = {
         "image_url": image_data_uri,
         "ai_model": _ai_model(),
-        "should_texture": True,
-        "enable_pbr": True,
+        "should_texture": should_texture,
+        "enable_pbr": should_texture,
         "auto_size": True,  # AI estimates real-world dimensions
         "target_formats": ["glb", "usdz"],
     }

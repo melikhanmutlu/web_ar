@@ -46,6 +46,8 @@ def _parse_ai_options(raw):
         out["origin_at"] = raw["origin_at"]
     if raw.get("remove_lighting") is True:
         out["remove_lighting"] = True
+    if isinstance(raw.get("should_texture"), bool):
+        out["should_texture"] = raw["should_texture"]
     texture_prompt = (raw.get("texture_prompt") or "").strip()
     if texture_prompt:
         out["texture_prompt"] = texture_prompt[:600]
@@ -101,7 +103,8 @@ def generate_3d():
                 moderation=options.get("moderation"),
                 pose_mode=options.get("pose_mode"),
                 origin_at=options.get("origin_at"),
-                remove_lighting=options.get("remove_lighting"))
+                remove_lighting=options.get("remove_lighting"),
+                should_texture=options.get("should_texture", True))
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
                                   stage="image", meshy_image_id=task_id,
                                   status="generating", progress=0, options=options,

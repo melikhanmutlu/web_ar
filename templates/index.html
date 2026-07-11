@@ -203,11 +203,11 @@
                 </div>
 
                 <div class="av-tabs av-tabs--sub" role="tablist">
-                    <button type="button" class="av-tab is-active" data-genmode="text">From Text</button>
-                    <button type="button" class="av-tab" data-genmode="image">From Image</button>
+                    <button type="button" class="av-tab is-active" data-genmode="image">From Image</button>
+                    <button type="button" class="av-tab" data-genmode="text">From Text</button>
                 </div>
 
-                <div id="genText" class="av-card">
+                <div id="genText" class="av-card hidden">
                     <label class="av-card-title" for="aiPrompt">Prompt</label>
                     <p class="av-card-desc" style="margin:0.15rem 0 0.6rem;">Describe the object you want.</p>
                     <textarea id="aiPrompt" class="av-textarea" rows="3" maxlength="600" placeholder="a red ceramic vase with a glossy finish"></textarea>
@@ -274,7 +274,7 @@
                     </details>
                 </div>
 
-                <div id="genImage" class="av-card hidden">
+                <div id="genImage" class="av-card">
                     <div id="aiImageDrop" class="av-dropzone" style="padding:2rem 1.5rem;">
                         <input id="ai-image" type="file" class="hidden" accept="image/png,image/jpeg">
                         <i data-lucide="image" class="av-dropzone-icon"></i>
@@ -345,6 +345,14 @@
                                 <span class="av-switch-text">Clean cutout — remove baked-in lighting (better for AR)</span>
                             </label>
                             {% endif %}
+                            <label class="av-switch-label">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optShouldTexture" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Add texture and materials</span>
+                            </label>
                             <label class="av-switch-label" style="margin-top:0.6rem;">
                                 <span class="av-switch">
                                     <input type="checkbox" id="optModerationImg" checked>
@@ -1010,7 +1018,7 @@
         const genBtn = document.getElementById('generateBtn');
         if (!genBtn) return; // not authenticated -> no generate UI
 
-        let genMode = 'text';
+        let genMode = 'image';
         let imageDataUri = null;
 
         // Sub-tabs: From Text | From Image
@@ -1239,6 +1247,7 @@
                 if (pose) opts.pose_mode = pose;
                 const removeLighting = document.getElementById('optRemoveLighting');
                 if (removeLighting && removeLighting.checked) opts.remove_lighting = true;
+                opts.should_texture = document.getElementById('optShouldTexture').checked;
                 opts.moderation = document.getElementById('optModerationImg').checked;
             }
             return opts;

@@ -206,6 +206,12 @@
         .tb-btn i { width: 1.6rem; height: 1.6rem; }
         #infoToggleBtn.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
         .dark #infoToggleBtn.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
+        #measureToolButton.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        .dark #measureToolButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
+
+        .measure-result-panel { position: fixed; right: 1rem; bottom: 5rem; z-index: 40; padding: 0.5rem 0.7rem; background: rgba(15, 23, 42, 0.9); color: white; font-size: 0.78rem; border-radius: 0.4rem; max-width: 16rem; }
+        .measure-dot { background: rgba(37, 99, 235, 0.9); color: white; border: 2px solid white; border-radius: 50%; width: 16px; height: 16px; cursor: default; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+        .measure-label { background: rgba(37, 99, 235, 0.92); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; white-space: nowrap; pointer-events: none; }
 
         /* Tools panel */
         #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 19rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
@@ -507,7 +513,7 @@
 
             /* Compact header links so home / my models / log out fit one line */
             .top-actions { gap: 0.15rem; }
-            .showcase-nav-link { font-size: 0.78rem; padding: 0.2rem 0.3rem; }
+            .showcase-nav-link { font-size: 0.8rem; padding: 0.25rem 0.3rem; }
             .login-pill { padding: 0.2rem 0.5rem; }
 
             .viewer-stage {
@@ -675,8 +681,7 @@
             >
             </model-viewer>
             {% if viewer_settings.show_dimensions %}
-            <button id="measureToolButton" type="button" style="position:absolute;left:16px;top:72px;z-index:8;padding:8px 12px;border:1px solid rgba(255,255,255,.25);background:rgba(15,23,42,.82);color:white;font-size:12px;cursor:pointer;">Measure</button>
-            <div id="measureToolResult" style="position:absolute;left:16px;top:112px;z-index:8;padding:7px 10px;background:rgba(15,23,42,.82);color:white;font:12px monospace;display:none;">Select two points</div>
+            <div id="measureToolResult" class="measure-result-panel hidden"></div>
             {% endif %}
         </div>
 
@@ -1268,6 +1273,9 @@
             <button id="redoButton" class="tb-btn" title="Redo (Ctrl+Shift+Z)" disabled><i data-lucide="redo-2"></i></button>
             {% endif %}
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
+            {% if viewer_settings.show_dimensions %}
+            <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>
+            {% endif %}
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
             <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i></button>

@@ -36,15 +36,49 @@ test('viewer tools panel opens each section without script errors', async ({ pag
   expect(unexpected, `unexpected console/page errors: ${unexpected.join('\n')}`).toEqual([]);
 });
 
-test('measurement tool can be toggled on the loaded model', async ({ page }) => {
+test('measure tool lives in the bottom-right toolbar and places visible markers', async ({ page }) => {
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
   await uploadCubeAndGetViewerUrl(page);
-  const measureToggle = page.locator('#measureToggle, [data-tool="measure"], #measureBtn');
-  if (await measureToggle.count() > 0) {
-    await measureToggle.first().click();
+
+  // The Measure button used to float disconnected over the canvas; it must
+  // now live in the same bottom-right toolbar as the other tool buttons.
+  await expect(page.locator('.toolbar-shell #measureToolButton')).toBeVisible();
+
+  await page.locator('#measureToolButton').click();
+  await expect(page.locator('#measureToolButton')).toHaveClass(/is-active/);
+  await expect(page.locator('#measureToolResult')).toBeVisible();
+
+  // positionAndNormalFromPoint can miss depending on camera framing/GPU
+  // rendering; retry a few nearby points instead of one exact click (same
+  // approach as tests/e2e/hotspot_discussion.spec.js).
+  const box = await page.locator('model-viewer').boundingBox();
+  const candidates = [[0, 0], [0.1, 0], [-0.1, 0], [0, 0.1], [0, -0.1]];
+  for (const [dx, dy] of candidates) {
+    if (await page.locator('.measure-dot').count() > 0) break;
+    await page.mouse.click(box.x + box.width * (0.5 + dx), box.y + box.height * (0.5 + dy));
+    await page.waitForTimeout(300);
   }
+  const placedFirst = await page.locator('.measure-dot').count() > 0;
+  test.skip(!placedFirst, 'measure placement raycast did not register a hit in this environment');
+
+  for (const [dx, dy] of candidates) {
+    if (await page.locator('.measure-dot').count() > 1) break;
+    await page.mouse.click(box.x + box.width * (0.5 + dx), box.y + box.height * (0.3 + dy));
+    await page.waitForTimeout(300);
+  }
+  if (await page.locator('.measure-dot').count() > 1) {
+    await expect(page.locator('#measureToolResult')).toContainText('cm');
+  }
+
+  // Turning hotspot mode on must turn measure mode off (and vice versa) --
+  // both listen on the same <model-viewer> click, so leaving both active
+  // made every click ambiguously place both a hotspot and a measure point.
+  await page.locator('#toolsPanelToggle').click();
+  await page.locator('#annotationsContainer .tp-section-header').click();
+  await page.locator('#toggleHotspotMode').click();
+  await expect(page.locator('#measureToolButton')).not.toHaveClass(/is-active/);
 
   const unexpected = errors.filter(isUnexpectedError);
   expect(unexpected, `unexpected console/page errors: ${unexpected.join('\n')}`).toEqual([]);

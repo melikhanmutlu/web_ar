@@ -115,12 +115,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // axis is enabled: the preview only *hides* geometry via shader discard,
         // so clicks would still land hotspots on invisible, clipped-away surfaces.
         window._disableHotspotMode = () => setHotspotMode(false);
+        window._isHotspotModeActive = () => hotspotMode;
 
         toggleHotspotMode?.addEventListener('click', () => {
             if (!hotspotMode && window._slicerClippingActive?.()) {
                 alert('Hotspots can\'t be placed while a slice preview is active — reset the slicer first.');
                 return;
             }
+            // Mutual exclusion with the measure tool (static/js/viewer/measure-tool.js)
+            // -- both listen for clicks on the same <model-viewer>, so having both
+            // modes active at once made every click ambiguously place both.
+            if (!hotspotMode) window._disableMeasureMode?.();
             setHotspotMode(!hotspotMode);
         });
 
@@ -134,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         modelViewer?.addEventListener('click', (e) => {
-            if (!hotspotMode) return;
+            if (!hotspotMode || window._isMeasureModeActive?.()) return;
             if (_hotspotPointerDown) {
                 const dx = e.clientX - _hotspotPointerDown.x;
                 const dy = e.clientY - _hotspotPointerDown.y;

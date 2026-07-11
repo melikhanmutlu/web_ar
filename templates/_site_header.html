@@ -12,7 +12,7 @@
         {% endif %}
         <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;padding:0;font:inherit;">{{ _('log out') }}</button>
+            <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;font-family:inherit;">{{ _('log out') }}</button>
         </form>
         {% else %}
         <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.register' %}is-active{% endif %}">{{ _('register') }}</a>

@@ -173,6 +173,95 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(err => console.error('Error saving hotspot:', err));
         });
 
+        // HOTSPOT DISCUSSION THREAD
+        // ===================================================================
+        const IS_AUTHENTICATED = window.VIEWER_CONFIG.isAuthenticated;
+        const CURRENT_USER_ID = window.VIEWER_CONFIG.currentUserId;
+        const IS_OWNER = window.VIEWER_CONFIG.isOwner;
+        const discussionModal = document.getElementById('hotspotDiscussionModal');
+        const discussionTitle = document.getElementById('hotspotDiscussionTitle');
+        const discussionComments = document.getElementById('hotspotDiscussionComments');
+        const discussionInput = document.getElementById('hotspotDiscussionInput');
+        const discussionSubmit = document.getElementById('hotspotDiscussionSubmit');
+        const discussionFormWrap = document.getElementById('hotspotDiscussionFormWrap');
+        const discussionLoginNote = document.getElementById('hotspotDiscussionLoginNote');
+        let activeDiscussionHotspotId = null;
+
+        if (discussionFormWrap && discussionLoginNote) {
+            discussionFormWrap.classList.toggle('hidden', !IS_AUTHENTICATED);
+            discussionLoginNote.classList.toggle('hidden', IS_AUTHENTICATED);
+        }
+
+        function renderDiscussionComments(comments) {
+            if (!discussionComments) return;
+            if (!comments || comments.length === 0) {
+                discussionComments.innerHTML = '<p class="tp-note">No comments yet.</p>';
+                return;
+            }
+            discussionComments.innerHTML = '';
+            comments.forEach((c) => {
+                const canDelete = IS_AUTHENTICATED && (IS_OWNER || c.userId === CURRENT_USER_ID);
+                const div = document.createElement('div');
+                div.className = 'hotspot-comment';
+                div.innerHTML =
+                    '<div>' + escapeHtml(c.body) + '</div>' +
+                    '<div class="hotspot-comment-meta"><span>' + escapeHtml(c.author) + ' &middot; ' + new Date(c.createdAt).toLocaleString() + '</span>' +
+                    (canDelete ? '<button class="delete-comment-btn" style="background:none;border:none;color:var(--color-gray-400);cursor:pointer;padding:0;"><i data-lucide="x" style="width:0.65rem;height:0.65rem;"></i></button>' : '') +
+                    '</div>';
+                div.querySelector('.delete-comment-btn')?.addEventListener('click', () => {
+                    fetch('/api/models/' + modelId + '/hotspots/' + activeDiscussionHotspotId + '/comments/' + c.id, { method: 'DELETE' })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data.success) { console.error('Failed to delete comment:', data.error); return; }
+                            loadDiscussionComments(activeDiscussionHotspotId);
+                        })
+                        .catch(err => console.error('Error deleting comment:', err));
+                });
+                discussionComments.appendChild(div);
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            });
+        }
+
+        function loadDiscussionComments(hotspotId) {
+            fetch('/api/models/' + modelId + '/hotspots/' + hotspotId + '/comments')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) return;
+                    renderDiscussionComments(data.comments);
+                })
+                .catch(err => console.error('Error loading comments:', err));
+        }
+
+        function openHotspotDiscussion(hotspotId, label) {
+            activeDiscussionHotspotId = hotspotId;
+            if (discussionTitle) discussionTitle.textContent = label;
+            if (discussionInput) discussionInput.value = '';
+            if (discussionComments) discussionComments.innerHTML = '<p class="tp-note">Loading…</p>';
+            discussionModal?.classList.add('show');
+            loadDiscussionComments(hotspotId);
+        }
+
+        document.getElementById('closeHotspotDiscussion')?.addEventListener('click', () => {
+            discussionModal?.classList.remove('show');
+        });
+
+        discussionSubmit?.addEventListener('click', () => {
+            const body = discussionInput?.value.trim();
+            if (!body || !activeDiscussionHotspotId) return;
+            fetch('/api/models/' + modelId + '/hotspots/' + activeDiscussionHotspotId + '/comments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.success) { console.error('Failed to post comment:', data.error); return; }
+                    if (discussionInput) discussionInput.value = '';
+                    loadDiscussionComments(activeDiscussionHotspotId);
+                })
+                .catch(err => console.error('Error posting comment:', err));
+        });
+
         function renderHotspotOnViewer(name, label, pos, norm) {
             // Names are generated as 'hotspot-<ts>' already — model-viewer only
             // needs the slot to start with "hotspot-", so don't double the prefix.
@@ -185,6 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
             hotspot.dataset.visibility = 'visible';
             hotspot.style.cssText = 'background:rgba(76,175,80,0.9);color:white;border:2px solid white;border-radius:50%;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.3);';
             hotspot.textContent = document.querySelectorAll('.hotspot-dot').length + 1;
+            hotspot.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                openHotspotDiscussion(name, label);
+            });
 
             const annotation = document.createElement('div');
             annotation.slot = slot;

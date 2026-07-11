@@ -429,6 +429,32 @@ class ModelHotspot(db.Model):
         }
 
 
+class HotspotComment(db.Model):
+    """A discussion reply on a hotspot -- lets viewers/collaborators leave
+    feedback pinned to a specific spot on the model, separate from the
+    hotspot's own title/description (which only its creator/an editor can set).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    hotspot_id = db.Column(db.Integer, db.ForeignKey('model_hotspot.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    hotspot = db.relationship('ModelHotspot', backref=db.backref(
+        'comments', cascade='all, delete-orphan', passive_deletes=True,
+        order_by='HotspotComment.created_at'))
+    user = db.relationship('User')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'body': self.body,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'author': self.user.username if self.user else 'Unknown',
+            'userId': self.user_id,
+        }
+
+
 class ModelVersion(db.Model):
     """
     Tracks version history of model modifications

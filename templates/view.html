@@ -109,6 +109,12 @@
         #arModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 2rem; width: 32rem; max-width: 92vw; position: relative; box-sizing: border-box; }
         #arModalQrCode canvas { display: none !important; }
         #arModalQrCode img { display: block !important; width: 200px !important; height: 200px !important; }
+        #hotspotDiscussionModal { display: none !important; position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; background: rgba(0,0,0,0.6) !important; z-index: 9999 !important; align-items: center !important; justify-content: center !important; }
+        #hotspotDiscussionModal.show { display: flex !important; }
+        #hotspotDiscussionModal .modal-card { background: #ffffff; border: 1px solid #e2e8f0; padding: 1.5rem; width: 26rem; max-width: 92vw; max-height: 80vh; overflow-y: auto; position: relative; box-sizing: border-box; }
+        .hotspot-comment { padding: 0.5rem 0; border-bottom: 1px solid #eef2f7; font-size: 0.8rem; }
+        .hotspot-comment:last-child { border-bottom: none; }
+        .hotspot-comment-meta { font-size: 0.68rem; color: #94a3b8; margin-top: 0.15rem; display: flex; justify-content: space-between; align-items: center; }
         model-viewer::part(ar-button) { display: none; }
 
         .viewer-shell { position: relative; height: 100vh; overflow: hidden; }
@@ -597,6 +603,8 @@
         // built when the server would actually accept the mutation.
         canEdit: {{ can_edit | tojson }},
         isOwner: {{ is_owner | tojson }},
+        isAuthenticated: {{ current_user.is_authenticated | tojson }},
+        currentUserId: {{ (current_user.id if current_user.is_authenticated else None) | tojson }},
         cumulativeScale: {{ (model.cumulative_scale if model.cumulative_scale else None) | tojson }},
         downloadFilename: {{ (display_name ~ '.glb') | tojson }},
       };
@@ -1404,6 +1412,19 @@
                     <div id="arModalQrCode"></div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="hotspotDiscussionModal">
+        <div class="modal-card">
+            <button id="closeHotspotDiscussion" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <h3 id="hotspotDiscussionTitle" style="font-size:0.95rem;font-weight:700;margin:0 0 0.75rem;color:var(--color-gray-900);padding-right:1.5rem;"></h3>
+            <div id="hotspotDiscussionComments"><p class="tp-note">No comments yet.</p></div>
+            <div id="hotspotDiscussionFormWrap" style="margin-top:0.75rem;">
+                <textarea id="hotspotDiscussionInput" rows="2" maxlength="2000" placeholder="Add a comment…" style="width:100%;box-sizing:border-box;border:1px solid var(--color-gray-200);padding:0.5rem;font-size:0.8rem;resize:vertical;"></textarea>
+                <button id="hotspotDiscussionSubmit" class="tp-btn-full" style="margin-top:0.4rem;">Post comment</button>
+            </div>
+            <p id="hotspotDiscussionLoginNote" class="tp-note hidden">Log in to join the discussion.</p>
         </div>
     </div>
 

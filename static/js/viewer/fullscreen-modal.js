@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const viewerStage = document.querySelector('.viewer-stage');
     const fullscreenButton = document.querySelector('#fullscreenButton');
     const downloadButton = document.querySelector('#downloadButton');
+    const downloadFormatSelect = document.querySelector('#downloadFormatSelect');
     const screenshotButton = document.getElementById('screenshotButton');
     const modelInfoButton = document.querySelector('#modelInfoButton');
     const modelInfoModal = document.querySelector('#modelInfoModal');
@@ -63,10 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download button handler
+    // Download button handler. GLB (the default) downloads the currently
+    // loaded model straight from the viewer; any other format re-derives it
+    // on the fly server-side (geometry only -- STL/OBJ/PLY don't carry
+    // PBR materials/textures, an inherent limitation of those formats).
     downloadButton?.addEventListener('click', async () => {
         try {
-            const modelUrl = modelViewer.src;
+            const format = downloadFormatSelect?.value || 'glb';
+            const modelUrl = format === 'glb'
+                ? modelViewer.src
+                : '/api/models/' + window.VIEWER_CONFIG.modelId + '/export/' + format;
             if (!modelUrl) {
                 throw new Error('Model URL not found');
             }
@@ -80,7 +87,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = window.VIEWER_CONFIG.downloadFilename;
+            a.download = format === 'glb'
+                ? window.VIEWER_CONFIG.downloadFilename
+                : window.VIEWER_CONFIG.downloadFilename.replace(/\.glb$/i, '') + '.' + format;
 
             document.body.appendChild(a);
             a.click();

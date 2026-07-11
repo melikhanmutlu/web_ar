@@ -1283,6 +1283,12 @@
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
             <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i></button>
+            <select id="downloadFormatSelect" title="Download format" style="height:2rem;font-size:0.7rem;border-radius:0.35rem;border:1px solid var(--color-gray-700);background:var(--color-gray-800);color:var(--color-gray-200);">
+                <option value="glb">GLB</option>
+                <option value="stl">STL</option>
+                <option value="obj">OBJ</option>
+                <option value="ply">PLY</option>
+            </select>
             <button id="downloadButton" class="tb-btn" title="Download"><i data-lucide="download"></i></button>
             <button id="screenshotButton" class="tb-btn" title="Screenshot"><i data-lucide="camera"></i></button>
             <button id="fullscreenButton" class="tb-btn" title="Fullscreen"><i data-lucide="maximize-2"></i></button>

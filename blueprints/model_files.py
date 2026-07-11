@@ -2,11 +2,12 @@
 and two decommissioned legacy static-file routes."""
 
 import base64
+import io
 import logging
 import os
 import re
 
-from flask import Blueprint, current_app, jsonify, request, send_from_directory
+from flask import Blueprint, current_app, jsonify, request, send_file, send_from_directory
 from flask_login import current_user, login_required
 
 from models import UserModel, db
@@ -14,6 +15,12 @@ from services.model_permissions import check_model_view_allowed, get_live_model
 
 model_files_bp = Blueprint("model_files", __name__)
 logger = logging.getLogger(__name__)
+
+# Formats trimesh can re-export a loaded GLB scene into. These are
+# geometry-only formats (no PBR materials/textures) -- an inherent
+# limitation of the formats themselves, not something this endpoint works
+# around.
+EXPORT_FORMATS = {"stl", "obj", "ply"}
 
 # Validate unique_id is a proper UUID to prevent path traversal.
 _UUID_RE = re.compile(
@@ -47,6 +54,44 @@ def serve_converted_file(unique_id, filename):
     except Exception as e:
         current_app.logger.error(f"Error serving file: {e}")
         return "Server error", 500
+
+
+@model_files_bp.route("/api/models/<model_id>/export/<fmt>", methods=["GET"])
+def export_model_as(model_id, fmt):
+    """Download the model re-exported as an alternate geometry format
+    (STL/OBJ/PLY), derived on the fly from the current GLB via trimesh."""
+    if fmt not in EXPORT_FORMATS:
+        return jsonify({"success": False, "error": "Unsupported export format"}), 400
+
+    model = get_live_model(model_id)
+    if not model:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    denied = check_model_view_allowed(model_id)
+    if denied:
+        return jsonify({"success": False, "error": denied.error}), denied.status
+
+    glb_path = model.glb_path
+    if not os.path.exists(glb_path):
+        return jsonify({"success": False, "error": "Model file not found"}), 404
+
+    try:
+        import trimesh
+
+        scene = trimesh.load(glb_path, force="scene")
+        exported = scene.export(file_type=fmt)
+        if isinstance(exported, str):
+            exported = exported.encode("utf-8")
+    except Exception as e:
+        current_app.logger.error(f"Error exporting model {model_id} as {fmt}: {e}")
+        return jsonify({"success": False, "error": "Export failed"}), 500
+
+    base_name = os.path.splitext(model.original_filename or "")[0] or model_id
+    return send_file(
+        io.BytesIO(exported),
+        as_attachment=True,
+        download_name=f"{model.display_name or base_name}.{fmt}",
+        mimetype="application/octet-stream",
+    )
 
 
 @model_files_bp.route("/api/thumbnail/<unique_id>", methods=["POST"])

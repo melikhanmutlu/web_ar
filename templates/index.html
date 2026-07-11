@@ -54,7 +54,7 @@
         </div>
 
         <div id="panel-upload" class="home-panel">
-        <form id="uploadForm" action="{{ url_for('upload_model') }}" method="post" enctype="multipart/form-data" class="av-stack">
+        <form id="uploadForm" action="{{ url_for('upload.upload_model') }}" method="post" enctype="multipart/form-data" class="av-stack">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <!-- File Upload -->
             <div>

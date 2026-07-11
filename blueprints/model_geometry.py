@@ -177,7 +177,7 @@ def model_lods(model_id):
     return jsonify({
         "success": True, "job_id": job_id, "status": "pending",
         "status_token": status_token,
-        "status_url": url_for("upload_job_status", job_id=job_id),
+        "status_url": url_for("upload.upload_job_status", job_id=job_id),
     }), 202
 
 
@@ -290,5 +290,5 @@ def model_derivatives(model_id):
         app_module._start_local_conversion(job_id)
     return jsonify({
         "success": True, "job_id": job_id, "status_token": status_token,
-        "status_url": url_for("upload_job_status", job_id=job_id),
+        "status_url": url_for("upload.upload_job_status", job_id=job_id),
     }), 202

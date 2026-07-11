@@ -173,6 +173,34 @@ class ApiToken(db.Model):
         return scope in set((self.scopes or '').split(','))
 
 
+class WebhookSubscription(db.Model):
+    """A user-owned HTTPS endpoint notified on conversion/AI generation
+    completion events. Delivery is best-effort (fire-and-forget, no retry
+    queue) -- see services/webhooks.py."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    url = db.Column(db.String(500), nullable=False)
+    secret = db.Column(db.String(64), nullable=False)
+    event_types = db.Column(db.String(300), nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_triggered_at = db.Column(db.DateTime, nullable=True)
+    last_status_code = db.Column(db.Integer, nullable=True)
+
+    def subscribes_to(self, event_type):
+        return event_type in set((self.event_types or '').split(','))
+
+    def to_dict(self):
+        return {
+            "id": self.id, "url": self.url,
+            "event_types": (self.event_types or '').split(','),
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat(),
+            "last_triggered_at": self.last_triggered_at.isoformat() if self.last_triggered_at else None,
+            "last_status_code": self.last_status_code,
+        }
+
+
 class UserModel(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # Changed to String to support UUID
     filename = db.Column(db.String(255), nullable=False)

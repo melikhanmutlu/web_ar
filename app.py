@@ -54,6 +54,7 @@ from blueprints.viewer import viewer_bp
 from blueprints.ai_generation import ai_generation_bp
 from blueprints.rigging import rigging_bp
 from blueprints.ai_image import ai_image_bp
+from blueprints.webhooks import webhooks_bp
 from model_cleanup import purge_model_completely
 from site_settings import get_setting, setting_bool, setting_int
 import re
@@ -82,7 +83,7 @@ from version_manager import (
     delete_version,
     version_path,
 )
-from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability
+from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability, dispatch_webhook_event
 from services.model_permissions import (
     model_access,
     get_live_model,
@@ -357,6 +358,7 @@ app.register_blueprint(viewer_bp)
 app.register_blueprint(ai_generation_bp)
 app.register_blueprint(rigging_bp)
 app.register_blueprint(ai_image_bp)
+app.register_blueprint(webhooks_bp)
 limiter.limit("120 per minute")(admin_bp)
 
 # auth.py can't import `limiter` itself (it's imported before `limiter` exists
@@ -1645,6 +1647,10 @@ def run_conversion_job(job, allow_retry=True):
             stage="Ready",
             detail="The model is ready for the viewer.",
         )
+        if job.job_type == "upload":
+            dispatch_webhook_event("conversion.completed", job.user_id, {
+                "job_id": job.id, "model_id": model_id,
+            })
     except Exception as e:
         retry = conversion_jobs.fail(job, e, allow_retry=allow_retry)
         update_conversion_progress(
@@ -1657,6 +1663,10 @@ def run_conversion_job(job, allow_retry=True):
             f"[conversion_job - {job.id}] attempt {job.attempts} failed "
             f"({'will retry' if retry else 'giving up'}): {e}"
         )
+        if not retry and job.job_type == "upload":
+            dispatch_webhook_event("conversion.failed", job.user_id, {
+                "job_id": job.id, "error": str(e)[:240],
+            })
         # Keep dead-letter staging for explicit replay/inspection. Inline jobs
         # cannot be replayed, so their staged files are cleaned immediately.
         if not retry and not allow_retry:
@@ -2533,6 +2543,9 @@ def _finalize_ai_job(job, task):
         job.status = "failed"
         job.error = "Generation finished but returned no GLB"
         db.session.commit()
+        dispatch_webhook_event("ai_generation.failed", job.user_id, {
+            "job_id": job.id, "error": job.error,
+        })
         return None
 
     tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "ai_" + job.id)
@@ -2562,6 +2575,9 @@ def _finalize_ai_job(job, task):
     job.progress = 100
     job.model_id = model.id
     db.session.commit()
+    dispatch_webhook_event("ai_generation.completed", job.user_id, {
+        "job_id": job.id, "model_id": model.id,
+    })
     return model
 
 
@@ -2654,6 +2670,10 @@ def _advance_ai_job(job):
                 job.error = t.get("task_error") or "Texturing failed"
 
     db.session.commit()
+    if job.status == "failed":
+        dispatch_webhook_event("ai_generation.failed", job.user_id, {
+            "job_id": job.id, "error": job.error,
+        })
 
 
 # --------------------------------------------------------------------------- #

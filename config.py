@@ -171,12 +171,6 @@ GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
 # noindex regardless of this flag (see _seo_robots_for_model_page in app.py).
 SEO_INDEX_MODEL_PAGES = os.getenv('SEO_INDEX_MODEL_PAGES', 'false').lower() == 'true'
 
-# i18n (Faz 5: services/i18n.py). English is the source language for every
-# gettext()-wrapped string in the codebase, so BABEL_DEFAULT_LOCALE doesn't
-# need its own English catalog -- only translations/tr has one.
-BABEL_DEFAULT_LOCALE = 'en'
-BABEL_TRANSLATION_DIRECTORIES = os.path.join(os.path.dirname(__file__), 'translations')
-
 # Klasörleri oluştur
 def create_directories():
     """Create necessary directories if they don't exist."""

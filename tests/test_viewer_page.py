@@ -63,6 +63,27 @@ def make_two_material_model(user_id=None):
     return model_id, glb_path
 
 
+def make_sized_box_model(extent, user_id=None):
+    """A single-box GLB whose largest side is exactly `extent` meters —
+    for exercising the AR scale-plausibility warning at its boundaries."""
+    model_id = "test-" + uuid.uuid4().hex[:8]
+    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
+    os.makedirs(model_dir, exist_ok=True)
+    glb_path = os.path.join(model_dir, "model.glb")
+
+    box = trimesh.creation.box(extents=(extent, extent, extent))
+    scene = trimesh.Scene()
+    scene.add_geometry(box, node_name="a")
+    scene.export(glb_path)
+
+    model = UserModel(id=model_id, filename=glb_path,
+                      file_type="glb", file_size=1000, user_id=user_id,
+                      cumulative_scale=1.0)
+    db.session.add(model)
+    db.session.commit()
+    return model_id, glb_path
+
+
 @pytest.fixture(autouse=True)
 def _no_usdz(monkeypatch):
     monkeypatch.setattr(app_module, "refresh_usdz_after_edit", lambda *a, **k: None)
@@ -194,6 +215,28 @@ def test_dimensions_endpoint_public(client):
     resp = client.get(f"/get_model_dimensions/{model_id}")
     assert resp.status_code == 200
     assert resp.get_json()["success"] is True
+
+
+def test_dimensions_endpoint_no_scale_warning_for_plausible_model(client):
+    model_id, _ = make_sized_box_model(extent=0.5)  # 50cm — plainly plausible
+    body = client.get(f"/get_model_dimensions/{model_id}").get_json()
+    assert body["scale_warning"] is None
+
+
+def test_dimensions_endpoint_warns_on_implausibly_tiny_model(client):
+    """A model whose largest side is a few millimeters looks like a
+    mm-mistaken-for-m unit bug once dropped into AR at real scale."""
+    model_id, _ = make_sized_box_model(extent=0.005)  # 5mm
+    body = client.get(f"/get_model_dimensions/{model_id}").get_json()
+    assert body["scale_warning"] is not None
+    assert "cm" in body["scale_warning"]
+
+
+def test_dimensions_endpoint_warns_on_implausibly_huge_model(client):
+    model_id, _ = make_sized_box_model(extent=50)  # 50m
+    body = client.get(f"/get_model_dimensions/{model_id}").get_json()
+    assert body["scale_warning"] is not None
+    assert "m —" in body["scale_warning"]
 
 
 def test_model_info_route_accepts_uuid_ids(client):

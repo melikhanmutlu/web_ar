@@ -113,6 +113,14 @@ WORKER_STALE_MINUTES = int(os.getenv('WORKER_STALE_MINUTES', 30))
 DEFAULT_MAX_DIMENSION_CM = float(os.getenv('DEFAULT_MAX_DIMENSION_CM', 50))
 MAX_MODEL_DIMENSION_METERS = float(os.getenv('MAX_MODEL_DIMENSION_METERS', 100))
 
+# AR (Scene Viewer / Quick Look) places a GLB's mesh at its native scale as
+# real-world meters, so a model authored/converted with the wrong source
+# unit looks comically tiny or huge in AR. These bound a "plausible
+# real-world object" range used only to warn the user in the viewer UI —
+# never to block viewing, editing, or AR itself.
+AR_SCALE_WARNING_MIN_METERS = float(os.getenv('AR_SCALE_WARNING_MIN_METERS', 0.02))
+AR_SCALE_WARNING_MAX_METERS = float(os.getenv('AR_SCALE_WARNING_MAX_METERS', 20))
+
 # Email notifications (conversion completed, share link created, org invite).
 # Best-effort/fire-and-forget: SMTP_HOST unset means notifications are simply
 # not sent (dev/test default) rather than failing the request that triggers

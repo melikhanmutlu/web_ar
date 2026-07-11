@@ -162,7 +162,32 @@ def get_model_dimensions(model_id):
             f"[get_model_dimensions] Model {model_id} dimensions: {dimensions_cm}"
         )
 
-        return jsonify({"success": True, "dimensions": dimensions_cm})
+        # AR places the GLB at its native scale as real-world meters, so a
+        # wrong-unit conversion (mm mistaken for m, etc.) looks implausibly
+        # tiny or huge there. Warn (never block) when the largest dimension
+        # falls outside a plausible real-world object range.
+        max_dimension_m = float(max(dimensions))
+        scale_warning = None
+        min_m = app_module.app.config.get("AR_SCALE_WARNING_MIN_METERS", 0.02)
+        max_m = app_module.app.config.get("AR_SCALE_WARNING_MAX_METERS", 20)
+        if max_dimension_m > 0 and max_dimension_m < min_m:
+            scale_warning = (
+                f"This model's largest side is only {max_dimension_m * 100:.1f} cm — "
+                "if it looks wrong in AR, the source file's units may have been "
+                "misdetected during conversion."
+            )
+        elif max_dimension_m > max_m:
+            scale_warning = (
+                f"This model's largest side is {max_dimension_m:.1f} m — "
+                "if it looks wrong in AR, the source file's units may have been "
+                "misdetected during conversion."
+            )
+
+        return jsonify({
+            "success": True,
+            "dimensions": dimensions_cm,
+            "scale_warning": scale_warning,
+        })
 
     except Exception as e:
         app_module.logger.error(f"[get_model_dimensions] Error: {e}", exc_info=True)

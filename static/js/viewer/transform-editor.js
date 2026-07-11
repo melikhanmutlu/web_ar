@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const dimHeight = document.getElementById('dimHeight');
             const dimDepth = document.getElementById('dimDepth');
             const cumulativeScale = document.getElementById('cumulativeScale');
+            const scaleWarning = document.getElementById('scaleWarning');
 
             fetch('/get_model_dimensions/' + modelId)
                 .then(r => r.json())
@@ -29,6 +30,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (sw) sw.textContent = parseFloat(d.width).toFixed(1);
                         if (sh) sh.textContent = parseFloat(d.height).toFixed(1);
                         if (sd) sd.textContent = parseFloat(d.depth).toFixed(1);
+                    }
+                    if (scaleWarning) {
+                        if (data.scale_warning) {
+                            scaleWarning.textContent = data.scale_warning;
+                            scaleWarning.classList.remove('hidden');
+                        } else {
+                            scaleWarning.classList.add('hidden');
+                        }
                     }
                 })
                 .catch(() => {});

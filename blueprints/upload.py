@@ -28,6 +28,7 @@ from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
 from services.model_permissions import check_model_mutation_allowed, get_live_model
+from services.plans import effective_storage_quota_mb
 from services.time_utils import datetime
 from site_settings import setting_int
 
@@ -55,7 +56,8 @@ def _check_storage_quota():
     """
     if not current_user.is_authenticated:
         return None
-    quota_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+    global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+    quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
     if not quota_mb:
         return None
     used = (
@@ -535,7 +537,8 @@ def init_chunked_upload():
         return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
 
     if current_user.is_authenticated:
-        quota_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+        global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+        quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
         if quota_mb:
             used = (
                 db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))

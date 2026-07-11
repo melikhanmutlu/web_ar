@@ -81,7 +81,7 @@ def my_models(folder_id=None):
             trash_count=trash_count,
             trash_retention_days=TRASH_RETENTION_DAYS,
             storage_used=_storage_usage_for(current_user.id),
-            storage_quota=_storage_quota_bytes(),
+            storage_quota=_storage_quota_bytes(current_user),
         )
     except Exception as e:
         current_app.logger.error(f"Error in my_models: {str(e)}")
@@ -114,7 +114,7 @@ def my_models_trash():
             trash_count=len(trashed_models),
             trash_retention_days=TRASH_RETENTION_DAYS,
             storage_used=_storage_usage_for(current_user.id),
-            storage_quota=_storage_quota_bytes(),
+            storage_quota=_storage_quota_bytes(current_user),
         )
     except Exception as e:
         current_app.logger.error(f"Error in my_models_trash: {str(e)}")

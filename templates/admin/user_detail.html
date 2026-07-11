@@ -23,6 +23,7 @@
                     {% if user.is_active_flag %}<span class="status-badge">active</span>{% else %}{{ badge('inactive') }}{% endif %}
                 </dd>
             </div>
+            <div><dt>plan</dt><dd><span class="status-badge">{{ user.plan }}</span></dd></div>
         </dl>
     </div>
     <div class="admin-card">
@@ -54,6 +55,21 @@
                 data-confirm="{% if user.is_active_flag %}Deactivate {{ user.username }}? They will be logged out and unable to log in.{% else %}Reactivate {{ user.username }}?{% endif %}">
             {% if user.is_active_flag %}deactivate{% else %}reactivate{% endif %}
         </button>
+        {% if user.plan != 'pro' %}
+        <button type="button" class="admin-btn"
+                data-action-url="{{ url_for('admin.set_plan', user_id=user.id) }}"
+                data-body='{"plan": "pro"}'
+                data-confirm="Upgrade {{ user.username }} to the pro plan (higher storage/AI limits)?">
+            upgrade to pro
+        </button>
+        {% else %}
+        <button type="button" class="admin-btn"
+                data-action-url="{{ url_for('admin.set_plan', user_id=user.id) }}"
+                data-body='{"plan": "free"}'
+                data-confirm="Downgrade {{ user.username }} to the free plan?">
+            downgrade to free
+        </button>
+        {% endif %}
         <button type="button" class="admin-btn"
                 data-action-url="{{ url_for('admin.reset_password', user_id=user.id) }}"
                 data-confirm="Reset {{ user.username }}'s password? A temporary password will be shown once."

@@ -462,6 +462,8 @@ def user_detail(user_id):
     ).count()
     ai_total = AIGenerationJob.query.filter_by(user_id=user.id).count()
 
+    from services.plans import effective_ai_daily_limit
+
     return render_template(
         "admin/user_detail.html",
         user=user,
@@ -470,7 +472,7 @@ def user_detail(user_id):
         storage_bytes=storage_bytes,
         ai_used_24h=ai_used_24h,
         ai_total=ai_total,
-        ai_limit=_effective_ai_daily_limit(),
+        ai_limit=effective_ai_daily_limit(user, _effective_ai_daily_limit()),
         likes=ModelLike.query.filter_by(user_id=user.id).count(),
         saves=ModelSave.query.filter_by(user_id=user.id).count(),
     )
@@ -508,6 +510,25 @@ def toggle_active(user_id):
         f"admin: {current_user.username} set is_active={user.is_active_flag} on {user.username}"
     )
     return jsonify({"success": True, "is_active": user.is_active_flag})
+
+
+@admin_bp.route("/users/<int:user_id>/set-plan", methods=["POST"])
+@admin_required
+def set_plan(user_id):
+    """Faz 5 plan/billing foundation: which tier's storage/AI limits apply
+    to this user (services/plans.py). No payment processing here -- an
+    admin sets this directly until a real billing provider is wired in."""
+    from services.plans import PLANS
+
+    user = User.query.get_or_404(user_id)
+    plan = (request.get_json(silent=True) or {}).get("plan")
+    if plan not in PLANS:
+        return jsonify({"success": False, "error": f"Invalid plan; must be one of {sorted(PLANS)}"}), 400
+    user.plan = plan
+    log_action("user.set_plan", "user", user.id, {"plan": plan})
+    db.session.commit()
+    logger.info(f"admin: {current_user.username} set plan={plan} on {user.username}")
+    return jsonify({"success": True, "plan": user.plan})
 
 
 @admin_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])

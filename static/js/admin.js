@@ -10,6 +10,7 @@
  *   data-confirm-typed="value"     additionally require typing `value`
  *   data-show-password             display response.temp_password instead of reloading
  *   data-redirect="/admin/..."     navigate there on success instead of reloading
+ *   data-body='{"k":"v"}'          JSON POST body (omit for a bodyless POST)
  *
  * Bulk actions: wrap a checkbox table + its action bar in one
  * `.admin-bulk-scope` container.
@@ -175,10 +176,12 @@
         const typed = button.getAttribute('data-confirm-typed');
         const showPassword = button.hasAttribute('data-show-password');
         const redirect = button.getAttribute('data-redirect');
+        const rawBody = button.getAttribute('data-body');
+        const body = rawBody ? JSON.parse(rawBody) : undefined;
         if (message) {
-            openModal({ url, message, typed, showPassword, redirect });
+            openModal({ url, message, typed, showPassword, redirect, body });
         } else {
-            runAction(url, showPassword, redirect);
+            runAction(url, showPassword, redirect, body);
         }
     });
 

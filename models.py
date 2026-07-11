@@ -34,6 +34,12 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    # Plan/billing foundation (Faz 5): which tier's limits apply to this
+    # user's storage quota and AI daily limit (services/plans.py). Payment
+    # processing itself is out of scope -- an admin sets this directly for
+    # now, so the schema and enforcement hooks are ready for a real billing
+    # provider to drive it later without another migration.
+    plan = db.Column(db.String(20), nullable=False, default="free", server_default="free")
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())

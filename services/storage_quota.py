@@ -7,6 +7,7 @@ from flask import current_app
 
 from services.time_utils import datetime
 from models import UserModel, db
+from services.plans import effective_storage_quota_mb
 from site_settings import setting_int
 
 TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
@@ -40,9 +41,8 @@ def _storage_usage_for(user_id):
     )
 
 
-def _storage_quota_bytes():
-    return (
-        setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
-        * 1024
-        * 1024
-    )
+def _storage_quota_bytes(user=None):
+    """user's plan (services/plans.py) can override the global site-wide
+    default; pass None (or omit) to get the plain global quota."""
+    global_default = setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
+    return effective_storage_quota_mb(user, global_default) * 1024 * 1024

@@ -2523,9 +2523,13 @@ def _ai_quota_state(user_id):
     so an admin setting ai_daily_limit to 0 to disable Meshy usage entirely
     must also cover it."""
     from datetime import timedelta
+    from services.plans import effective_ai_daily_limit
     since = datetime.utcnow() - timedelta(days=1)
     # Admin-editable override; falls back to the env default when unset.
-    limit = setting_int("ai_daily_limit", app.config.get("AI_GEN_DAILY_LIMIT", 10))
+    # The user's plan (services/plans.py) can raise that ceiling further.
+    global_default_limit = setting_int("ai_daily_limit", app.config.get("AI_GEN_DAILY_LIMIT", 10))
+    user = db.session.get(User, user_id) if user_id else None
+    limit = effective_ai_daily_limit(user, global_default_limit)
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,

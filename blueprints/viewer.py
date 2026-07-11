@@ -251,7 +251,11 @@ def view_model(model_id):
     filename_base = (model.original_filename.rsplit(".", 1)[0]
                      if model.original_filename and model.original_filename != "Unknown" else "Model")
     display_name = model.display_name or filename_base
-    is_owner = current_user.is_authenticated and model.user_id == current_user.id
+    # Admins get full owner-parity in the viewer (same as check_model_mutation_allowed
+    # / check_model_view_allowed's actor_is_admin bypass), not just the actual owner.
+    is_owner = current_user.is_authenticated and (
+        model.user_id == current_user.id or current_user.is_admin
+    )
     # Anonymous models (user_id None) are editable by anyone by design — this
     # mirrors check_model_mutation_allowed, so edit UI is only rendered for
     # viewers whose mutations the backend would actually accept.

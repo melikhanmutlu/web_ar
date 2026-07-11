@@ -264,6 +264,16 @@
                         </button>
                         {% endif %}
                     </div>
+                    {% if not trash_view %}
+                    <select class="visibility-select" data-model-id="{{ model.id }}"
+                            onclick="event.stopPropagation()"
+                            onchange="event.stopPropagation(); updateModelVisibility('{{ model.id }}', this.value, this)"
+                            title="Who can see this model. Public models can appear on the Discover page.">
+                        <option value="private" {% if model.visibility == 'private' %}selected{% endif %}>Private</option>
+                        <option value="unlisted" {% if model.visibility == 'unlisted' %}selected{% endif %}>Unlisted (link only)</option>
+                        <option value="public" {% if model.visibility == 'public' %}selected{% endif %}>Public (shown on Discover)</option>
+                    </select>
+                    {% endif %}
                     <p class="library-model-meta">
                         {% if trash_view %}
                         <span class="upload-date">Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }}</span>

@@ -22,7 +22,7 @@ class ModelAccessService:
 
     def mutation_decision(
         self, model_id, *, actor_id=None, edit_token=None, share_can_edit=False,
-        organization_can_edit=False, require_exists=True
+        organization_can_edit=False, require_exists=True, actor_is_admin=False
     ):
         model = self.model_type.query.session.get(self.model_type, model_id)
         if model is None:
@@ -31,6 +31,8 @@ class ModelAccessService:
             return None, AccessDecision(True)
         if model.deleted_at is not None:
             return model, AccessDecision(False, 410, "Model is in trash")
+        if actor_is_admin:
+            return model, AccessDecision(True)
         if model.user_id is not None:
             if share_can_edit or organization_can_edit:
                 return model, AccessDecision(True)
@@ -45,10 +47,12 @@ class ModelAccessService:
         return model, AccessDecision(True)
 
     def view_decision(self, model_id, *, actor_id=None, has_share_grant=False,
-                      organization_member=False):
+                      organization_member=False, actor_is_admin=False):
         model = self.model_type.query.session.get(self.model_type, model_id)
         if model is None or model.deleted_at is not None:
             return model, AccessDecision(False, 404, "Model not found")
+        if actor_is_admin:
+            return model, AccessDecision(True)
         if (model.visibility == "private" and actor_id != model.user_id and
                 not has_share_grant and not organization_member):
             return model, AccessDecision(False, 403, "Private model")

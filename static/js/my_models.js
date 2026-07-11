@@ -457,6 +457,29 @@ function moveSelectedToFolder(folderId) {
     });
 }
 
+// Per-model visibility (library-card select; see also the bulk variant below)
+function updateModelVisibility(modelId, visibility, selectEl) {
+    const previous = selectEl.dataset.previousValue || selectEl.value;
+    selectEl.disabled = true;
+    fetch(`/api/models/${modelId}/sharing`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibility })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error || 'Failed to update visibility');
+        selectEl.dataset.previousValue = visibility;
+        displayToast('Visibility updated', 'success');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        selectEl.value = previous;
+        displayToast(error.message || 'Failed to update visibility', 'error');
+    })
+    .finally(() => { selectEl.disabled = false; });
+}
+
 // Bulk visibility + tagging
 function showBulkVisibilityModal() {
     if (selectedModels.size === 0) {

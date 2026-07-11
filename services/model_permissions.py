@@ -64,7 +64,8 @@ def check_model_mutation_allowed(model_id, require_exists=True):
     _, decision = model_access.mutation_decision(
         model_id, actor_id=actor_id, edit_token=token,
         share_can_edit=grant == "edit", organization_can_edit=organization_can_edit,
-        require_exists=require_exists
+        require_exists=require_exists,
+        actor_is_admin=bool(current_user.is_authenticated and current_user.is_admin),
     )
     if not decision.allowed:
         return jsonify({"success": False, "error": decision.error}), decision.status
@@ -86,6 +87,7 @@ def check_model_view_allowed(model_id):
     _, decision = model_access.view_decision(
         model_id, actor_id=actor_id, has_share_grant=grant is not None,
         organization_member=organization_member,
+        actor_is_admin=bool(current_user.is_authenticated and current_user.is_admin),
     )
     if not decision.allowed:
         return decision

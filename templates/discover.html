@@ -11,6 +11,28 @@
         </div>
     </section>
 
+    <section class="discover-flow" aria-label="How ARVision works">
+        <div class="discover-flow-step">
+            <span class="discover-flow-icon"><i data-lucide="upload-cloud"></i></span>
+            <span class="discover-flow-label">Upload a 3D file</span>
+        </div>
+        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
+        <div class="discover-flow-step">
+            <span class="discover-flow-icon"><i data-lucide="cog"></i></span>
+            <span class="discover-flow-label">Auto-converted to GLB/USDZ</span>
+        </div>
+        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
+        <div class="discover-flow-step">
+            <span class="discover-flow-icon"><i data-lucide="sliders-horizontal"></i></span>
+            <span class="discover-flow-label">Customize, annotate, measure</span>
+        </div>
+        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
+        <div class="discover-flow-step">
+            <span class="discover-flow-icon"><i data-lucide="scan"></i></span>
+            <span class="discover-flow-label">View in AR & share</span>
+        </div>
+    </section>
+
     <section class="library-tools">
         <form method="get" class="library-search" style="flex:1;">
             <i data-lucide="search"></i>
@@ -68,6 +90,10 @@
         <i data-lucide="compass"></i>
         <h2>Nothing here yet</h2>
         <p>No public models {{ 'match "' + search + '"' if search else 'have been shared yet' }}.</p>
+        {% if not search %}
+        <p class="av-card-desc">Have a model already? Set its visibility to <strong>Public</strong> from
+            <a href="{{ url_for('models_crud.my_models') }}" style="text-decoration:underline;">My Models</a> to show it here.</p>
+        {% endif %}
     </div>
     {% endif %}
 </main>

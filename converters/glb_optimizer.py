@@ -6,9 +6,13 @@ The step is intentionally fail-safe: if gltfpack is missing, errors, or does not
 produce a smaller file, the original GLB is left completely untouched so the
 conversion pipeline can never regress.
 
-NOTE: gltfpack output uses KHR_meshopt_compression / KHR_mesh_quantization, which
-<model-viewer> decodes natively. Verify a few representative models in the viewer
-and AR before turning this on in production.
+NOTE: gltfpack -cc output uses EXT_meshopt_compression / KHR_mesh_quantization.
+<model-viewer> does NOT decode EXT_meshopt_compression by default (unlike DRACO,
+which ships with a built-in decoder location) -- the app must explicitly set
+ModelViewerElement.meshoptDecoderLocation before any model loads, or a
+meshopt-compressed GLB is valid but silently never renders. See the
+<script> block right after model-viewer's own <script> tag in
+templates/view.html, embed.html, compare.html, and index.html.
 """
 
 import os
@@ -29,7 +33,7 @@ def _safe_remove(path: str) -> None:
 
 
 def glb_requires_meshopt(glb_path: str) -> bool:
-    """Return True if the GLB requires KHR_meshopt_compression.
+    """Return True if the GLB requires EXT_meshopt_compression.
 
     gltfpack output (when GLB_OPTIMIZE is on) uses meshopt compression, which
     trimesh CANNOT decode. Editing such a file (slice / material / transform) would
@@ -42,13 +46,13 @@ def glb_requires_meshopt(glb_path: str) -> bool:
 
         gltf = GLTF2().load(glb_path)
         required = list(getattr(gltf, "extensionsRequired", None) or [])
-        return "KHR_meshopt_compression" in required
+        return "EXT_meshopt_compression" in required
     except Exception:
         # Dependency-light fallback: scan the GLB JSON chunk for the extension name.
         try:
             with open(glb_path, "rb") as f:
                 head = f.read(262144)
-            return b"KHR_meshopt_compression" in head
+            return b"EXT_meshopt_compression" in head
         except Exception:
             return False
 

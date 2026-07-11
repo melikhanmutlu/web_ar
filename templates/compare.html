@@ -4,6 +4,12 @@
     <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Model comparison — arvision</title>
     <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
+    <script>
+        customElements.whenDefined('model-viewer').then(() => {
+            customElements.get('model-viewer').meshoptDecoderLocation =
+                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+        });
+    </script>
     <style>
         *{box-sizing:border-box}body{margin:0;background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif}
         header{padding:14px 20px;display:flex;justify-content:space-between;border-bottom:1px solid #334155}

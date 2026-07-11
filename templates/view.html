@@ -17,7 +17,16 @@
 
     <!-- Google Model Viewer -->
     <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
-
+    <!-- Meshopt-compressed GLBs (Web Compression: Meshopt on upload) need this
+         decoder registered before model-viewer loads one, or the model silently
+         never renders -- model-viewer ships a DRACO decoder default but has no
+         meshopt default, unlike DRACO. -->
+    <script>
+        customElements.whenDefined('model-viewer').then(() => {
+            customElements.get('model-viewer').meshoptDecoderLocation =
+                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+        });
+    </script>
 
     <!-- QR Code library -->
     <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>

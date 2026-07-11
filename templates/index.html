@@ -1264,7 +1264,15 @@
                     const s = document.createElement('script');
                     s.type = 'module';
                     s.src = 'https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js';
-                    s.onload = () => resolve();
+                    s.onload = () => {
+                        // Meshopt-compressed GLBs need this decoder registered
+                        // before any model loads, same as templates/view.html.
+                        customElements.whenDefined('model-viewer').then(() => {
+                            customElements.get('model-viewer').meshoptDecoderLocation =
+                                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+                        });
+                        resolve();
+                    };
                     s.onerror = () => reject(new Error('Failed to load 3D preview.'));
                     document.head.appendChild(s);
                 });

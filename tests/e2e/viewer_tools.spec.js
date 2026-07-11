@@ -148,3 +148,23 @@ test('non-owner viewing a model only sees GLB in the download menu', async ({ pa
   await expect(otherPage.locator('.download-fanout-btn')).toHaveCount(1);
   await otherContext.close();
 });
+
+test('meshopt_decoder.js is served correctly as a static asset', async ({ page }) => {
+  // Regression check for the "Web Compression: Meshopt" bug -- model-viewer
+  // has a built-in default DRACO decoder location but none for meshopt, so
+  // without this file being reachable, a meshopt-compressed upload produces
+  // a valid GLB that silently never renders.
+  const resp = await page.goto('/static/js/meshopt_decoder.js');
+  expect(resp.status()).toBe(200);
+  const body = await resp.text();
+  expect(body).toContain('MeshoptDecoder');
+  expect(body.length).toBeGreaterThan(1000);
+});
+
+test('viewer page wires meshoptDecoderLocation to the static decoder', async ({ page }) => {
+  const viewerUrl = await uploadCubeAndGetViewerUrl(page);
+  const resp = await page.request.get(viewerUrl);
+  const html = await resp.text();
+  expect(html).toContain('meshoptDecoderLocation');
+  expect(html).toContain('/static/js/meshopt_decoder.js');
+});

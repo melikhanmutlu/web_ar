@@ -1,41 +1,10 @@
-const path = require('path');
 const { test, expect } = require('@playwright/test');
+const { isUnexpectedError, uploadCubeAndGetViewerUrl } = require('./helpers/upload');
 
 // Safety net for the upcoming view.html inline-JS modularization: uploads a
 // real model, opens the viewer, and exercises the tools panel so a refactor
 // that breaks script load order or a window._x global shows up here instead
 // of silently in production.
-//
-// Some CI/sandboxed environments restrict outbound access to third-party
-// CDNs (Tailwind, Lucide icons, unpkg's model-viewer bundle); errors caused
-// purely by a blocked CDN request are not app bugs, so they're filtered out
-// of the failure assertion below rather than asserting zero console errors.
-const KNOWN_BLOCKED_CDN_ERRORS = [
-  /tailwind is not defined/i,
-  /lucide is not defined/i,
-  /net::ERR_/i,
-  /Failed to load resource.*(tailwindcss|unpkg|cdnjs|googleapis)/i,
-  // Browser-console noise unrelated to app JS correctness: an unrecognized
-  // (but harmless) CSP directive, and the favicon 404 present in every run.
-  /Unrecognized Content-Security-Policy directive/i,
-  /Failed to load resource: the server responded with a status of 404/i,
-];
-
-function isUnexpectedError(message) {
-  return !KNOWN_BLOCKED_CDN_ERRORS.some((pattern) => pattern.test(message));
-}
-
-async function uploadCubeAndGetViewerUrl(page) {
-  await page.goto('/');
-  const fileInput = page.locator('#file-upload');
-  await fileInput.setInputFiles(path.join(__dirname, 'fixtures', 'cube.glb'));
-  await page.getByRole('button', { name: /upload and convert/i }).click();
-
-  // The upload goes through the async job flow (job_id + status polling);
-  // wait for the client-side redirect to the viewer once it completes.
-  await page.waitForURL(/\/view\//, { timeout: 30_000 });
-  return page.url();
-}
 
 test('viewer tools panel opens each section without script errors', async ({ page }) => {
   const errors = [];

@@ -201,6 +201,8 @@ test_output.txt
 pytest_out.txt
 pytest_output.txt
 report.json
+test-results/
+playwright-report/
 
 # Log files (explicit)
 app.log

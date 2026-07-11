@@ -9,6 +9,21 @@ import sqlalchemy as sa
 
 db = SQLAlchemy()
 
+# SQLite ships with foreign key enforcement disabled per connection; without
+# this the ondelete rules below are silently ignored (Postgres enforces them
+# natively). Registered on the Engine class so app, worker and tests all get it.
+import sqlite3
+from sqlalchemy import event as _sa_event
+from sqlalchemy.engine import Engine as _SAEngine
+
+
+@_sa_event.listens_for(_SAEngine, "connect")
+def _sqlite_enforce_foreign_keys(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
 class User(UserMixin, db.Model):
     LOCKOUT_THRESHOLD = 5
     LOCKOUT_MINUTES = 15
@@ -24,9 +39,9 @@ class User(UserMixin, db.Model):
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
     failed_login_attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     locked_until = db.Column(db.DateTime, nullable=True)
-    models = db.relationship('UserModel', backref='user', lazy=True)
-    folders = db.relationship('Folder', backref='user', lazy=True)
-    organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan')
+    models = db.relationship('UserModel', backref='user', lazy=True, passive_deletes=True)
+    folders = db.relationship('Folder', backref='user', lazy=True, passive_deletes=True)
+    organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
 
     @property
     def is_active(self):
@@ -61,9 +76,9 @@ class Folder(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(db.String(100), nullable=False, unique=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
-    parent_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='SET NULL'), nullable=True, index=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey('folder.id', ondelete='CASCADE'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     parent = db.relationship('Folder', remote_side=[id], backref=db.backref('subfolders', lazy=True))
@@ -104,14 +119,14 @@ class Organization(db.Model):
     slug = db.Column(db.String(140), unique=True, nullable=False, index=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    members = db.relationship('OrganizationMember', backref='organization', lazy=True, cascade='all, delete-orphan')
+    members = db.relationship('OrganizationMember', backref='organization', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     models = db.relationship('UserModel', backref='organization', lazy=True)
 
 
 class OrganizationMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
     role = db.Column(db.String(20), nullable=False, default='viewer')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
@@ -119,18 +134,18 @@ class OrganizationMember(db.Model):
 
 class OrganizationDomain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'), nullable=False, index=True)
     hostname = db.Column(db.String(255), unique=True, nullable=False, index=True)
     verification_token = db.Column(db.String(80), nullable=False)
     verified_at = db.Column(db.DateTime, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-    organization = db.relationship('Organization', backref=db.backref('domains', lazy=True, cascade='all, delete-orphan'))
+    organization = db.relationship('Organization', backref=db.backref('domains', lazy=True, cascade='all, delete-orphan', passive_deletes=True))
 
 
 class ApiToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'), nullable=True, index=True)
     name = db.Column(db.String(120), nullable=False)
     token_prefix = db.Column(db.String(16), nullable=False, index=True)
     token_digest = db.Column(db.String(64), unique=True, nullable=False, index=True)
@@ -163,9 +178,9 @@ class UserModel(db.Model):
     color = db.Column(db.String(7), nullable=True)  # Hex color code
     qr_code = db.Column(db.String(255), nullable=True)  # QR code filename
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    folder_id = db.Column(db.Integer, db.ForeignKey('folder.id'), nullable=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    folder_id = db.Column(db.Integer, db.ForeignKey('folder.id', ondelete='SET NULL'), nullable=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='SET NULL'), nullable=True, index=True)
     
     # Scale tracking
     original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload
@@ -205,14 +220,14 @@ class UserModel(db.Model):
     source_filename = db.Column(db.String(255), nullable=True)
     
     # Version tracking
-    versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelVersion.created_at.desc()')
+    versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True, order_by='ModelVersion.created_at.desc()')
     
     # Hotspots
-    hotspots = db.relationship('ModelHotspot', backref='model', lazy=True, cascade='all, delete-orphan', order_by='ModelHotspot.created_at')
-    share_links = db.relationship('ModelShareLink', backref='model', lazy=True, cascade='all, delete-orphan')
-    analytics_events = db.relationship('ModelAnalyticsEvent', backref='model', lazy=True, cascade='all, delete-orphan')
-    lods = db.relationship('ModelLOD', backref='model', lazy=True, cascade='all, delete-orphan')
-    derived_assets = db.relationship('ModelDerivedAsset', backref='model', lazy=True, cascade='all, delete-orphan')
+    hotspots = db.relationship('ModelHotspot', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True, order_by='ModelHotspot.created_at')
+    share_links = db.relationship('ModelShareLink', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    analytics_events = db.relationship('ModelAnalyticsEvent', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    lods = db.relationship('ModelLOD', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
+    derived_assets = db.relationship('ModelDerivedAsset', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     
     def __repr__(self):
         return f'<UserModel {self.filename}>'
@@ -273,7 +288,7 @@ class UserModel(db.Model):
 
 class ModelShareLink(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False, index=True)
     token_digest = db.Column(db.String(64), unique=True, nullable=False, index=True)
     permission = db.Column(db.String(10), nullable=False, default='view')
     password_hash = db.Column(db.String(255), nullable=True)
@@ -290,7 +305,7 @@ class ModelShareLink(db.Model):
 
 class ModelAnalyticsEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False, index=True)
     event_type = db.Column(db.String(30), nullable=False, index=True)
     visitor_hash = db.Column(db.String(64), nullable=True, index=True)
     referrer_domain = db.Column(db.String(255), nullable=True)
@@ -305,7 +320,7 @@ class ModelHotspot(db.Model):
     Each hotspot has a position, title, description, and optional camera view
     """
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)
     
     # Hotspot data
     hotspot_id = db.Column(db.String(50), nullable=False)  # Frontend ID (e.g., 'hotspot-1234567890')
@@ -381,7 +396,7 @@ class ModelVersion(db.Model):
     Each modification (transform, slice, material) creates a new version
     """
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)
     version_number = db.Column(db.Integer, nullable=False)  # 1, 2, 3, etc.
     filename = db.Column(db.String(255), nullable=False)  # Path to version file
     file_size = db.Column(db.Integer)
@@ -428,7 +443,7 @@ class ModelVersion(db.Model):
 
 class ModelLOD(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False, index=True)
     level = db.Column(db.Integer, nullable=False)
     ratio = db.Column(db.Float, nullable=False)
     filename = db.Column(db.String(255), nullable=False)
@@ -447,7 +462,7 @@ class ModelLOD(db.Model):
 
 class ModelDerivedAsset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False, index=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False, index=True)
     kind = db.Column(db.String(40), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)
@@ -459,7 +474,7 @@ class ModelDerivedAsset(db.Model):
 class CameraView(db.Model):
     """Saved camera views for 3D models"""
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     orbit_theta = db.Column(db.Float, nullable=False)
     orbit_phi = db.Column(db.Float, nullable=False)
@@ -470,7 +485,7 @@ class CameraView(db.Model):
     fov = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    model = db.relationship('UserModel', backref=db.backref('camera_views', lazy=True, cascade='all, delete-orphan', order_by='CameraView.created_at'))
+    model = db.relationship('UserModel', backref=db.backref('camera_views', lazy=True, cascade='all, delete-orphan', passive_deletes=True, order_by='CameraView.created_at'))
 
     def to_dict(self):
         return {
@@ -484,8 +499,8 @@ class CameraView(db.Model):
 
 class ModelLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     session_id = db.Column(db.String(128), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (
@@ -493,30 +508,30 @@ class ModelLike(db.Model):
         db.UniqueConstraint('model_id', 'session_id', name='uq_model_like_session'),
     )
 
-    model = db.relationship('UserModel', backref=db.backref('likes', lazy=True, cascade='all, delete-orphan'))
+    model = db.relationship('UserModel', backref=db.backref('likes', lazy=True, cascade='all, delete-orphan', passive_deletes=True))
 
 
 class ModelSave(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (
         db.UniqueConstraint('model_id', 'user_id', name='uq_model_save_user'),
     )
 
-    model = db.relationship('UserModel', backref=db.backref('saves', lazy=True, cascade='all, delete-orphan'))
+    model = db.relationship('UserModel', backref=db.backref('saves', lazy=True, cascade='all, delete-orphan', passive_deletes=True))
 
 
 class AIGenerationJob(db.Model):
     """Tracks an AI text/image -> 3D generation (Meshy) so the frontend can poll
     status without a long-lived server thread (gunicorn multi-worker safe)."""
     id = db.Column(db.String(36), primary_key=True)  # our job UUID
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     kind = db.Column(db.String(10), nullable=False)        # 'text' | 'image'
     prompt = db.Column(db.Text, nullable=True)
-    parent_job_id = db.Column(db.String(36), db.ForeignKey('ai_generation_job.id'), nullable=True, index=True)
-    preset_id = db.Column(db.Integer, db.ForeignKey('prompt_preset.id'), nullable=True)
+    parent_job_id = db.Column(db.String(36), db.ForeignKey('ai_generation_job.id', ondelete='SET NULL'), nullable=True, index=True)
+    preset_id = db.Column(db.Integer, db.ForeignKey('prompt_preset.id', ondelete='SET NULL'), nullable=True)
 
     # Meshy task ids (text is two-stage: preview -> refine)
     meshy_preview_id = db.Column(db.String(80), nullable=True)
@@ -561,7 +576,7 @@ class AIGenerationJob(db.Model):
 
 class PromptPreset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
     name = db.Column(db.String(120), nullable=False)
     prompt_template = db.Column(db.Text, nullable=False)
     category = db.Column(db.String(60), nullable=True, index=True)
@@ -571,8 +586,8 @@ class PromptPreset(db.Model):
 
 class MaterialPreset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
-    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id'), nullable=True, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='SET NULL'), nullable=True, index=True)
     name = db.Column(db.String(120), nullable=False)
     color = db.Column(db.String(7), nullable=False, default='#ffffff')
     metalness = db.Column(db.Float, nullable=False, default=0.0)
@@ -668,7 +683,7 @@ class ConversionJob(db.Model):
 
     payload = db.Column(db.JSON, nullable=True)      # staged paths + options
     model_id = db.Column(db.String(36), nullable=True)  # UserModel.id when done
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     error = db.Column(db.Text, nullable=True)
     status_token_hash = db.Column(db.String(255), nullable=True)
 
@@ -681,7 +696,8 @@ class ConversionJob(db.Model):
     next_attempt_at = db.Column(db.DateTime, nullable=True, index=True)
     last_heartbeat_at = db.Column(db.DateTime, nullable=True)
     events = db.relationship('ConversionJobEvent', backref='job', lazy=True,
-                             cascade='all, delete-orphan', order_by='ConversionJobEvent.created_at')
+                             cascade='all, delete-orphan', passive_deletes=True,
+                             order_by='ConversionJobEvent.created_at')
 
     def to_dict(self):
         return {
@@ -706,7 +722,7 @@ class WorkerHeartbeat(db.Model):
 
 class ConversionJobEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    job_id = db.Column(db.String(36), db.ForeignKey('conversion_job.id'), nullable=False, index=True)
+    job_id = db.Column(db.String(36), db.ForeignKey('conversion_job.id', ondelete='CASCADE'), nullable=False, index=True)
     level = db.Column(db.String(10), nullable=False, default='info')
     event = db.Column(db.String(60), nullable=False)
     message = db.Column(db.Text, nullable=True)

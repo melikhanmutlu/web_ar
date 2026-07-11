@@ -43,7 +43,7 @@ def healthz():
 def metrics():
     """Small Prometheus-compatible operational surface without user data."""
     configured_token = current_app.config.get("METRICS_TOKEN", "")
-    if current_app.config.get("FLASK_ENV") == "production":
+    if configured_token or current_app.config.get("FLASK_ENV") == "production":
         supplied_token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if not configured_token or not secrets.compare_digest(supplied_token, configured_token):
             abort(404)

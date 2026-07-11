@@ -49,7 +49,8 @@ The test suite includes a real GLB upload and conversion happy path, access-poli
 - Set `DATABASE_URL` to PostgreSQL.
 - Mount persistent storage and configure the `WEB_AR_*_DIR` variables.
 - Set `JOB_QUEUE=true` and run `worker.py` as a separate process.
-- Configure `METRICS_TOKEN` before exposing `/metrics`.
+- Configure `METRICS_TOKEN` before exposing `/metrics` (enforced in every environment once set).
+- Embeds: a model without an `embed_allowed_domains` allowlist is served with `frame-ancestors *` so it can be iframed anywhere — this is the intended default for public embeds. Set the per-model allowlist to restrict which sites may embed it.
 - Use Redis through `RATELIMIT_STORAGE_URI` when running multiple web instances.
 - Apply `flask db upgrade` before accepting traffic.
 

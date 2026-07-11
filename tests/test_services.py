@@ -3,12 +3,16 @@ from pathlib import Path
 import pytest
 from werkzeug.security import generate_password_hash
 
-from models import UserModel, db
+from models import User, UserModel, db
 from services import ModelAccessService, StorageService
 
 
 def test_model_access_service_enforces_owner_and_capability(client):
-    owned = UserModel(id="owned", filename="x", user_id=9)
+    owner = User(username="owner", email="owner@test.com")
+    owner.set_password("pw")
+    db.session.add(owner)
+    db.session.flush()
+    owned = UserModel(id="owned", filename="x", user_id=owner.id)
     anonymous = UserModel(
         id="anonymous", filename="x", edit_token_hash=generate_password_hash("token")
     )
@@ -16,8 +20,8 @@ def test_model_access_service_enforces_owner_and_capability(client):
     db.session.commit()
     service = ModelAccessService(UserModel)
 
-    assert not service.mutation_decision("owned", actor_id=8)[1].allowed
-    assert service.mutation_decision("owned", actor_id=9)[1].allowed
+    assert not service.mutation_decision("owned", actor_id=owner.id + 1)[1].allowed
+    assert service.mutation_decision("owned", actor_id=owner.id)[1].allowed
     assert not service.mutation_decision("anonymous", edit_token="wrong")[1].allowed
     assert service.mutation_decision("anonymous", edit_token="token")[1].allowed
 

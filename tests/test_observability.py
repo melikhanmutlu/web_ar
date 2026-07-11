@@ -31,6 +31,22 @@ def test_metrics_report_queue_state_and_duration(client):
     assert "arvision_conversion_duration_seconds 5.000" in text
 
 
+def test_metrics_require_bearer_token_whenever_configured(client):
+    app = client.application
+    previous_token = app.config.get("METRICS_TOKEN")
+    app.config.update(METRICS_TOKEN="metrics-secret")
+    try:
+        assert client.get("/metrics").status_code == 404
+        assert client.get(
+            "/metrics", headers={"Authorization": "Bearer wrong"}
+        ).status_code == 404
+        assert client.get(
+            "/metrics", headers={"Authorization": "Bearer metrics-secret"}
+        ).status_code == 200
+    finally:
+        app.config.update(METRICS_TOKEN=previous_token)
+
+
 def test_production_metrics_require_bearer_token(client):
     app = client.application
     previous_env = app.config.get("FLASK_ENV")

@@ -98,6 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
         modelViewer?.addEventListener('load', async () => {
             await ensureMaterialsLoaded();
             captureOriginalMaterials();
+            // Lets undo-redo.js capture its baseline snapshot only once the
+            // sliders actually reflect the model's real material state,
+            // instead of guessing with a fixed delay.
+            window.dispatchEvent(new CustomEvent('viewer:material-ready'));
         });
 
         // Auto-capture viewer screenshot as thumbnail (owner only, once per model)
@@ -303,6 +307,47 @@ document.addEventListener('DOMContentLoaded', () => {
         // Cross-file bridge: save-flow.js needs to read the current
         // material list to build the "Save & Apply to AR" payload.
         window.getMaterials = getMaterials;
+
+        // Cross-file bridge: undo-redo.js snapshots/restores editor state
+        // without knowing how the material editor itself applies changes.
+        window._captureMaterialSnapshot = function() {
+            return {
+                color: document.getElementById('materialColorHex')?.value || '#FFFFFF',
+                metalness: parseFloat(document.getElementById('metalnessSlider')?.value ?? 0),
+                roughness: parseFloat(document.getElementById('roughnessSlider')?.value ?? 1),
+                opacity: parseFloat(document.getElementById('opacitySlider')?.value ?? 1),
+            };
+        };
+        window._applyMaterialSnapshot = function(snap) {
+            const matColor = document.getElementById('materialColor');
+            const matColorHex = document.getElementById('materialColorHex');
+            const metalnessSlider = document.getElementById('metalnessSlider');
+            const roughnessSlider = document.getElementById('roughnessSlider');
+            const opacitySlider = document.getElementById('opacitySlider');
+            const metalnessValue = document.getElementById('metalnessValue');
+            const roughnessValue = document.getElementById('roughnessValue');
+            const opacityValue = document.getElementById('opacityValue');
+
+            if (matColor) matColor.value = snap.color;
+            if (matColorHex) matColorHex.value = snap.color.toUpperCase();
+            applyMaterialColor(snap.color);
+
+            if (metalnessSlider) metalnessSlider.value = snap.metalness;
+            if (metalnessValue) metalnessValue.textContent = snap.metalness.toFixed(2);
+            if (roughnessSlider) roughnessSlider.value = snap.roughness;
+            if (roughnessValue) roughnessValue.textContent = snap.roughness.toFixed(2);
+            if (opacitySlider) opacitySlider.value = snap.opacity;
+            if (opacityValue) opacityValue.textContent = snap.opacity.toFixed(2);
+
+            forEachMaterial(mat => {
+                mat.pbrMetallicRoughness.setMetallicFactor(snap.metalness);
+                mat.pbrMetallicRoughness.setRoughnessFactor(snap.roughness);
+                const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
+                mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], snap.opacity]);
+                mat.setAlphaMode(snap.opacity < 1 ? 'BLEND' : 'OPAQUE');
+            });
+            markMaterialChanged();
+        };
 
         // Initialize editors
         if (!materialEditorInitialized) initMaterialEditor();

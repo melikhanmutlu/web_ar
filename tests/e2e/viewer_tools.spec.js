@@ -91,3 +91,30 @@ test('AR button explains why AR is unavailable on an unsupported device', async 
   await expect(page.locator('#arModalTitle')).toHaveText('AR Not Supported');
   await expect(page.locator('#arModalMessage')).toContainText('QR code');
 });
+
+test('undo/redo steps a material change back and forth', async ({ page }) => {
+  await uploadCubeAndGetViewerUrl(page);
+  await page.locator('#toolsPanelToggle').click();
+  await page.locator('#materialContainer .tp-section-header').click();
+
+  const roughnessSlider = page.locator('#roughnessSlider');
+  await expect(page.locator('#undoButton')).toBeDisabled();
+
+  // Move the slider and commit the change. range inputs need an explicit
+  // "change" dispatch (undo-redo.js snapshots on "change", not "input") --
+  // fill() alone doesn't reliably fire it for <input type="range">.
+  await roughnessSlider.evaluate((el) => {
+    el.value = '0.4';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await expect(page.locator('#undoButton')).toBeEnabled();
+  await expect(roughnessSlider).toHaveValue('0.4');
+
+  await page.locator('#undoButton').click();
+  await expect(roughnessSlider).toHaveValue('1');
+  await expect(page.locator('#redoButton')).toBeEnabled();
+
+  await page.locator('#redoButton').click();
+  await expect(roughnessSlider).toHaveValue('0.4');
+});

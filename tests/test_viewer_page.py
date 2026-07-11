@@ -126,6 +126,8 @@ def test_edit_ui_hidden_from_non_owner(client):
     assert 'id="saveCameraView"' not in body
     assert 'id="toggleHotspotMode"' not in body
     assert 'id="clearAnnotations"' not in body
+    assert 'id="undoButton"' not in body
+    assert 'id="redoButton"' not in body
     assert "canEdit: false" in body
 
 
@@ -139,6 +141,8 @@ def test_edit_ui_rendered_for_anonymous_model(client):
     body = resp.get_data(as_text=True)
     assert 'id="saveChanges"' in body
     assert 'id="slicerApply"' in body
+    assert 'id="undoButton"' in body
+    assert 'id="redoButton"' in body
     assert "canEdit: true" in body
 
 

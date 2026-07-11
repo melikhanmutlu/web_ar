@@ -176,4 +176,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!transformEditorInitialized) initTransformEditor();
         loadDimensions();
+
+        // Cross-file bridge: undo-redo.js snapshots/restores editor state
+        // without knowing how the transform editor itself applies changes.
+        window._captureTransformSnapshot = function() {
+            return {
+                scale: parseFloat(document.getElementById('scaleSlider')?.value ?? 1),
+                rotateX: parseFloat(document.getElementById('rotateXSlider')?.value ?? 0),
+                rotateY: parseFloat(document.getElementById('rotateYSlider')?.value ?? 0),
+                rotateZ: parseFloat(document.getElementById('rotateZSlider')?.value ?? 0),
+            };
+        };
+        window._applyTransformSnapshot = function(snap) {
+            const scaleInput = document.getElementById('scaleInput');
+            const scaleSlider = document.getElementById('scaleSlider');
+            const rotateXSlider = document.getElementById('rotateXSlider');
+            const rotateYSlider = document.getElementById('rotateYSlider');
+            const rotateZSlider = document.getElementById('rotateZSlider');
+            const rotateXValue = document.getElementById('rotateXValue');
+            const rotateYValue = document.getElementById('rotateYValue');
+            const rotateZValue = document.getElementById('rotateZValue');
+
+            if (scaleSlider) scaleSlider.value = snap.scale;
+            if (scaleInput) scaleInput.value = snap.scale.toFixed(1);
+            if (rotateXSlider) rotateXSlider.value = snap.rotateX;
+            if (rotateYSlider) rotateYSlider.value = snap.rotateY;
+            if (rotateZSlider) rotateZSlider.value = snap.rotateZ;
+            if (rotateXValue) rotateXValue.textContent = snap.rotateX + '°';
+            if (rotateYValue) rotateYValue.textContent = snap.rotateY + '°';
+            if (rotateZValue) rotateZValue.textContent = snap.rotateZ + '°';
+            applyTransform();
+        };
 });

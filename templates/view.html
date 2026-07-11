@@ -1202,6 +1202,10 @@
         <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
             <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
             <button id="modelInfoButton" class="tb-btn" title="Details"><i data-lucide="file-text"></i></button>
+            {% if can_edit %}
+            <button id="undoButton" class="tb-btn" title="Undo (Ctrl+Z)" disabled><i data-lucide="undo-2"></i></button>
+            <button id="redoButton" class="tb-btn" title="Redo (Ctrl+Shift+Z)" disabled><i data-lucide="redo-2"></i></button>
+            {% endif %}
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
@@ -1390,6 +1394,9 @@
     <script src="{{ url_for('static', filename='js/viewer/animation-controls.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/material-editor.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/transform-editor.js') }}"></script>
+    {% if can_edit %}
+    <script src="{{ url_for('static', filename='js/viewer/undo-redo.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/annotations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/versions.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/rig-animate.js') }}"></script>

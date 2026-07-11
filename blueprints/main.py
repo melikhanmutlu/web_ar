@@ -3,6 +3,7 @@
 from flask import Blueprint, redirect, render_template, request, session, url_for
 from flask_login import current_user
 
+from config import WORKER_POLL_INTERVAL
 from services.i18n import SUPPORTED_LANGUAGES
 
 main_bp = Blueprint("main", __name__)
@@ -20,7 +21,8 @@ def index():
         ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
     return render_template("index.html",
                             ai_remove_lighting_supported=ai_remove_lighting_supported,
-                            ai_quota=ai_quota)
+                            ai_quota=ai_quota,
+                            worker_poll_interval_ms=int(WORKER_POLL_INTERVAL * 1000))
 
 
 @main_bp.route("/set-language/<lang>")

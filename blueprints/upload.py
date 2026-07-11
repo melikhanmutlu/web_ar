@@ -21,6 +21,7 @@ from werkzeug.utils import secure_filename
 from config import (
     BATCH_UPLOAD_MAX_FILES,
     CHUNK_UPLOAD_MAX_CHUNKS,
+    DEFAULT_MAX_DIMENSION_CM,
     JOB_STREAM_MAX_SECONDS,
     MAX_MODEL_DIMENSION_METERS,
 )
@@ -196,7 +197,7 @@ def upload_file():
         app_module.logger.info(f"DEBUG: useMaxDimension parsed: {use_max_dimension}")
 
         if use_max_dimension:
-            max_dimension = float(request.form.get("maxDimension", "50"))  # Keep in cm
+            max_dimension = float(request.form.get("maxDimension", str(DEFAULT_MAX_DIMENSION_CM)))  # Keep in cm
             app_module.logger.info(f"Maximum dimension limit enabled: {max_dimension} cm")
         else:
             max_dimension = None  # No scaling

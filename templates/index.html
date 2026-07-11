@@ -819,7 +819,7 @@
                         .then(r => r.json())
                         .then(job => { if (applyJobUpdate(job, editToken)) clearInterval(poll); })
                         .catch(() => { /* transient network error; keep polling */ });
-                }, 2000);
+                }, {{ worker_poll_interval_ms }});
             }
 
             // Real-time job progress (Faz 4: SSE), falling back to polling

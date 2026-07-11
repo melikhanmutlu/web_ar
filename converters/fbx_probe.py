@@ -44,9 +44,7 @@ def probe_fbx(input_path, work_dir):
     """
     import numpy as np
 
-    # Reuse the converter's library-path + lifecycle helpers (lazy import to
-    # avoid any import cycle; fbx_converter never imports this module at top).
-    from .fbx_converter import _ensure_assimp_library_path, _pyassimp_scene
+    from .fbx_common import _ensure_assimp_library_path, _pyassimp_scene
     from .base_converter import safe_texture_ext
 
     _ensure_assimp_library_path()

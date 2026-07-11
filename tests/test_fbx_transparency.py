@@ -15,7 +15,7 @@ import trimesh
 from PIL import Image as PILImage
 from pygltflib import GLTF2
 
-from converters.fbx_converter import _analyze_alpha_channel, fix_material_transparency
+from converters.fbx_materials import _analyze_alpha_channel, fix_material_transparency
 from glb_modifier import apply_material_modifications
 
 

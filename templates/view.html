@@ -625,24 +625,12 @@
     <script src="{{ url_for('static', filename='js/viewer/ar-onboarding.js') }}"></script>
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
-    <!-- Header -->
-    <div class="top-header">
-        <div class="brand-shell">
-            <a href="/" class="brand-mark hover:opacity-80 transition-opacity">arvision</a>
-        </div>
-        <nav class="top-actions" aria-label="Viewer navigation">
-            <a href="/" class="showcase-nav-link">home</a>
-            {% if current_user.is_authenticated %}
-            <a href="/my_models" class="showcase-nav-link">my models</a>
-            <form method="POST" action="{{ url_for('auth.logout') }}" style="display:inline;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;padding:0;font:inherit;">log out</button>
-            </form>
-            {% else %}
-            <a href="{{ url_for('auth.login') }}" class="showcase-nav-link login-pill">login</a>
-            {% endif %}
-        </nav>
-    </div>
+    <!-- Header: same partial every other page uses, so the link set (discover,
+         register, admin, active-state) stays in sync instead of drifting via a
+         hand-duplicated copy. Its markup reuses this page's own .top-header/
+         .brand-shell/.showcase-nav-link classes (defined above), so the
+         floating/dark viewer chrome is unaffected. -->
+    {% include '_site_header.html' %}
 
     <!-- QR Modal -->
     <div id="qrModal">

@@ -4,6 +4,7 @@
     </div>
     <nav class="top-actions" aria-label="Primary">
         <a href="{{ url_for('main.index') }}" class="showcase-nav-link {% if request.endpoint == 'main.index' %}is-active{% endif %}">home</a>
+        <a href="{{ url_for('discover.discover') }}" class="showcase-nav-link {% if request.endpoint == 'discover.discover' %}is-active{% endif %}">discover</a>
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('models_crud.my_models') }}" class="showcase-nav-link {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">my models</a>
         {% if current_user.is_admin %}

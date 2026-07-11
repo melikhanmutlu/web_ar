@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Discover - arvision{% endblock %}
+
+{% block content %}
+<main class="library-main">
+    <section class="library-header">
+        <div>
+            <p class="home-kicker">Community gallery</p>
+            <h1 class="home-title">Discover</h1>
+        </div>
+    </section>
+
+    <section class="library-tools">
+        <form method="get" class="library-search" style="flex:1;">
+            <i data-lucide="search"></i>
+            <input type="text" name="q" value="{{ search }}" placeholder="Search public models...">
+        </form>
+        <form method="get">
+            {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+            <select name="sort" class="av-select library-sort" onchange="this.form.submit()">
+                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest First</option>
+                <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most Liked</option>
+            </select>
+        </form>
+    </section>
+
+    {% if models %}
+    <div class="library-model-grid">
+        {% for model in models %}
+        {% set model_name = (model.display_name or model.original_filename or 'Model') %}
+        <article class="model-card library-model" data-model-id="{{ model.id }}"
+                 onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'">
+            <div class="library-preview">
+                <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}"
+                     alt="{{ model_name }} preview" loading="lazy" decoding="async"
+                     onerror="this.closest('.library-preview').classList.add('is-empty'); this.remove();">
+                <div class="library-preview-fallback">
+                    <i data-lucide="box"></i>
+                    <span>No screenshot yet</span>
+                </div>
+            </div>
+            <div class="library-model-body">
+                <h3 class="model-name" title="{{ model_name }}">{{ model_name }}</h3>
+                <p class="library-model-meta">
+                    <span class="file-size">{{ like_counts.get(model.id, 0) }} like{{ '' if like_counts.get(model.id, 0) == 1 else 's' }}</span>
+                    <span class="file-type-badge">{{ (model.file_type or '') | upper }}</span>
+                </p>
+                {% if model.tags %}
+                <div class="model-tags">
+                    {% for tag in model.tags.split(',') %}<span class="model-tag-chip">{{ tag }}</span>{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% if has_more %}
+    <div class="library-load-more">
+        <a class="library-btn" href="{{ url_for('discover.discover', q=search, sort=sort, page=page + 1) }}">
+            <i data-lucide="chevrons-down"></i>
+            Load more
+        </a>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="library-empty">
+        <i data-lucide="compass"></i>
+        <h2>Nothing here yet</h2>
+        <p>No public models {{ 'match "' + search + '"' if search else 'have been shared yet' }}.</p>
+    </div>
+    {% endif %}
+</main>
+{% endblock %}

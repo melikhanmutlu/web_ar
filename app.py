@@ -55,6 +55,7 @@ from blueprints.ai_generation import ai_generation_bp
 from blueprints.rigging import rigging_bp
 from blueprints.ai_image import ai_image_bp
 from blueprints.webhooks import webhooks_bp
+from blueprints.discover import discover_bp
 from model_cleanup import purge_model_completely
 from site_settings import get_setting, setting_bool, setting_int
 import re
@@ -359,6 +360,7 @@ app.register_blueprint(ai_generation_bp)
 app.register_blueprint(rigging_bp)
 app.register_blueprint(ai_image_bp)
 app.register_blueprint(webhooks_bp)
+app.register_blueprint(discover_bp)
 limiter.limit("120 per minute")(admin_bp)
 
 # auth.py can't import `limiter` itself (it's imported before `limiter` exists

@@ -153,6 +153,20 @@ def test_edit_ui_rendered_for_owner(client):
     assert "canEdit: true" in body
 
 
+def test_ar_placement_setting_reflected_in_model_viewer_tag(client):
+    owner = make_user("owner-ar", "owner-ar@test.com")
+    model_id, _ = make_two_material_model(user_id=owner.id)
+    login(client, "owner-ar", "testpassword123")
+
+    model = db.session.get(UserModel, model_id)
+    model.viewer_settings = {"ar_placement": "ceiling"}
+    db.session.commit()
+
+    resp = client.get(f"/view/{model_id}")
+    body = resp.get_data(as_text=True)
+    assert 'ar-placement="ceiling"' in body
+
+
 def test_dimensions_endpoint_public(client):
     """/get_model_dimensions is read-only data already shown publicly on the
     page — a non-owner (anonymous) request must not 403."""

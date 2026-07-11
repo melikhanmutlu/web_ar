@@ -88,6 +88,10 @@ def model_viewer_settings(model_id):
         if data["environment"] not in {"neutral", "legacy"}:
             return jsonify({"success": False, "error": "Invalid environment preset"}), 400
         current["environment"] = data["environment"]
+    if "ar_placement" in data:
+        if data["ar_placement"] not in {"floor", "wall", "ceiling"}:
+            return jsonify({"success": False, "error": "Invalid ar_placement"}), 400
+        current["ar_placement"] = data["ar_placement"]
     for field, minimum, maximum in (
         ("exposure", 0.1, 3.0), ("shadow_intensity", 0.0, 3.0),
         ("auto_rotate_delay", 0, 30000),

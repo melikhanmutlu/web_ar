@@ -67,3 +67,23 @@ def test_viewer_settings_validate_untrusted_branding_and_presets(client):
     )
     assert response.status_code == 400
     assert "boolean" in response.get_json()["error"]
+    assert client.patch(
+        f"/api/models/{model.id}/viewer-settings",
+        json={"ar_placement": "table"},
+    ).status_code == 400
+
+
+def test_ar_placement_defaults_to_floor_and_is_settable(client):
+    model = _viewer_owner(client)
+    assert client.get(
+        f"/api/models/{model.id}/viewer-settings"
+    ).get_json()["settings"]["ar_placement"] == "floor"
+
+    response = client.patch(
+        f"/api/models/{model.id}/viewer-settings", json={"ar_placement": "wall"}
+    )
+    assert response.status_code == 200
+    assert response.get_json()["settings"]["ar_placement"] == "wall"
+    assert client.get(
+        f"/api/models/{model.id}/viewer-settings"
+    ).get_json()["settings"]["ar_placement"] == "wall"

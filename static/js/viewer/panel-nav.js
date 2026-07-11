@@ -31,6 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
 
+        // ===================================================================
+        // AR PLACEMENT (floor / wall / ceiling)
+        // ===================================================================
+        document.getElementById('arPlacementSelect')?.addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (modelViewer) modelViewer.setAttribute('ar-placement', value);
+            fetch(`/api/models/${window.VIEWER_CONFIG.modelId}/viewer-settings`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ar_placement: value }),
+            }).catch(() => {});
+        });
+
         // TOOLS PANEL NAVIGATION (menu list ↔ full-height section detail)
         // ===================================================================
         (function() {

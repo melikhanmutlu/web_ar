@@ -11,6 +11,7 @@ DEFAULT_VIEWER_SETTINGS = {
     "field_of_view": "24deg",
     "show_dimensions": True,
     "show_ar": True,
+    "ar_placement": "floor",
     "branding": {"name": "ARVision", "logo_url": None, "primary_color": "#ffffff", "hide_powered_by": False},
     "section_presets": [],
 }

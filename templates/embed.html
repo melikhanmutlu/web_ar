@@ -66,7 +66,7 @@
         camera-orbit="{{ viewer_settings.camera_orbit }}"
         field-of-view="{{ viewer_settings.field_of_view }}"
         interaction-prompt="none"
-        {% if ar and viewer_settings.show_ar %}ar ar-scale="auto" ar-placement="floor" ar-modes="webxr scene-viewer quick-look" xr-environment{% endif %}
+        {% if ar and viewer_settings.show_ar %}ar ar-scale="auto" ar-placement="{{ viewer_settings.ar_placement }}" ar-modes="webxr scene-viewer quick-look" xr-environment{% endif %}
         {% if viewer_settings.auto_rotate %}auto-rotate auto-rotate-delay="{{ viewer_settings.auto_rotate_delay }}"{% endif %}
         {% if autoplay %}autoplay{% endif %}
         loading="eager"

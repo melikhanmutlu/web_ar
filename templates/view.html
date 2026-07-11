@@ -674,7 +674,7 @@
                 {% if viewer_settings.auto_rotate %}auto-rotate auto-rotate-delay="{{ viewer_settings.auto_rotate_delay }}"{% endif %}
                 interaction-prompt="none"
                 ar
-                ar-placement="floor"
+                ar-placement="{{ viewer_settings.ar_placement }}"
                 xr-environment
             >
             </model-viewer>
@@ -841,6 +841,17 @@
                             <button type="button" class="tp-btn-sm camera-preset-btn" data-theta="0" data-phi="179.99">Bottom</button>
                         </div>
                     </div>
+
+                    {% if can_edit and viewer_settings.show_ar %}
+                    <div class="tp-field" style="margin-top:0.5rem;">
+                        <label class="tp-label">AR Placement</label>
+                        <select id="arPlacementSelect" class="tp-select">
+                            <option value="floor" {% if viewer_settings.ar_placement == 'floor' %}selected{% endif %}>Floor</option>
+                            <option value="wall" {% if viewer_settings.ar_placement == 'wall' %}selected{% endif %}>Wall</option>
+                            <option value="ceiling" {% if viewer_settings.ar_placement == 'ceiling' %}selected{% endif %}>Ceiling</option>
+                        </select>
+                    </div>
+                    {% endif %}
 
                     <!-- Animation (hidden if no animations) -->
                     <div id="animationPanel" class="hidden" style="margin-top:0.5rem;">

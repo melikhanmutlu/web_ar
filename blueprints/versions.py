@@ -49,6 +49,64 @@ def get_versions(model_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _version_summary(v):
+    return {
+        "version_number": v.version_number,
+        "operation_type": v.operation_type,
+        "operation_details": v.operation_details,
+        "dimensions": v.dimensions,
+        "vertices": v.vertices,
+        "faces": v.faces,
+        "file_size": v.file_size,
+        "file_size_formatted": v.file_size_formatted,
+        "created_at": v.created_at_formatted,
+        "comment": v.comment,
+    }
+
+
+@versions_bp.route("/api/versions/<model_id>/compare/<int:version_a>/<int:version_b>", methods=["GET"])
+def compare_model_versions(model_id, version_a, version_b):
+    """Diff two saved versions: dimensions/vertex/face/size deltas, so a user
+    can see what an edit actually changed without downloading both GLBs."""
+    import app as app_module
+
+    try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
+
+        va = ModelVersion.query.filter_by(model_id=model_id, version_number=version_a).first()
+        vb = ModelVersion.query.filter_by(model_id=model_id, version_number=version_b).first()
+        if not va or not vb:
+            return jsonify({"success": False, "error": "Version not found"}), 404
+
+        def _dim_delta(key):
+            da = (va.dimensions or {}).get(key)
+            db_ = (vb.dimensions or {}).get(key)
+            if da is None or db_ is None:
+                return None
+            return round(db_ - da, 3)
+
+        diff = {
+            "dimensions": {axis: _dim_delta(axis) for axis in ("x", "y", "z", "max")},
+            "vertices": (vb.vertices - va.vertices) if va.vertices is not None and vb.vertices is not None else None,
+            "faces": (vb.faces - va.faces) if va.faces is not None and vb.faces is not None else None,
+            "file_size": (vb.file_size - va.file_size) if va.file_size is not None and vb.file_size is not None else None,
+        }
+
+        return jsonify({
+            "success": True,
+            "version_a": _version_summary(va),
+            "version_b": _version_summary(vb),
+            "diff": diff,
+        })
+    except Exception as e:
+        app_module.logger.error(f"Failed to compare versions {version_a}/{version_b} for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @versions_bp.route("/api/versions/<model_id>/restore/<int:version_number>", methods=["POST"])
 def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""

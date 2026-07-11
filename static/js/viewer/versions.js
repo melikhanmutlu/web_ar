@@ -9,11 +9,59 @@ document.addEventListener('DOMContentLoaded', () => {
         // ===================================================================
         const versionList = document.getElementById('versionList');
         const refreshVersions = document.getElementById('refreshVersions');
+        const compareVersionsBtn = document.getElementById('compareVersionsBtn');
+        const versionCompareResult = document.getElementById('versionCompareResult');
         let versionPreviewItems = [];
+        let selectedForCompare = [];
+
+        function updateCompareButton() {
+            if (compareVersionsBtn) compareVersionsBtn.disabled = selectedForCompare.length !== 2;
+        }
+
+        function formatDelta(value, suffix) {
+            if (value === null || value === undefined) return 'n/a';
+            const sign = value > 0 ? '+' : '';
+            return sign + value + (suffix || '');
+        }
+
+        compareVersionsBtn?.addEventListener('click', async () => {
+            if (selectedForCompare.length !== 2) return;
+            const [a, b] = [...selectedForCompare].sort((x, y) => x - y);
+            if (versionCompareResult) versionCompareResult.innerHTML = '<p class="tp-note">Comparing…</p>';
+            try {
+                const res = await fetch('/api/versions/' + modelId + '/compare/' + a + '/' + b);
+                const data = await res.json();
+                if (!data.success) {
+                    if (versionCompareResult) versionCompareResult.innerHTML = '<p class="tp-note">' + escapeHtml(data.error || 'Comparison failed') + '</p>';
+                    return;
+                }
+                const d = data.diff;
+                const rows = [
+                    ['Width (cm)', formatDelta(d.dimensions.x)],
+                    ['Height (cm)', formatDelta(d.dimensions.y)],
+                    ['Depth (cm)', formatDelta(d.dimensions.z)],
+                    ['Vertices', formatDelta(d.vertices)],
+                    ['Faces', formatDelta(d.faces)],
+                    ['File size (bytes)', formatDelta(d.file_size)],
+                ].map(([label, value]) =>
+                    '<div class="tp-dim-row"><span>' + label + '</span><span>' + value + '</span></div>'
+                ).join('');
+                if (versionCompareResult) {
+                    versionCompareResult.innerHTML =
+                        '<p class="tp-note" style="margin:0.4rem 0 0.2rem;">v' + a + ' &rarr; v' + b + '</p>' + rows;
+                }
+            } catch (e) {
+                if (versionCompareResult) versionCompareResult.innerHTML = '<p class="tp-note">Comparison failed.</p>';
+            }
+        });
 
         function loadVersions() {
             if (!versionList) return;
             versionList.innerHTML = '<p class="tp-note" style="text-align:center;padding:0.5rem 0;">Loading...</p>';
+
+            selectedForCompare = [];
+            if (versionCompareResult) versionCompareResult.innerHTML = '';
+            updateCompareButton();
 
             fetch('/api/versions/' + modelId)
                 .then(r => r.json())
@@ -31,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         div.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem;">' +
                             '<div style="display:flex;align-items:center;gap:0.35rem;">' +
+                            '<input type="checkbox" class="compare-checkbox" title="Select to compare">' +
                             '<span style="font-weight:700;font-size:0.72rem;color:var(--color-gray-200);">v' + v.version_number + '</span>' +
                             '<span class="tp-version-badge">' + escapeHtml(v.operation_type) + '</span>' +
                             '</div>' +
@@ -43,6 +92,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' +
                             (CAN_EDIT ? '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' : '') +
                             '</div>';
+
+                        div.querySelector('.compare-checkbox').addEventListener('change', (e) => {
+                            if (e.target.checked) {
+                                if (selectedForCompare.length >= 2) {
+                                    e.target.checked = false;
+                                    return;
+                                }
+                                selectedForCompare.push(v.version_number);
+                            } else {
+                                selectedForCompare = selectedForCompare.filter(n => n !== v.version_number);
+                            }
+                            updateCompareButton();
+                        });
 
                         div.querySelector('.restore-btn')?.addEventListener('click', async () => {
                             if (!confirm('Restore to version ' + v.version_number + '? Current model will be replaced.')) return;

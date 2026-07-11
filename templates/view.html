@@ -1164,6 +1164,44 @@
             </div>
 
             {% if is_owner %}
+            <!-- ─── EMBED ─── -->
+            <div class="tp-section" id="embedContainer">
+                <button class="tp-section-header">
+                    <i data-lucide="code-2" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Embed</span>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body">
+                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.72rem;color:var(--color-gray-200);margin-bottom:0.3rem;"><input type="checkbox" id="embedShowDimensions" class="tp-checkbox"> Show dimensions badge</label>
+                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.72rem;color:var(--color-gray-200);margin-bottom:0.3rem;"><input type="checkbox" id="embedShowAr" class="tp-checkbox"> Show AR button</label>
+                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.72rem;color:var(--color-gray-200);margin-bottom:0.3rem;"><input type="checkbox" id="embedAutoRotate" class="tp-checkbox"> Auto-rotate</label>
+                    <div class="tp-field">
+                        <label class="tp-label">Background color</label>
+                        <input type="color" id="embedBackgroundColor" class="tp-input">
+                    </div>
+                    <div class="tp-field">
+                        <label class="tp-label">Brand color</label>
+                        <input type="color" id="embedPrimaryColor" class="tp-input">
+                    </div>
+                    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.72rem;color:var(--color-gray-200);margin-bottom:0.3rem;"><input type="checkbox" id="embedHidePoweredBy" class="tp-checkbox"> Hide "Powered by ARVision"</label>
+                    <button id="embedSaveSettings" class="tp-btn-full" style="margin-top:0.4rem;">Save Embed Settings</button>
+                    <p id="embedSaveStatus" class="tp-note hidden"></p>
+
+                    <div style="margin-top:0.75rem;border-top:1px solid var(--color-gray-700);padding-top:0.5rem;">
+                        <label class="tp-label">Embed snippet</label>
+                        <select id="embedSnippetType" class="tp-input" style="margin-bottom:0.35rem;">
+                            <option value="html">HTML iframe</option>
+                            <option value="shopify_liquid">Shopify</option>
+                            <option value="woocommerce_shortcode">WooCommerce</option>
+                        </select>
+                        <textarea id="embedSnippetOutput" class="tp-input" rows="3" readonly style="font-family:monospace;font-size:0.68rem;resize:vertical;"></textarea>
+                        <button id="embedCopySnippet" class="tp-btn-full" style="margin-top:0.35rem;">Copy Snippet</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_owner %}
             <!-- ─── ANALYTICS ─── -->
             <div class="tp-section" id="analyticsContainer">
                 <button class="tp-section-header">
@@ -1449,6 +1487,7 @@
     <script src="{{ url_for('static', filename='js/viewer/versions.js') }}"></script>
     {% if is_owner %}
     <script src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/viewer/embed-panel.js') }}"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/rig-animate.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>

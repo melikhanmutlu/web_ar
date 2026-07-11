@@ -253,6 +253,20 @@ def test_analytics_panel_rendered_for_owner_only(client):
     assert "js/viewer/analytics-panel.js" in owner_body
 
 
+def test_embed_panel_rendered_for_owner_only(client):
+    owner = make_user("owner-embed", "owner-embed@test.com")
+    model_id, _ = make_two_material_model(user_id=owner.id)
+
+    anon_body = client.get(f"/view/{model_id}").get_data(as_text=True)
+    assert 'id="embedContainer"' not in anon_body
+    assert "js/viewer/embed-panel.js" not in anon_body
+
+    login(client, "owner-embed", "testpassword123")
+    owner_body = client.get(f"/view/{model_id}").get_data(as_text=True)
+    assert 'id="embedContainer"' in owner_body
+    assert "js/viewer/embed-panel.js" in owner_body
+
+
 def test_model_info_route_accepts_uuid_ids(client):
     """/api/model-info used <int:model_id> while ids are UUID strings, so it
     could never match. It must at least route now (401/302 for anonymous —

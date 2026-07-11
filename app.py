@@ -17,7 +17,7 @@ from flask import (
     abort,
     g,
 )
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFError, CSRFProtect
 from flask_login import (
     LoginManager,
     login_user,
@@ -295,6 +295,21 @@ def ratelimit_handler(e):
     ), 429
 
 
+@app.errorhandler(CSRFError)
+def csrf_error_handler(e):
+    wants_json = request.path.startswith("/api/") or (
+        request.accept_mimetypes.best == "application/json"
+    )
+    if wants_json:
+        return jsonify(
+            {"success": False, "error": f"CSRF validation failed: {e.description}"}
+        ), 400
+    flash("Your session expired. Please try again.", "error")
+    referrer = request.referrer or ""
+    same_origin = urlsplit(referrer).netloc == urlsplit(request.host_url).netloc
+    return redirect(referrer if same_origin else url_for("main.index"))
+
+
 
 
 @app.before_request
@@ -403,6 +418,15 @@ app.view_functions["rigging.rig_model"] = limiter.limit(
 app.view_functions["ai_image.generate_image"] = limiter.limit(
     "10 per minute"
 )(app.view_functions["ai_image.generate_image"])
+
+# Endpoints that cannot carry a session-bound CSRF token: 410 stubs that must
+# keep answering old clients, capability-token/anonymous flows, and beacons
+# fired from session-less cross-site embed iframes.
+csrf.exempt(app.view_functions["upload.upload_file"])  # 410 stub
+csrf.exempt(app.view_functions["upload.convert"])  # 410 stub
+csrf.exempt(app.view_functions["upload.retry_upload_job"])  # capability-token auth
+csrf.exempt(app.view_functions["engagement.track_download"])  # anonymous beacon
+csrf.exempt(app.view_functions["engagement.create_model_analytics_event"])  # embed beacon
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(

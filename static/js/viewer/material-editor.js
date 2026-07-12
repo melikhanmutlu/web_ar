@@ -6,12 +6,22 @@ let transformEditorInitialized = false;
 // save must never include a material block the user didn't ask for —
 // on a multi-material model that would silently overwrite materials
 // 1..N with material 0's appearance.
+// Tracked per FIELD, not just as one boolean: the backend applies each
+// present field to every material, so a roughness-only tweak must not
+// also send `color` — that would wipe previously saved per-layer colors
+// (Layers panel clones) with material 0's color.
 let materialDirty = false;
-function markMaterialChanged() {
+const materialDirtyFields = new Set();
+function markMaterialChanged(field) {
     materialDirty = true;
+    if (field) materialDirtyFields.add(field);
     // If a slice preview is active, re-patch materials: a material change
     // can recompile/replace the THREE material and lose the clip shader.
     window._reapplyClipping?.();
+}
+function clearMaterialDirty() {
+    materialDirty = false;
+    materialDirtyFields.clear();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -163,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const hex = e.target.value;
                 if (matColorHex) matColorHex.value = hex.toUpperCase();
                 applyMaterialColor(hex);
-                markMaterialChanged();
+                markMaterialChanged('color');
             });
 
             matColorHex?.addEventListener('input', (e) => {
@@ -172,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (/^#[0-9A-F]{6}$/i.test(hex)) {
                     if (matColor) matColor.value = hex;
                     applyMaterialColor(hex);
-                    markMaterialChanged();
+                    markMaterialChanged('color');
                 }
             });
 
@@ -182,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setMetallicFactor(val);
                 });
-                markMaterialChanged();
+                markMaterialChanged('metalness');
             });
 
             roughnessSlider?.addEventListener('input', (e) => {
@@ -191,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 forEachMaterial(mat => {
                     mat.pbrMetallicRoughness.setRoughnessFactor(val);
                 });
-                markMaterialChanged();
+                markMaterialChanged('roughness');
             });
 
             opacitySlider?.addEventListener('input', (e) => {
@@ -206,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         mat.setAlphaMode('OPAQUE');
                     }
                 });
-                markMaterialChanged();
+                markMaterialChanged('opacity');
             });
 
             // Texture upload
@@ -227,7 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         mat.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, cf[3]]);
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     });
-                    markMaterialChanged();
+                    markMaterialChanged('texture');
+                    markMaterialChanged('color');
                     // Sync color pickers with the reset tint
                     if (matColor) matColor.value = '#ffffff';
                     if (matColorHex) matColorHex.value = '#FFFFFF';
@@ -296,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (textureUpload) textureUpload.value = '';
                 // Back at the model's saved appearance — nothing material-wise
                 // left to persist, so a later save must not send a material block.
-                materialDirty = false;
+                clearMaterialDirty();
                 window._reapplyClipping?.();
             });
 
@@ -318,7 +329,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 opacity: parseFloat(document.getElementById('opacitySlider')?.value ?? 1),
             };
         };
-        window._applyMaterialSnapshot = function(snap) {
+        // Exposed for save-flow.js: which material fields the user actually
+        // touched, so the save payload only carries those fields.
+        window._materialDirtyFields = function() {
+            return new Set(materialDirtyFields);
+        };
+
+        window._applyMaterialSnapshot = function(snap, opts) {
             const matColor = document.getElementById('materialColor');
             const matColorHex = document.getElementById('materialColorHex');
             const metalnessSlider = document.getElementById('metalnessSlider');
@@ -346,7 +363,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], snap.opacity]);
                 mat.setAlphaMode(snap.opacity < 1 ? 'BLEND' : 'OPAQUE');
             });
-            markMaterialChanged();
+            // Undoing back to the baseline restores the model's saved
+            // appearance — treating that as "dirty" made a later
+            // transform-only save include a material block built from
+            // mat[0], flattening every other material's appearance.
+            if (opts && opts.dirty === false) {
+                clearMaterialDirty();
+            } else {
+                ['color', 'metalness', 'roughness', 'opacity'].forEach(markMaterialChanged);
+            }
         };
 
         // Initialize editors

@@ -46,7 +46,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function applySnapshot(snap) {
         restoring = true;
         try {
-            if (snap.material) window._applyMaterialSnapshot?.(snap.material);
+            if (snap.material) {
+                // Restoring the baseline (pointer 0) puts the model back at
+                // its saved appearance — nothing material-wise left to
+                // persist, so the material dirty flag must clear, or a later
+                // transform-only save would still send a material block and
+                // flatten multi-material models.
+                const atBaseline = history.length > 0 &&
+                    JSON.stringify(snap.material) === JSON.stringify(history[0].material);
+                window._applyMaterialSnapshot?.(snap.material, { dirty: !atBaseline });
+            }
             if (snap.transform) window._applyTransformSnapshot?.(snap.transform);
         } finally {
             restoring = false;

@@ -48,6 +48,25 @@ def apply_modifications():
             app_module.logger.error(f"Original GLB not found: {original_path}")
             return jsonify({"success": False, "error": "Original model not found"}), 404
 
+        # Same guard as save_modifications: trimesh can't decode
+        # meshopt-compressed GLBs, so the transform bake would read
+        # compressed buffer bytes as raw floats and produce garbage geometry.
+        from converters.glb_optimizer import glb_requires_meshopt
+
+        if glb_requires_meshopt(original_path):
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "This model is compressed (meshopt) and cannot be modified. Re-upload it without optimization to edit.",
+                }
+            ), 400
+
+        # Same as save_modifications: the user picked the color while SEEING
+        # the texture in the viewer, so the downloaded file must tint the
+        # texture exactly like Save does — otherwise download ≠ save ≠ preview.
+        if isinstance(modifications.get("material"), dict):
+            modifications["material"]["tint_textures"] = True
+
         # Create output filename with timestamp
         timestamp = int(time.time())
         output_filename = f"modified_{timestamp}.glb"
@@ -311,6 +330,7 @@ def save_modifications():
                         "extents": [new_dims["x"], new_dims["y"], new_dims["z"]],
                         "max": new_dims["max"],
                     })
+                    model.file_size = os.path.getsize(current_model_path)
 
                     # Update cumulative scale if scale was applied
                     if (
@@ -562,6 +582,7 @@ def slice_model():
                             "max": new_dims["max"],
                         }
                     )
+                    model.file_size = os.path.getsize(input_path)
                     db.session.commit()
                     app_module.logger.info(f"[slice_model] Updated dimensions: {new_dims}")
 

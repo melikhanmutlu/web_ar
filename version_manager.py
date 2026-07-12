@@ -3,6 +3,7 @@ Model Version Manager
 Handles version tracking for model modifications
 """
 
+import json
 import os
 import shutil
 import logging
@@ -99,7 +100,15 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
 
         bounds = mesh.bounds
         dimensions = bounds[1] - bounds[0]
-        
+
+        # Record the model's cumulative_scale alongside the snapshot (inside
+        # the operation_details JSON — no schema change needed) so
+        # restore_version can roll it back together with the geometry.
+        # Callers commit their cumulative_scale update BEFORE calling
+        # create_version, so this reflects the post-operation state.
+        details = dict(operation_details or {})
+        details.setdefault('cumulative_scale_after', float(model.cumulative_scale or 1.0))
+
         # Create version entry
         version = ModelVersion(
             model_id=model_id,
@@ -107,7 +116,7 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
             filename=version_file,
             file_size=file_size,
             operation_type=operation_type,
-            operation_details=operation_details,
+            operation_details=details,
             dimensions={
                 'x': round(float(dimensions[0] * 100), 2),
                 'y': round(float(dimensions[1] * 100), 2),
@@ -189,10 +198,30 @@ def restore_version(model_id, version_number):
             if os.path.exists(restore_source):
                 os.remove(restore_source)
 
-        # Update model metadata
+        # Update model metadata so the DB matches the restored GLB. `bounds`
+        # is the column view_model actually renders dimensions from (writing
+        # only original_dimensions left the viewer showing the pre-restore
+        # size indefinitely).
         model = db.session.get(UserModel, model_id)
-        if model and version.dimensions:
-            model.original_dimensions = version.dimensions
+        if model:
+            if version.dimensions:
+                model.original_dimensions = version.dimensions
+                model.bounds = json.dumps({
+                    "extents": [
+                        version.dimensions.get('x'),
+                        version.dimensions.get('y'),
+                        version.dimensions.get('z'),
+                    ],
+                    "max": version.dimensions.get('max'),
+                })
+            if os.path.exists(current_file):
+                model.file_size = os.path.getsize(current_file)
+            # Roll cumulative_scale back with the geometry (recorded per
+            # version by create_version; absent on versions created before
+            # that was added — leave the current value in that case).
+            restored_scale = (version.operation_details or {}).get('cumulative_scale_after')
+            if restored_scale is not None:
+                model.cumulative_scale = float(restored_scale)
             db.session.commit()
 
         logger.info(f"Restored model {model_id} to version {version_number}")

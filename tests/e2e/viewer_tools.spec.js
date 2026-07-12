@@ -123,6 +123,76 @@ test('undo/redo steps a material change back and forth', async ({ page }) => {
   await expect(roughnessSlider).toHaveValue('0.4');
 });
 
+test('undo back to baseline, then a transform-only save sends no material block', async ({ page }) => {
+  // Regression: touching a material control, undoing back to the original
+  // state, then saving a scale change used to re-send a material block
+  // (built from mat[0] only), flattening every material on multi-material
+  // models even though the user visually changed nothing material-wise.
+  await uploadCubeAndGetViewerUrl(page);
+  await page.locator('#toolsPanelToggle').click();
+  await page.locator('#materialContainer .tp-section-header').click();
+
+  const roughnessSlider = page.locator('#roughnessSlider');
+  await roughnessSlider.evaluate((el) => {
+    el.value = '0.4';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.locator('#undoButton').click(); // back at baseline
+
+  // Now make a transform-only change
+  await page.locator('#toolsDetailBackBtn').click();
+  await page.locator('#transformContainer .tp-section-header').click();
+  await page.locator('#scaleSlider').evaluate((el) => {
+    el.value = '1.5';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const [request] = await Promise.all([
+    page.waitForRequest('**/save_modifications'),
+    page.locator('#saveChanges').click(),
+  ]);
+  const payload = request.postDataJSON();
+  expect(payload.modifications.transform.scale).toBe(1.5);
+  expect(payload.modifications.material).toBeUndefined();
+});
+
+test('roughness-only edit saves a material block without color', async ({ page }) => {
+  // Regression: the save payload used to always carry `color` when any
+  // material control was touched, wiping previously saved per-layer colors.
+  await uploadCubeAndGetViewerUrl(page);
+
+  // The material block is only built when model-viewer's material list is
+  // populated -- unavailable when this sandbox's proxy blocks the CDN
+  // bundle (established limitation; see hotspot_discussion.spec.js).
+  const materialsLoaded = await page.evaluate(() =>
+    Promise.race([
+      customElements.whenDefined('model-viewer').then(() => true),
+      new Promise((resolve) => setTimeout(() => resolve(false), 8000)),
+    ]).then((defined) => defined && (window.getMaterials?.().length ?? 0) > 0)
+  );
+  test.skip(!materialsLoaded, 'model-viewer CDN unavailable in this sandbox -- material list empty');
+
+  await page.locator('#toolsPanelToggle').click();
+  await page.locator('#materialContainer .tp-section-header').click();
+
+  await page.locator('#roughnessSlider').evaluate((el) => {
+    el.value = '0.3';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const [request] = await Promise.all([
+    page.waitForRequest('**/save_modifications'),
+    page.locator('#saveChanges').click(),
+  ]);
+  const material = request.postDataJSON().modifications.material;
+  expect(material.roughness).toBeCloseTo(0.3, 5);
+  expect(material.color).toBeUndefined();
+  expect(material.metalness).toBeUndefined();
+});
+
 test('download menu shows all formats to the owner via the hover fan-out', async ({ page }) => {
   test.setTimeout(60_000);
   await registerAndLogin(page, 'downloadowner');

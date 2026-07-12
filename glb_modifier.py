@@ -123,7 +123,22 @@ def apply_material_modifications(gltf, material_mods):
                     material.alphaMode = 'OPAQUE'
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
-        
+        elif 'opacity' in material_mods and not is_transparent_like:
+            # Opacity-only edit (no color in the payload): keep each
+            # material's own RGB — opacity lives in baseColorFactor's alpha
+            # channel, so writing it must not homogenize per-material colors.
+            try:
+                opacity = float(material_mods['opacity'])
+                base = pbr.baseColorFactor or [1.0, 1.0, 1.0, 1.0]
+                pbr.baseColorFactor = [base[0], base[1], base[2], opacity]
+                if opacity < 1.0:
+                    material.alphaMode = 'BLEND'
+                elif material.alphaMode == 'BLEND':
+                    material.alphaMode = 'OPAQUE'
+                logger.info(f"Applied opacity {opacity} to material {i} (color preserved)")
+            except Exception as e:
+                logger.error(f"Failed to apply opacity to material {i}: {e}")
+
         # Apply metalness (skip for foliage-like/transparent materials)
         if 'metalness' in material_mods and not is_transparent_like:
             try:

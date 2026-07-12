@@ -9,22 +9,38 @@ document.addEventListener('DOMContentLoaded', () => {
         function gatherModifications() {
             const mods = {};
 
-            // Material modifications — ONLY when the user actually touched a
-            // material control. The backend applies this single value set to
-            // every material in the GLB, so sending mat[0]'s current state on
-            // an untouched save (e.g. transform-only) would permanently
-            // overwrite all other materials on a multi-material model.
+            // Material modifications — ONLY the fields the user actually
+            // touched. The backend applies each present field to every
+            // material in the GLB, so sending an untouched field (e.g.
+            // `color` on a roughness-only edit) would permanently overwrite
+            // other materials' values for it — including per-layer colors
+            // saved earlier via the Layers panel.
             const mats = window.getMaterials();
             if (materialDirty && mats.length > 0) {
                 try {
                     const mat = mats[0];
                     const cf = mat.pbrMetallicRoughness?.baseColorFactor;
-                    mods.material = {
-                        color: cf ? [cf[0], cf[1], cf[2]] : null,
-                        metalness: mat.pbrMetallicRoughness?.metallicFactor ?? 0,
-                        roughness: mat.pbrMetallicRoughness?.roughnessFactor ?? 1,
-                        opacity: cf ? cf[3] : 1
-                    };
+                    const dirtyFields = window._materialDirtyFields?.() ||
+                        new Set(['color', 'metalness', 'roughness', 'opacity']);
+                    const material = {};
+                    if (dirtyFields.has('color') && cf) {
+                        material.color = [cf[0], cf[1], cf[2]];
+                        // Color and opacity share baseColorFactor's alpha
+                        // channel server-side, so a color write must carry
+                        // the current alpha or it would reset to opaque.
+                        material.opacity = cf[3];
+                    } else if (dirtyFields.has('opacity') && cf) {
+                        material.opacity = cf[3];
+                    }
+                    if (dirtyFields.has('metalness')) {
+                        material.metalness = mat.pbrMetallicRoughness?.metallicFactor ?? 0;
+                    }
+                    if (dirtyFields.has('roughness')) {
+                        material.roughness = mat.pbrMetallicRoughness?.roughnessFactor ?? 1;
+                    }
+                    if (Object.keys(material).length > 0) {
+                        mods.material = material;
+                    }
                 } catch (e) { /* material not loaded — skip material mods */ }
             }
             // A pending texture upload is a material change in its own right.
@@ -119,6 +135,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const modifications = gatherModifications();
+
+            // Explode offsets are captured from the live scene, where a
+            // pending rotation is only a root-level preview (not baked into
+            // the nodes). Baking both in one request applies unrotated
+            // offsets to rotated geometry — parts fly out in directions that
+            // don't match the preview. Force the rotation through its own
+            // save first.
+            const rot = modifications.transform?.rotation;
+            if (rot && (rot.x !== 0 || rot.y !== 0 || rot.z !== 0)) {
+                alert('Save the rotation first (Save & Apply to AR), then save the exploded layout — combining them in one save would misplace the exploded parts.');
+                return;
+            }
+
             modifications.explode = explodeMods;
 
             const defaultExplodeButtonMarkup = saveExplodedBtn.innerHTML;

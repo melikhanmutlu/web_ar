@@ -226,7 +226,11 @@ class UserModel(db.Model):
     
     # Scale tracking
     original_dimensions = db.Column(db.JSON, nullable=True)  # Original dimensions at upload
-    cumulative_scale = db.Column(db.Float, default=1.0)  # Total scale factor applied
+    # Total scale applied through VIEWER edits since conversion (display-only,
+    # shown as "Total Scale" in the transform panel). Deliberately excludes
+    # upload-time normalization (unit conversion, max_dimension) — those are
+    # part of producing the converted model, not a user edit on it.
+    cumulative_scale = db.Column(db.Float, default=1.0)
     
     # Hotspot visibility
     hotspots_visible = db.Column(db.Boolean, default=True)  # Toggle for showing/hiding hotspots

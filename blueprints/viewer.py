@@ -102,8 +102,12 @@ def view_model(model_id):
         try:
             import trimesh
             import numpy as np
+            from converters.glb_optimizer import readable_glb
 
-            mesh = trimesh.load(glb_path)
+            # Decompress meshopt/draco first (trimesh reads compressed GLBs as
+            # empty geometry, which would render dimensions as 0 x 0 x 0).
+            with readable_glb(glb_path) as readable_path:
+                mesh = trimesh.load(readable_path)
             app_module.logger.info(f"Loaded mesh type: {type(mesh)}")
 
             # Get extents based on mesh type

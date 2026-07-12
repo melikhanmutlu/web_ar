@@ -10,9 +10,9 @@
         {% if current_user.is_admin %}
         <a href="{{ url_for('admin.dashboard') }}" class="showcase-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">admin</a>
         {% endif %}
-        <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form" style="display:inline;">
+        <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="showcase-nav-link" style="background:none;border:none;cursor:pointer;font-family:inherit;">log out</button>
+            <button type="submit" class="showcase-nav-link">log out</button>
         </form>
         {% else %}
         <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.register' %}is-active{% endif %}">register</a>

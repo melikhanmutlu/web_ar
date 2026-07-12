@@ -20,6 +20,8 @@ import shutil
 import logging
 import platform
 import subprocess
+import tempfile
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,100 @@ def _safe_remove(path: str) -> None:
             os.remove(path)
     except Exception:
         pass
+
+
+# Compression extensions that trimesh cannot decode. Any GLB requiring one of
+# these must be decompressed before a server-side geometry op (dimensions,
+# slicer bounds, slicing, exploded view) can read it -- otherwise trimesh loads
+# an empty scene and every measurement/operation silently returns zeros/None.
+_COMPRESSION_EXTENSIONS = ("EXT_meshopt_compression", "KHR_draco_mesh_compression")
+
+
+def glb_needs_decompression(glb_path: str) -> bool:
+    """True if the GLB is meshopt- or draco-compressed (trimesh can't read it)."""
+    try:
+        if not glb_path or not os.path.exists(glb_path):
+            return False
+        from pygltflib import GLTF2
+
+        gltf = GLTF2().load(glb_path)
+        required = list(getattr(gltf, "extensionsRequired", None) or [])
+        return any(ext in required for ext in _COMPRESSION_EXTENSIONS)
+    except Exception:
+        # Dependency-light fallback: scan the GLB JSON chunk for the names.
+        try:
+            with open(glb_path, "rb") as f:
+                head = f.read(262144)
+            return any(ext.encode() in head for ext in _COMPRESSION_EXTENSIONS)
+        except Exception:
+            return False
+
+
+def _decompress_glb_to_temp(glb_path: str, timeout: int = 120):
+    """Produce an uncompressed temp copy of a compressed GLB via gltfpack (which
+    decodes meshopt and draco input natively). Returns the temp path, or None if
+    gltfpack is unavailable or fails. Caller owns the returned temp file."""
+    cmd_base = _resolve_gltfpack()
+    if not cmd_base:
+        logger.warning("GLB needs decompression but gltfpack is unavailable: %s", glb_path)
+        return None
+    fd, tmp_out = tempfile.mkstemp(suffix=".glb", prefix="decompressed_")
+    os.close(fd)
+    # -noq: no quantization -- re-export plain float attributes trimesh can read.
+    # Deliberately omit -cc so the output is uncompressed.
+    cmd = cmd_base + ["-i", glb_path, "-o", tmp_out, "-noq", "-kn", "-ke", "-km"]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except Exception as e:
+        logger.warning("gltfpack decompression failed to run for %s: %s", glb_path, e)
+        _safe_remove(tmp_out)
+        return None
+    if result.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) == 0:
+        logger.warning("gltfpack decompression returned %s for %s", result.returncode, glb_path)
+        _safe_remove(tmp_out)
+        return None
+    return tmp_out
+
+
+def decompress_glb_in_place(glb_path: str) -> bool:
+    """If glb_path is meshopt/draco-compressed, replace it with an uncompressed
+    (editable) version so trimesh-based edits (slice / transform / material)
+    can run. Returns True if it decompressed the file, False if it was already
+    editable or decompression was unavailable/failed (caller decides whether to
+    treat that as fatal). The edit inherently rewrites geometry to an
+    uncompressed form anyway, so converting up front keeps the model editable
+    going forward instead of hard-blocking every edit."""
+    if not glb_needs_decompression(glb_path):
+        return False
+    tmp = _decompress_glb_to_temp(glb_path)
+    if not tmp:
+        return False
+    try:
+        shutil.move(tmp, glb_path)
+        return True
+    except Exception as e:
+        logger.warning("Could not replace %s with decompressed copy: %s", glb_path, e)
+        _safe_remove(tmp)
+        return False
+
+
+@contextmanager
+def readable_glb(glb_path: str):
+    """Yield a filesystem path to a GLB that trimesh can read.
+
+    If glb_path is meshopt/draco-compressed, yields a temporary uncompressed
+    copy (auto-removed on exit); otherwise yields glb_path unchanged. Use this
+    to wrap every server-side `trimesh.load(...)` on a stored model.glb so
+    compression never silently zeroes out dimensions/bounds/slicing.
+    """
+    tmp = None
+    if glb_needs_decompression(glb_path):
+        tmp = _decompress_glb_to_temp(glb_path)
+    try:
+        yield tmp or glb_path
+    finally:
+        if tmp:
+            _safe_remove(tmp)
 
 
 def glb_requires_meshopt(glb_path: str) -> bool:

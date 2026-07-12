@@ -80,14 +80,15 @@ def test_optimize_glb_disabled_leaves_file_untouched(sample_glb):
 
 
 @pytest.mark.skipif(not GLTFPACK_AVAILABLE, reason="gltfpack binary not available in this environment")
-def test_save_modifications_refuses_a_meshopt_compressed_model(client, monkeypatch, dense_sample_glb):
-    """Integration check for blueprints/model_editing.py's edit-blocking guard:
-    before the extension-name fix, this always fell through to actually
-    attempting the edit (silently corrupting the compressed GLB via trimesh)
-    instead of returning the clear "cannot be modified" error."""
+def test_save_modifications_decompresses_a_meshopt_compressed_model(client, monkeypatch, dense_sample_glb):
+    """Editing a meshopt-compressed model used to be hard-blocked. It now
+    decompresses the file in place first (trimesh can't read meshopt) and
+    applies the edit, leaving the model uncompressed/editable — a color edit
+    should succeed and the stored file should no longer require decompression."""
     import shutil as shutil_module
 
     import converters.glb_optimizer as glb_optimizer_module
+    from converters.glb_optimizer import glb_needs_decompression
     from app import app, db
     from models import UserModel
 
@@ -103,6 +104,7 @@ def test_save_modifications_refuses_a_meshopt_compressed_model(client, monkeypat
     os.makedirs(model_dir, exist_ok=True)
     dest = os.path.join(model_dir, "model.glb")
     shutil_module.copyfile(dense_sample_glb, dest)
+    assert glb_needs_decompression(dest)  # precondition: it is compressed
     model = UserModel(id=model_id, filename=dest, file_type="glb",
                        file_size=os.path.getsize(dest), user_id=None, cumulative_scale=1.0)
     db.session.add(model)
@@ -113,5 +115,6 @@ def test_save_modifications_refuses_a_meshopt_compressed_model(client, monkeypat
         "modifications": {"material": {"color": "#ff0000"}},
     })
     data = resp.get_json()
-    assert data["success"] is False
-    assert "cannot be modified" in data["error"]
+    assert data["success"] is True, data
+    # The edit decompressed it in place, so it's now editable going forward.
+    assert not glb_needs_decompression(dest)

@@ -658,17 +658,23 @@ def get_mesh_bounds(glb_path):
         dict: {'min': [x,y,z], 'max': [x,y,z], 'center': [x,y,z]} or None
     """
     try:
-        loaded = trimesh.load(glb_path, force=None)
+        from converters.glb_optimizer import readable_glb
 
-        if isinstance(loaded, trimesh.Scene):
-            # dump(concatenate=True) applies all node transforms → world-space coordinates
-            combined = loaded.dump(concatenate=True)
-            if combined is None or len(getattr(combined, 'vertices', [])) == 0:
+        # A meshopt/draco-compressed model.glb loads as empty geometry in
+        # trimesh; decompress to a temp copy first so bounds aren't all zero
+        # (which would leave the slicer sliders with min==max and unmovable).
+        with readable_glb(glb_path) as readable_path:
+            loaded = trimesh.load(readable_path, force=None)
+
+            if isinstance(loaded, trimesh.Scene):
+                # dump(concatenate=True) applies all node transforms → world-space
+                combined = loaded.dump(concatenate=True)
+                if combined is None or len(getattr(combined, 'vertices', [])) == 0:
+                    return None
+            elif isinstance(loaded, trimesh.Trimesh):
+                combined = loaded
+            else:
                 return None
-        elif isinstance(loaded, trimesh.Trimesh):
-            combined = loaded
-        else:
-            return None
 
         bounds = combined.bounds      # (2, 3)
         # Geometric bounding-box center (NOT centroid/center-of-mass) so the slicer

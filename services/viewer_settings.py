@@ -2,7 +2,9 @@
 
 DEFAULT_VIEWER_SETTINGS = {
     "environment": "neutral",
-    "background_color": "#1a1a2e",
+    # The viewer renders on white by default (it's a light-only page). Owners
+    # can still override this per-model via the Embed panel.
+    "background_color": "#ffffff",
     "exposure": 0.96,
     "shadow_intensity": 1.2,
     "auto_rotate": False,

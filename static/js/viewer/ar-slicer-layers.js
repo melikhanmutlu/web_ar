@@ -528,6 +528,30 @@ void main() {
                 _clipUniforms.slicerNumPlanes.value = clip.count;
             }
 
+            // While the user is dragging to orbit/zoom, model-viewer already
+            // re-renders every frame on its own, so the fallback camera-nudge
+            // below is unnecessary then -- and actively harmful: setting
+            // cameraOrbit + jumpCameraToGoal every frame fought the user's drag,
+            // so the model barely rotated with the slicer open. Track active
+            // interaction and skip the nudge during it.
+            let _userInteractingWithCamera = false;
+            (function trackCameraInteraction() {
+                const mv = document.querySelector('model-viewer');
+                if (!mv) return;
+                const start = () => { _userInteractingWithCamera = true; };
+                const end = () => { _userInteractingWithCamera = false; };
+                mv.addEventListener('pointerdown', start);
+                window.addEventListener('pointerup', end);
+                window.addEventListener('pointercancel', end);
+                // Wheel-zoom has no pointerup; clear shortly after the last wheel.
+                let wheelTimer = null;
+                mv.addEventListener('wheel', () => {
+                    _userInteractingWithCamera = true;
+                    clearTimeout(wheelTimer);
+                    wheelTimer = setTimeout(end, 200);
+                }, { passive: true });
+            })();
+
             // Force model-viewer to re-render (works with or without renderer access)
             let _nudgeDirection = 1;
             function forceModelViewerRender() {
@@ -539,7 +563,9 @@ void main() {
                 }
 
                 // Method 2: Nudge camera to trigger model-viewer's internal render
-                // Alternates direction to prevent drift
+                // Alternates direction to prevent drift. Skipped during user
+                // interaction (model-viewer renders every frame then anyway).
+                if (_userInteractingWithCamera) return;
                 const mv = document.querySelector('model-viewer');
                 if (mv) {
                     try {
@@ -1023,12 +1049,12 @@ void main() {
                             posBtn.classList.remove('bg-gray-100', 'dark:bg-gray-700', 'text-gray-500');
                         }
 
-                        // Reset the camera to the default framing: the clip-plane
-                        // preview is computed in the default view, so slicing from
-                        // a rotated camera produced confusing results.
-                        modelViewer.cameraOrbit = '36deg 70deg auto';
-                        modelViewer.fieldOfView = '24deg';
-                        modelViewer.cameraTarget = 'auto auto auto';
+                        // NOTE: the camera is intentionally NOT reset here. The
+                        // clip planes are axis-aligned in the model's own space
+                        // (see buildClipPlaneData) and applied in the shader by
+                        // world position, so the cut is identical from any camera
+                        // angle. Snapping the camera on slice-enable just yanked
+                        // the model to a side view for no functional reason.
 
                         // The clip planes are computed from the SAVED model's
                         // bounds, but an unsaved transform preview (scale/rotate

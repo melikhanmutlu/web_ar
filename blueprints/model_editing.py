@@ -80,18 +80,13 @@ def apply_modifications():
             app_module.logger.error(f"Original GLB not found: {original_path}")
             return jsonify({"success": False, "error": "Original model not found"}), 404
 
-        # Same guard as save_modifications: trimesh can't decode
-        # meshopt-compressed GLBs, so the transform bake would read
-        # compressed buffer bytes as raw floats and produce garbage geometry.
-        from converters.glb_optimizer import glb_requires_meshopt
+        # trimesh can't decode meshopt/draco-compressed GLBs, so decompress
+        # in place first (the edit rewrites geometry to uncompressed form
+        # anyway) instead of hard-blocking. Keeps compressed models editable.
+        from converters.glb_optimizer import decompress_glb_in_place
 
-        if glb_requires_meshopt(original_path):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "This model is compressed (meshopt) and cannot be modified. Re-upload it without optimization to edit.",
-                }
-            ), 400
+        if decompress_glb_in_place(original_path):
+            app_module.logger.info(f"[apply_modifications] Decompressed {model_id} for editing")
 
         # Same as save_modifications: the user picked the color while SEEING
         # the texture in the viewer, so the downloaded file must tint the
@@ -289,16 +284,13 @@ def save_modifications():
             app_module.logger.error(f"Current model.glb not found: {current_model_path}")
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
-        # Refuse to edit meshopt-compressed GLBs (trimesh cannot decode them).
-        from converters.glb_optimizer import glb_requires_meshopt
+        # trimesh can't decode meshopt/draco-compressed GLBs -- decompress in
+        # place first (the save rewrites geometry to uncompressed form anyway)
+        # instead of hard-blocking, so compressed models stay editable.
+        from converters.glb_optimizer import decompress_glb_in_place
 
-        if glb_requires_meshopt(current_model_path):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "This model is compressed (meshopt) and cannot be modified. Re-upload it without optimization to edit.",
-                }
-            ), 400
+        if decompress_glb_in_place(current_model_path):
+            app_module.logger.info(f"[save_modifications] Decompressed {model_id} for editing")
 
         app_module.logger.info(
             f"[save_modifications] Using current model.glb as base: {current_model_path}"
@@ -541,16 +533,13 @@ def slice_model():
                 {"success": False, "error": f"Model not found at {input_path}"}
             ), 404
 
-        # Refuse to edit meshopt-compressed GLBs (trimesh cannot decode them).
-        from converters.glb_optimizer import glb_requires_meshopt
+        # trimesh can't decode meshopt/draco-compressed GLBs -- decompress in
+        # place first (slicing rewrites geometry to uncompressed form anyway)
+        # instead of hard-blocking, so compressed models can be sliced.
+        from converters.glb_optimizer import decompress_glb_in_place
 
-        if glb_requires_meshopt(input_path):
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "This model is compressed (meshopt) and cannot be sliced. Re-upload it without optimization to edit.",
-                }
-            ), 400
+        if decompress_glb_in_place(input_path):
+            app_module.logger.info(f"[slice_model] Decompressed {model_id} for slicing")
 
         # Create backup
         backup_path = os.path.join(

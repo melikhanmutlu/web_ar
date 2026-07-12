@@ -96,6 +96,23 @@ a { color: inherit; }
 .showcase-nav-link:hover, .showcase-nav-link.is-active { color: var(--color-gray-900); text-decoration: underline; text-underline-offset: 2px; }
 .dark .showcase-nav-link { color: var(--color-gray-400); }
 .dark .showcase-nav-link:hover, .dark .showcase-nav-link.is-active { color: var(--color-gray-200); }
+/* "log out" is a <button> in a <form> (POST-only route); the others are <a>.
+   Normalize the button + wrapper so it lines up identically -- a bare button
+   brings UA line-height/vertical-align/box defaults the nav class doesn't
+   override, which is why it looked off next to the anchor links. */
+.logout-form { display: inline-flex; align-items: center; margin: 0; padding: 0; }
+.logout-form button.showcase-nav-link {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.88rem;
+    letter-spacing: 0.02em;
+    line-height: inherit;
+}
+@media (max-width: 768px) {
+    .logout-form button.showcase-nav-link { padding: 0.25rem 0.3rem; font-size: 0.8rem; }
+}
 
 .login-pill { border: 1px solid var(--color-gray-300); padding: 0.25rem 0.7rem; }
 .dark .login-pill { border-color: var(--color-gray-700); }

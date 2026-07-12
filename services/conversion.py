@@ -85,13 +85,6 @@ class ConversionService:
             report(68, "Scaling model", "Applying the requested maximum dimension limit.")
             self._limit_dimension(output_path, float(payload["max_dimension"]))
 
-        report(72, "Optimizing GLB", "Checking compression and viewer compatibility.")
-        compression = payload.get("compression")
-        optimize_glb(
-            output_path,
-            enabled=None if compression is None else compression in {"meshopt", "draco"},
-            mode=compression if compression in {"meshopt", "draco"} else "meshopt",
-        )
         if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError("Processed file missing or empty")
 
@@ -114,9 +107,65 @@ class ConversionService:
             asset_report = self.asset_quality.inspect(output_path, warnings)
         except Exception as exc:
             asset_report = {"valid": False, "warnings": [f"Inspection failed: {exc}"]}
+
+        # Measure dimensions HERE, on the uncompressed geometry, before the
+        # compression step below. Measuring after meshopt compression is
+        # unreliable: KHR_mesh_quantization stores positions as integers with
+        # the dequantization scale in the node transform, so naive vertex
+        # reads report quantized-space extents (tens of km). dump(concatenate)
+        # bakes node transforms → real-world coordinates.
+        dimensions_cm = self._measure_dimensions_cm(output_path)
+
+        # Compression MUST be the last GLB-modifying step. gltfpack's meshopt/
+        # draco output is only decodable by model-viewer's own decoder; any
+        # later pygltflib save (normalize/finalize) or trimesh read corrupts
+        # the compressed buffers ("buffer too short"), which is why this used
+        # to run before normalize/finalize and produced broken, unmeasurable,
+        # unsliceable models. Everything above ran on uncompressed geometry;
+        # compress now, and nothing else touches the file afterward.
+        report(90, "Optimizing GLB", "Checking compression and viewer compatibility.")
+        compression = payload.get("compression")
+        optimize_glb(
+            output_path,
+            enabled=None if compression is None else compression in {"meshopt", "draco"},
+            mode=compression if compression in {"meshopt", "draco"} else "meshopt",
+        )
+        if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
+            raise RuntimeError("Processed file missing or empty")
+
         return {
             "converter": converter,
             "file_size": os.path.getsize(output_path),
             "quality_warnings": warnings,
             "asset_report": asset_report,
+            "dimensions_cm": dimensions_cm,
         }
+
+    @staticmethod
+    def _measure_dimensions_cm(glb_path):
+        """AABB extents in cm from node-transform-baked geometry, or None.
+        Uses dump(concatenate=True) so node transforms (incl. any scale) are
+        applied — a naive per-geometry vertex read would miss them."""
+        try:
+            loaded = trimesh.load(glb_path, force="scene")
+            if isinstance(loaded, trimesh.Scene):
+                combined = loaded.dump(concatenate=True)
+            else:
+                combined = loaded
+            if combined is None or len(getattr(combined, "vertices", [])) == 0:
+                return None
+            bounds = combined.bounds
+            if bounds is None:
+                return None
+            ext = bounds[1] - bounds[0]
+            if float(max(ext)) <= 0.001:
+                return None
+            return {
+                "x": round(float(ext[0]) * 100, 2),
+                "y": round(float(ext[1]) * 100, 2),
+                "z": round(float(ext[2]) * 100, 2),
+                "max": round(float(max(ext)) * 100, 2),
+            }
+        except Exception as exc:
+            logger.warning("Dimension measurement failed for %s: %s", glb_path, exc)
+            return None

@@ -2033,42 +2033,55 @@ def _run_upload_pipeline(payload, progress_callback=None):
             # Decide if 0-byte file is an error
             # return jsonify({'error': 'Internal server error: Processed file is empty'}), 500
 
-        # Normalize model to center origin for consistent pivot behavior
-        try:
-            report(78, "Normalizing pivot", "Centering the model for predictable rotation and viewing.")
-            logger.info(
-                f"[upload_model - {unique_id}] Normalizing model to center origin"
-            )
-            gltf = GLTF2().load(output_path)
-            gltf = normalize_model_to_center(gltf)
-            gltf.save(output_path)
-            logger.info(f"[upload_model - {unique_id}] Model normalized and saved")
-        except Exception as e:
-            logger.error(
-                f"[upload_model - {unique_id}] Error normalizing model: {e}",
-                exc_info=True,
-            )
-            # Continue even if normalization fails
+        # Normalize model to center origin for consistent pivot behavior.
+        # ConversionService already normalizes (and compresses last), so
+        # re-running a pygltflib save here would corrupt a meshopt/draco
+        # buffer ("buffer too short") -- skip for service-converted models.
+        if not service_converted:
+            try:
+                report(78, "Normalizing pivot", "Centering the model for predictable rotation and viewing.")
+                logger.info(
+                    f"[upload_model - {unique_id}] Normalizing model to center origin"
+                )
+                gltf = GLTF2().load(output_path)
+                gltf = normalize_model_to_center(gltf)
+                gltf.save(output_path)
+                logger.info(f"[upload_model - {unique_id}] Model normalized and saved")
+            except Exception as e:
+                logger.error(
+                    f"[upload_model - {unique_id}] Error normalizing model: {e}",
+                    exc_info=True,
+                )
+                # Continue even if normalization fails
 
         quality_warnings = []
         asset_report = None
         # GLB quality pass: embed stray external textures, guarantee PBR
-        # materials, validate (warn-only — never blocks a viewable upload)
-        try:
-            report(84, "Checking materials", "Embedding textures and validating material settings.")
-            quality_search_dirs = [converted_dir]
-            if temp_dir:
-                quality_search_dirs.append(temp_dir)
-            quality_warnings = finalize_glb(output_path, search_dirs=quality_search_dirs)
-            for w in quality_warnings:
-                logger.warning(f"[upload_model - {unique_id}] GLB quality: {w}")
-        except Exception as e:
-            logger.warning(f"[upload_model - {unique_id}] GLB quality pass skipped: {e}")
-        try:
-            asset_report = asset_quality.inspect(output_path, quality_warnings)
-        except Exception as e:
-            logger.warning(f"[upload_model - {unique_id}] Asset report failed: {e}")
-            asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
+        # materials, validate (warn-only — never blocks a viewable upload).
+        # ConversionService already ran finalize_glb + inspect on the
+        # uncompressed geometry and then compressed as its last step; re-running
+        # them here would (a) corrupt a meshopt/draco buffer via pygltflib save
+        # and (b) misread geometry counts from the compressed file. Reuse the
+        # service's results instead.
+        if service_converted:
+            quality_warnings = conversion_result.get("quality_warnings") or []
+            asset_report = conversion_result.get("asset_report")
+        else:
+            try:
+                report(84, "Checking materials", "Embedding textures and validating material settings.")
+                quality_search_dirs = [converted_dir]
+                if temp_dir:
+                    quality_search_dirs.append(temp_dir)
+                quality_warnings = finalize_glb(output_path, search_dirs=quality_search_dirs)
+                for w in quality_warnings:
+                    logger.warning(f"[upload_model - {unique_id}] GLB quality: {w}")
+            except Exception as e:
+                logger.warning(f"[upload_model - {unique_id}] GLB quality pass skipped: {e}")
+            try:
+                asset_report = asset_quality.inspect(output_path, quality_warnings)
+            except Exception as e:
+                logger.warning(f"[upload_model - {unique_id}] Asset report failed: {e}")
+                asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
 
         # Clean up temporary file and directory
         try:
@@ -2128,14 +2141,34 @@ def _run_upload_pipeline(payload, progress_callback=None):
                     f"[upload_model - {unique_id}] Could not use original FBX dimensions: {str(e)}"
                 )
 
+        # Prefer the dimensions ConversionService measured on the UNcompressed
+        # geometry (before its final compression step). Re-measuring the stored
+        # file here is unreliable once it's meshopt-compressed (quantized
+        # coordinates), so use the service's value when available.
+        if not model_bounds and service_converted:
+            svc_dims = conversion_result.get("dimensions_cm")
+            if svc_dims:
+                import json
+                model_bounds = json.dumps({
+                    "extents": [svc_dims["x"], svc_dims["y"], svc_dims["z"]],
+                    "max": svc_dims["max"],
+                })
+                logger.info(f"[upload_model - {unique_id}] Using service dimensions: {svc_dims}")
+
         # If not FBX or FBX dimensions failed, try from GLB
         if not model_bounds:
             try:
                 import trimesh
                 import numpy as np
                 import json
+                from converters.glb_optimizer import readable_glb
 
-                mesh = trimesh.load(output_path)
+                # If the output was meshopt/draco compressed, trimesh reads it
+                # as empty geometry -- decompress to a temp copy first, or the
+                # stored dimensions would be all zeros (and the viewer would
+                # show 0 x 0 x 0, blocking slicing).
+                with readable_glb(output_path) as readable_path:
+                    mesh = trimesh.load(readable_path)
                 logger.info(
                     f"[upload_model - {unique_id}] Loaded mesh type: {type(mesh)}"
                 )

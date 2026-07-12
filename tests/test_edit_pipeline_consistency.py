@@ -152,18 +152,33 @@ def test_restore_rolls_back_bounds_file_size_and_cumulative_scale(client):
     assert model.file_size == os.path.getsize(glb_path)
 
 
-def test_apply_modifications_refuses_meshopt_like_save_does(client, monkeypatch):
+def test_apply_modifications_decompresses_meshopt_instead_of_refusing(client, monkeypatch):
+    """Compressed models used to be hard-blocked from editing. Now the edit
+    endpoints decompress the model in place first (an edit rewrites geometry
+    to uncompressed form anyway) and proceed, so a meshopt model is editable
+    rather than a dead end."""
     model_id, _ = make_two_material_model(user_id=None)
 
     import blueprints.model_editing  # noqa: F401  (route module)
     import converters.glb_optimizer as glb_optimizer_module
-    monkeypatch.setattr(glb_optimizer_module, "glb_requires_meshopt", lambda path: True)
+
+    # Spy on the in-place decompression the edit path now performs. The test
+    # model is already uncompressed, so return False (nothing to do) but record
+    # that the edit consulted the decompress step instead of 400ing.
+    calls = []
+    real = glb_optimizer_module.decompress_glb_in_place
+
+    def spy(path):
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr(glb_optimizer_module, "decompress_glb_in_place", spy)
 
     resp = client.post("/apply_modifications", json={
         "model_id": model_id,
         "modifications": {"transform": {"scale": 2.0}},
     })
     data = resp.get_json()
-    assert resp.status_code == 400
-    assert data["success"] is False
-    assert "cannot be modified" in data["error"]
+    assert resp.status_code == 200, data
+    assert data["success"] is True
+    assert calls, "edit path should have consulted decompress_glb_in_place"

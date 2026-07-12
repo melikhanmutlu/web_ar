@@ -16,7 +16,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Google Model Viewer -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
+    <script type="module" src="{{ url_for('static', filename='js/model-viewer.min.js') }}"></script>
     <!-- Meshopt-compressed GLBs (Web Compression: Meshopt on upload) need this
          decoder registered before model-viewer loads one, or the model silently
          never renders -- model-viewer ships a DRACO decoder default but has no
@@ -371,7 +371,14 @@
         .dark #toolsPanelToggle.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
         .canvas-control-shell { position: fixed; left: var(--spacing-xl); bottom: var(--spacing-lg); z-index: 30; }
-        .info-modal-backdrop { background: rgba(0, 0, 0, 0.7); }
+        /* Full positioning lives here, not only in Tailwind utility classes:
+           if the Tailwind CDN script fails to load (mobile networks block or
+           drop it regularly), these backdrops must still center their card —
+           and `.hidden` below must still hide them, or two full-screen dark
+           overlays sit on top of the viewer eating every tap. No !important,
+           so Tailwind's runtime-injected rules still win when it does load. */
+        .info-modal-backdrop { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0, 0, 0, 0.7); }
+        .hidden { display: none; }
         .info-modal-card { width: min(30rem, calc(100vw - 2rem)); border: 1px solid var(--color-gray-200); background: var(--color-white); max-height: 80vh; overflow-y: auto; }
         .dark .info-modal-card { border-color: var(--color-gray-700); background: var(--color-gray-900); }
         .info-modal-row { display: grid; grid-template-columns: 1.1rem 1fr; gap: var(--spacing-md); align-items: start; padding: var(--spacing-xs) 0; }

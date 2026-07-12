@@ -141,11 +141,16 @@ def after_request(response):
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com; "
+        # 'wasm-unsafe-eval' is REQUIRED: model-viewer's decoders (meshopt,
+        # and DRACO/KTX2 from gstatic) compile WebAssembly. Without it the
+        # decoder's WebAssembly.instantiate() is refused, the loader's
+        # decoder promise rejects, and EVERY model load fails -- blank
+        # viewer, dead AR/fullscreen buttons on all devices.
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.tailwindcss.com https://unpkg.com https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com https://www.gstatic.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         "img-src 'self' data: blob: https:; connect-src 'self' https:; "
-        "model-src 'self' blob:; worker-src 'self' blob:; "
+        "worker-src 'self' blob:; "
         f"frame-ancestors {frame_ancestors}",
     )
     if request.is_secure:

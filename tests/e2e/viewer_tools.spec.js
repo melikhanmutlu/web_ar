@@ -104,6 +104,13 @@ test('undo/redo steps a material change back and forth', async ({ page }) => {
   const roughnessSlider = page.locator('#roughnessSlider');
   await expect(page.locator('#undoButton')).toBeDisabled();
 
+  // When the model actually loads, material-editor.js syncs the slider to
+  // the model's REAL roughness (not necessarily 1) and undo-redo.js
+  // refreshes its baseline to match -- so undo must return to whatever the
+  // slider showed before the edit, not to a hardcoded default.
+  await page.waitForTimeout(1500); // let viewer:material-ready settle if the model loads
+  const initialValue = await roughnessSlider.inputValue();
+
   // Move the slider and commit the change. range inputs need an explicit
   // "change" dispatch (undo-redo.js snapshots on "change", not "input") --
   // fill() alone doesn't reliably fire it for <input type="range">.
@@ -116,7 +123,7 @@ test('undo/redo steps a material change back and forth', async ({ page }) => {
   await expect(roughnessSlider).toHaveValue('0.4');
 
   await page.locator('#undoButton').click();
-  await expect(roughnessSlider).toHaveValue('1');
+  await expect(roughnessSlider).toHaveValue(initialValue);
   await expect(page.locator('#redoButton')).toBeEnabled();
 
   await page.locator('#redoButton').click();

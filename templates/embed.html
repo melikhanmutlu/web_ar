@@ -10,7 +10,7 @@
     {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>
-    <script type="module" src="https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js"></script>
+    <script type="module" src="{{ url_for('static', filename='js/model-viewer.min.js') }}"></script>
     <script>
         customElements.whenDefined('model-viewer').then(() => {
             customElements.get('model-viewer').meshoptDecoderLocation =

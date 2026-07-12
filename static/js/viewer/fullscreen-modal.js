@@ -53,13 +53,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 500);
     });
 
-    // Fullscreen button handler
+    // Fullscreen button handler. iOS Safari has no Fullscreen API for
+    // arbitrary elements (only <video>), and older WebKit needs the
+    // webkit- prefix — fall through the variants instead of silently
+    // console.error-ing while the button appears dead.
     fullscreenButton?.addEventListener('click', async () => {
         try {
-            if (!document.fullscreenElement) {
+            const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+            if (fullscreenElement) {
+                await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
+                return;
+            }
+            if (modelViewer.requestFullscreen) {
                 await modelViewer.requestFullscreen();
+            } else if (modelViewer.webkitRequestFullscreen) {
+                await modelViewer.webkitRequestFullscreen();
             } else {
-                await document.exitFullscreen();
+                alert('Fullscreen is not supported by this browser. On iPhone, rotate to landscape for a larger view.');
             }
         } catch (error) {
             console.error('Fullscreen error:', error);

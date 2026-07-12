@@ -22,7 +22,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-from pygltflib import Buffer, BufferView, GLTF2, Material, PbrMetallicRoughness
+from pygltflib import (
+    Buffer, BufferView, GLTF2, Image, Material, PbrMetallicRoughness,
+    Texture, TextureInfo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,88 @@ def embed_external_textures(glb_path: str, search_dirs: list = None) -> bool:
         image.uri = None
         gltf.bufferViews.append(view)
         changed = True
+
+    if changed:
+        gltf.save(glb_path)
+    return changed
+
+
+def attach_base_color_texture_files(glb_path: str, texture_paths: list) -> bool:
+    """Embed standalone base-color maps and bind them to GLB materials.
+
+    Meshy can return a valid GLB with materials but no image/texture references,
+    while exposing the PBR maps separately through ``texture_urls``. Merely
+    downloading those files beside the GLB cannot repair that shape because
+    :func:`embed_external_textures` has no URI to resolve. This helper creates
+    the missing image/texture graph explicitly and keeps the result as a
+    self-contained GLB.
+
+    Texture files are matched to materials by position. If Meshy supplies one
+    base-color map for several materials, that map is reused for each material.
+    Existing base-color texture assignments are never replaced.
+    """
+    paths = [Path(path) for path in (texture_paths or []) if path and Path(path).is_file()]
+    if not paths:
+        return False
+
+    try:
+        gltf = _load_glb(glb_path)
+    except GLBQualityError:
+        return False
+
+    if gltf.bufferViews is None:
+        gltf.bufferViews = []
+    if gltf.images is None:
+        gltf.images = []
+    if gltf.textures is None:
+        gltf.textures = []
+    if gltf.materials is None:
+        gltf.materials = []
+
+    texture_indices = []
+    for path in paths:
+        payload = path.read_bytes()
+        if not payload or len(payload) > _MAX_REMOTE_TEXTURE_BYTES:
+            logger.warning("Skipping invalid base-color texture file: %s", path)
+            continue
+        offset = _append_blob(gltf, payload)
+        gltf.bufferViews.append(
+            BufferView(buffer=0, byteOffset=offset, byteLength=len(payload))
+        )
+        gltf.images.append(
+            Image(bufferView=len(gltf.bufferViews) - 1, mimeType=_mime_for(path))
+        )
+        gltf.textures.append(Texture(source=len(gltf.images) - 1))
+        texture_indices.append(len(gltf.textures) - 1)
+
+    if not texture_indices:
+        return False
+
+    # A texture-less GLB may also omit materials entirely. Create a valid PBR
+    # target and attach otherwise-unassigned primitives to it.
+    changed = False
+    if not gltf.materials:
+        gltf.materials.append(Material(name="Meshy_BaseColor", doubleSided=True))
+        changed = True
+
+    for material_index, material in enumerate(gltf.materials):
+        if material.pbrMetallicRoughness is None:
+            material.pbrMetallicRoughness = PbrMetallicRoughness()
+            changed = True
+        pbr = material.pbrMetallicRoughness
+        if pbr.baseColorTexture is None:
+            texture_index = texture_indices[min(material_index, len(texture_indices) - 1)]
+            pbr.baseColorTexture = TextureInfo(index=texture_index)
+            # baseColorFactor multiplies the sampled texture; force a neutral
+            # factor so a stale/default tint cannot wash out Meshy's artwork.
+            pbr.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
+            changed = True
+
+    for mesh in gltf.meshes or []:
+        for primitive in mesh.primitives or []:
+            if primitive.material is None or primitive.material >= len(gltf.materials):
+                primitive.material = 0
+                changed = True
 
     if changed:
         gltf.save(glb_path)

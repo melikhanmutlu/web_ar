@@ -13,7 +13,9 @@ from pygltflib import (
 )
 
 import converters.glb_quality as gq
-from converters.glb_quality import embed_remote_textures, inspect_texture_state
+from converters.glb_quality import (
+    attach_base_color_texture_files, embed_remote_textures, inspect_texture_state,
+)
 
 
 class _FakeResponse:
@@ -92,3 +94,24 @@ def test_inspect_texture_state_external_then_embedded(monkeypatch, tmp_path):
     assert after["images"] == 1
     assert after["embedded"] == 1
     assert after["external_hosts"] == []
+
+
+def test_attach_base_color_texture_repairs_textureless_meshy_glb(tmp_path):
+    """Meshy may return maps only in texture_urls, with no GLB image URI."""
+    path = str(tmp_path / "textureless.glb")
+    trimesh.creation.box(extents=(1, 1, 1)).export(path)
+
+    texture_path = tmp_path / "meshy_base_color.png"
+    texture_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"texture-payload")
+
+    assert inspect_texture_state(path)["images"] == 0
+    assert attach_base_color_texture_files(path, [str(texture_path)]) is True
+
+    repaired = GLTF2.load(path)
+    assert len(repaired.images) == 1
+    assert repaired.images[0].uri is None
+    assert repaired.images[0].bufferView is not None
+    assert len(repaired.textures) == 1
+    material = repaired.materials[repaired.meshes[0].primitives[0].material]
+    assert material.pbrMetallicRoughness.baseColorTexture.index == 0
+    assert material.pbrMetallicRoughness.baseColorFactor == [1.0, 1.0, 1.0, 1.0]

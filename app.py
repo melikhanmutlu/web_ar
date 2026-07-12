@@ -2678,7 +2678,8 @@ def _finalize_ai_job(job, task):
     # the job.
     try:
         from converters.glb_quality import (
-            embed_remote_textures, has_base_color_textures, inspect_texture_state,
+            attach_base_color_texture_files, embed_remote_textures,
+            has_base_color_textures, inspect_texture_state,
         )
         logger.info(
             "[generate-3d] job=%s texture state: %s | model_urls=%s | texture_urls=%d",
@@ -2687,20 +2688,48 @@ def _finalize_ai_job(job, task):
         )
         if embed_remote_textures(glb_tmp, allowed_hosts=MESHY_TEXTURE_HOSTS):
             logger.info("[generate-3d] job=%s embedded remote Meshy textures", job.id)
-        # Fallback for GLBs that reference textures by relative filename: pull
-        # Meshy's separate PBR maps next to the GLB so register's
-        # embed_external_textures pass (search_dirs includes tmp_dir) can pack
-        # them. Only when the GLB still lacks a base-color texture.
+        # Some successful image-to-3D tasks return a texture-less GLB and expose
+        # the artwork only through texture_urls. There is no image URI for
+        # embed_external_textures to resolve in that case, so download Meshy's
+        # base-color maps and explicitly bind/embed them into the GLB.
         if not has_base_color_textures(glb_tmp) and task.get("texture_urls"):
             from urllib.parse import urlparse as _urlparse
-            for tex in task["texture_urls"]:
-                for map_url in (tex or {}).values():
-                    if isinstance(map_url, str) and map_url.lower().startswith(("http://", "https://")):
-                        try:
-                            name = os.path.basename(_urlparse(map_url).path) or "texture.png"
-                            ai_generator.download(map_url, os.path.join(tmp_dir, name))
-                        except Exception:
-                            pass
+            texture_entries = task["texture_urls"]
+            if isinstance(texture_entries, dict):
+                texture_entries = [texture_entries]
+            base_color_files = []
+            base_color_keys = {"base_color", "basecolor", "albedo", "diffuse", "diffuse_color"}
+            for index, tex in enumerate(texture_entries):
+                if not isinstance(tex, dict):
+                    continue
+                map_url = next((
+                    value for key, value in tex.items()
+                    if str(key).lower().replace("-", "_") in base_color_keys
+                    and isinstance(value, str)
+                    and value.lower().startswith(("http://", "https://"))
+                ), None)
+                if not map_url:
+                    continue
+                parsed = _urlparse(map_url)
+                host = (parsed.hostname or "").lower()
+                if not any(host == allowed or host.endswith("." + allowed)
+                           for allowed in MESHY_TEXTURE_HOSTS):
+                    logger.warning("[generate-3d] skipped untrusted texture host: %s", host)
+                    continue
+                suffix = os.path.splitext(parsed.path)[1].lower()
+                if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
+                    suffix = ".png"
+                destination = os.path.join(tmp_dir, f"meshy_base_color_{index}{suffix}")
+                try:
+                    if ai_generator.download(map_url, destination):
+                        base_color_files.append(destination)
+                except Exception as texture_exc:
+                    logger.warning("[generate-3d] base-color download failed: %s", texture_exc)
+            if attach_base_color_texture_files(glb_tmp, base_color_files):
+                logger.info(
+                    "[generate-3d] job=%s attached %d Meshy base-color texture(s)",
+                    job.id, len(base_color_files),
+                )
     except Exception as exc:
         logger.warning("[generate-3d] job=%s texture diagnose/heal skipped: %s", job.id, exc)
 

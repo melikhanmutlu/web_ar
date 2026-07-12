@@ -10,6 +10,7 @@ from services.time_utils import datetime
 from datetime import timedelta
 from models import ApiToken, ModelAnalyticsEvent, UserModel, db
 from services.org_membership import _organization_membership
+from services.plans import plan_allows
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
 
@@ -47,6 +48,11 @@ def api_tokens():
             "last_used_at": token.last_used_at.isoformat() if token.last_used_at else None,
             "revoked": token.revoked_at is not None,
         } for token in tokens]})
+    if not plan_allows(current_user, "api_access"):
+        return jsonify({
+            "success": False,
+            "error": "API access requires a Pro or Business plan.",
+        }), 403
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "API token")).strip()[:120]
     scopes = data.get("scopes", ["models:read"])

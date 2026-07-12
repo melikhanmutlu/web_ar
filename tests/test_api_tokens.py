@@ -2,7 +2,9 @@ from models import ApiToken, ModelAnalyticsEvent, User, UserModel, db
 
 
 def _token_owner():
-    owner = User(username="apiowner", email="apiowner@example.com")
+    # API token minting is a paid feature (plan_allows api_access), so the
+    # owner needs a plan that unlocks it.
+    owner = User(username="apiowner", email="apiowner@example.com", plan="pro")
     owner.set_password("password")
     db.session.add(owner)
     db.session.flush()

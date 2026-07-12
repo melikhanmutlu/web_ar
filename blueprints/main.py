@@ -22,3 +22,15 @@ def index():
                             ai_remove_lighting_supported=ai_remove_lighting_supported,
                             ai_quota=ai_quota,
                             worker_poll_interval_ms=int(WORKER_POLL_INTERVAL * 1000))
+
+
+@main_bp.route("/pricing", methods=["GET"])
+def pricing():
+    from services.plans import PLANS, PLAN_CONFIG
+
+    return render_template(
+        "pricing.html",
+        plans=PLANS,
+        plan_config=PLAN_CONFIG,
+        current_plan=current_user.plan if current_user.is_authenticated else None,
+    )

@@ -1,36 +1,125 @@
-"""Plan/tier foundation for usage quotas (Faz 5: "Kullanım kotaları ve
-plan/faturalama temeli"). Payment processing itself is out of scope --
-this only defines per-plan limit overrides and how they combine with the
-existing global admin-configured defaults (storage_quota_mb, ai_daily_limit
-in site_settings.py), so a real billing provider can drive User.plan later
-without another migration.
+"""Plan/tier foundation for usage quotas and features (Faz 5: "Kullanım
+kotaları ve plan/faturalama temeli").
+
+PLAN_CONFIG below is the single source of truth for every tier's limits and
+feature flags -- the enforcement hooks (upload guards, AI quota, API access)
+and the user-facing surfaces (/pricing, profile) all read from it. Payment
+processing itself is still out of scope: an admin sets User.plan directly
+until a real billing provider is wired in, and that provider will only need
+to write User.plan -- no new schema/migration (columns like plan_expires_at
+or stripe_customer_id are deferred to that future billing phase).
+
+Value conventions (shared with the enforcement sites):
+- storage_mb / ai_daily / max_models / max_upload_mb == None  -> no
+  plan-imposed limit; fall through to the global admin default (storage/AI)
+  or treat as unlimited (model count).
+- ai_daily must never be 0 for a paid tier: 0 means "disabled entirely" in
+  app.py::_ai_quota_state, not unlimited -- so paid tiers use a large ceiling.
 """
 
 import os
 
-PLANS = ("free", "pro")
+PLANS = ("free", "pro", "business")
 DEFAULT_PLAN = "free"
 
-# Only plans that override the global default need an entry here -- "free"
-# always falls through to the existing site-wide setting.
-_STORAGE_QUOTA_MB_OVERRIDES = {
-    "pro": int(os.getenv("PLAN_PRO_STORAGE_QUOTA_MB", 10240)),
-}
-# Unlike storage_quota_mb, ai_daily_limit's own convention treats 0 as
-# "disabled entirely" (see app.py::_ai_quota_state), not unlimited -- so
-# "pro" gets a large practical ceiling instead of 0.
-_AI_DAILY_LIMIT_OVERRIDES = {
-    "pro": int(os.getenv("PLAN_PRO_AI_DAILY_LIMIT", 1000)),
+# Single source of truth. "free"'s None limits are load-bearing: they make the
+# effective_* helpers fall through to the global admin-configured defaults,
+# which is exactly what the existing behaviour (and tests) expect.
+PLAN_CONFIG = {
+    "free": {
+        "display_name": "Free",
+        "price": 0,
+        "limits": {
+            "storage_mb": None,       # -> global storage_quota_mb default (1 GB)
+            "ai_daily": None,         # -> global ai_daily_limit default (10)
+            "max_models": 10,
+            "max_upload_mb": 50,
+            "batch_size": 3,
+            "analytics_retention_days": 7,
+        },
+        "features": {
+            "api_access": False,
+            "advanced_ai_options": False,
+            "password_protected_shares": False,
+            "organizations": False,
+            "custom_domains": False,
+            "white_label": False,
+            "webhooks": False,
+        },
+    },
+    "pro": {
+        "display_name": "Pro",
+        "price": 19,
+        "limits": {
+            # Keep the existing env hooks so env-based tuning isn't dropped.
+            "storage_mb": int(os.getenv("PLAN_PRO_STORAGE_QUOTA_MB", 10240)),  # 10 GB
+            "ai_daily": int(os.getenv("PLAN_PRO_AI_DAILY_LIMIT", 1000)),
+            "max_models": 200,
+            "max_upload_mb": 100,
+            "batch_size": 10,
+            "analytics_retention_days": 90,
+        },
+        "features": {
+            "api_access": True,
+            "advanced_ai_options": True,
+            "password_protected_shares": True,
+            "organizations": False,
+            "custom_domains": False,
+            "white_label": False,
+            "webhooks": False,
+        },
+    },
+    "business": {
+        "display_name": "Business",
+        "price": 99,
+        "limits": {
+            "storage_mb": int(os.getenv("PLAN_BUSINESS_STORAGE_QUOTA_MB", 102400)),  # 100 GB
+            "ai_daily": int(os.getenv("PLAN_BUSINESS_AI_DAILY_LIMIT", 5000)),
+            "max_models": None,       # unlimited
+            "max_upload_mb": 100,
+            "batch_size": 25,
+            "analytics_retention_days": 365,
+        },
+        "features": {
+            "api_access": True,
+            "advanced_ai_options": True,
+            "password_protected_shares": True,
+            "organizations": True,
+            "custom_domains": True,
+            "white_label": True,
+            "webhooks": True,
+        },
+    },
 }
 
 
+def _plan_name(user):
+    """Resolve a user's plan name, normalizing unknown/None to DEFAULT_PLAN."""
+    plan = getattr(user, "plan", None) if user is not None else None
+    return plan if plan in PLAN_CONFIG else DEFAULT_PLAN
+
+
+def plan_limit(user, key, global_default=None):
+    """Effective numeric limit for `key`. A None value in the plan means "no
+    plan-imposed limit" -> return global_default (which is None for callers
+    that treat None as unlimited)."""
+    value = PLAN_CONFIG[_plan_name(user)]["limits"].get(key)
+    if value is None:
+        return global_default
+    return value
+
+
+def plan_allows(user, feature):
+    """Whether the user's plan unlocks a boolean feature flag."""
+    return bool(PLAN_CONFIG[_plan_name(user)]["features"].get(feature, False))
+
+
+# Backward-compatible thin wrappers over plan_limit -- signatures and
+# semantics unchanged, so the existing call sites (services/storage_quota.py,
+# blueprints/upload.py, app.py::_ai_quota_state, admin.py) stay untouched.
 def effective_storage_quota_mb(user, global_default_mb):
-    if user is not None and user.plan in _STORAGE_QUOTA_MB_OVERRIDES:
-        return _STORAGE_QUOTA_MB_OVERRIDES[user.plan]
-    return global_default_mb
+    return plan_limit(user, "storage_mb", global_default_mb)
 
 
 def effective_ai_daily_limit(user, global_default_limit):
-    if user is not None and user.plan in _AI_DAILY_LIMIT_OVERRIDES:
-        return _AI_DAILY_LIMIT_OVERRIDES[user.plan]
-    return global_default_limit
+    return plan_limit(user, "ai_daily", global_default_limit)

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - ARVision{% endblock %}
+
+{% set feature_labels = {
+    'api_access': 'REST API access',
+    'advanced_ai_options': 'Advanced AI generation options',
+    'password_protected_shares': 'Password-protected share links',
+    'organizations': 'Teams & organizations',
+    'custom_domains': 'Custom domains',
+    'white_label': 'White-label / remove branding',
+    'webhooks': 'Webhooks',
+} %}
+
+{% block content %}
+<div class="container mx-auto px-4 pt-28 pb-16">
+    <div class="max-w-6xl mx-auto">
+        <div class="text-center mb-10">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Plans &amp; Pricing</h1>
+            <p class="text-gray-600 dark:text-gray-400">Choose the plan that fits your WebAR workflow.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {% for plan in plans %}
+                {% set cfg = plan_config[plan] %}
+                {% set limits = cfg.limits %}
+                {% set is_current = (plan == current_plan) %}
+                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 flex flex-col border {% if plan == 'pro' %}border-primary{% else %}border-gray-200 dark:border-gray-700{% endif %}">
+                    {% if plan == 'pro' %}
+                        <span class="self-start inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary mb-2">Most popular</span>
+                    {% endif %}
+                    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">{{ cfg.display_name }}</h2>
+                    <div class="mt-2 mb-4">
+                        <span class="text-3xl font-bold text-gray-900 dark:text-white">${{ cfg.price }}</span>
+                        <span class="text-gray-500 dark:text-gray-400">/mo</span>
+                    </div>
+
+                    <ul class="space-y-2 text-sm text-gray-700 dark:text-gray-300 mb-6 flex-1">
+                        <li>{{ limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB' }} storage</li>
+                        <li>{{ limits.max_models if limits.max_models else 'Unlimited' }} models</li>
+                        <li>{{ limits.ai_daily if limits.ai_daily else 10 }} AI generations / day</li>
+                        <li>Up to {{ limits.max_upload_mb }} MB per file</li>
+                        <li>{{ limits.batch_size }} files per batch upload</li>
+                        <li>{{ limits.analytics_retention_days }}-day analytics history</li>
+                        {% for feature, enabled in cfg.features.items() %}
+                            {% if enabled %}
+                                <li class="text-gray-900 dark:text-white">&#10003; {{ feature_labels[feature] }}</li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+
+                    {% if is_current %}
+                        <span class="w-full text-center px-4 py-2 rounded-md text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">Current plan</span>
+                    {% elif plan == 'free' %}
+                        <a href="{{ url_for('auth.register') }}" class="w-full text-center px-4 py-2 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">Get started</a>
+                    {% else %}
+                        <a href="mailto:sales@arvision.app?subject=Upgrade%20to%20{{ cfg.display_name }}" class="w-full text-center px-4 py-2 rounded-md text-sm font-medium text-white bg-primary hover:bg-primary-dark">Contact us</a>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        <p class="text-center text-xs text-gray-400 dark:text-gray-500 mt-8">
+            Self-serve checkout is coming soon. To change your plan today, contact us and an admin will set it up.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -11,6 +11,8 @@
  *   data-show-password             display response.temp_password instead of reloading
  *   data-redirect="/admin/..."     navigate there on success instead of reloading
  *   data-body='{"k":"v"}'          JSON POST body (omit for a bodyless POST)
+ *   data-body-from="#sel"          read a live input's value into the body...
+ *   data-body-key="plan"           ...under this key (overrides data-body)
  *
  * Bulk actions: wrap a checkbox table + its action bar in one
  * `.admin-bulk-scope` container.
@@ -177,7 +179,15 @@
         const showPassword = button.hasAttribute('data-show-password');
         const redirect = button.getAttribute('data-redirect');
         const rawBody = button.getAttribute('data-body');
-        const body = rawBody ? JSON.parse(rawBody) : undefined;
+        let body = rawBody ? JSON.parse(rawBody) : undefined;
+        // data-body-from="#selector" reads a live input's value into the POST
+        // body under data-body-key (e.g. a plan <select>), overriding data-body.
+        const bodyFrom = button.getAttribute('data-body-from');
+        const bodyKey = button.getAttribute('data-body-key');
+        if (bodyFrom && bodyKey) {
+            const source = document.querySelector(bodyFrom);
+            if (source) body = Object.assign({}, body, { [bodyKey]: source.value });
+        }
         if (message) {
             openModal({ url, message, typed, showPassword, redirect, body });
         } else {

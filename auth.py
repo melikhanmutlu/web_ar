@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
-from models import User, db
+from models import User, UserModel, db
 from site_settings import setting_bool
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
@@ -99,4 +99,35 @@ def logout():
 @auth.route('/profile')
 @login_required
 def profile():
-    return render_template('profile.html')
+    import app as app_module
+    from services.plans import PLAN_CONFIG, plan_limit
+    from services.storage_quota import _storage_usage_for, _storage_quota_bytes
+
+    plan = current_user.plan
+    plan_display = PLAN_CONFIG.get(plan, {}).get("display_name", plan.title())
+
+    storage_used = _storage_usage_for(current_user.id)
+    storage_quota = _storage_quota_bytes(current_user)  # 0 => unlimited
+    model_count = (
+        db.session.query(db.func.count(UserModel.id))
+        .filter(UserModel.user_id == current_user.id, UserModel.deleted_at.is_(None))
+        .scalar()
+    )
+    model_limit = plan_limit(current_user, "max_models")  # None => unlimited
+    _, ai_used, ai_limit = app_module._ai_quota_state(current_user.id)
+
+    usage = {
+        "storage_used_mb": round(storage_used / (1024 * 1024), 1),
+        "storage_quota_mb": round(storage_quota / (1024 * 1024)) if storage_quota else None,
+        "model_count": model_count,
+        "model_limit": model_limit,
+        "ai_used": ai_used,
+        "ai_limit": ai_limit,
+    }
+    return render_template(
+        'profile.html',
+        user=current_user,
+        plan=plan,
+        plan_display=plan_display,
+        usage=usage,
+    )

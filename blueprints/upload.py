@@ -30,20 +30,58 @@ from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
 from services.model_permissions import check_model_mutation_allowed, get_live_model
-from services.plans import effective_storage_quota_mb
+from services.plans import effective_storage_quota_mb, plan_limit
 from services.time_utils import datetime
 from site_settings import setting_int
 
 upload_bp = Blueprint("upload", __name__)
 
 
+def _effective_max_upload_mb():
+    """Smallest positive per-file upload cap across the admin-global setting
+    (max_upload_mb) and the current user's plan (services/plans.py). A 0/None
+    from either source means "no cap from that source"; returns 0 when neither
+    imposes one. The env-derived MAX_CONTENT_LENGTH stays the hard ceiling
+    enforced by Werkzeug regardless."""
+    caps = [setting_int("max_upload_mb", 0)]
+    if current_user.is_authenticated:
+        caps.append(plan_limit(current_user, "max_upload_mb"))
+    positive = [c for c in caps if c]
+    return min(positive) if positive else 0
+
+
 def _check_upload_size_limit():
-    """Admin-configurable upload cap (max_upload_mb setting). The env-derived
-    MAX_CONTENT_LENGTH stays the hard ceiling enforced by Werkzeug; this only
-    lowers the effective limit at runtime. Returns a response tuple or None."""
-    max_mb = setting_int("max_upload_mb", 0)
+    """Enforce the effective per-file upload cap at runtime. Returns a
+    response tuple or None."""
+    max_mb = _effective_max_upload_mb()
     if max_mb and request.content_length and request.content_length > max_mb * 1024 * 1024:
         return jsonify({"error": f"File exceeds the {max_mb} MB upload limit"}), 413
+    return None
+
+
+def _check_model_count_limit():
+    """Per-user model-count cap from the user's plan (None => unlimited).
+
+    Unlike the storage quota (which counts trashed models still on disk), this
+    excludes soft-deleted models (deleted_at IS NULL) so a user can't be
+    permanently locked out of uploading by rows sitting in the trash. Runs
+    before the file is written, so it gates on the pre-existing total.
+    Returns a response tuple or None.
+    """
+    if not current_user.is_authenticated:
+        return None
+    cap = plan_limit(current_user, "max_models")
+    if not cap:
+        return None
+    count = (
+        db.session.query(db.func.count(UserModel.id))
+        .filter(UserModel.user_id == current_user.id, UserModel.deleted_at.is_(None))
+        .scalar()
+    )
+    if count >= cap:
+        return jsonify(
+            {"error": f"Model limit reached ({cap}). Delete some models or upgrade your plan."}
+        ), 413
     return None
 
 
@@ -427,6 +465,9 @@ def upload_model():
     quota_guard = _check_storage_quota()
     if quota_guard is not None:
         return quota_guard
+    count_guard = _check_model_count_limit()
+    if count_guard is not None:
+        return count_guard
 
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -633,7 +674,7 @@ def init_chunked_upload():
     if total_size <= 0 or total_chunks <= 0 or total_chunks > CHUNK_UPLOAD_MAX_CHUNKS:
         return jsonify({"success": False, "error": "Invalid total_size/total_chunks"}), 400
 
-    max_mb = setting_int("max_upload_mb", 0)
+    max_mb = _effective_max_upload_mb()
     if max_mb and total_size > max_mb * 1024 * 1024:
         return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
 
@@ -648,6 +689,9 @@ def init_chunked_upload():
             )
             if used + total_size > quota_mb * 1024 * 1024:
                 return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
+    count_guard = _check_model_count_limit()
+    if count_guard is not None:
+        return count_guard
 
     upload_id = str(uuid.uuid4())
     session_dir = _chunk_session_dir(upload_id)
@@ -795,7 +839,7 @@ def complete_chunked_upload(upload_id):
         # user's quota (the init-time checks trusted the client's declared
         # total_size; enforce against the bytes actually delivered).
         assembled_size = os.path.getsize(assembled_path)
-        max_mb = setting_int("max_upload_mb", 0)
+        max_mb = _effective_max_upload_mb()
         if max_mb and assembled_size > max_mb * 1024 * 1024:
             return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
         if current_user.is_authenticated:
@@ -809,6 +853,9 @@ def complete_chunked_upload(upload_id):
                 )
                 if used + assembled_size > quota_mb * 1024 * 1024:
                     return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
+        count_guard = _check_model_count_limit()
+        if count_guard is not None:
+            return count_guard
 
         edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
         status_token = secrets.token_urlsafe(32)
@@ -844,6 +891,11 @@ def batch_upload_models():
     quota_guard = _check_storage_quota()
     if quota_guard is not None:
         return quota_guard
+    # Blocks the batch when the user is already at their model cap. A precise
+    # "count + len(files) > cap" partial check is out of scope for now.
+    count_guard = _check_model_count_limit()
+    if count_guard is not None:
+        return count_guard
 
     files = [item for item in request.files.getlist("files") if item and item.filename]
     if not files:

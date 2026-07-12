@@ -9,10 +9,46 @@
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
             <div class="flex items-center space-x-4">
                 <div class="flex-1">
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.name }}</h2>
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.username }}</h2>
                     <p class="text-gray-600 dark:text-gray-400">{{ current_user.email }}</p>
                 </div>
             </div>
+        </div>
+
+        <!-- Plan & Usage -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Plan</h3>
+                <div class="flex items-center space-x-3">
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary dark:bg-primary/20">{{ plan_display }}</span>
+                    {% if plan != 'business' %}
+                        <a href="{{ url_for('main.pricing') }}" class="text-sm font-medium text-primary hover:underline">Upgrade</a>
+                    {% endif %}
+                </div>
+            </div>
+            <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Storage</dt>
+                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ usage.storage_used_mb }} MB
+                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.storage_quota_mb ~ ' MB' if usage.storage_quota_mb else 'Unlimited' }}</span>
+                    </dd>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Models</dt>
+                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ usage.model_count }}
+                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.model_limit if usage.model_limit else 'Unlimited' }}</span>
+                    </dd>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">AI generations (24h)</dt>
+                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
+                        {{ usage.ai_used }}
+                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.ai_limit }}</span>
+                    </dd>
+                </div>
+            </dl>
         </div>
 
         <!-- User Models -->

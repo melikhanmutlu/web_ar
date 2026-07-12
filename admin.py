@@ -455,7 +455,7 @@ def user_detail(user_id):
     ).count()
     ai_total = AIGenerationJob.query.filter_by(user_id=user.id).count()
 
-    from services.plans import effective_ai_daily_limit
+    from services.plans import PLANS, effective_ai_daily_limit
 
     return render_template(
         "admin/user_detail.html",
@@ -466,6 +466,7 @@ def user_detail(user_id):
         ai_used_24h=ai_used_24h,
         ai_total=ai_total,
         ai_limit=effective_ai_daily_limit(user, _effective_ai_daily_limit()),
+        plans=PLANS,
         likes=ModelLike.query.filter_by(user_id=user.id).count(),
         saves=ModelSave.query.filter_by(user_id=user.id).count(),
     )

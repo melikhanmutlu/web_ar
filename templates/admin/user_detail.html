@@ -55,21 +55,20 @@
                 data-confirm="{% if user.is_active_flag %}Deactivate {{ user.username }}? They will be logged out and unable to log in.{% else %}Reactivate {{ user.username }}?{% endif %}">
             {% if user.is_active_flag %}deactivate{% else %}reactivate{% endif %}
         </button>
-        {% if user.plan != 'pro' %}
-        <button type="button" class="admin-btn"
-                data-action-url="{{ url_for('admin.set_plan', user_id=user.id) }}"
-                data-body='{"plan": "pro"}'
-                data-confirm="Upgrade {{ user.username }} to the pro plan (higher storage/AI limits)?">
-            upgrade to pro
-        </button>
-        {% else %}
-        <button type="button" class="admin-btn"
-                data-action-url="{{ url_for('admin.set_plan', user_id=user.id) }}"
-                data-body='{"plan": "free"}'
-                data-confirm="Downgrade {{ user.username }} to the free plan?">
-            downgrade to free
-        </button>
-        {% endif %}
+        <span class="admin-inline-field">
+            <select id="set-plan-select" class="admin-select" aria-label="plan">
+                {% for plan in plans %}
+                <option value="{{ plan }}" {% if plan == user.plan %}selected{% endif %}>{{ plan }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="admin-btn"
+                    data-action-url="{{ url_for('admin.set_plan', user_id=user.id) }}"
+                    data-body-from="#set-plan-select"
+                    data-body-key="plan"
+                    data-confirm="Change {{ user.username }}'s plan? This applies their new storage/AI/model limits and feature access.">
+                set plan
+            </button>
+        </span>
         <button type="button" class="admin-btn"
                 data-action-url="{{ url_for('admin.reset_password', user_id=user.id) }}"
                 data-confirm="Reset {{ user.username }}'s password? A temporary password will be shown once."

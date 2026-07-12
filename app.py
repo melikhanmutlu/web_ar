@@ -2635,6 +2635,12 @@ def _claim_ai_stage(job_id, expect_stage, new_stage):
     return bool(claimed)
 
 
+# Hosts Meshy serves generated GLBs/textures from. Used to allowlist the
+# remote-texture embed (SSRF guard) so we only fetch texture images referenced
+# by a Meshy-authored GLB, never an arbitrary URL.
+MESHY_TEXTURE_HOSTS = ["meshy.ai", "amazonaws.com", "cloudfront.net"]
+
+
 def _finalize_ai_job(job, task):
     """Download finished GLB (+USDZ), register as model, mark job ready.
 
@@ -2659,6 +2665,40 @@ def _finalize_ai_job(job, task):
     os.makedirs(tmp_dir, exist_ok=True)
     glb_tmp = os.path.join(tmp_dir, "model.glb")
     ai_generator.download(glb_url, glb_tmp)
+
+    # Diagnose + self-heal textures BEFORE registration (which runs a pygltflib
+    # round-trip). Logs exactly what Meshy returned (so an untextured result is
+    # one-glance diagnosable), then embeds any externally-referenced (CDN/signed
+    # URL) textures so the model is self-contained -- otherwise it renders
+    # untextured under CSP/CORS or once Meshy's signed URLs expire. Never fails
+    # the job.
+    try:
+        from converters.glb_quality import (
+            embed_remote_textures, has_base_color_textures, inspect_texture_state,
+        )
+        logger.info(
+            "[generate-3d] job=%s texture state: %s | model_urls=%s | texture_urls=%d",
+            job.id, inspect_texture_state(glb_tmp), sorted(model_urls.keys()),
+            len(task.get("texture_urls") or []),
+        )
+        if embed_remote_textures(glb_tmp, allowed_hosts=MESHY_TEXTURE_HOSTS):
+            logger.info("[generate-3d] job=%s embedded remote Meshy textures", job.id)
+        # Fallback for GLBs that reference textures by relative filename: pull
+        # Meshy's separate PBR maps next to the GLB so register's
+        # embed_external_textures pass (search_dirs includes tmp_dir) can pack
+        # them. Only when the GLB still lacks a base-color texture.
+        if not has_base_color_textures(glb_tmp) and task.get("texture_urls"):
+            from urllib.parse import urlparse as _urlparse
+            for tex in task["texture_urls"]:
+                for map_url in (tex or {}).values():
+                    if isinstance(map_url, str) and map_url.lower().startswith(("http://", "https://")):
+                        try:
+                            name = os.path.basename(_urlparse(map_url).path) or "texture.png"
+                            ai_generator.download(map_url, os.path.join(tmp_dir, name))
+                        except Exception:
+                            pass
+    except Exception as exc:
+        logger.warning("[generate-3d] job=%s texture diagnose/heal skipped: %s", job.id, exc)
 
     usdz_tmp = None
     if model_urls.get("usdz"):

@@ -19,10 +19,15 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
+import requests
 from pygltflib import Buffer, BufferView, GLTF2, Material, PbrMetallicRoughness
 
 logger = logging.getLogger(__name__)
+
+# Cap a single downloaded texture so a hostile/broken URL can't exhaust memory.
+_MAX_REMOTE_TEXTURE_BYTES = 32 * 1024 * 1024
 
 
 class GLBQualityError(ValueError):
@@ -114,6 +119,122 @@ def embed_external_textures(glb_path: str, search_dirs: list = None) -> bool:
     if changed:
         gltf.save(glb_path)
     return changed
+
+
+def _host_allowed(url: str, allowed_hosts: list) -> bool:
+    """True if url's host equals or is a subdomain of an allowed host."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        return False
+    if not host:
+        return False
+    for pattern in allowed_hosts or []:
+        p = (pattern or "").lower().lstrip(".")
+        if p and (host == p or host.endswith("." + p)):
+            return True
+    return False
+
+
+def embed_remote_textures(glb_path: str, allowed_hosts: list) -> bool:
+    """Download http(s) image URIs referenced by the GLB and embed them into the
+    binary chunk, making the model self-contained.
+
+    Only fetches from `allowed_hosts` (SSRF guard) -- intended for GLBs from a
+    trusted source (e.g. Meshy) whose textures are hosted on a known CDN and
+    would otherwise be lost (CSP/CORS) or expire (signed URLs). Best-effort:
+    any failure leaves the image as-is.
+    """
+    if not allowed_hosts:
+        return False
+    try:
+        gltf = _load_glb(glb_path)
+    except GLBQualityError:
+        return False
+    if not gltf.images:
+        return False
+    if gltf.bufferViews is None:
+        gltf.bufferViews = []
+
+    changed = False
+    for image in gltf.images:
+        uri = image.uri
+        if not uri or image.bufferView is not None:
+            continue
+        if not uri.lower().startswith(("http://", "https://")):
+            continue
+        if not _host_allowed(uri, allowed_hosts):
+            logger.warning(f"Remote texture host not allowed, skipping: {uri}")
+            continue
+        try:
+            resp = requests.get(uri, stream=True, timeout=60)
+            if resp.status_code >= 400:
+                logger.warning(f"Remote texture fetch failed {resp.status_code}: {uri}")
+                continue
+            payload = b""
+            for chunk in resp.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                payload += chunk
+                if len(payload) > _MAX_REMOTE_TEXTURE_BYTES:
+                    raise ValueError("remote texture exceeds size cap")
+        except Exception as exc:
+            logger.warning(f"Remote texture fetch error for {uri}: {exc}")
+            continue
+
+        offset = _append_blob(gltf, payload)
+        view = BufferView(buffer=0, byteOffset=offset, byteLength=len(payload))
+        image.bufferView = len(gltf.bufferViews)
+        content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        image.mimeType = content_type if content_type.startswith("image/") else "image/png"
+        image.uri = None
+        gltf.bufferViews.append(view)
+        changed = True
+
+    if changed:
+        gltf.save(glb_path)
+    return changed
+
+
+def inspect_texture_state(glb_path: str) -> dict:
+    """A small, log-friendly summary of a GLB's texture/material state.
+
+    Used to diagnose why an AI-generated model rendered untextured: whether it
+    has any images, whether they're embedded vs referenced externally (and from
+    which host), and the first material's key PBR factors.
+    """
+    try:
+        gltf = _load_glb(glb_path)
+    except GLBQualityError as exc:
+        return {"error": str(exc)}
+    images = gltf.images or []
+    embedded = 0
+    external_hosts = []
+    for im in images:
+        uri = im.uri or ""
+        if im.bufferView is not None or uri.startswith("data:"):
+            embedded += 1
+        elif uri:
+            try:
+                external_hosts.append((urlparse(uri).hostname or uri[:48]))
+            except Exception:
+                external_hosts.append(uri[:48])
+    materials = gltf.materials or []
+    first = {}
+    if materials:
+        pbr = materials[0].pbrMetallicRoughness
+        first = {
+            "baseColorFactor": getattr(pbr, "baseColorFactor", None) if pbr else None,
+            "metallicFactor": getattr(pbr, "metallicFactor", None) if pbr else None,
+            "has_base_color_texture": bool(pbr and pbr.baseColorTexture is not None),
+        }
+    return {
+        "images": len(images),
+        "embedded": embedded,
+        "external_hosts": external_hosts,
+        "materials": len(materials),
+        "first_material": first,
+    }
 
 
 def has_base_color_textures(glb_path: str) -> bool:

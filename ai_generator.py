@@ -226,6 +226,10 @@ def get_task(kind: str, task_id: str) -> dict:
         "status": data.get("status"),
         "progress": int(data.get("progress") or 0),
         "model_urls": data.get("model_urls") or {},
+        # Per-material PBR map URLs (base_color / metallic / roughness / normal),
+        # separate from model_urls. Used to repair a GLB that references its
+        # textures externally instead of embedding them.
+        "texture_urls": data.get("texture_urls") or [],
         "thumbnail_url": data.get("thumbnail_url"),
         "task_error": (data.get("task_error") or {}).get("message"),
         "raw": data,

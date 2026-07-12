@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let hintEl = null;
     let savedStageBg = '';
     let active = false;
+    let entering = false; // guards the async getUserMedia window against double-clicks
 
     function buildHint() {
         hintEl = document.createElement('div');
@@ -41,17 +42,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function enter() {
+        // A second click while getUserMedia is still pending would open a
+        // second stream and orphan the first <video> with a live, unstoppable
+        // camera track. Ignore re-entry until this attempt resolves.
+        if (entering || active) return;
+        entering = true;
+        let openedStream;
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
+            openedStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: 'environment' },
                 audio: false,
             });
         } catch (err) {
+            entering = false;
             alert(err && err.name === 'NotAllowedError'
                 ? 'Camera permission was denied — allow camera access for this site and try again.'
                 : 'No camera could be opened on this device, so overlay mode is unavailable.');
             return;
         }
+        stream = openedStream;
         videoEl = document.createElement('video');
         videoEl.id = 'cameraOverlayVideo';
         videoEl.autoplay = true;
@@ -66,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
         buildHint();
         button.classList.add('is-active');
         active = true;
+        entering = false;
     }
 
     function exit() {
@@ -82,6 +92,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     button.addEventListener('click', () => (active ? exit() : enter()));
+
+    // Cross-file bridge: entering fullscreen only fullscreens <model-viewer>,
+    // not this sibling <video>, so the camera would keep running invisibly
+    // behind a blank fullscreen background. fullscreen-modal.js calls this
+    // first so the overlay is off before that happens.
+    window._exitCameraOverlay = function() {
+        if (active) exit();
+    };
 
     // Never leave the camera running when the page goes away.
     window.addEventListener('pagehide', () => { if (active) exit(); });

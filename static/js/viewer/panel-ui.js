@@ -47,10 +47,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // doesn't cover the model. Desktop keeps it open as a floating card.
         (function initInfoDrawer() {
             const mq = () => window.innerWidth <= 1024;
-            if (mq()) closeInfo();
+            let wasMobile = mq();
+            if (wasMobile) closeInfo();
             window.addEventListener('resize', () => {
+                // Mobile browsers fire 'resize' when the URL bar collapses or
+                // the soft keyboard opens (e.g. tapping the inline title/
+                // description editor) -- not just on an actual desktop<->mobile
+                // width change. Only close the drawer on a real crossing, or
+                // editing text would slam it shut mid-edit.
+                const isMobile = mq();
                 const sidebar = document.getElementById('rightSidebar');
-                if (mq() && sidebar && !sidebar.classList.contains('info-hidden')) closeInfo();
+                if (isMobile && !wasMobile && sidebar && !sidebar.classList.contains('info-hidden')) {
+                    closeInfo();
+                }
+                wasMobile = isMobile;
             });
         })();
 

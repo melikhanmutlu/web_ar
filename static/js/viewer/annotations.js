@@ -359,7 +359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 savedViews = [];
                 renderCameraViews();
                 hotspotCount = 0;
-                modelViewer?.querySelectorAll('[slot^="hotspot-"]').forEach(el => el.remove());
+                // Exclude measure-tool markers (slot "hotspot-measure-*") --
+                // this selector used to remove them too, leaving measure-tool's
+                // own markers[]/points[] arrays pointing at removed DOM nodes
+                // while its result panel kept showing a stale distance.
+                modelViewer?.querySelectorAll('[slot^="hotspot-"]:not([slot^="hotspot-measure-"])').forEach(el => el.remove());
                 if (hotspotsList) hotspotsList.innerHTML = '<p class="tp-note">No hotspots yet</p>';
             })
             .catch(err => console.error('Error clearing annotations:', err));

@@ -126,14 +126,11 @@ def my_models_trash():
 def download_model(model_id):
     """Download the converted model file."""
     try:
-        # Get the model from database
-        session = Session(db.engine)
-        model = session.get(UserModel, model_id)
+        # Use the request-scoped session (a standalone Session(db.engine) here
+        # was never closed, leaking a pooled connection per download).
+        model = db.session.get(UserModel, model_id)
         if model is None or model.deleted_at is not None:
             return "Model not found", 404
-
-        if model is None:
-            return "File not found", 404
 
         # Check if user owns this model
         if model.user_id != current_user.id:
@@ -162,8 +159,9 @@ def download_model(model_id):
 def get_model_info_api(model_id):
     import app as app_module
 
-    session = Session(db.engine)
-    model = session.get(UserModel, model_id)
+    # Request-scoped session (avoids the connection leak of an unclosed
+    # standalone Session(db.engine)).
+    model = db.session.get(UserModel, model_id)
     if model is None or model.deleted_at is not None:
         return jsonify({"error": "Model not found"}), 404
     if model.user_id != current_user.id:
@@ -214,6 +212,9 @@ def update_model_color():
             model.color = color
             model.validation_report = app_module.asset_quality.inspect(output_path)
             db.session.commit()
+            # Regenerate the USDZ so iOS Quick Look (served via ios-src) reflects
+            # the new color, matching every other GLB-mutating path.
+            app_module.refresh_usdz_after_edit(model_id, output_path)
             create_version(
                 model_id=model_id,
                 operation_type="material",
@@ -301,6 +302,7 @@ def delete_model(model_id):
 @models_crud_bp.route("/delete_all_models", methods=["POST"])
 @login_required
 def delete_all_models():
+    session = None
     try:
         # Get all models for the current user
         session = Session(db.engine)
@@ -337,6 +339,10 @@ def delete_all_models():
         logger.error(f"Error deleting all models: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return jsonify({"error": "Error deleting models"}), 500
+    finally:
+        # Close the standalone session so its pooled connection is returned.
+        if session is not None:
+            session.close()
 
 
 @models_crud_bp.route("/delete_selected_models", methods=["POST"])

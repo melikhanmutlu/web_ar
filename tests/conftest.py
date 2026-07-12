@@ -1,3 +1,20 @@
+import os
+import tempfile
+
+# Point the app at a throwaway SQLite file BEFORE importing it. Flask-SQLAlchemy
+# latches its engine from the config at import time, so setting
+# SQLALCHEMY_DATABASE_URI inside a fixture (as this module used to) had no
+# effect — the suite actually ran against, and db.drop_all()'d, the developer's
+# real instance/app.db. Setting DATABASE_URL here (config.py reads it at import)
+# guarantees isolation. A temp file (not :memory:) keeps the same DB across the
+# multiple connections SQLAlchemy may open during a test.
+_TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db", prefix="arvision_test_")
+os.close(_TEST_DB_FD)
+os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH}"
+# Setting DATABASE_URL trips config.py's production detection, which then
+# requires a SECRET_KEY — provide a fixed test one so import succeeds.
+os.environ.setdefault("SECRET_KEY", "test-only-secret-key")
+
 import pytest
 from app import app, db, limiter
 from models import User, Folder
@@ -7,8 +24,15 @@ def client():
     app.config['TESTING'] = True
     app.config['RATELIMIT_ENABLED'] = False
     limiter.enabled = False
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:' # Use in-memory DB for tests
+    # DB isolation is handled at import time via DATABASE_URL (see top of file);
+    # the engine is already latched, so setting the URI here would be a no-op.
     app.config['WTF_CSRF_ENABLED'] = False
+    # The DATABASE_URL above flips config into "production" mode, which marks
+    # cookies Secure; the Werkzeug test client speaks http, so a Secure session
+    # cookie would never be sent back and every login-dependent test would fail.
+    # Cookie flags are read per-response (not latched), so overriding here works.
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['REMEMBER_COOKIE_SECURE'] = False
     # Flask-Limiter's storage is a process-wide singleton, so hits accumulate
     # across every test in the session, not just within one test. Its
     # `enabled` flag is latched from app.config only once, at the init_app()

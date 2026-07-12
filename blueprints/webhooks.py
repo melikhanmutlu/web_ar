@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 
 from models import WebhookSubscription, db
 from services import WEBHOOK_EVENT_TYPES
+from services.webhooks import is_safe_webhook_url
 
 webhooks_bp = Blueprint("webhooks", __name__)
 
@@ -24,6 +25,11 @@ def webhooks():
     parsed = urlsplit(url)
     if parsed.scheme != "https" or not parsed.netloc:
         return jsonify({"success": False, "error": "url must be an https:// URL"}), 400
+    if not is_safe_webhook_url(url):
+        return jsonify({
+            "success": False,
+            "error": "url must resolve to a public host (private/internal addresses are not allowed)",
+        }), 400
     event_types = data.get("event_types")
     if not isinstance(event_types, list) or not event_types:
         return jsonify({"success": False, "error": "event_types must be a non-empty list"}), 400

@@ -90,12 +90,14 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
 
         if not hasattr(mesh, 'vertices'):
             logger.error(f"Model {model_id} produced no mesh; skipping version metadata")
+            os.remove(version_file)  # the copy at version_file was already made above
             return None
         if len(mesh.vertices) > MAX_VERTICES:
             logger.error(
                 f"Model {model_id} mesh too large "
                 f"({len(mesh.vertices)} > {MAX_VERTICES} verts); skipping version"
             )
+            os.remove(version_file)
             return None
 
         bounds = mesh.bounds

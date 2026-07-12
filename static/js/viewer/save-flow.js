@@ -4,7 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // SAVE CHANGES
         // ===================================================================
         const saveChangesBtn = document.getElementById('saveChanges');
-        const defaultSaveButtonMarkup = '<i data-lucide="circle"></i> Save & Apply to AR';
+        // Capture the button's real initial markup (check-circle icon, per the
+        // template) instead of hardcoding a different icon name -- the old
+        // hardcoded "circle" markup left the button showing a blank icon
+        // after a failed save until the tools panel was reopened re-ran lucide.
+        const defaultSaveButtonMarkup = saveChangesBtn ? saveChangesBtn.innerHTML : '';
 
         function gatherModifications() {
             const mods = {};
@@ -114,6 +118,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 saveChangesBtn.disabled = false;
                 saveChangesBtn.innerHTML = defaultSaveButtonMarkup;
+                // lucide swaps <i data-lucide> tags for inline <svg> at page
+                // load; restoring raw innerHTML brings back the unrendered
+                // <i> tag, so re-run it or the icon stays blank until the
+                // tools panel is closed and reopened.
+                window.lucide?.createIcons();
             }
         });
 

@@ -209,7 +209,25 @@ def model_exploded_asset(model_id):
         return jsonify({"success": False, "error": "Explosion factor must be 0.05-2.0"}), 400
     try:
         scene = trimesh.load(model.filename, force="scene")
-        geometries = [geometry.copy() for geometry in scene.geometry.values()]
+        # scene.geometry values are in each part's own LOCAL frame; for any
+        # model whose parts are placed via node transforms (STEP assemblies,
+        # most GLB exports), copying them raw piles everything at the wrong
+        # position and computes explosion directions from local-frame
+        # centroids. Bake each node's world transform first, like
+        # mesh_slicer._iter_world_meshes does.
+        geometries = []
+        seen_names = set()
+        for node_name in scene.graph.nodes_geometry:
+            transform, geom_name = scene.graph[node_name]
+            geom = scene.geometry.get(geom_name)
+            if geom is None:
+                continue
+            geometry = geom.copy()
+            if transform is not None:
+                geometry.apply_transform(transform)
+            name = node_name if node_name not in seen_names else f"{node_name}_{len(seen_names)}"
+            seen_names.add(name)
+            geometries.append(geometry)
         if len(geometries) < 2:
             return jsonify({"success": False, "error": "Exploded view requires multiple mesh parts"}), 422
         centers = np.array([geometry.centroid for geometry in geometries])

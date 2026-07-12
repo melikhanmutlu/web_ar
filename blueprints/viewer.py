@@ -56,8 +56,12 @@ def view_model(model_id):
         if guard:
             abort(403)
 
-    # Increment view count
-    model.view_count = (model.view_count or 0) + 1
+    # Increment view count atomically (a read-modify-write loses concurrent
+    # views; match the coalesce+1 pattern used for share/download counts).
+    UserModel.query.filter_by(id=model_id).update(
+        {UserModel.view_count: db.func.coalesce(UserModel.view_count, 0) + 1},
+        synchronize_session=False,
+    )
     db.session.commit()
     record_model_event(model_id, "view")
 

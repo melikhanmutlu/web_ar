@@ -37,11 +37,6 @@ else:
 # Flask Configuration
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
-if FLASK_ENV == 'production' and SECRET_KEY == 'dev-secret-key-change-in-production':
-    raise RuntimeError('SECRET_KEY must be configured in production')
-SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = FLASK_ENV == 'production'
-SESSION_COOKIE_SAMESITE = 'Lax'
 
 # SECRET_KEY signs session cookies and CSRF tokens — a known/default value lets
 # anyone forge sessions and impersonate users. Fail fast in production rather
@@ -61,6 +56,17 @@ if not _SECRET_KEY:
         )
     _SECRET_KEY = 'dev-secret-key-change-in-production'
 SECRET_KEY = _SECRET_KEY
+
+# Cookies must carry the Secure flag in production so the session/remember
+# tokens are never sent over plain HTTP. Keyed off the same production
+# detection as the SECRET_KEY guard — the real Railway deploy sets
+# RAILWAY_ENVIRONMENT/DATABASE_URL rather than FLASK_ENV.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = _IS_PRODUCTION
+SESSION_COOKIE_SAMESITE = 'Lax'
+REMEMBER_COOKIE_HTTPONLY = True
+REMEMBER_COOKIE_SECURE = _IS_PRODUCTION
+REMEMBER_COOKIE_SAMESITE = 'Lax'
 
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')

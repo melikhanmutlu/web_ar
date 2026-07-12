@@ -654,6 +654,16 @@
         }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Rig & Animate progress bar: view.html doesn't link arvision.css
+           (only the Tailwind CDN + this inline block), so without these the
+           bar renders as zero-height and only the status text moves. */
+        .progress-bar-container { width: 100%; height: 0.5rem; background: var(--color-white); overflow: hidden; }
+        .dark .progress-bar-container { background: var(--color-gray-900); }
+        .progress-bar { height: 100%; width: 0%; background: var(--color-gray-900); transition: width 0.35s ease, background-color 0.3s ease; }
+        .dark .progress-bar { background: var(--color-gray-200); }
+        .progress-bar.error { background: #dc2626; }
+        .dark .progress-bar.error { background: #ef4444; }
     </style>
 
     <script>
@@ -771,7 +781,11 @@
                         {% else %}
                         <h2 class="showcase-title">{{ display_name }}</h2>
                         {% endif %}
+                        {% if is_owner %}
                         <a href="/my_models" class="showcase-publisher">Published by {{ owner_username }}</a>
+                        {% else %}
+                        <span class="showcase-publisher">Published by {{ owner_username }}</span>
+                        {% endif %}
                         {% if is_owner %}
                         <p class="showcase-description" id="modelDescription" title="Click to edit" style="cursor:pointer;" onclick="startEditDescription(this)">{{ model.description if model.description else 'Click to add a description...' }}</p>
                         {% else %}

@@ -14,7 +14,7 @@ import shutil
 
 from flask import current_app
 
-from models import ModelLike, ModelSave
+from models import ModelLike, ModelSave, RigAnimationJob
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,13 @@ def purge_model_completely(session, model):
         synchronize_session=False
     )
     session.query(ModelSave).filter_by(model_id=model.id).delete(
+        synchronize_session=False
+    )
+    # RigAnimationJob.model_id is a NOT NULL FK with no ORM cascade, so under
+    # Postgres FK enforcement it blocks the row delete (IntegrityError at
+    # commit) for any model that was ever rigged/animated — and callers remove
+    # the files first, leaving a broken zombie. Clear the job rows explicitly.
+    session.query(RigAnimationJob).filter_by(model_id=model.id).delete(
         synchronize_session=False
     )
     session.delete(model)

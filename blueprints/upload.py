@@ -407,6 +407,13 @@ def upload_model():
             use_color = bool(use_color_raw)
 
         color = request.form.get("color", "#4CAF50")
+        # Validate the hex color like every sibling upload path — an
+        # unvalidated value is persisted and later interpolated into the SVG
+        # thumbnail / gallery markup, so a bad string is a stored-XSS vector.
+        try:
+            color = app_module.validate_color(color)
+        except ValueError:
+            color = "#4CAF50"
         app_module.logger.info(f"Color settings - useColor: {use_color}, color: {color}")
 
         # Get maximum dimension setting (only if checkbox is checked)
@@ -506,9 +513,28 @@ def _read_chunk_meta(session_dir):
         return None
 
 
+def _received_chunk_indices(session_dir):
+    """The chunk files on disk are the source of truth for which indices have
+    arrived -- not meta.json's "received" list, which two concurrent PUTs can
+    race on (both read-modify-write the same list, one update is lost)."""
+    indices = []
+    for name in os.listdir(session_dir):
+        if name.startswith("chunk_"):
+            try:
+                indices.append(int(name[len("chunk_"):]))
+            except ValueError:
+                pass
+    return sorted(indices)
+
+
 def _write_chunk_meta(session_dir, meta):
-    with open(os.path.join(session_dir, "meta.json"), "w") as f:
+    # Write-then-rename so a crash mid-write can't leave a truncated/corrupt
+    # meta.json that would brick the session ("Unknown upload_id" forever).
+    path = os.path.join(session_dir, "meta.json")
+    tmp_path = path + f".tmp{os.getpid()}"
+    with open(tmp_path, "w") as f:
         json.dump(meta, f)
+    os.replace(tmp_path, path)
 
 
 @upload_bp.route("/api/uploads/chunked/init", methods=["POST"])
@@ -574,12 +600,31 @@ def put_upload_chunk(upload_id, index):
     if not data:
         return jsonify({"success": False, "error": "Empty chunk body"}), 400
 
+    # Enforce the declared total_size against the ACTUAL bytes received. Without
+    # this, a client could declare total_size=1 (passing the init-time quota /
+    # upload-limit checks) and then PUT arbitrarily large chunks, bypassing the
+    # storage quota and exhausting the volume. Count on-disk bytes for the other
+    # chunks (a re-PUT of this index replaces, so exclude the old copy) plus the
+    # incoming body, and reject once the sum exceeds the declared size.
+    declared_total = int(meta.get("total_size") or 0)
+    existing_bytes = 0
+    for other in _received_chunk_indices(session_dir):
+        if other == index:
+            continue
+        try:
+            existing_bytes += os.path.getsize(os.path.join(session_dir, f"chunk_{other}"))
+        except OSError:
+            pass
+    if declared_total and existing_bytes + len(data) > declared_total:
+        return jsonify({
+            "success": False,
+            "error": "Uploaded data exceeds the declared total size",
+        }), 413
+
     with open(os.path.join(session_dir, f"chunk_{index}"), "wb") as f:
         f.write(data)
-    if index not in meta["received"]:
-        meta["received"].append(index)
-        _write_chunk_meta(session_dir, meta)
-    return jsonify({"success": True, "received_count": len(meta["received"]), "total_chunks": meta["total_chunks"]})
+    received = _received_chunk_indices(session_dir)
+    return jsonify({"success": True, "received_count": len(received), "total_chunks": meta["total_chunks"]})
 
 
 @upload_bp.route("/api/uploads/chunked/<upload_id>/status", methods=["GET"])
@@ -590,7 +635,9 @@ def get_chunked_upload_status(upload_id):
     meta = _read_chunk_meta(session_dir) if session_dir else None
     if not meta:
         return jsonify({"success": False, "error": "Unknown upload_id"}), 404
-    return jsonify({"success": True, **meta})
+    body = dict(meta)
+    body["received"] = _received_chunk_indices(session_dir)
+    return jsonify({"success": True, **body})
 
 
 @upload_bp.route("/api/uploads/chunked/<upload_id>/complete", methods=["POST"])
@@ -603,8 +650,9 @@ def complete_chunked_upload(upload_id):
     meta = _read_chunk_meta(session_dir) if session_dir else None
     if not meta:
         return jsonify({"success": False, "error": "Unknown upload_id"}), 404
-    if len(meta["received"]) != meta["total_chunks"]:
-        missing = sorted(set(range(meta["total_chunks"])) - set(meta["received"]))
+    received = _received_chunk_indices(session_dir)
+    if len(received) != meta["total_chunks"]:
+        missing = sorted(set(range(meta["total_chunks"])) - set(received))
         return jsonify({"success": False, "error": "Upload incomplete", "missing_chunks": missing}), 409
 
     data = request.get_json(silent=True) or {}
@@ -613,6 +661,11 @@ def complete_chunked_upload(upload_id):
         return jsonify({"success": False, "error": "Invalid compression mode"}), 400
     use_color = bool(data.get("useColor", False))
     color = data.get("color", "#4CAF50")
+    # Validate the hex color (stored-XSS guard) — mirror the other upload paths.
+    try:
+        color = app_module.validate_color(color)
+    except ValueError:
+        color = "#4CAF50"
     max_dimension = None
     if data.get("useMaxDimension"):
         try:
@@ -633,6 +686,25 @@ def complete_chunked_upload(upload_id):
                     shutil.copyfileobj(chunk, out)
         for i in range(meta["total_chunks"]):
             os.remove(os.path.join(session_dir, f"chunk_{i}"))
+
+        # Re-validate the real assembled size against the upload limit and the
+        # user's quota (the init-time checks trusted the client's declared
+        # total_size; enforce against the bytes actually delivered).
+        assembled_size = os.path.getsize(assembled_path)
+        max_mb = setting_int("max_upload_mb", 0)
+        if max_mb and assembled_size > max_mb * 1024 * 1024:
+            return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
+        if current_user.is_authenticated:
+            global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+            quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
+            if quota_mb:
+                used = (
+                    db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
+                    .filter(UserModel.user_id == current_user.id)
+                    .scalar()
+                )
+                if used + assembled_size > quota_mb * 1024 * 1024:
+                    return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
 
         edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
         status_token = secrets.token_urlsafe(32)
@@ -705,10 +777,10 @@ def batch_upload_models():
 
     user_id = current_user.id if current_user.is_authenticated else None
     jobs, errors = [], []
-    for item in files:
+    for index, item in enumerate(files):
         safe_name = secure_filename(item.filename)
         if not app_module.allowed_file(safe_name):
-            errors.append({"filename": item.filename, "error": "File type not allowed"})
+            errors.append({"filename": item.filename, "error": "File type not allowed", "index": index})
             continue
         job_id = str(uuid.uuid4())
         edit_token = secrets.token_urlsafe(32) if user_id is None else None
@@ -735,6 +807,7 @@ def batch_upload_models():
             jobs.append({
                 "job_id": job_id,
                 "filename": item.filename,
+                "index": index,
                 "status_token": status_token,
                 "edit_token": edit_token,
                 "status_url": url_for("upload.upload_job_status", job_id=job_id),
@@ -742,12 +815,12 @@ def batch_upload_models():
             if not app_module.JOB_QUEUE_ENABLED:
                 app_module._start_local_conversion(job_id)
         except UploadStagingError as exc:
-            errors.append({"filename": item.filename, "error": str(exc)})
+            errors.append({"filename": item.filename, "error": str(exc), "index": index})
         except Exception:
             db.session.rollback()
             shutil.rmtree(os.path.join(app_module.app.config["TEMP_FOLDER"], job_id), ignore_errors=True)
             app_module.logger.exception("Batch staging failed for %s", item.filename)
-            errors.append({"filename": item.filename, "error": "Failed to stage upload"})
+            errors.append({"filename": item.filename, "error": "Failed to stage upload", "index": index})
 
     status = 202 if jobs else 400
     return jsonify({"success": bool(jobs), "jobs": jobs, "errors": errors}), status
@@ -778,7 +851,12 @@ def _build_job_status_payload(job):
     # stalled — the frontend already renders job.status == 'failed'. In queue
     # mode, worker.py's own requeue_stale_jobs() reconciliation owns this.
     if not app_module.JOB_QUEUE_ENABLED and job.status == "processing":
-        ref = job.started_at or job.created_at
+        # Measure staleness from the last heartbeat, not job start: the pipeline
+        # bumps last_heartbeat_at on every progress step, so a legitimately long
+        # conversion (large FBX: FBX2glTF alone can take ~300s, plus optimize/
+        # quality passes) is not falsely failed mid-run — which would also let
+        # the retry endpoint spawn a second thread writing the same model.glb.
+        ref = getattr(job, "last_heartbeat_at", None) or job.started_at or job.created_at
         if ref and (datetime.utcnow() - ref).total_seconds() > app_module.UPLOAD_STALL_SECONDS:
             job.status = "failed"
             job.error = (

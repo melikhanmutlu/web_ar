@@ -1450,9 +1450,12 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                 )
                 return
 
-            thumb_color = color or model.color or "#667eea"
-            name = model.original_filename[:20]
-            file_type = model.file_type or "GLB"
+            import html as _html
+            # Escape values interpolated into the SVG (served as image/svg+xml):
+            # defense in depth against a stored value breaking out of markup.
+            thumb_color = _html.escape(color or model.color or "#667eea")
+            name = _html.escape(model.original_filename[:20])
+            file_type = _html.escape(model.file_type or "GLB")
 
             svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
                 <defs>

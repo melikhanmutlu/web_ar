@@ -327,6 +327,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 metalness: parseFloat(document.getElementById('metalnessSlider')?.value ?? 0),
                 roughness: parseFloat(document.getElementById('roughnessSlider')?.value ?? 1),
                 opacity: parseFloat(document.getElementById('opacitySlider')?.value ?? 1),
+                // Which fields the user had actually touched at this point in
+                // history. Captured so undo/redo restores the exact dirty set
+                // instead of blanket-marking all four — otherwise a
+                // roughness-only edit, once undone/redone, would save a full
+                // material block and flatten every other material's color.
+                dirtyFields: Array.from(materialDirtyFields),
             };
         };
         // Exposed for save-flow.js: which material fields the user actually
@@ -363,11 +369,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], snap.opacity]);
                 mat.setAlphaMode(snap.opacity < 1 ? 'BLEND' : 'OPAQUE');
             });
-            // Undoing back to the baseline restores the model's saved
-            // appearance — treating that as "dirty" made a later
-            // transform-only save include a material block built from
-            // mat[0], flattening every other material's appearance.
-            if (opts && opts.dirty === false) {
+            // Restore the exact dirty-field set this snapshot was taken with,
+            // so a later save only carries the fields the user genuinely
+            // changed. Falls back to the older opts.dirty flag for snapshots
+            // captured before dirtyFields existed.
+            if (Array.isArray(snap.dirtyFields)) {
+                materialDirtyFields.clear();
+                snap.dirtyFields.forEach((f) => materialDirtyFields.add(f));
+                materialDirty = materialDirtyFields.size > 0;
+                window._reapplyClipping?.();
+            } else if (opts && opts.dirty === false) {
                 clearMaterialDirty();
             } else {
                 ['color', 'metalness', 'roughness', 'opacity'].forEach(markMaterialChanged);

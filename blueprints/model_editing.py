@@ -386,10 +386,16 @@ def save_modifications():
             )
         else:
             app_module.logger.error("[save_modifications] Modification failed")
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
             return jsonify({"success": False, "error": "Failed to modify GLB"}), 500
 
     except Exception as e:
         app_module.logger.error(f"[save_modifications] Error: {e}", exc_info=True)
+        # modify_glb writes to temp_output before any later step can raise;
+        # clean it up so a failed save doesn't leave orphaned temp_*.glb files.
+        if 'temp_output' in locals() and os.path.exists(temp_output):
+            os.remove(temp_output)
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -624,8 +630,15 @@ def slice_model():
             return jsonify(response)
         else:
             app_module.logger.error("[slice_model] Slicing failed")
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
             return jsonify({"success": False, "error": "Failed to slice model"}), 500
 
     except Exception as e:
         app_module.logger.error(f"[slice_model] Error: {e}", exc_info=True)
+        # slice_mesh_multi may have partially written temp_output before this
+        # raised; clean it up so a failed slice doesn't leave an orphaned
+        # temp_sliced_*.glb behind forever.
+        if 'temp_output' in locals() and os.path.exists(temp_output):
+            os.remove(temp_output)
         return jsonify({"success": False, "error": str(e)}), 500

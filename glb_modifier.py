@@ -115,11 +115,15 @@ def apply_material_modifications(gltf, material_mods):
                         + (" (texture tint)" if has_texture else "")
                     )
 
-                # Set alpha mode based on opacity; never downgrade MASK cutouts
+                # Set alpha mode based on opacity; never downgrade MASK cutouts.
+                # Only downgrade BLEND→OPAQUE for untextured materials: a
+                # textured material authored as BLEND (glass, foliage with an
+                # alpha texture) carries meaningful per-texel transparency that
+                # a default opacity=1.0 must not silently flatten to opaque.
                 if opacity < 1.0:
                     material.alphaMode = 'BLEND'
                     logger.info(f"Set alphaMode to BLEND for material {i} (opacity < 1.0)")
-                elif material.alphaMode == 'BLEND':
+                elif material.alphaMode == 'BLEND' and not has_texture:
                     material.alphaMode = 'OPAQUE'
             except Exception as e:
                 logger.error(f"Failed to apply color to material {i}: {e}")
@@ -493,7 +497,14 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
         # ── Embed image in binary buffer (not data URI) ──
         blob = gltf.binary_blob() or b""
         img_offset = len(blob)
-        new_blob = blob + image_bytes
+        # Pad the image to a 4-byte boundary. The image bufferView itself does
+        # not require alignment, but _ensure_texcoord0() may append a FLOAT
+        # TEXCOORD_0 accessor right after it, and accessor-backed bufferViews
+        # MUST start on a 4-byte offset (glTF spec). Without this pad, a PNG
+        # whose length isn't a multiple of 4 leaves the UV accessor misaligned
+        # and three.js/model-viewer refuses to load the GLB.
+        img_padding = (-len(image_bytes)) % 4
+        new_blob = blob + image_bytes + (b"\x00" * img_padding)
         gltf.set_binary_blob(new_blob)
         if gltf.buffers:
             gltf.buffers[0].byteLength = len(new_blob)

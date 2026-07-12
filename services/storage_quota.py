@@ -16,17 +16,18 @@ TRASH_RETENTION_DAYS = int(os.getenv("TRASH_RETENTION_DAYS", 30))
 def _purge_expired_trash(user_id):
     """Permanently delete this user's trashed models older than retention."""
     from datetime import timedelta
+    from model_cleanup import purge_model_completely
 
     cutoff = datetime.utcnow() - timedelta(days=TRASH_RETENTION_DAYS)
     expired = UserModel.query.filter(
         UserModel.user_id == user_id, UserModel.deleted_at < cutoff
     ).all()
     for model in expired:
-        for base in (current_app.config["CONVERTED_FOLDER"], current_app.config["UPLOAD_FOLDER"]):
-            d = os.path.join(base, str(model.id))
-            if os.path.exists(d):
-                shutil.rmtree(d, ignore_errors=True)
-        db.session.delete(model)
+        # Use the shared purge helper so engagement rows and RigAnimationJob
+        # FK rows are cleared too — a bare db.session.delete(model) raises an
+        # IntegrityError at commit for any rigged model, which previously made
+        # the whole My Models page unreachable.
+        purge_model_completely(db.session, model)
     if expired:
         db.session.commit()
         current_app.logger.info(f"Purged {len(expired)} expired trash models for user {user_id}")

@@ -581,7 +581,11 @@
             }
         });
 
-        const VALID_UPLOAD_EXTENSIONS = ['.obj', '.glb', '.gltf', '.fbx', '.stl', '.step', '.stp'];
+        // Derived from the backend's ALLOWED_EXTENSIONS (single source of
+        // truth) so the client never rejects a type the server accepts — the
+        // hardcoded list previously omitted .zip, blocking the very ZIP bundle
+        // workflow the UI instructs users to use.
+        const VALID_UPLOAD_EXTENSIONS = {{ upload_extensions | tojson }}.map((e) => '.' + e);
         const UPLOAD_MAX_BYTES = {{ upload_max_bytes }};
 
         function fileExtensionOf(file) {
@@ -599,7 +603,7 @@
                 const fileExtension = fileExtensionOf(file);
 
                 if (!VALID_UPLOAD_EXTENSIONS.includes(fileExtension)) {
-                    displayError('Invalid file type. Please upload a 3D model file (OBJ, GLB, GLTF, FBX, STL, or STEP).');
+                    displayError('Invalid file type. Supported: {{ upload_extensions | map("upper") | join(", ") }}.');
                     return;
                 }
 
@@ -629,6 +633,14 @@
                 } else {
                     mtlUpload?.classList.add('hidden');
                     textureUpload?.classList.add('hidden');
+                    // Clear any previously-selected MTL/texture files -- the
+                    // submit handler appends them whenever they're non-empty,
+                    // so selecting OBJ+MTL then re-selecting e.g. an STL used
+                    // to silently submit the STL with the leftover MTL.
+                    const mtlInputEl = document.getElementById('mtl-upload');
+                    const textureInputEl = document.getElementById('texture-upload');
+                    if (mtlInputEl) mtlInputEl.value = '';
+                    if (textureInputEl) textureInputEl.value = '';
                 }
 
                 // Source-unit selector is only meaningful for unitless STL/OBJ files.
@@ -667,7 +679,9 @@
             const submitBtn = document.getElementById('submitBtn');
 
             if (valid.length === 0) {
-                displayError(`No valid files selected. ${rejected.join(', ')}`);
+                // Escape: rejected[] contains raw, attacker-influenceable
+                // filenames and displayError injects into innerHTML.
+                displayError(`No valid files selected. ${escapeHtml(rejected.join(', '))}`);
                 if (submitBtn) submitBtn.disabled = true;
                 return;
             }
@@ -743,7 +757,7 @@
             batchList.innerHTML = '';
             batchList.classList.remove('hidden');
 
-            const rows = new Map(); // File -> {el, statusEl, barEl}
+            const rows = []; // index -> {el, statusEl, barEl} (position matches `files`)
             files.forEach((file) => {
                 const row = document.createElement('div');
                 row.className = 'batch-row';
@@ -755,7 +769,7 @@
                     <div class="progress-bar-container"><div class="progress-bar" style="width:5%;"></div></div>
                 `;
                 batchList.appendChild(row);
-                rows.set(file, {
+                rows.push({
                     el: row,
                     statusEl: row.querySelector('.batch-row-status'),
                     barEl: row.querySelector('.progress-bar'),
@@ -791,22 +805,22 @@
                 return;
             }
 
-            // Matched by filename -- fine for the common case of distinct
-            // names; two files sharing an identical name in one selection
-            // would both resolve to the first matching row.
+            // Matched by index -- the backend returns each job/error with the
+            // original request-order index, so two files sharing an identical
+            // name in one selection each get their own row (matching by name
+            // used to make both resolve to the first row, leaving the second
+            // stuck at "Uploading…" forever).
             (data.errors || []).forEach((err) => {
-                const match = [...rows.entries()].find(([file]) => file.name === err.filename);
-                if (!match) return;
-                const [, refs] = match;
+                const refs = rows[err.index];
+                if (!refs) return;
                 refs.statusEl.textContent = err.error;
                 refs.statusEl.classList.add('is-error');
                 refs.barEl.classList.add('error');
             });
 
             (data.jobs || []).forEach((job) => {
-                const match = [...rows.entries()].find(([file]) => file.name === job.filename);
-                if (!match) return;
-                const [, refs] = match;
+                const refs = rows[job.index];
+                if (!refs) return;
                 pollBatchJob(refs, job.job_id, job.status_token, job.edit_token);
             });
         }
@@ -875,6 +889,7 @@
         }
 
         // Handle form submission
+        let uploadInProgress = false; // guards against duplicate single-file submits
         uploadForm.addEventListener('submit', async function(e) {
             e.preventDefault();
 
@@ -895,6 +910,19 @@
                 displayError('Please select a file to upload.');
                 return;
             }
+
+            // Prevent a second click from starting a duplicate conversion job
+            // (both would convert, then race to redirect). The button is
+            // re-enabled by endUpload() on any error terminal; the success
+            // path navigates away, so it intentionally stays disabled.
+            const submitBtnEl = document.getElementById('submitBtn');
+            if (uploadInProgress) return;
+            uploadInProgress = true;
+            if (submitBtnEl) submitBtnEl.disabled = true;
+            const endUpload = () => {
+                uploadInProgress = false;
+                if (submitBtnEl) submitBtnEl.disabled = false;
+            };
 
             const formData = new FormData();
             formData.append('file', file);
@@ -1003,7 +1031,20 @@
             // Applies one job-status update to the progress UI. Returns true
             // once the job reaches a terminal state (caller stops watching).
             function applyJobUpdate(job, editToken) {
-                if (!job.success) return false;
+                if (!job.success) {
+                    // Terminal: an expired/invalid status token or a GC'd job
+                    // returns success:false. Returning false here left the
+                    // poll interval / SSE running forever with the bar stuck.
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Conversion status unavailable',
+                        job.error || 'The upload job could not be tracked. Please check My Models or try again.', 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Upload job status unavailable')}</div>`;
+                    endUpload();
+                    return true;
+                }
                 const jobProgress = typeof job.progress === 'number' ? job.progress : null;
                 const nextProgress = jobProgress !== null ? jobProgress : (job.status === 'processing' ? 72 : currentProgress);
                 const stage = job.stage || stageText[job.status] || job.status || 'Processing';
@@ -1020,6 +1061,7 @@
                     uploadResult.style.display = 'block';
                     setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
                     uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Conversion failed')}</div>`;
+                    endUpload();
                     return true;
                 }
                 setProgress(
@@ -1189,6 +1231,7 @@
                     uploadResult.style.display = 'block';
                     setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
                     uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(error.message)}</div>`;
+                    endUpload();
                 }
             };
             xhr.onerror = () => {
@@ -1198,6 +1241,7 @@
                 uploadResult.style.display = 'block';
                 setProgress(currentProgress, 'Network error', 'Could not reach the local upload endpoint.', 'Failed');
                 uploadResult.innerHTML = '<div class="av-text-error">Network error while uploading.</div>';
+                endUpload();
             };
             setProgress(4, 'Preparing upload', 'Packaging selected file, materials, textures, and options.', 'Preparing');
             xhr.send(formData);
@@ -1355,8 +1399,14 @@
         });
 
         document.getElementById('visualizeBtn')?.addEventListener('click', async () => {
+            const visualizeBtn = document.getElementById('visualizeBtn');
             const p = document.getElementById('aiPrompt').value.trim();
             if (!p) { alert('Please enter a prompt.'); return; }
+            // Unlike transformBtn/genBtn, this button wasn't disabled during
+            // its task -- a double click started two Meshy image-gen tasks
+            // (both burning AI quota) racing on the shared progress bar.
+            if (visualizeBtn.disabled) return;
+            visualizeBtn.disabled = true;
             errBox.classList.add('hidden'); errBox.textContent = '';
             clearT2iSelection();
             t2iResults.classList.add('hidden');
@@ -1392,6 +1442,8 @@
                 t2iResults.classList.remove('hidden');
             } catch (e) {
                 showGenError(e.message);
+            } finally {
+                visualizeBtn.disabled = false;
             }
         });
 

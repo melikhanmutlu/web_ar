@@ -259,7 +259,11 @@ def serve_thumbnail(unique_id):
         # Fallback: Generate SVG-based gradient thumbnail
         import html as html_module
 
-        color = model.color if model.color else "#667eea"
+        # Escape the stored color too: it is served as image/svg+xml, so an
+        # unescaped value could break out of the style attribute and inject
+        # markup/script (defense in depth alongside upload-time validation and
+        # any legacy rows persisted before that validation existed).
+        color = html_module.escape(model.color if model.color else "#667eea")
         name = html_module.escape(model.original_filename[:20])
         file_type = html_module.escape(model.file_type or "GLB")
 

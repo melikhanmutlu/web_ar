@@ -332,5 +332,9 @@ class STLConverter(BaseConverter):
         Args:
             error_message: Error message to be logged
         """
+        # Record the message on self.errors (like the base class) so the
+        # conversion service can surface the specific STL failure to the user
+        # instead of a generic "Conversion failed".
+        self.errors.append(error_message)
         self.update_status("ERROR")
         self.log_operation(f"Error during conversion: {error_message}")

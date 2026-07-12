@@ -4,8 +4,11 @@ promptly, and this must never block or fail the request that triggered it.
 """
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
+import socket
+from urllib.parse import urlsplit
 
 import requests
 
@@ -13,6 +16,40 @@ from models import WebhookSubscription, db
 from services.time_utils import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def is_safe_webhook_url(url):
+    """Reject anything that isn't an https URL resolving to a public IP.
+
+    Guards against SSRF: a user could otherwise point a webhook at an internal
+    host (169.254.169.254 metadata, 10.x/192.168.x services, 127.0.0.1) and use
+    our server as a request-forgery proxy. Resolved at delivery time too, so a
+    hostname that later rebinds to a private IP is still blocked.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    if parts.scheme != "https" or not parts.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parts.hostname, parts.port or 443, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, UnicodeError, ValueError):
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        addr = info[4][0]
+        try:
+            ip = ipaddress.ip_address(addr)
+        except ValueError:
+            return False
+        if (
+            ip.is_private or ip.is_loopback or ip.is_link_local
+            or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+        ):
+            return False
+    return True
 
 WEBHOOK_EVENT_TYPES = {
     "conversion.completed",
@@ -36,6 +73,11 @@ def dispatch_webhook_event(event_type, user_id, payload):
     ).all()
     for subscription in subscriptions:
         if not subscription.subscribes_to(event_type):
+            continue
+        # Re-check at delivery time: a hostname that passed at registration
+        # could since have rebound to an internal address.
+        if not is_safe_webhook_url(subscription.url):
+            logger.warning(f"[webhook] skipping delivery to unsafe/private URL: {subscription.url}")
             continue
         body = json.dumps({"event": event_type, "data": payload}).encode()
         signature = hmac.new(subscription.secret.encode(), body, hashlib.sha256).hexdigest()

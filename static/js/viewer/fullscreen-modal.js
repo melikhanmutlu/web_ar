@@ -64,6 +64,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 await (document.exitFullscreen?.() ?? document.webkitExitFullscreen?.());
                 return;
             }
+            // Camera overlay mode fullscreens <model-viewer> only; its sibling
+            // <video> would be left running behind a blank background.
+            window._exitCameraOverlay?.();
             if (modelViewer.requestFullscreen) {
                 await modelViewer.requestFullscreen();
             } else if (modelViewer.webkitRequestFullscreen) {
@@ -164,11 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === downloadFormatModal) downloadFormatModal.classList.add('hidden');
     });
 
-    // The viewer is a light-only page; the stage default in CSS is
-    // gray-100, but the viewer has always rendered on white.
+    // The viewer is a light-only page (independent of the model's own
+    // background color setting, which the template already applied inline).
     document.documentElement.classList.remove('dark');
     localStorage.theme = 'light';
-    if (viewerStage) viewerStage.style.background = '#FFFFFF';
+    // Only fall back to white if the owner hasn't configured a background —
+    // this used to unconditionally overwrite the template's inline
+    // `background:{{ viewer_settings.background_color }}`, silently making
+    // that Embed-panel setting have no effect on the main viewer page.
+    if (viewerStage && !viewerStage.style.background) viewerStage.style.background = '#FFFFFF';
 
     // Screenshot functionality
     screenshotButton?.addEventListener('click', async () => {

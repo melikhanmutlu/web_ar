@@ -95,6 +95,49 @@ def claim_next_job():
     return job
 
 
+def prune_stale_chunk_sessions(max_age_hours=24):
+    """Remove abandoned resumable-upload chunk directories.
+
+    A session is created on /api/uploads/chunked/init and only cleaned up by
+    complete_chunked_upload's own finally -- any upload the client never
+    finishes (tab closed mid-transfer, the exact scenario chunked upload
+    exists for) leaves its chunks on the persistent volume forever.
+    """
+    import shutil
+
+    root = os.path.join(app.config["TEMP_FOLDER"], "chunked")
+    if not os.path.isdir(root):
+        return
+    cutoff = time.time() - max_age_hours * 3600
+    pruned = 0
+    for name in os.listdir(root):
+        session_dir = os.path.join(root, name)
+        try:
+            if os.path.isdir(session_dir) and os.path.getmtime(session_dir) < cutoff:
+                shutil.rmtree(session_dir, ignore_errors=True)
+                pruned += 1
+        except OSError:
+            continue
+    if pruned:
+        logger.info(f"Pruned {pruned} abandoned chunked-upload session(s)")
+
+
+def prune_stale_heartbeats(max_age_hours=24):
+    """Delete WorkerHeartbeat rows not seen in `max_age_hours`.
+
+    WORKER_ID is hostname:pid, so every process restart (the deploy loop
+    restarts a crashed worker every few seconds) inserts a NEW row instead of
+    updating one — nothing else ever removes old rows.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    deleted = WorkerHeartbeat.query.filter(WorkerHeartbeat.last_seen_at < cutoff).delete(
+        synchronize_session=False
+    )
+    if deleted:
+        db.session.commit()
+        logger.info(f"Pruned {deleted} stale worker heartbeat row(s)")
+
+
 def requeue_stale_jobs():
     """Recover orphaned 'processing' jobs (crashed worker).
 
@@ -183,6 +226,7 @@ def main():
     record_worker_heartbeat()
     last_heartbeat = 0.0
     last_ai_reconcile = 0.0
+    last_heartbeat_prune = 0.0
     while True:
         try:
             if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:
@@ -201,6 +245,11 @@ def main():
                 reconcile_stale_ai_jobs()
                 reconcile_stale_rig_jobs()
                 last_ai_reconcile = time.monotonic()
+
+            if time.monotonic() - last_heartbeat_prune > 3600:
+                prune_stale_heartbeats()
+                prune_stale_chunk_sessions()
+                last_heartbeat_prune = time.monotonic()
 
             job = claim_next_job()
             if job is None:

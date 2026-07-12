@@ -92,13 +92,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const shadowSoftnessSlider = document.getElementById('shadowSoftnessSlider');
     const shadowSoftnessValue = document.getElementById('shadowSoftnessValue');
     const environmentSelect = document.getElementById('environmentSelect');
+    const shadowToggle = document.getElementById('shadowToggle');
+    // Remembers the last non-zero shadow so toggling the shadow back ON restores
+    // the user's chosen intensity instead of a hardcoded default.
+    let _lastShadow = shadowIntensitySlider ? (parseFloat(shadowIntensitySlider.value) || 1.2) : 1.2;
 
     function syncLightingReadouts() {
         if (exposureSlider && exposureValue) exposureValue.textContent = parseFloat(exposureSlider.value).toFixed(2);
         if (shadowIntensitySlider && shadowIntensityValue) shadowIntensityValue.textContent = parseFloat(shadowIntensitySlider.value).toFixed(2);
         if (shadowSoftnessSlider && shadowSoftnessValue) shadowSoftnessValue.textContent = parseFloat(shadowSoftnessSlider.value).toFixed(2);
+        // The "Ground shadow" checkbox reflects the slider: any shadow > 0 = on.
+        if (shadowToggle && shadowIntensitySlider) {
+            const v = parseFloat(shadowIntensitySlider.value);
+            shadowToggle.checked = v > 0;
+            if (v > 0) _lastShadow = v;
+        }
     }
     syncLightingReadouts();
+
+    // On/off convenience toggle: off drops shadow intensity to 0, on restores it.
+    shadowToggle?.addEventListener('change', () => {
+        if (!shadowIntensitySlider) return;
+        if (shadowToggle.checked) {
+            shadowIntensitySlider.value = _lastShadow > 0 ? _lastShadow : 1.2;
+        } else {
+            const v = parseFloat(shadowIntensitySlider.value);
+            if (v > 0) _lastShadow = v;
+            shadowIntensitySlider.value = 0;
+        }
+        applyShadowIntensity();
+        document.querySelectorAll('.lighting-preset-btn.is-active').forEach(b => b.classList.remove('is-active'));
+    });
 
     function applyExposure() {
         if (exposureSlider) modelViewer.exposure = parseFloat(exposureSlider.value);

@@ -360,6 +360,21 @@
             // Expose on window so first DOMContentLoaded scope can call it
             window._slicerDiscoverInternals = discoverInternals;
 
+            // Shared accessor for other viewer features (e.g. the measure tool's
+            // wireframe overlay + vertex snap) that also need model-viewer's
+            // undocumented internal THREE scene. Runs the same lazy discovery on
+            // demand and returns the live objects + scavenged constructors, or
+            // null if discovery fails -- callers must guard and degrade.
+            window._getMvInternals = function () {
+                if (!discoverInternals()) return null;
+                return {
+                    scene: _mvScene,
+                    camera: _mvCamera,
+                    Vector3: _InternalVector3,
+                    Matrix4: _InternalMatrix4,
+                };
+            };
+
             // ---- Shader-based clipping (bypasses renderer.localClippingEnabled) ----
             // We inject custom clipping code directly into material shaders via onBeforeCompile.
             // This works even when we can't access the renderer object.

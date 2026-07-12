@@ -41,4 +41,14 @@ test('material + lighting presets apply live', async ({ page }) => {
   const liveMetal = await page.evaluate(() =>
     document.getElementById('modelViewer').model.materials[0].pbrMetallicRoughness.metallicFactor);
   expect(liveMetal).toBeCloseTo(1.0, 2);
+
+  // ── Ground shadow on/off toggle ──
+  await page.click('#toolsDetailBackBtn');
+  await page.click('#lightingContainer .tp-section-header');
+  const shadowNow = () => page.evaluate(() => document.getElementById('modelViewer').shadowIntensity);
+  expect(await shadowNow()).toBeGreaterThan(0);
+  await page.locator('#shadowToggle').uncheck();
+  expect(await shadowNow()).toBe(0);
+  await page.locator('#shadowToggle').check();
+  expect(await shadowNow()).toBeGreaterThan(0);
 });

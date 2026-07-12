@@ -24,6 +24,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let showXYZ = false;
     let focusedAxis = null;   // 'total' | 'x' | 'y' | 'z' | null
     let saved = [];
+    let _tapWasDisabled = false;  // model-viewer disable-tap state before we forced it
+    let _wireframeOn = false;
+    let _wireframeOverlays = [];  // { parent, mesh } overlay meshes we added
+    let _snapOn = true;           // magnet-snap to nearest vertex (when internals available)
+    let _pointerDown = null;      // last pointerdown client coords (travel guard)
 
     // ── SVG overlay (created once, sits over the model-viewer) ──
     const stage = viewer.parentElement;
@@ -54,9 +59,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setActive(on) {
         active = on;
+        // Suppress model-viewer's tap-to-recenter while measuring: a single tap
+        // otherwise smoothly moves the camera target onto the clicked surface,
+        // which fights point placement. Toggling the attribute is what actually
+        // stops it (the built-in recenter runs off its own pointer handlers, so
+        // a click-listener stopPropagation wouldn't help). Restore prior state.
+        if (on) {
+            _tapWasDisabled = viewer.hasAttribute('disable-tap');
+            viewer.setAttribute('disable-tap', '');
+        } else if (!_tapWasDisabled) {
+            viewer.removeAttribute('disable-tap');
+        }
+        viewer.classList.toggle('measure-cursor', on);
         button?.classList.toggle('is-active', active);
         panel.classList.toggle('hidden', !active);
-        if (!active) clearMarkers();
+        if (!active) { clearMarkers(); if (_wireframeOn) setWireframe(false); }
         renderPanel();
         if (active) loadSaved();
     }
@@ -82,10 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return el;
     }
 
-    function addDot(pos, label) {
+    function addDot(pos, label, snapped) {
         const dot = document.createElement('div');
         dot.slot = 'measure-dot-' + markers.length + '-' + Date.now();
-        dot.className = 'measure-dot';
+        dot.className = 'measure-dot' + (snapped ? ' is-snapped' : '');
         dot.dataset.position = posStr(pos);
         viewer.appendChild(dot);
         markers.push(dot);
@@ -133,8 +150,8 @@ document.addEventListener('DOMContentLoaded', () => {
         current.anchorE2 = addAnchor(e2);
         current.anchorB = addAnchor(b);
         // Visible dots + total label.
-        addDot(a, '1');
-        addDot(b, '2');
+        addDot(a, '1', a._snapped);
+        addDot(b, '2', b._snapped);
         addAxisLabel(mid(a, b), fmt(current.total), 'total');
         // Axis labels (shown only in XYZ mode, but created once).
         current.labelX = addAxisLabel(mid(a, e1), 'X ' + fmt(current.dx), 'x');
@@ -203,11 +220,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Panel ──
+    // Mesh-view + snap toggles; only rendered where the internal scene is
+    // reachable, so they never appear as dead controls.
+    function renderInternalToggles() {
+        if (!internalsAvailable()) return '';
+        return '<label class="mt-toggle"><input type="checkbox" id="mtWire"' + (_wireframeOn ? ' checked' : '') + '> Mesh / wireframe view</label>' +
+            '<label class="mt-toggle"><input type="checkbox" id="mtSnap"' + (_snapOn ? ' checked' : '') + '> Snap to vertices</label>';
+    }
+    function wireInternalToggles() {
+        panel.querySelector('#mtWire')?.addEventListener('change', (e) => { setWireframe(e.target.checked); });
+        panel.querySelector('#mtSnap')?.addEventListener('change', (e) => { _snapOn = e.target.checked; });
+    }
+
     function renderPanel() {
         if (!active) return;
         if (!current) {
             panel.innerHTML = '<div class="mt-hint">Click two points on the model to measure the distance.</div>' +
+                renderInternalToggles() +
                 renderSavedList();
+            wireInternalToggles();
+            wireSavedList();
             return;
         }
         const row = (axis, text) =>
@@ -221,6 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row('z', 'Z: ' + fmt(current.dz)) +
             '</div>' +
             '<label class="mt-toggle"><input type="checkbox" id="mtXYZ"' + (showXYZ ? ' checked' : '') + '> Show X/Y/Z lines</label>' +
+            renderInternalToggles() +
             '<div class="mt-actions">' +
             (CAN_EDIT ? '<button type="button" id="mtSave" class="tp-btn-sm">Save</button>' : '') +
             '<button type="button" id="mtClear" class="tp-btn-sm">Clear</button>' +
@@ -302,18 +335,35 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(() => {});
     }
 
+    // Record where a press started so a click that actually ended an orbit-drag
+    // (pointer travelled) doesn't drop a stray measure point.
+    viewer.addEventListener('pointerdown', (e) => {
+        _pointerDown = { x: e.clientX, y: e.clientY };
+    });
+
     viewer.addEventListener('click', (event) => {
         if (!active || window._isHotspotModeActive?.()) return;
         if (typeof viewer.positionAndNormalFromPoint !== 'function') return;
-        const hit = viewer.positionAndNormalFromPoint(event.clientX, event.clientY);
+        if (_pointerDown) {
+            const dx = event.clientX - _pointerDown.x;
+            const dy = event.clientY - _pointerDown.y;
+            if (dx * dx + dy * dy > 36) return;   // treated as a drag, not a tap
+        }
+        // model-viewer expects element-relative coordinates (mirrors annotations.js);
+        // passing raw clientX/Y made hits land off-target or miss entirely.
+        const rect = viewer.getBoundingClientRect();
+        const hit = viewer.positionAndNormalFromPoint(event.clientX - rect.left, event.clientY - rect.top);
         if (!hit?.position) return;
 
         if (points.length === 2) clearMarkers();   // start a fresh measurement
-        const p = { x: hit.position.x, y: hit.position.y, z: hit.position.z };
+        const raw = { x: hit.position.x, y: hit.position.y, z: hit.position.z };
+        const snap = snapPoint(raw);
+        const p = snap.point;
+        p._snapped = snap.snapped;
         points.push(p);
 
         if (points.length === 1) {
-            addDot(p, '1');
+            addDot(p, '1', p._snapped);
             renderPanel();
         } else {
             // Remove the temporary "1" dot; buildMeasurement re-adds both.
@@ -330,5 +380,93 @@ document.addEventListener('DOMContentLoaded', () => {
         markers = [];
         anchors = [];
         clearOverlay();
+    }
+
+    // ── Internal-scene features (wireframe + snap) ──────────────────────────
+    // These need model-viewer's undocumented THREE scene. We reuse the slicer's
+    // discovery (window._getMvInternals) and guard every use, so if a
+    // model-viewer upgrade breaks discovery these features simply no-op while
+    // core measuring (public positionAndNormalFromPoint) keeps working.
+    function mvInternals() {
+        try { return window._getMvInternals?.() || null; } catch { return null; }
+    }
+    // Whether the wireframe/snap toggles can do anything on this page.
+    function internalsAvailable() { return !!mvInternals(); }
+
+    // Lay a wireframe over each solid mesh (kept visible) by cloning its
+    // material with wireframe=true. Scavenges the Mesh constructor off a live
+    // node -- no imported THREE needed.
+    function setWireframe(on) {
+        if (on) {
+            const I = mvInternals();
+            if (!I) { _wireframeOn = false; return false; }
+            if (window._slicerClippingActive?.()) return false;  // avoid slicer material churn
+            try {
+                I.scene.traverse((node) => {
+                    if (!node.isMesh || !node.material || node.userData?._measureWire) return;
+                    const base = Array.isArray(node.material) ? node.material[0] : node.material;
+                    if (!base?.clone) return;
+                    const wireMat = base.clone();
+                    wireMat.wireframe = true;
+                    wireMat.transparent = true;
+                    wireMat.opacity = 0.6;
+                    wireMat.depthWrite = false;
+                    if (wireMat.color?.setRGB) wireMat.color.setRGB(0.1, 0.85, 0.55);
+                    const overlay = new node.constructor(node.geometry, wireMat);
+                    overlay.userData._measureWire = true;
+                    overlay.renderOrder = (node.renderOrder || 0) + 1;
+                    node.add(overlay);
+                    _wireframeOverlays.push({ overlay, material: wireMat });
+                });
+            } catch (e) { console.warn('[Measure] wireframe overlay failed:', e); teardownWireframe(); return false; }
+            _wireframeOn = true;
+            return true;
+        }
+        teardownWireframe();
+        return true;
+    }
+    function teardownWireframe() {
+        _wireframeOverlays.forEach(({ overlay, material }) => {
+            try { overlay.parent?.remove(overlay); material?.dispose?.(); } catch { /* already gone */ }
+        });
+        _wireframeOverlays = [];
+        _wireframeOn = false;
+    }
+
+    // Snap a raw surface hit to the nearest model vertex within a size-derived
+    // threshold. Returns { point, snapped }. Per-click only (never per-frame);
+    // bails to the raw hit above a vertex cap so high-poly models stay snappy.
+    const SNAP_VERTEX_CAP = 250000;
+    function snapPoint(p) {
+        if (!_snapOn) return { point: p, snapped: false };
+        const I = mvInternals();
+        if (!I) return { point: p, snapped: false };
+        try {
+            I.scene.updateMatrixWorld?.(true);
+            const dims = viewer.getDimensions?.();
+            const span = dims ? Math.max(dims.x, dims.y, dims.z) : 1;
+            const threshold = span * 0.03;
+            let best = null, bestD = threshold, scanned = 0, capped = false;
+            I.scene.traverse((node) => {
+                if (capped || !node.isMesh || node.userData?._measureWire) return;
+                const pos = node.geometry?.attributes?.position;
+                if (!pos) return;
+                if (scanned + pos.count > SNAP_VERTEX_CAP) { capped = true; return; }
+                const m = node.matrixWorld.elements;
+                for (let i = 0; i < pos.count; i++, scanned++) {
+                    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+                    const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
+                    const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
+                    const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
+                    const d = Math.hypot(wx - p.x, wy - p.y, wz - p.z);
+                    if (d < bestD) { bestD = d; best = { x: wx, y: wy, z: wz }; }
+                }
+            });
+            if (capped) console.warn('[Measure] vertex snap skipped (model too high-poly)');
+            return best ? { point: best, snapped: true } : { point: p, snapped: false };
+        } catch (e) {
+            console.warn('[Measure] snap failed:', e);
+            return { point: p, snapped: false };
+        }
     }
 });

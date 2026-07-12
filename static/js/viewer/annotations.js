@@ -103,8 +103,19 @@ document.addEventListener('DOMContentLoaded', () => {
         loadCameraViewsFromDB();
 
         // Hotspot mode
+        let _hsTapWasDisabled = false;
         function setHotspotMode(on) {
             hotspotMode = on;
+            // Suppress model-viewer's tap-to-recenter while placing hotspots (a
+            // tap otherwise moves the camera target), mirroring the measure tool.
+            if (modelViewer) {
+                if (on) {
+                    _hsTapWasDisabled = modelViewer.hasAttribute('disable-tap');
+                    modelViewer.setAttribute('disable-tap', '');
+                } else if (!_hsTapWasDisabled) {
+                    modelViewer.removeAttribute('disable-tap');
+                }
+            }
             if (!toggleHotspotMode) return;
             toggleHotspotMode.textContent = hotspotMode ? 'Hotspot Mode: ON (click model)' : 'Click Model to Add Hotspot';
             toggleHotspotMode.style.background = hotspotMode ? 'var(--color-gray-200)' : '';

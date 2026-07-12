@@ -136,7 +136,8 @@ def attach_base_color_texture_files(glb_path: str, texture_paths: list) -> bool:
 
     Texture files are matched to materials by position. If Meshy supplies one
     base-color map for several materials, that map is reused for each material.
-    Existing base-color texture assignments are never replaced.
+    Existing, usable embedded base-color assignments are never replaced;
+    dangling/external assignments are repaired.
     """
     paths = [Path(path) for path in (texture_paths or []) if path and Path(path).is_file()]
     if not paths:
@@ -187,7 +188,7 @@ def attach_base_color_texture_files(glb_path: str, texture_paths: list) -> bool:
             material.pbrMetallicRoughness = PbrMetallicRoughness()
             changed = True
         pbr = material.pbrMetallicRoughness
-        if pbr.baseColorTexture is None:
+        if not _texture_info_is_embedded(gltf, pbr.baseColorTexture):
             texture_index = texture_indices[min(material_index, len(texture_indices) - 1)]
             pbr.baseColorTexture = TextureInfo(index=texture_index)
             # baseColorFactor multiplies the sampled texture; force a neutral
@@ -332,6 +333,51 @@ def has_base_color_textures(glb_path: str) -> bool:
         if pbr and pbr.baseColorTexture is not None:
             return True
     return False
+
+
+def _texture_info_is_embedded(gltf: GLTF2, texture_info) -> bool:
+    """Return whether a texture info resolves to image data inside the GLB."""
+    if texture_info is None or texture_info.index is None:
+        return False
+    textures = gltf.textures or []
+    if not 0 <= texture_info.index < len(textures):
+        return False
+    source = textures[texture_info.index].source
+    images = gltf.images or []
+    if source is None or not 0 <= source < len(images):
+        return False
+    image = images[source]
+    return image.bufferView is not None or bool(
+        image.uri and image.uri.startswith("data:")
+    )
+
+
+def has_embedded_base_color_textures(glb_path: str) -> bool:
+    """True only when every used material base-color map is self-contained.
+
+    A mere TextureInfo reference is insufficient: Meshy GLBs sometimes point
+    at a missing relative file or an expired signed URL, which still made the
+    old ``has_base_color_textures`` check pass and skipped the repair fallback.
+    """
+    try:
+        gltf = _load_glb(glb_path)
+    except GLBQualityError:
+        return False
+    used_materials = {
+        primitive.material
+        for mesh in gltf.meshes or []
+        for primitive in mesh.primitives or []
+        if primitive.material is not None
+    }
+    if not used_materials:
+        return False
+    for material_index in used_materials:
+        if material_index >= len(gltf.materials or []):
+            return False
+        pbr = gltf.materials[material_index].pbrMetallicRoughness
+        if not pbr or not _texture_info_is_embedded(gltf, pbr.baseColorTexture):
+            return False
+    return True
 
 
 def ensure_pbr_materials(glb_path: str) -> bool:

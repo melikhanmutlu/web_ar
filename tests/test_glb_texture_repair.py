@@ -14,7 +14,8 @@ from pygltflib import (
 
 import converters.glb_quality as gq
 from converters.glb_quality import (
-    attach_base_color_texture_files, embed_remote_textures, inspect_texture_state,
+    attach_base_color_texture_files, embed_remote_textures,
+    has_embedded_base_color_textures, inspect_texture_state,
 )
 
 
@@ -115,3 +116,23 @@ def test_attach_base_color_texture_repairs_textureless_meshy_glb(tmp_path):
     material = repaired.materials[repaired.meshes[0].primitives[0].material]
     assert material.pbrMetallicRoughness.baseColorTexture.index == 0
     assert material.pbrMetallicRoughness.baseColorFactor == [1.0, 1.0, 1.0, 1.0]
+    assert has_embedded_base_color_textures(path) is True
+
+
+def test_attach_base_color_texture_replaces_dangling_glb_reference(tmp_path):
+    """A TextureInfo pointing at an unavailable URI must not skip repair."""
+    path = str(tmp_path / "dangling.glb")
+    _glb_with_external_image(path, uri="missing_texture.png")
+    assert has_embedded_base_color_textures(path) is False
+
+    texture_path = tmp_path / "meshy_base_color.png"
+    texture_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"replacement")
+    assert attach_base_color_texture_files(path, [str(texture_path)]) is True
+
+    repaired = GLTF2.load(path)
+    material = repaired.materials[repaired.meshes[0].primitives[0].material]
+    texture = repaired.textures[material.pbrMetallicRoughness.baseColorTexture.index]
+    image = repaired.images[texture.source]
+    assert image.uri is None
+    assert image.bufferView is not None
+    assert has_embedded_base_color_textures(path) is True

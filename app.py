@@ -2679,7 +2679,7 @@ def _finalize_ai_job(job, task):
     try:
         from converters.glb_quality import (
             attach_base_color_texture_files, embed_remote_textures,
-            has_base_color_textures, inspect_texture_state,
+            has_embedded_base_color_textures, inspect_texture_state,
         )
         logger.info(
             "[generate-3d] job=%s texture state: %s | model_urls=%s | texture_urls=%d",
@@ -2692,7 +2692,7 @@ def _finalize_ai_job(job, task):
         # the artwork only through texture_urls. There is no image URI for
         # embed_external_textures to resolve in that case, so download Meshy's
         # base-color maps and explicitly bind/embed them into the GLB.
-        if not has_base_color_textures(glb_tmp) and task.get("texture_urls"):
+        if not has_embedded_base_color_textures(glb_tmp) and task.get("texture_urls"):
             from urllib.parse import urlparse as _urlparse
             texture_entries = task["texture_urls"]
             if isinstance(texture_entries, dict):

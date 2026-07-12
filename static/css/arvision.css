@@ -1157,54 +1157,58 @@ body > .av-flash { margin-top: 5.5rem; }
    =================================================================== */
 .pricing-main {
     height: 100dvh;
-    max-width: 74rem;
+    max-width: 76rem;
     margin: 0 auto;
-    padding: 4.75rem var(--spacing-lg) var(--spacing-lg);
+    padding: 5rem var(--spacing-lg) var(--spacing-lg);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg);
     overflow: hidden;
     position: relative;
     z-index: 1;
 }
 .pricing-hero { text-align: center; }
-.pricing-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; color: var(--color-gray-900); margin: 0.1rem 0 0; }
+.pricing-title { font-size: 1.85rem; font-weight: 800; letter-spacing: -0.03em; color: var(--color-gray-900); margin: 0.1rem 0 0; }
 
 .pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spacing-lg); align-items: stretch; min-height: 0; }
 
-.pricing-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--color-gray-200); background: var(--color-white); padding: var(--spacing-xl); }
+.pricing-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--color-gray-200); background: var(--color-white); padding: 1.4rem; }
 .pricing-card--featured { border-color: var(--color-gray-900); }
 /* Absolute so it sits in the top-right corner without pushing the featured
    card's name/price down -- keeps the header row aligned across all tiers. */
-.pricing-badge { position: absolute; top: 0.85rem; right: 0.85rem; margin: 0; }
+.pricing-badge { position: absolute; top: 0.95rem; right: 0.95rem; margin: 0; }
 
-.pricing-name { font-size: 1rem; font-weight: 700; color: var(--color-gray-900); }
-.pricing-price { display: flex; align-items: baseline; gap: 0.3rem; margin: 0.15rem 0 var(--spacing-md); }
-.pricing-price-amount { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.03em; color: var(--color-gray-900); line-height: 1; }
-.pricing-price-period { font-size: 0.78rem; color: var(--color-gray-500); }
+.pricing-name { font-size: 1.1rem; font-weight: 700; color: var(--color-gray-900); }
+.pricing-price { display: flex; align-items: baseline; gap: 0.35rem; margin: 0.2rem 0 var(--spacing-lg); }
+.pricing-price-amount { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.03em; color: var(--color-gray-900); line-height: 1; }
+.pricing-price-period { font-size: 0.85rem; color: var(--color-gray-500); }
 
-.pricing-features { list-style: none; margin: 0 0 var(--spacing-md); padding: 0; flex: 1; display: flex; flex-direction: column; gap: 0.3rem; }
-.pricing-feature { display: flex; align-items: flex-start; gap: 0.4rem; font-size: 0.78rem; color: var(--color-gray-700); line-height: 1.3; }
-.pricing-feature i { width: 0.85rem; height: 0.85rem; color: var(--color-gray-900); flex-shrink: 0; margin-top: 0.08rem; }
+.pricing-features { list-style: none; margin: 0 0 var(--spacing-lg); padding: 0; flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+.pricing-feature { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.86rem; color: var(--color-gray-700); line-height: 1.4; }
+.pricing-feature i { width: 0.95rem; height: 0.95rem; color: var(--color-gray-900); flex-shrink: 0; margin-top: 0.1rem; }
 
 .pricing-cta { margin-top: auto; }
-.library-btn.pricing-cta, .btn-primary.pricing-cta { width: 100%; min-height: 2.2rem; padding: 0.5rem 0.8rem; font-size: 0.84rem; }
-.pricing-current { margin-top: auto; text-align: center; border: 1px solid var(--color-gray-200); color: var(--color-gray-400); padding: 0.5rem 0.8rem; font-size: 0.82rem; font-weight: 700; }
+.library-btn.pricing-cta, .btn-primary.pricing-cta { width: 100%; min-height: 2.4rem; padding: 0.6rem 0.9rem; font-size: 0.9rem; }
+.pricing-current { margin-top: auto; text-align: center; border: 1px solid var(--color-gray-200); color: var(--color-gray-400); padding: 0.6rem 0.9rem; font-size: 0.9rem; font-weight: 700; }
 
 /* Compact AI-credit-packs strip (replaces the tall second section) */
-.pricing-credit-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--spacing-md); border: 1px solid var(--color-gray-200); background: var(--color-gray-100); padding: var(--spacing-md) var(--spacing-lg); }
-.pricing-credit-lead { display: flex; flex-direction: column; gap: 0.1rem; }
-.pricing-credit-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-gray-500); font-weight: 700; }
-.pricing-credit-sub { font-size: 0.74rem; color: var(--color-gray-500); }
+.pricing-credit-strip { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--spacing-md); border: 1px solid var(--color-gray-200); background: var(--color-gray-100); padding: var(--spacing-lg); }
+.pricing-credit-lead { display: flex; flex-direction: column; gap: 0.15rem; }
+.pricing-credit-title { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--color-gray-500); font-weight: 700; }
+.pricing-credit-sub { font-size: 0.82rem; color: var(--color-gray-500); }
 .pricing-credit-packs { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
-.pricing-credit-pack { display: inline-flex; align-items: baseline; gap: 0.4rem; border: 1px solid var(--color-gray-300); background: var(--color-white); padding: 0.4rem 0.7rem; text-decoration: none; transition: border-color 0.15s ease, transform 0.15s ease; }
+.pricing-credit-pack { display: inline-flex; align-items: baseline; gap: 0.45rem; border: 1px solid var(--color-gray-300); background: var(--color-white); padding: 0.55rem 0.85rem; text-decoration: none; transition: border-color 0.15s ease, transform 0.15s ease; }
 .pricing-credit-pack:hover { border-color: var(--color-gray-900); transform: translateY(-1px); }
-.pricing-credit-count { font-size: 0.82rem; font-weight: 700; color: var(--color-gray-900); }
-.pricing-credit-price { font-size: 0.76rem; color: var(--color-gray-500); }
+.pricing-credit-count { font-size: 0.92rem; font-weight: 700; color: var(--color-gray-900); }
+.pricing-credit-price { font-size: 0.82rem; color: var(--color-gray-500); }
 
 @media (max-width: 900px) {
     .pricing-main { height: auto; min-height: 100dvh; overflow: visible; justify-content: flex-start; padding-top: 5rem; }
     .pricing-grid { grid-template-columns: 1fr; max-width: 26rem; margin: 0 auto; width: 100%; }
     .pricing-credit-strip { flex-direction: column; align-items: flex-start; }
+}
+/* Short viewports can't hold the enlarged tiers -- scroll instead of clipping. */
+@media (min-width: 901px) and (max-height: 740px) {
+    .pricing-main { height: auto; min-height: 100dvh; overflow: visible; justify-content: flex-start; }
 }

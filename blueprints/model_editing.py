@@ -17,6 +17,33 @@ from version_manager import create_version
 model_editing_bp = Blueprint("model_editing", __name__)
 
 
+def _mesh_vertex_face_counts(mesh):
+    """Total vertex/face counts for either a Trimesh or a Scene (summed
+    across all its geometries) -- mirrors how the upload pipeline populates
+    UserModel.vertices/faces from the initial conversion."""
+    if isinstance(mesh, trimesh.Scene):
+        geoms = [g for g in mesh.geometry.values() if hasattr(g, "vertices")]
+        return sum(len(g.vertices) for g in geoms), sum(len(g.faces) for g in geoms)
+    return len(mesh.vertices), len(mesh.faces)
+
+
+def _invalidate_thumbnail(app_module, model):
+    """Delete the stale thumbnail and re-queue generation so the library
+    card reflects the model's new geometry/color after an edit. Without
+    this, generate_thumbnail_async's "already exists, skip" guard means the
+    pre-edit thumbnail is shown forever. Best-effort: a failure here must
+    never fail the edit that already succeeded."""
+    thumbnail_path = os.path.join(os.path.dirname(model.filename), "thumbnail.png")
+    try:
+        if os.path.exists(thumbnail_path):
+            os.remove(thumbnail_path)
+        app_module._enqueue_internal_job("thumbnail", model.id, {
+            "kind": "thumbnail", "color": model.color, "user_id": model.user_id,
+        })
+    except Exception as e:
+        app_module.logger.warning(f"[_invalidate_thumbnail] Failed to re-queue thumbnail for {model.id}: {e}")
+
+
 @model_editing_bp.route("/apply_modifications", methods=["POST"])
 def apply_modifications():
     """Apply material and transform modifications to GLB model"""
@@ -331,6 +358,7 @@ def save_modifications():
                         "max": new_dims["max"],
                     })
                     model.file_size = os.path.getsize(current_model_path)
+                    model.vertices, model.faces = _mesh_vertex_face_counts(mesh)
 
                     # Update cumulative scale if scale was applied
                     if (
@@ -349,6 +377,10 @@ def save_modifications():
                     app_module.logger.info(
                         f"[save_modifications] Updated database dimensions: {new_dims}"
                     )
+                    # The library card otherwise keeps showing the pre-edit
+                    # geometry/color forever (thumbnails are only ever
+                    # generated once, at upload).
+                    _invalidate_thumbnail(app_module, model)
 
             except Exception as dim_error:
                 app_module.logger.error(
@@ -589,8 +621,12 @@ def slice_model():
                         }
                     )
                     model.file_size = os.path.getsize(input_path)
+                    model.vertices, model.faces = _mesh_vertex_face_counts(mesh)
                     db.session.commit()
                     app_module.logger.info(f"[slice_model] Updated dimensions: {new_dims}")
+                    # A slice changes the geometry outright -- the library
+                    # card must not keep showing the pre-slice thumbnail.
+                    _invalidate_thumbnail(app_module, model)
 
             except Exception as dim_error:
                 app_module.logger.error(f"[slice_model] Failed to update dimensions: {dim_error}")

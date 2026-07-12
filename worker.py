@@ -177,6 +177,39 @@ def requeue_stale_jobs():
         db.session.commit()
 
 
+def _unstick_orphaned_ai_stage(job):
+    """`stage` can be left at "refining"/"finalizing" -- values _claim_ai_stage
+    moves it to right before starting the next Meshy call or finalizing, and
+    which _advance_ai_job's `if job.stage ==` branches never match -- if the
+    process dies (deploy, OOM) between that commit and the follow-up commit
+    that would either complete the step or roll the claim back on exception.
+    Left alone, the job spins in place forever (every reconcile sweep calls
+    _advance_ai_job, which no-ops for these stage values) while still
+    counting against the user's daily AI quota. Roll the claim back to the
+    stage it was claimed from so the next _advance_ai_job call has a real
+    branch to retry."""
+    if job.stage == "refining":
+        job.stage = "preview"
+        db.session.commit()
+        logger.warning(f"AI job {job.id} had an orphaned 'refining' claim; rolled back to 'preview'")
+    elif job.stage == "finalizing":
+        # "finalizing" is claimed from "image" (image-kind jobs) or "refine"
+        # (text-kind jobs) -- job.kind disambiguates which.
+        job.stage = "image" if job.kind == "image" else "refine"
+        db.session.commit()
+        logger.warning(f"AI job {job.id} had an orphaned 'finalizing' claim; rolled back to '{job.stage}'")
+
+
+def _unstick_orphaned_rig_stage(job):
+    """Same recovery as _unstick_orphaned_ai_stage, for RigAnimationJob.
+    "finalizing" is claimed only from "animating" (the only transitional-only
+    stage in this job type's chain)."""
+    if job.stage == "finalizing":
+        job.stage = "animating"
+        db.session.commit()
+        logger.warning(f"Rig job {job.id} had an orphaned 'finalizing' claim; rolled back to 'animating'")
+
+
 def reconcile_stale_ai_jobs():
     """Re-advance any AIGenerationJob that hasn't moved in AI_RECONCILE_MINUTES.
 
@@ -195,6 +228,7 @@ def reconcile_stale_ai_jobs():
     ).all()
     for job in stuck:
         try:
+            _unstick_orphaned_ai_stage(job)
             _advance_ai_job(job)
         except Exception as e:
             logger.warning(f"AI reconcile failed for job {job.id}: {e}")
@@ -211,6 +245,7 @@ def reconcile_stale_rig_jobs():
     ).all()
     for job in stuck:
         try:
+            _unstick_orphaned_rig_stage(job)
             _advance_rig_job(job)
         except Exception as e:
             logger.warning(f"Rig reconcile failed for job {job.id}: {e}")

@@ -16,6 +16,7 @@ from flask import (
     make_response,
     abort,
     g,
+    has_app_context,
 )
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from flask_login import (
@@ -1833,6 +1834,25 @@ def _run_upload_pipeline(payload, progress_callback=None):
     max_dimension = payload.get("max_dimension")
     source_unit = payload.get("source_unit")
     user_id = payload.get("user_id")
+
+    # Idempotency guard: if a prior attempt already completed the UserModel
+    # insert (below) but the job was retried anyway -- e.g. it failed/crashed
+    # afterward, or a stale-job sweep requeued it before its "completed"
+    # status was recorded (the very case where the staged temp source below
+    # has often already been cleaned up) -- re-running the whole pipeline
+    # would redo a perfectly good conversion and then crash on the duplicate
+    # primary key. Short-circuit instead: the id is a UUID the pipeline chose
+    # once, so its presence in the table means this exact attempt already
+    # succeeded. Guarded by has_app_context() so this otherwise-pure function
+    # can still be called (and reach the file-existence check below) with no
+    # Flask app/request context active -- true of every real caller (worker.py
+    # and inline request handlers both run inside one) but not of a raw
+    # function-level test.
+    if has_app_context():
+        existing = db.session.get(UserModel, unique_id)
+        if existing is not None:
+            logger.info(f"[upload_model - {unique_id}] UserModel already exists; retry is a no-op")
+            return existing.id
 
     # Staged source must still exist. Requeued/stale jobs (e.g. picked up
     # after a redeploy) often point at a temp file that was already cleaned

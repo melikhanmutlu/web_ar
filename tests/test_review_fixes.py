@@ -299,3 +299,118 @@ def test_update_model_color_refreshes_usdz(client, monkeypatch):
     resp = client.post("/api/update-model-color", json={"model_id": model_id, "color": "#3355ff"})
     assert resp.status_code == 200, resp.get_json()
     assert len(calls) == 1 and calls[0][0] == model_id
+
+
+# ── Orphaned AI/rig job stage recovery ────────────────────────────────────
+def test_unstick_orphaned_ai_stage_rolls_back_refining_and_finalizing(client):
+    from models import AIGenerationJob
+    from worker import _unstick_orphaned_ai_stage
+
+    user = User(username="aiorphan", email="aiorphan@test.com")
+    user.set_password("testpassword")
+    db.session.add(user)
+    db.session.commit()
+
+    # "refining" is only ever a transitional claim from "preview" -- if the
+    # process dies right after the claim commits, no `if job.stage ==`
+    # branch in _advance_ai_job matches "refining", so the job would spin at
+    # the same progress forever without this recovery.
+    refining = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="refining")
+    db.session.add(refining)
+    db.session.commit()
+    _unstick_orphaned_ai_stage(refining)
+    assert refining.stage == "preview"
+
+    # "finalizing" is ambiguous -- claimed from either "image" or "refine" --
+    # and must be disambiguated via job.kind.
+    finalizing_image = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="image", stage="finalizing")
+    finalizing_text = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="finalizing")
+    db.session.add_all([finalizing_image, finalizing_text])
+    db.session.commit()
+    _unstick_orphaned_ai_stage(finalizing_image)
+    _unstick_orphaned_ai_stage(finalizing_text)
+    assert finalizing_image.stage == "image"
+    assert finalizing_text.stage == "refine"
+
+    # A resting stage (one _advance_ai_job actually handles) must be left alone.
+    resting = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="preview")
+    db.session.add(resting)
+    db.session.commit()
+    from worker import _unstick_orphaned_ai_stage as unstick
+    unstick(resting)
+    assert resting.stage == "preview"
+
+
+def test_unstick_orphaned_rig_stage_rolls_back_finalizing(client):
+    from models import RigAnimationJob
+    from worker import _unstick_orphaned_rig_stage
+
+    model_id = "rigorphan-" + uuid.uuid4().hex[:8]
+    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
+    os.makedirs(model_dir, exist_ok=True)
+    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(os.path.join(model_dir, "model.glb"))
+    model = UserModel(id=model_id, filename=os.path.join(model_dir, "model.glb"),
+                      file_type="glb", file_size=100, user_id=None, cumulative_scale=1.0)
+    db.session.add(model)
+    db.session.commit()
+
+    job = RigAnimationJob(id=uuid.uuid4().hex, model_id=model_id, status="generating",
+                          stage="finalizing", height_meters=0.1)
+    db.session.add(job)
+    db.session.commit()
+    _unstick_orphaned_rig_stage(job)
+    assert job.stage == "animating"
+
+
+# ── Upload pipeline retry idempotency ─────────────────────────────────────
+def test_run_upload_pipeline_short_circuits_when_model_already_exists(client, monkeypatch):
+    """If a prior attempt already committed the UserModel row (e.g. the job
+    was retried after a later step crashed), re-running the whole pipeline
+    must return the existing model id instead of redoing the conversion and
+    crashing on the duplicate primary key."""
+    from app import _run_upload_pipeline
+
+    model_id = "dup-" + uuid.uuid4().hex[:8]
+    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
+    os.makedirs(model_dir, exist_ok=True)
+    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(os.path.join(model_dir, "model.glb"))
+    model = UserModel(id=model_id, filename=os.path.join(model_dir, "model.glb"),
+                      file_type="glb", file_size=100, user_id=None, cumulative_scale=1.0)
+    db.session.add(model)
+    db.session.commit()
+
+    def boom(*a, **k):
+        raise AssertionError("conversion_service.convert should not run for an already-completed model_id")
+    monkeypatch.setattr(app_module.conversion_service, "convert", boom)
+
+    result = _run_upload_pipeline({
+        "unique_id": model_id,
+        "original_filename": "whatever.stl",
+        "temp_file_path": "/does/not/matter",  # never checked: short-circuits first
+        "file_extension": "stl",
+    })
+    assert result == model_id
+
+
+# ── Thumbnail invalidation after geometry-mutating edits ─────────────────
+def test_save_modifications_invalidates_stale_thumbnail(client, monkeypatch):
+    from tests.test_viewer_page import make_two_material_model
+
+    monkeypatch.setattr(app_module, "refresh_usdz_after_edit", lambda *a, **k: None)
+    model_id, glb_path = make_two_material_model(user_id=None)
+    thumbnail_path = os.path.join(os.path.dirname(glb_path), "thumbnail.png")
+    with open(thumbnail_path, "wb") as f:
+        f.write(b"stale-thumbnail-bytes")
+
+    enqueued = []
+    monkeypatch.setattr(app_module, "_enqueue_internal_job",
+                        lambda job_type, mid, payload: enqueued.append((job_type, mid, payload)))
+
+    resp = client.post("/save_modifications", json={
+        "model_id": model_id,
+        "modifications": {"material": {"opacity": 0.5}},
+    })
+    assert resp.get_json()["success"] is True, resp.get_json()
+
+    assert not os.path.exists(thumbnail_path), "stale thumbnail should have been removed"
+    assert enqueued and enqueued[0][0] == "thumbnail" and enqueued[0][1] == model_id

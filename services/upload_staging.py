@@ -1,5 +1,6 @@
 import os
 import shutil
+import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
@@ -70,9 +71,10 @@ class UploadStagingService:
         file_storage.save(target)
         return target
 
-    def _extract_archive(self, archive_path, job_dir):
-        extract_root = job_dir / "archive"
-        extract_root.mkdir()
+    def _safe_extract(self, archive_path, extract_root):
+        """Extract the ZIP into extract_root with the usual entry-count, size
+        and path-traversal guards. Raises UploadStagingError on any problem."""
+        extract_root.mkdir(parents=True, exist_ok=True)
         try:
             archive = zipfile.ZipFile(archive_path)
         except zipfile.BadZipFile as exc:
@@ -95,6 +97,10 @@ class UploadStagingService:
                 with archive.open(item) as source, target.open("wb") as output:
                     shutil.copyfileobj(source, output)
 
+    def _extract_archive(self, archive_path, job_dir):
+        extract_root = job_dir / "archive"
+        self._safe_extract(archive_path, extract_root)
+
         models = [p for p in extract_root.rglob("*") if p.is_file() and p.suffix.lower() in self.MODEL_EXTENSIONS]
         if len(models) != 1:
             raise UploadStagingError("ZIP archive must contain exactly one supported 3D model")
@@ -102,3 +108,60 @@ class UploadStagingService:
         mtl_files = list(primary.parent.glob("*.mtl")) if primary.suffix.lower() == ".obj" else []
         textures = [p for p in extract_root.rglob("*") if p.is_file() and p.suffix.lower() in self.TEXTURE_EXTENSIONS]
         return primary, (mtl_files[0] if mtl_files else None), textures
+
+    def stage_archive_models(self, archive_file, make_job_id):
+        """Extract a ZIP and stage EVERY supported model it contains as its own
+        independent job (each with a fresh job dir), so one ZIP of N models
+        fans out into N conversion jobs.
+
+        Companions are grouped per model by the model's own folder: an OBJ
+        picks up a sibling .mtl, and image textures in the same folder ride
+        along (unused ones are simply ignored downstream). Returns a list of
+        (job_id, staged_payload); the payload shape matches stage()."""
+        scratch = Path(tempfile.mkdtemp(dir=self.temp_root))
+        try:
+            zip_path = scratch / "upload.zip"
+            archive_file.save(zip_path)
+            extract_root = scratch / "extract"
+            self._safe_extract(zip_path, extract_root)
+
+            models = sorted(
+                p for p in extract_root.rglob("*")
+                if p.is_file() and p.suffix.lower() in self.MODEL_EXTENSIONS
+            )
+            if not models:
+                raise UploadStagingError("ZIP archive contains no supported 3D model")
+
+            staged = []
+            for model_path in models:
+                job_id = make_job_id()
+                job_dir = self._job_dir(job_id)
+                dest_model = job_dir / (secure_filename(model_path.name) or "model")
+                shutil.copyfile(model_path, dest_model)
+
+                mtl_dest = None
+                if model_path.suffix.lower() == ".obj":
+                    siblings = list(model_path.parent.glob("*.mtl"))
+                    if siblings:
+                        mtl_dest = job_dir / (secure_filename(siblings[0].name) or "model.mtl")
+                        shutil.copyfile(siblings[0], mtl_dest)
+
+                texture_dests = []
+                for sibling in sorted(model_path.parent.iterdir()):
+                    if sibling.is_file() and sibling.suffix.lower() in self.TEXTURE_EXTENSIONS:
+                        tex_dest = job_dir / (secure_filename(sibling.name) or sibling.name)
+                        shutil.copyfile(sibling, tex_dest)
+                        texture_dests.append(tex_dest)
+
+                staged.append((job_id, {
+                    "temp_dir": str(job_dir),
+                    "temp_file_path": str(dest_model),
+                    "original_filename": dest_model.name,
+                    "client_filename": model_path.name,
+                    "file_extension": dest_model.suffix.lower(),
+                    "mtl_path": str(mtl_dest) if mtl_dest else None,
+                    "texture_paths": [str(p) for p in texture_dests],
+                }))
+            return staged
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)

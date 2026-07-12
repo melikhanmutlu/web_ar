@@ -310,6 +310,54 @@ def upload_progress():
     return jsonify({"progress": progress})
 
 
+def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
+                           source_unit, compression):
+    """Create one ConversionJob per staged model (used when a single ZIP
+    contained several models) and return a batch-style response the frontend
+    renders as a progress list -- mirroring /api/uploads/batch."""
+    import app as app_module
+
+    user_id = current_user.id if current_user.is_authenticated else None
+    jobs = []
+    for index, (job_id, staged) in enumerate(staged_models):
+        edit_token = secrets.token_urlsafe(32) if user_id is None else None
+        status_token = secrets.token_urlsafe(32)
+        payload = {
+            "unique_id": job_id,
+            "original_filename": staged["original_filename"],
+            "client_filename": staged["client_filename"],
+            "temp_dir": staged["temp_dir"],
+            "temp_file_path": staged["temp_file_path"],
+            "file_extension": staged["file_extension"],
+            "mtl_path": staged["mtl_path"],
+            "texture_paths": staged["texture_paths"],
+            "use_color": use_color,
+            "color": color,
+            "max_dimension": max_dimension,
+            "source_unit": source_unit,
+            "compression": compression,
+            "user_id": user_id,
+            "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
+        }
+        job = ConversionJob(
+            id=job_id, job_type="upload", status="pending", payload=payload,
+            user_id=user_id, status_token_hash=generate_password_hash(status_token),
+        )
+        db.session.add(job)
+        db.session.commit()
+        if not app_module.JOB_QUEUE_ENABLED:
+            app_module._start_local_conversion(job_id)
+        jobs.append({
+            "job_id": job_id,
+            "filename": staged["client_filename"],
+            "index": index,
+            "status_token": status_token,
+            "edit_token": edit_token,
+            "status_url": url_for("upload.upload_job_status", job_id=job_id),
+        })
+    return jsonify({"success": True, "multi": True, "jobs": jobs, "errors": []}), 202
+
+
 def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimension,
                             source_unit, compression, edit_token, status_token):
     """Shared tail of every upload entrypoint (single-shot /upload_model and
@@ -445,6 +493,31 @@ def upload_model():
                 "Maximum dimension limit disabled - model will keep original size"
             )
 
+        source_unit = request.form.get("sourceUnit")
+
+        # A ZIP can now carry SEVERAL independent models -- fan each out into
+        # its own job (shared conversion options apply to all). A ZIP with a
+        # single model still converts to one job and redirects to its viewer,
+        # exactly like before.
+        if original_filename.lower().endswith(".zip"):
+            staged_models = app_module.upload_staging.stage_archive_models(
+                file, lambda: str(uuid.uuid4())
+            )
+            if len(staged_models) > 1:
+                return _finalize_multi_staged(
+                    staged_models,
+                    use_color=use_color, color=color, max_dimension=max_dimension,
+                    source_unit=source_unit, compression=compression,
+                )
+            unique_id, staged = staged_models[0]
+            temp_dir = staged["temp_dir"]
+            return _finalize_staged_upload(
+                unique_id, staged,
+                use_color=use_color, color=color, max_dimension=max_dimension,
+                source_unit=source_unit, compression=compression,
+                edit_token=edit_token, status_token=status_token,
+            )
+
         # --- Start: Consistent File Handling Logic ---
         unique_id = str(uuid.uuid4())
         app_module.logger.info(f"[upload_model - {unique_id}] Generated unique ID")
@@ -461,7 +534,7 @@ def upload_model():
         return _finalize_staged_upload(
             unique_id, staged,
             use_color=use_color, color=color, max_dimension=max_dimension,
-            source_unit=request.form.get("sourceUnit"), compression=compression,
+            source_unit=source_unit, compression=compression,
             edit_token=edit_token, status_token=status_token,
         )
 

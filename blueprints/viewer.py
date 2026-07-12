@@ -415,6 +415,22 @@ def vr_view(model_id):
         seo_robots=_seo_robots_for_model_page(),
     ))
     response.headers["Cache-Control"] = "no-store"
+    # A-Frame needs 'unsafe-eval' (it compiles code strings at runtime); the
+    # app-wide CSP only allows 'wasm-unsafe-eval', so without this override the
+    # A-Frame bundle throws "Refused to evaluate a string as JavaScript",
+    # AFRAME never initializes, and the VR page renders pitch black. Set a
+    # VR-only CSP here (the global after_request uses setdefault, so this
+    # wins). Everything the page needs is same-origin/vendored now.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "img-src 'self' data: blob: https:; "
+        "connect-src 'self' https: blob: data:; "
+        "worker-src 'self' blob:; "
+        "frame-ancestors 'self'"
+    )
     return response
 
 

@@ -746,24 +746,23 @@
             return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
         }
 
-        // Multi-file upload: each file becomes its own independent
-        // ConversionJob via /api/uploads/batch (blueprints/upload.py), tracked
-        // with its own progress row instead of the single-file progress bar.
-        async function submitBatchUpload(files) {
+        // Render one progress row per name into #batchUploadList and return the
+        // row refs (position-indexed). Shared by multi-file upload and the
+        // multi-model-ZIP flow so both show the same progress list.
+        function renderBatchRows(names) {
             const batchList = document.getElementById('batchUploadList');
             const uploadStatus = document.getElementById('uploadStatus');
             uploadStatus.classList.add('hidden');
             uploadStatus.style.display = 'none';
             batchList.innerHTML = '';
             batchList.classList.remove('hidden');
-
-            const rows = []; // index -> {el, statusEl, barEl} (position matches `files`)
-            files.forEach((file) => {
+            const rows = [];
+            names.forEach((name) => {
                 const row = document.createElement('div');
                 row.className = 'batch-row';
                 row.innerHTML = `
                     <div class="batch-row-head">
-                        <span class="batch-row-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                        <span class="batch-row-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
                         <span class="batch-row-status">Uploading…</span>
                     </div>
                     <div class="progress-bar-container"><div class="progress-bar" style="width:5%;"></div></div>
@@ -775,6 +774,32 @@
                     barEl: row.querySelector('.progress-bar'),
                 });
             });
+            return rows;
+        }
+
+        // Attach polling (and any errors) to already-rendered rows from a
+        // batch-style response ({jobs:[{index,...}], errors:[{index,...}]}).
+        function trackBatchJobs(rows, data) {
+            (data.errors || []).forEach((err) => {
+                const refs = rows[err.index];
+                if (!refs) return;
+                refs.statusEl.textContent = err.error;
+                refs.statusEl.classList.add('is-error');
+                refs.barEl.classList.add('error');
+            });
+            (data.jobs || []).forEach((job) => {
+                const refs = rows[job.index];
+                if (!refs) return;
+                pollBatchJob(refs, job.job_id, job.status_token, job.edit_token);
+            });
+        }
+
+        // Multi-file upload: each file becomes its own independent
+        // ConversionJob via /api/uploads/batch (blueprints/upload.py), tracked
+        // with its own progress row instead of the single-file progress bar.
+        async function submitBatchUpload(files) {
+            const batchList = document.getElementById('batchUploadList');
+            const rows = renderBatchRows(files.map((f) => f.name));
 
             const formData = new FormData();
             files.forEach((file) => formData.append('files', file));
@@ -805,24 +830,8 @@
                 return;
             }
 
-            // Matched by index -- the backend returns each job/error with the
-            // original request-order index, so two files sharing an identical
-            // name in one selection each get their own row (matching by name
-            // used to make both resolve to the first row, leaving the second
-            // stuck at "Uploading…" forever).
-            (data.errors || []).forEach((err) => {
-                const refs = rows[err.index];
-                if (!refs) return;
-                refs.statusEl.textContent = err.error;
-                refs.statusEl.classList.add('is-error');
-                refs.barEl.classList.add('error');
-            });
-
-            (data.jobs || []).forEach((job) => {
-                const refs = rows[job.index];
-                if (!refs) return;
-                pollBatchJob(refs, job.job_id, job.status_token, job.edit_token);
-            });
+            // Rows and jobs share the backend's request-order index.
+            trackBatchJobs(rows, data);
         }
 
         // Tracks one batch row's job to completion (mirrors pollUploadJob's
@@ -1119,7 +1128,11 @@
             const CHUNK_THRESHOLD_BYTES = 20 * 1024 * 1024;
             const hasCompanions = (mtlInput && mtlInput.files.length > 0) ||
                 (textureInput && textureInput.files.length > 0);
-            if (file.size > CHUNK_THRESHOLD_BYTES && !hasCompanions) {
+            // ZIPs go through the regular multipart path even when large: the
+            // chunked endpoint can't accept archives (it needs to fan a
+            // multi-model ZIP into several jobs, which /upload_model does).
+            const isZip = /\.zip$/i.test(file.name);
+            if (file.size > CHUNK_THRESHOLD_BYTES && !hasCompanions && !isZip) {
                 uploadFileChunked(file, {
                     useColor: shouldApplyColor,
                     color: document.getElementById('colorPicker').value,
@@ -1216,7 +1229,16 @@
                 if (xhr.readyState !== XMLHttpRequest.DONE) return;
                 try {
                     const response = JSON.parse(xhr.responseText || '{}');
-                    if (xhr.status >= 200 && xhr.status < 300 && response.success && response.viewer_url) {
+                    if (xhr.status >= 200 && xhr.status < 300 && response.success && response.multi) {
+                        // A single ZIP held several models -> the backend fanned
+                        // them into one job each; show the batch progress list.
+                        clearInterval(elapsedTimer);
+                        endUpload();
+                        const uploadStatusEl = document.getElementById('uploadStatus');
+                        if (uploadStatusEl) { uploadStatusEl.classList.add('hidden'); uploadStatusEl.style.display = 'none'; }
+                        const names = (response.jobs || []).map((j) => j.filename);
+                        trackBatchJobs(renderBatchRows(names), response);
+                    } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.viewer_url) {
                         setProgress(96, 'Finalizing model', 'Conversion finished; preparing the viewer route.', 'Finalizing');
                         finishUpload(response.message, response.viewer_url);
                     } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.job_id) {

@@ -1173,9 +1173,11 @@ body > .av-flash { margin-top: 5.5rem; }
 
 .pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spacing-lg); align-items: stretch; min-height: 0; }
 
-.pricing-card { display: flex; flex-direction: column; border: 1px solid var(--color-gray-200); background: var(--color-white); padding: var(--spacing-xl); }
+.pricing-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--color-gray-200); background: var(--color-white); padding: var(--spacing-xl); }
 .pricing-card--featured { border-color: var(--color-gray-900); }
-.pricing-badge { align-self: flex-start; margin-bottom: 0.4rem; }
+/* Absolute so it sits in the top-right corner without pushing the featured
+   card's name/price down -- keeps the header row aligned across all tiers. */
+.pricing-badge { position: absolute; top: 0.85rem; right: 0.85rem; margin: 0; }
 
 .pricing-name { font-size: 1rem; font-weight: 700; color: var(--color-gray-900); }
 .pricing-price { display: flex; align-items: baseline; gap: 0.3rem; margin: 0.15rem 0 var(--spacing-md); }

@@ -245,3 +245,29 @@ test('viewer page wires meshoptDecoderLocation to the static decoder', async ({ 
   expect(html).toContain('meshoptDecoderLocation');
   expect(html).toContain('/static/js/meshopt_decoder.js');
 });
+
+test('camera overlay button toggles the no-anchor camera mode', async ({ page, context }) => {
+  // Free-placement mode: live rear camera behind the transparent model
+  // canvas, no AR surface lock (static/js/viewer/camera-overlay.js). In
+  // environments without a (fake) camera, the button must explain itself
+  // via an alert instead of failing silently.
+  await context.grantPermissions(['camera']);
+  await uploadCubeAndGetViewerUrl(page);
+
+  let alerted = null;
+  page.on('dialog', (dialog) => { alerted = dialog.message(); dialog.accept(); });
+
+  await page.locator('#cameraOverlayButton').click({ force: true });
+  await page.waitForTimeout(1500);
+
+  const videoAttached = await page.locator('#cameraOverlayVideo').count() > 0;
+  if (videoAttached) {
+    await expect(page.locator('#cameraOverlayButton')).toHaveClass(/is-active/);
+    await expect(page.locator('#cameraOverlayHint')).toBeVisible();
+    // Exit releases everything
+    await page.locator('#cameraOverlayButton').click({ force: true });
+    await expect(page.locator('#cameraOverlayVideo')).not.toBeAttached();
+  } else {
+    expect(alerted, 'no camera -> a clear alert must explain why').toContain('amera');
+  }
+});

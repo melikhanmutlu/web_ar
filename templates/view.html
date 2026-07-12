@@ -217,6 +217,15 @@
         .dark #infoToggleBtn.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
         #measureToolButton.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
         .dark #measureToolButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
+        #cameraOverlayButton.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        .dark #cameraOverlayButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
+
+        /* Camera Overlay mode: live rear camera behind the transparent
+           model canvas (static/js/viewer/camera-overlay.js). */
+        #cameraOverlayVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+        body.camera-overlay-active model-viewer { position: relative; z-index: 1; }
+        body.camera-overlay-active .top-header { display: none; } /* maximum viewfinder room */
+        .camera-overlay-hint { position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 45; max-width: min(26rem, calc(100vw - 2rem)); padding: 0.45rem 0.8rem; background: rgba(15, 23, 42, 0.85); color: white; font-size: 0.75rem; border-radius: 999px; text-align: center; pointer-events: none; }
 
         /* Download button: hover fan-out on desktop (see fullscreen-modal.js
            for the mobile/tablet popup fallback, since hover doesn't work on
@@ -737,6 +746,7 @@
         {% if viewer_settings.show_dimensions %}
     <script src="{{ url_for('static', filename='js/viewer/measure-tool.js') }}"></script>
         {% endif %}
+    <script src="{{ url_for('static', filename='js/viewer/camera-overlay.js') }}"></script>
 
 
         <!-- Portfolio Tagline -->
@@ -1324,6 +1334,7 @@
             <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>
             {% endif %}
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
+            <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
             <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i></button>
             <div class="download-menu" id="downloadMenu">

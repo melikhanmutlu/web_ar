@@ -26,13 +26,18 @@ def index():
 
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
-    from services.plans import PLANS, PLAN_CONFIG
+    from services.plans import PLANS, PLAN_CONFIG, plan_name
+
     from services.credits import CREDIT_PACKS
+
+    # Admins resolve to the internal "unlimited" plan (not in PLANS), so it
+    # highlights nothing on the tier grid -- the template shows a note instead.
+    current_plan = plan_name(current_user) if current_user.is_authenticated else None
 
     return render_template(
         "pricing.html",
         plans=PLANS,
         plan_config=PLAN_CONFIG,
         credit_packs=CREDIT_PACKS,
-        current_plan=current_user.plan if current_user.is_authenticated else None,
+        current_plan=current_plan,
     )

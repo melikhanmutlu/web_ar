@@ -22,8 +22,15 @@ Value conventions (shared with the enforcement sites):
 
 import os
 
+# PLANS is the public, self-serve tier list -- it drives /pricing and the admin
+# set-plan validation. The "unlimited" plan below is deliberately NOT in it, so
+# it never appears on the pricing page and can't be assigned to a user (nobody
+# can upgrade to it); admins get it automatically (see _plan_name).
 PLANS = ("free", "pro", "business")
 DEFAULT_PLAN = "free"
+# Internal, admin-only tier: fully authorized, no quotas. Not purchasable.
+ADMIN_PLAN = "unlimited"
+_UNLIMITED = 1_000_000_000
 
 # Single source of truth. "free"'s None limits are load-bearing: they make the
 # effective_* helpers fall through to the global admin-configured defaults,
@@ -93,13 +100,48 @@ PLAN_CONFIG = {
             "webhooks": True,
         },
     },
+    # Admin-only, fully authorized. Every numeric limit is effectively unlimited
+    # (huge sentinel, or None where None already means unlimited) and every
+    # feature is on. Kept out of PLANS so it's never shown or self-assignable.
+    ADMIN_PLAN: {
+        "display_name": "Unlimited",
+        "price": None,
+        "limits": {
+            "storage_mb": _UNLIMITED,
+            "ai_monthly": _UNLIMITED,
+            "max_models": None,          # unlimited
+            "max_upload_mb": _UNLIMITED,
+            "batch_size": _UNLIMITED,
+            "analytics_retention_days": _UNLIMITED,
+        },
+        "features": {
+            "api_access": True,
+            "advanced_ai_options": True,
+            "password_protected_shares": True,
+            "organizations": True,
+            "custom_domains": True,
+            "white_label": True,
+            "webhooks": True,
+        },
+    },
 }
 
 
 def _plan_name(user):
-    """Resolve a user's plan name, normalizing unknown/None to DEFAULT_PLAN."""
+    """Resolve a user's plan name, normalizing unknown/None to DEFAULT_PLAN.
+
+    Admins are always on the internal ADMIN_PLAN (fully authorized, no quotas)
+    regardless of their stored plan -- so every plan_limit/plan_allows/quota
+    check that flows through here treats them as unlimited in one place."""
+    if user is not None and getattr(user, "is_admin", False):
+        return ADMIN_PLAN
     plan = getattr(user, "plan", None) if user is not None else None
     return plan if plan in PLAN_CONFIG else DEFAULT_PLAN
+
+
+def plan_name(user):
+    """Public: the plan name in effect for `user` (admins -> ADMIN_PLAN)."""
+    return _plan_name(user)
 
 
 def plan_limit(user, key, global_default=None):

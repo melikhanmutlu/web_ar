@@ -23,6 +23,9 @@
     <div class="pricing-hero">
         <p class="home-kicker">Plans &amp; pricing</p>
         <h1 class="pricing-title">Choose your plan</h1>
+        {% if current_plan == 'unlimited' %}
+        <p class="pricing-sub" style="margin-top:0.5rem;font-weight:600;">You're on the Unlimited (admin) plan — no usage limits apply.</p>
+        {% endif %}
     </div>
 
     <div class="pricing-grid">

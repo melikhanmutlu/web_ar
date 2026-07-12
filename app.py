@@ -415,15 +415,19 @@ app.view_functions["upload.batch_upload_models"] = limiter.limit(
 app.view_functions["upload.retry_upload_job"] = limiter.limit(
     "10 per hour"
 )(app.view_functions["upload.retry_upload_job"])
+# Admins are exempt from the AI abuse-guard rate limits (they're also exempt
+# from the monthly quota via the unlimited plan) so admin testing/support isn't
+# throttled.
+_ai_rate_exempt = lambda: current_user.is_authenticated and getattr(current_user, "is_admin", False)
 app.view_functions["ai_generation.generate_3d"] = limiter.limit(
-    "6 per minute"
+    "6 per minute", exempt_when=_ai_rate_exempt
 )(app.view_functions["ai_generation.generate_3d"])
 app.view_functions["ai_generation.meshy_webhook"] = limiter.limit(
     "120 per minute"
 )(app.view_functions["ai_generation.meshy_webhook"])
 csrf.exempt(app.view_functions["ai_generation.meshy_webhook"])
 app.view_functions["ai_image.generate_image"] = limiter.limit(
-    "10 per minute"
+    "10 per minute", exempt_when=_ai_rate_exempt
 )(app.view_functions["ai_image.generate_image"])
 
 # Endpoints that cannot carry a session-bound CSRF token: 410 stubs that must

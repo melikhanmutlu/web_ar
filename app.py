@@ -149,7 +149,11 @@ def after_request(response):
         "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.tailwindcss.com https://unpkg.com https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com https://www.gstatic.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
-        "img-src 'self' data: blob: https:; connect-src 'self' https:; "
+        # GLTFLoader turns images embedded in a GLB binary chunk into blob:
+        # URLs and fetches them before uploading to WebGL. blob: therefore
+        # belongs in connect-src as well as img-src; without it every embedded
+        # material texture is blocked and model-viewer renders a white mesh.
+        "img-src 'self' data: blob: https:; connect-src 'self' https: blob:; "
         "worker-src 'self' blob:; "
         f"frame-ancestors {frame_ancestors}",
     )

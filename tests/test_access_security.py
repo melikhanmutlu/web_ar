@@ -88,7 +88,9 @@ def test_cross_site_browser_writes_are_rejected(client):
 
 def test_security_headers_and_post_only_logout(client):
     response = client.get("/")
-    assert "frame-ancestors 'self'" in response.headers["Content-Security-Policy"]
+    policy = response.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self'" in policy
+    assert "connect-src 'self' https: blob:" in policy
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["Permissions-Policy"]
     assert client.get("/logout").status_code == 405

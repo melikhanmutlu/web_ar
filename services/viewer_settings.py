@@ -22,4 +22,10 @@ def resolved_viewer_settings(model):
     stored = model.viewer_settings or {}
     settings.update({key: value for key, value in stored.items() if key != "branding"})
     settings["branding"] = {**DEFAULT_VIEWER_SETTINGS["branding"], **(stored.get("branding") or {})}
+    # model-viewer's engine only implements "floor" and "wall" — "ceiling"
+    # was briefly offered in the UI but silently behaved as floor (the
+    # string doesn't exist anywhere in the model-viewer bundle). Coerce any
+    # stored value so the rendered attribute is always a real one.
+    if settings.get("ar_placement") not in ("floor", "wall"):
+        settings["ar_placement"] = "floor"
     return settings

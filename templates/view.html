@@ -900,8 +900,8 @@
                         <select id="arPlacementSelect" class="tp-select">
                             <option value="floor" {% if viewer_settings.ar_placement == 'floor' %}selected{% endif %}>Floor</option>
                             <option value="wall" {% if viewer_settings.ar_placement == 'wall' %}selected{% endif %}>Wall</option>
-                            <option value="ceiling" {% if viewer_settings.ar_placement == 'ceiling' %}selected{% endif %}>Ceiling</option>
                         </select>
+                        <p class="tp-note" style="margin-top:0.3rem;">Wall placement needs WebXR (Chrome on Android). iOS Quick Look and Scene Viewer always place on the floor.</p>
                     </div>
                     {% endif %}
 

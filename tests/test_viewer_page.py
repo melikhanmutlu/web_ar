@@ -184,12 +184,34 @@ def test_ar_placement_setting_reflected_in_model_viewer_tag(client):
     login(client, "owner-ar", "testpassword123")
 
     model = db.session.get(UserModel, model_id)
-    model.viewer_settings = {"ar_placement": "ceiling"}
+    model.viewer_settings = {"ar_placement": "wall"}
     db.session.commit()
 
     resp = client.get(f"/view/{model_id}")
     body = resp.get_data(as_text=True)
-    assert 'ar-placement="ceiling"' in body
+    assert 'ar-placement="wall"' in body
+
+
+def test_stored_ceiling_placement_coerces_to_floor(client):
+    """model-viewer's engine only implements floor/wall — "ceiling" was
+    briefly offered in the UI but silently behaved as floor. Models that
+    stored it must render a real value, not the fake one."""
+    owner = make_user("owner-ar2", "owner-ar2@test.com")
+    model_id, _ = make_two_material_model(user_id=owner.id)
+    login(client, "owner-ar2", "testpassword123")
+
+    model = db.session.get(UserModel, model_id)
+    model.viewer_settings = {"ar_placement": "ceiling"}
+    db.session.commit()
+
+    body = client.get(f"/view/{model_id}").get_data(as_text=True)
+    assert 'ar-placement="floor"' in body
+    assert 'ar-placement="ceiling"' not in body
+
+    # And the PATCH endpoint no longer accepts it going forward
+    resp = client.patch(f"/api/models/{model_id}/viewer-settings",
+                        json={"ar_placement": "ceiling"})
+    assert resp.status_code == 400
 
 
 def test_ar_error_feedback_elements_rendered(client):

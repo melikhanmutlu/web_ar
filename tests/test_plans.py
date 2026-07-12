@@ -247,3 +247,68 @@ def test_admin_can_set_business_plan(client, admin_user):
     assert resp.status_code == 200
     assert resp.get_json()["plan"] == "business"
     assert db.session.get(User, target.id).plan == "business"
+
+
+# --- admin-editable plan config override (services/plans.py) ---
+
+def test_get_plan_config_without_override_matches_code_default():
+    from services.plans import PLAN_CONFIG, get_plan_config
+    assert get_plan_config("pro") == PLAN_CONFIG["pro"]
+
+
+def test_plan_limit_pure_without_app_context_is_unaffected_by_overrides():
+    # No `client` fixture -> no Flask app context. Regression guard: the
+    # override layer must not make plan_limit/plan_allows touch the DB when
+    # called outside a request, exactly like before the override existed.
+    assert plan_limit(User(plan="pro"), "max_models") == 200
+    assert plan_allows(User(plan="pro"), "api_access") is True
+
+
+def test_plan_override_updates_effective_config(client, admin_user):
+    from services.plans import all_plan_configs
+
+    login(client, "adminuser", "adminpassword")
+    resp = client.post("/admin/settings?tab=plans", data={
+        "pro__max_models": "500",
+        "pro__webhooks": "on",
+    })
+    assert resp.status_code == 302
+
+    pro_user = User(plan="pro")
+    assert plan_limit(pro_user, "max_models") == 500
+    assert plan_allows(pro_user, "webhooks") is True
+    # Untouched keys still fall back to the code default.
+    assert plan_limit(pro_user, "storage_mb") == 10240
+    assert all_plan_configs()["pro"]["limits"]["max_models"] == 500
+
+
+def test_plan_override_raw_reports_only_saved_fields(client, admin_user):
+    from services.plans import plan_override_raw
+
+    login(client, "adminuser", "adminpassword")
+    assert plan_override_raw("business") == {}
+    client.post("/admin/settings?tab=plans", data={"business__price": "149"})
+    assert plan_override_raw("business") == {"price": 149}
+
+
+def test_admin_unlimited_plan_ignores_overrides(client, admin_user):
+    from services.plans import ADMIN_PLAN, plan_name
+
+    login(client, "adminuser", "adminpassword")
+    client.post("/admin/settings?tab=plans", data={
+        "pro__max_models": "1", "business__webhooks": "off",
+    })
+    admin = db.session.get(User, admin_user.id)
+    assert plan_name(admin) == ADMIN_PLAN
+    assert plan_limit(admin, "max_models") is None
+    assert plan_allows(admin, "webhooks") is True
+
+
+def test_invalid_plan_override_value_is_rejected(client, admin_user):
+    from services.plans import plan_override_raw
+
+    login(client, "adminuser", "adminpassword")
+    resp = client.post("/admin/settings?tab=plans", data={"pro__max_models": "-5"})
+    assert resp.status_code == 302
+    # Rejected -- no override was saved.
+    assert plan_override_raw("pro") == {}

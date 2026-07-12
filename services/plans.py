@@ -18,8 +18,16 @@ Value conventions (shared with the enforcement sites):
   None so it falls through to the global ai_monthly_limit setting (default 0
   -> AI generation off for free users unless an admin grants some); paid
   tiers set an explicit positive ceiling.
+
+Admin override layer: the admin "Plans" settings tab can override a self-serve
+plan's price/limits/features at runtime, stored as JSON under the SiteSetting
+key "plan_override.<plan>" (see _plan_override / get_plan_config below). This
+is a DB layer *on top of* the PLAN_CONFIG defaults below -- it never touches
+ADMIN_PLAN (admins always stay fully unlimited) and never touches PLANS
+itself (no new tiers can be created this way, only the existing three tuned).
 """
 
+import json
 import os
 
 # PLANS is the public, self-serve tier list -- it drives /pricing and the admin
@@ -31,6 +39,18 @@ DEFAULT_PLAN = "free"
 # Internal, admin-only tier: fully authorized, no quotas. Not purchasable.
 ADMIN_PLAN = "unlimited"
 _UNLIMITED = 1_000_000_000
+
+# The editable field names inside a plan's "limits"/"features" dict -- shared
+# by the admin Plans settings tab (parsing the submitted form + rendering
+# each row) so the field list lives in exactly one place.
+LIMIT_KEYS = (
+    "storage_mb", "ai_monthly", "max_models", "max_upload_mb",
+    "batch_size", "analytics_retention_days",
+)
+FEATURE_KEYS = (
+    "api_access", "advanced_ai_options", "password_protected_shares",
+    "organizations", "custom_domains", "white_label", "webhooks",
+)
 
 # Single source of truth. "free"'s None limits are load-bearing: they make the
 # effective_* helpers fall through to the global admin-configured defaults,
@@ -144,11 +164,66 @@ def plan_name(user):
     return _plan_name(user)
 
 
+def _plan_override(plan):
+    """Raw admin-saved override for a self-serve plan, or {} if none exists.
+
+    Guarded by has_app_context(): plan_limit/plan_allows are exercised by
+    tests/test_plans.py as pure functions on a bare (unsaved) User() with no
+    Flask app context, so this must never touch the DB in that case -- it
+    just returns {} immediately, which is exactly the pre-override behaviour.
+    ADMIN_PLAN is deliberately excluded (not in PLANS) so it can never be
+    overridden -- admins always stay fully unlimited.
+    """
+    if plan not in PLANS:
+        return {}
+    from flask import has_app_context
+    if not has_app_context():
+        return {}
+    from site_settings import get_setting
+    raw = get_setting(f"plan_override.{plan}")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+
+
+def plan_override_raw(plan):
+    """Public: just the saved override (not merged with code defaults). Used
+    by the admin Plans settings tab to show which fields are actually
+    overridden vs. inherited from PLAN_CONFIG."""
+    return _plan_override(plan)
+
+
+def get_plan_config(plan):
+    """Effective config for one plan: PLAN_CONFIG merged with any admin-saved
+    override. Returns {} for an unknown plan (matches the old PLAN_CONFIG.get(
+    plan, {}) fallback some callers relied on)."""
+    base = PLAN_CONFIG.get(plan)
+    if base is None:
+        return {}
+    override = _plan_override(plan)
+    if not override:
+        return base
+    return {
+        "display_name": base["display_name"],
+        "price": override.get("price", base["price"]),
+        "limits": {**base["limits"], **override.get("limits", {})},
+        "features": {**base["features"], **override.get("features", {})},
+    }
+
+
+def all_plan_configs():
+    """{plan: effective_config} for every self-serve plan, in PLANS order."""
+    return {p: get_plan_config(p) for p in PLANS}
+
+
 def plan_limit(user, key, global_default=None):
     """Effective numeric limit for `key`. A None value in the plan means "no
     plan-imposed limit" -> return global_default (which is None for callers
     that treat None as unlimited)."""
-    value = PLAN_CONFIG[_plan_name(user)]["limits"].get(key)
+    value = get_plan_config(_plan_name(user)).get("limits", {}).get(key)
     if value is None:
         return global_default
     return value
@@ -156,7 +231,7 @@ def plan_limit(user, key, global_default=None):
 
 def plan_allows(user, feature):
     """Whether the user's plan unlocks a boolean feature flag."""
-    return bool(PLAN_CONFIG[_plan_name(user)]["features"].get(feature, False))
+    return bool(get_plan_config(_plan_name(user)).get("features", {}).get(feature, False))
 
 
 # Backward-compatible thin wrappers over plan_limit -- signatures and

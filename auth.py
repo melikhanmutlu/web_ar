@@ -100,11 +100,11 @@ def logout():
 @login_required
 def profile():
     import app as app_module
-    from services.plans import PLAN_CONFIG, plan_limit
+    from services.plans import get_plan_config, plan_limit
     from services.storage_quota import _storage_usage_for, _storage_quota_bytes
 
     plan = current_user.plan
-    plan_display = PLAN_CONFIG.get(plan, {}).get("display_name", plan.title())
+    plan_display = get_plan_config(plan).get("display_name", plan.title())
 
     storage_used = _storage_usage_for(current_user.id)
     storage_quota = _storage_quota_bytes(current_user)  # 0 => unlimited

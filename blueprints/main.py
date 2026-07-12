@@ -26,7 +26,7 @@ def index():
 
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
-    from services.plans import PLANS, PLAN_CONFIG, plan_name
+    from services.plans import PLANS, plan_name, all_plan_configs
 
     from services.credits import CREDIT_PACKS
 
@@ -37,7 +37,7 @@ def pricing():
     return render_template(
         "pricing.html",
         plans=PLANS,
-        plan_config=PLAN_CONFIG,
+        plan_config=all_plan_configs(),
         credit_packs=CREDIT_PACKS,
         current_plan=current_plan,
     )

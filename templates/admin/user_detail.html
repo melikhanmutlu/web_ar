@@ -42,6 +42,84 @@
     </div>
 </div>
 
+<div class="admin-card">
+    <h2 class="admin-card-title">
+        billing
+        <a href="{{ url_for('admin.billing', q=user.username) }}" class="count">view all payments</a>
+    </h2>
+    <div class="admin-table-wrap" style="border:none;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>date</th><th>plan</th><th class="num">amount</th><th>status</th><th>method</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payments %}
+                <tr>
+                    <td class="muted">{{ payment.created_at.strftime('%Y-%m-%d') if payment.created_at else '—' }}</td>
+                    <td>{{ payment.plan }}</td>
+                    <td class="num">{{ payment.amount }} {{ payment.currency }}</td>
+                    <td>{{ badge(payment.status) }}</td>
+                    <td class="muted">{{ payment.method or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="muted">no payments recorded</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if user.id != current_user.id %}
+    <form method="POST" action="{{ url_for('admin.record_payment', user_id=user.id) }}" class="admin-settings-form" style="margin-top:1rem;border:none;padding:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="admin-field">
+            <label class="field-label" for="payment-plan">plan paid for</label>
+            <select id="payment-plan" name="plan" class="av-select">
+                {% for p in plans %}
+                <option value="{{ p }}" {% if p == user.plan %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-amount">amount</label>
+            <input type="number" id="payment-amount" name="amount" class="av-input" step="0.01" min="0.01" required>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-currency">currency</label>
+            <input type="text" id="payment-currency" name="currency" class="av-input" value="USD" maxlength="3" style="width:6rem;">
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-method">method</label>
+            <input type="text" id="payment-method" name="method" class="av-input" placeholder="bank_transfer, manual, …">
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-period-start">period start</label>
+            <input type="date" id="payment-period-start" name="period_start" class="av-input">
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-period-end">period end</label>
+            <input type="date" id="payment-period-end" name="period_end" class="av-input">
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="payment-note">note</label>
+            <textarea id="payment-note" name="note" class="av-input" rows="2"></textarea>
+        </div>
+        <div class="admin-field">
+            <label class="av-switch-label">
+                <span class="av-switch">
+                    <input type="checkbox" name="update_plan" checked>
+                    <span class="track"></span>
+                    <span class="knob"></span>
+                </span>
+                <span class="av-switch-text">also set {{ user.username }}'s plan to the one above</span>
+            </label>
+        </div>
+        <button type="submit" class="admin-btn admin-btn--primary">record payment</button>
+    </form>
+    {% endif %}
+</div>
+
 {% if user.id != current_user.id %}
 <div class="admin-card">
     <h2 class="admin-card-title">actions</h2>

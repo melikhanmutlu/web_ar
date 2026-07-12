@@ -10,7 +10,25 @@
     {% endfor %}
 </div>
 
-<form method="POST" action="{{ url_for('admin.settings', tab=tab) }}" class="admin-card admin-settings-form">
+{% set limit_labels = {
+    'storage_mb': 'storage (MB)',
+    'ai_monthly': 'AI generations / month',
+    'max_models': 'max models',
+    'max_upload_mb': 'max upload size (MB)',
+    'batch_size': 'batch upload size',
+    'analytics_retention_days': 'analytics retention (days)',
+} %}
+{% set feature_labels = {
+    'api_access': 'REST API access',
+    'advanced_ai_options': 'Advanced AI generation options',
+    'password_protected_shares': 'Password-protected share links',
+    'organizations': 'Teams & organizations',
+    'custom_domains': 'Custom domains',
+    'white_label': 'White-label / remove branding',
+    'webhooks': 'Webhooks',
+} %}
+
+<form method="POST" action="{{ url_for('admin.settings', tab=tab) }}" class="admin-card admin-settings-form{% if tab == 'plans' %} admin-settings-form--wide{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     {% if tab == 'general' %}
@@ -65,6 +83,61 @@
                value="{{ values.storage_quota_mb }}">
         <p class="field-help">Enforced at upload time for logged-in users (anonymous uploads aren't tracked to a quota). 0 = unlimited.</p>
     </div>
+
+    {% elif tab == 'plans' %}
+    <p class="field-help" style="margin-bottom:1rem;">
+        Override any of Free/Pro/Business's price, limits, or features. Leave a
+        number blank to keep using the code default (shown as its placeholder);
+        leave a feature on "default" to keep its built-in on/off state. Changes
+        apply everywhere within about a minute (/pricing, profile, and all
+        enforcement).
+    </p>
+    <table class="plans-editor-table">
+        <thead>
+            <tr>
+                <th></th>
+                {% for plan in plans %}<th>{{ plan }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="plans-editor-label">price ($/mo)</td>
+                {% for plan in plans %}
+                <td><input type="number" name="{{ plan }}__price" min="0" step="1"
+                           value="{{ plans_editor[plan].price if plans_editor[plan].price is not none else '' }}"
+                           placeholder="{{ plans_editor[plan].price_default }}"></td>
+                {% endfor %}
+            </tr>
+            <tr><td colspan="{{ plans|length + 1 }}" class="plans-editor-section">limits</td></tr>
+            {% for key in limit_keys %}
+            <tr>
+                <td class="plans-editor-label">{{ limit_labels[key] }}</td>
+                {% for plan in plans %}
+                {% set d = plans_editor[plan].limits_default[key] %}
+                <td><input type="number" name="{{ plan }}__{{ key }}" min="0" step="1"
+                           value="{{ plans_editor[plan].limits[key] if plans_editor[plan].limits[key] is not none else '' }}"
+                           placeholder="{{ d if d is not none else 'global setting' }}"></td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            <tr><td colspan="{{ plans|length + 1 }}" class="plans-editor-section">features</td></tr>
+            {% for key in feature_keys %}
+            <tr>
+                <td class="plans-editor-label">{{ feature_labels[key] }}</td>
+                {% for plan in plans %}
+                {% set current = plans_editor[plan].features[key] %}
+                <td>
+                    <select name="{{ plan }}__{{ key }}">
+                        <option value="" {% if current is none %}selected{% endif %}>default ({{ 'on' if plans_editor[plan].features_default[key] else 'off' }})</option>
+                        <option value="on" {% if current == True %}selected{% endif %}>on</option>
+                        <option value="off" {% if current == False %}selected{% endif %}>off</option>
+                    </select>
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
     {% endif %}
 
     <button type="submit" class="admin-btn admin-btn--primary">save settings</button>

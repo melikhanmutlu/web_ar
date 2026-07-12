@@ -526,6 +526,22 @@
     margin-left: 0.4rem;
 }
 
+.status-badge--paid {
+    border-color: var(--color-gray-900);
+    color: var(--color-gray-900);
+}
+
+.status-badge--refunded {
+    border-color: var(--admin-accent);
+    color: var(--admin-accent);
+}
+
+.status-badge--void {
+    border-color: var(--color-gray-400);
+    color: var(--color-gray-400);
+    text-decoration: line-through;
+}
+
 /* --------------------------------------------------------------------------
    Pagination
    -------------------------------------------------------------------------- */
@@ -695,6 +711,50 @@
 }
 
 .admin-field .av-input:focus { border-color: var(--color-gray-500); outline: none; }
+
+/* Plans tab needs 3 side-by-side plan columns -- wider than the other
+   single-column settings forms. */
+.admin-settings-form--wide { max-width: 60rem; }
+
+.plans-editor-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+.plans-editor-table th,
+.plans-editor-table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--color-gray-200);
+    text-align: left;
+    vertical-align: middle;
+}
+.plans-editor-table th {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-gray-500);
+    font-weight: 700;
+}
+.plans-editor-table td.plans-editor-label {
+    font-size: 0.85rem;
+    color: var(--color-gray-700);
+    white-space: nowrap;
+}
+.plans-editor-table td.plans-editor-section {
+    padding-top: 1rem;
+    border-bottom: none;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-gray-400);
+    font-weight: 700;
+}
+.plans-editor-table input[type="number"],
+.plans-editor-table select {
+    width: 100%;
+    min-width: 6rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    background: var(--color-white);
+    border: 1px solid var(--color-gray-300);
+    font-family: var(--font-sans);
+}
 
 /* --------------------------------------------------------------------------
    Confirm modal extras

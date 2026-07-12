@@ -1,0 +1,114 @@
+{% extends "admin/base.html" %}
+{% from "admin/_pagination.html" import pager %}
+{% from "admin/_status_badge.html" import badge %}
+
+{% block title %}billing — arvision admin{% endblock %}
+{% block page_title %}billing{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url_for('admin.export_billing_csv', **request.args) }}" class="admin-btn">export csv</a>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">${{ '%.2f'|format(stats.revenue_month) }}</div>
+        <div class="kpi-label">revenue this month</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">${{ '%.2f'|format(stats.revenue_total) }}</div>
+        <div class="kpi-label">revenue all-time</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">${{ '%.2f'|format(stats.mrr) }}</div>
+        <div class="kpi-label">estimated MRR</div>
+        <div class="kpi-sub">plan price &times; active users, current plan config</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.plan_counts.get('free', 0) }} / {{ stats.plan_counts.get('pro', 0) }} / {{ stats.plan_counts.get('business', 0) }}</div>
+        <div class="kpi-label">free / pro / business users</div>
+        <div class="kpi-sub">{{ stats.admin_count }} admin (unlimited)</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ stats.outstanding_credits }}</div>
+        <div class="kpi-label">outstanding AI credits</div>
+    </div>
+</div>
+
+<form method="GET" action="{{ url_for('admin.billing') }}" class="admin-filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search username or email…" class="av-input">
+    <select name="plan" class="av-select">
+        <option value="">all plans</option>
+        {% for p in plans %}
+        <option value="{{ p }}" {% if plan == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+    </select>
+    <select name="status" class="av-select">
+        <option value="">all statuses</option>
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="admin-filter-submit">filter</button>
+</form>
+
+<div class="admin-table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>date</th>
+                <th>user</th>
+                <th>plan</th>
+                <th class="num">amount</th>
+                <th>status</th>
+                <th>method</th>
+                <th>period</th>
+                <th>recorded by</th>
+                <th>update</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for payment in page.items %}
+            <tr>
+                <td class="muted">{{ payment.created_at.strftime('%Y-%m-%d') if payment.created_at else '—' }}</td>
+                <td>
+                    {% if payment.user %}
+                    <a href="{{ url_for('admin.user_detail', user_id=payment.user.id) }}">{{ payment.user.username }}</a>
+                    {% else %}
+                    <span class="muted">deleted user</span>
+                    {% endif %}
+                </td>
+                <td>{{ payment.plan }}</td>
+                <td class="num">{{ payment.amount }} {{ payment.currency }}</td>
+                <td>{{ badge(payment.status) }}</td>
+                <td class="muted">{{ payment.method or '—' }}</td>
+                <td class="muted">
+                    {% if payment.period_start or payment.period_end %}
+                    {{ payment.period_start.isoformat() if payment.period_start else '?' }} &rarr; {{ payment.period_end.isoformat() if payment.period_end else '?' }}
+                    {% else %}—{% endif %}
+                </td>
+                <td class="muted">{{ payment.recorded_by.username if payment.recorded_by else '—' }}</td>
+                <td>
+                    <span class="admin-inline-field">
+                        <select id="payment-status-{{ payment.id }}" class="admin-select" aria-label="status">
+                            {% for s in statuses %}
+                            <option value="{{ s }}" {% if s == payment.status %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="admin-btn"
+                                data-action-url="{{ url_for('admin.set_payment_status', payment_id=payment.id) }}"
+                                data-body-from="#payment-status-{{ payment.id }}"
+                                data-body-key="status"
+                                data-confirm="Update this payment's status?">set</button>
+                    </span>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="muted">no payments recorded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{{ pager(page, 'admin.billing') }}
+{% endblock %}

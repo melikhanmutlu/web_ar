@@ -11,12 +11,14 @@ model_cleanup.py / site_settings.py.
 
 import csv
 import io
+import json
 import logging
 import math
 import os
 import secrets
 import shutil
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 
 from flask import (
@@ -45,6 +47,7 @@ from models import (
     ModelLike,
     ModelSave,
     ModelVersion,
+    Payment,
     User,
     UserModel,
     db,
@@ -457,6 +460,13 @@ def user_detail(user_id):
 
     from services.plans import PLANS, effective_ai_monthly_limit
 
+    payments = (
+        Payment.query.filter_by(user_id=user.id)
+        .order_by(Payment.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
     return render_template(
         "admin/user_detail.html",
         user=user,
@@ -467,6 +477,8 @@ def user_detail(user_id):
         ai_total=ai_total,
         ai_limit=effective_ai_monthly_limit(user, _effective_ai_monthly_limit()),
         plans=PLANS,
+        payment_statuses=PAYMENT_STATUSES,
+        payments=payments,
         likes=ModelLike.query.filter_by(user_id=user.id).count(),
         saves=ModelSave.query.filter_by(user_id=user.id).count(),
     )
@@ -543,6 +555,69 @@ def adjust_credits(user_id):
     db.session.commit()
     logger.info(f"admin: {current_user.username} adjusted credits by {amount} (-> {balance}) on {user.username}")
     return jsonify({"success": True, "ai_credit_balance": balance})
+
+
+@admin_bp.route("/users/<int:user_id>/record-payment", methods=["POST"])
+@admin_required
+def record_payment(user_id):
+    """Log a manually-recorded payment for this user (Faz 5 billing
+    foundation -- no payment provider is integrated, an admin enters what was
+    paid after the fact). A classic form POST (not JSON) since it has several
+    fields; optionally also syncs the user's plan in the same submit."""
+    from services.plans import PLANS
+
+    user = User.query.get_or_404(user_id)
+
+    plan = request.form.get("plan", "").strip()
+    if plan not in PLANS:
+        flash("Invalid plan for payment record.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user.id))
+
+    amount_raw = (request.form.get("amount") or "").strip()
+    try:
+        amount = Decimal(amount_raw)
+        if amount <= 0:
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        flash("Payment amount must be a positive number.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user.id))
+
+    currency = (request.form.get("currency") or "USD").strip().upper()[:3] or "USD"
+    method = (request.form.get("method") or "").strip()[:40] or None
+    note = (request.form.get("note") or "").strip() or None
+
+    def _parse_date(field):
+        raw = (request.form.get(field) or "").strip()
+        if not raw:
+            return None
+        try:
+            return datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    payment = Payment(
+        user_id=user.id, plan=plan, amount=amount, currency=currency,
+        method=method, period_start=_parse_date("period_start"),
+        period_end=_parse_date("period_end"), note=note,
+        recorded_by_id=current_user.id,
+    )
+    db.session.add(payment)
+
+    plan_changed = "update_plan" in request.form and user.plan != plan
+    if plan_changed:
+        user.plan = plan
+
+    log_action("billing.record_payment", "user", user.id, {
+        "plan": plan, "amount": str(amount), "currency": currency,
+        "plan_changed": plan_changed,
+    })
+    db.session.commit()
+    logger.info(
+        f"admin: {current_user.username} recorded a {amount} {currency} payment "
+        f"for {user.username} (plan={plan})"
+    )
+    flash(f"Payment recorded for {user.username}." + (" Plan updated." if plan_changed else ""), "success")
+    return redirect(url_for("admin.user_detail", user_id=user.id))
 
 
 @admin_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
@@ -1279,10 +1354,118 @@ def analytics_day(date_str):
 
 
 # ---------------------------------------------------------------------------
+# Billing (Faz 5: manually-recorded payments -- no payment provider wired in)
+# ---------------------------------------------------------------------------
+
+PAYMENT_STATUSES = ("paid", "refunded", "void")
+
+
+def _billing_query():
+    status = request.args.get("status", "")
+    plan = request.args.get("plan", "")
+    q = (request.args.get("q") or "").strip()
+
+    query = Payment.query.outerjoin(User, Payment.user_id == User.id)
+    if status in PAYMENT_STATUSES:
+        query = query.filter(Payment.status == status)
+    if plan:
+        query = query.filter(Payment.plan == plan)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(User.username.ilike(like), User.email.ilike(like)))
+    return query.order_by(Payment.created_at.desc()), status, plan, q
+
+
+@admin_bp.route("/billing")
+@admin_required
+def billing():
+    from services.plans import PLANS, get_plan_config
+
+    query, status, plan, q = _billing_query()
+    page = paginate(query, _page_arg())
+
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+
+    revenue_month = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.status == "paid", Payment.created_at >= month_start
+    ).scalar()
+    revenue_total = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.status == "paid"
+    ).scalar()
+
+    # Grouped on the raw stored plan (not plan_name()'s admin resolution) --
+    # is_admin users are excluded outright since they never pay.
+    plan_counts = dict(
+        db.session.query(User.plan, func.count(User.id))
+        .filter(User.is_admin.is_(False))
+        .group_by(User.plan)
+        .all()
+    )
+    mrr = sum(plan_counts.get(p, 0) * (get_plan_config(p).get("price") or 0) for p in PLANS)
+    outstanding_credits = db.session.query(
+        func.coalesce(func.sum(User.ai_credit_balance), 0)
+    ).scalar()
+
+    stats = {
+        "revenue_month": revenue_month,
+        "revenue_total": revenue_total,
+        "mrr": mrr,
+        "plan_counts": {p: plan_counts.get(p, 0) for p in PLANS},
+        "admin_count": User.query.filter(User.is_admin.is_(True)).count(),
+        "outstanding_credits": outstanding_credits,
+    }
+
+    return render_template(
+        "admin/billing.html",
+        page=page, status=status, plan=plan, q=q,
+        plans=PLANS, statuses=PAYMENT_STATUSES, stats=stats,
+    )
+
+
+@admin_bp.route("/billing/export.csv")
+@admin_required
+def export_billing_csv():
+    query, _, _, _ = _billing_query()
+    rows = (
+        (
+            p.id,
+            p.created_at.isoformat() if p.created_at else "",
+            p.user.username if p.user else "",
+            p.plan, p.amount, p.currency, p.status, p.method or "",
+            p.period_start.isoformat() if p.period_start else "",
+            p.period_end.isoformat() if p.period_end else "",
+            p.recorded_by.username if p.recorded_by else "",
+            p.note or "",
+        )
+        for p in query.all()
+    )
+    return _csv_response(
+        "payments.csv",
+        ["id", "created_at", "username", "plan", "amount", "currency", "status",
+         "method", "period_start", "period_end", "recorded_by", "note"],
+        rows,
+    )
+
+
+@admin_bp.route("/payments/<int:payment_id>/set-status", methods=["POST"])
+@admin_required
+def set_payment_status(payment_id):
+    payment = Payment.query.get_or_404(payment_id)
+    status = (request.get_json(silent=True) or {}).get("status")
+    if status not in PAYMENT_STATUSES:
+        return jsonify({"success": False, "error": f"status must be one of {PAYMENT_STATUSES}"}), 400
+    payment.status = status
+    log_action("billing.set_status", "payment", payment.id, {"status": status})
+    db.session.commit()
+    return jsonify({"success": True, "status": payment.status})
+
+
+# ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 
-SETTINGS_TABS = ("general", "users", "ai", "uploads")
+SETTINGS_TABS = ("general", "users", "ai", "uploads", "plans")
 
 
 @admin_bp.route("/settings", methods=["GET", "POST"])
@@ -1337,6 +1520,53 @@ def settings():
                 flash("Storage quota must be between 0 (unlimited) and 1,000,000 MB.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
             set_setting("storage_quota_mb", str(quota_mb))
+        elif tab == "plans":
+            from services.plans import PLANS, LIMIT_KEYS, FEATURE_KEYS
+
+            for plan in PLANS:
+                override = {}
+
+                price_raw = (request.form.get(f"{plan}__price") or "").strip()
+                if price_raw:
+                    try:
+                        price_val = int(price_raw)
+                        if price_val < 0:
+                            raise ValueError
+                    except ValueError:
+                        flash(f"{plan.title()} price must be a non-negative whole number.", "error")
+                        return redirect(url_for("admin.settings", tab=tab))
+                    override["price"] = price_val
+
+                limits = {}
+                for key in LIMIT_KEYS:
+                    raw = (request.form.get(f"{plan}__{key}") or "").strip()
+                    if not raw:
+                        continue  # blank = no override, keep falling back to the code default
+                    try:
+                        val = int(raw)
+                        if val < 0:
+                            raise ValueError
+                    except ValueError:
+                        flash(f"{plan.title()} {key.replace('_', ' ')} must be a non-negative whole number.", "error")
+                        return redirect(url_for("admin.settings", tab=tab))
+                    limits[key] = val
+                if limits:
+                    override["limits"] = limits
+
+                # Feature selects are 3-state ("" = inherit code default, "on"/"off"
+                # = explicit override) -- a plain checkbox can't represent "inherit"
+                # vs. "explicitly off" since an unchecked box submits nothing either way.
+                features = {}
+                for key in FEATURE_KEYS:
+                    raw = request.form.get(f"{plan}__{key}", "")
+                    if raw == "on":
+                        features[key] = True
+                    elif raw == "off":
+                        features[key] = False
+                if features:
+                    override["features"] = features
+
+                set_setting(f"plan_override.{plan}", json.dumps(override) if override else None)
 
         # set_setting() commits per-key already; the log entry needs its own
         # commit since nothing else in this branch does one.
@@ -1355,8 +1585,24 @@ def settings():
         "max_upload_mb": setting_int("max_upload_mb", ceiling),
         "storage_quota_mb": _effective_storage_quota_mb(),
     }
+
+    from services.plans import PLANS, PLAN_CONFIG, LIMIT_KEYS, FEATURE_KEYS, plan_override_raw
+
+    plans_editor = {}
+    for plan in PLANS:
+        raw = plan_override_raw(plan)
+        plans_editor[plan] = {
+            "price": raw.get("price"),
+            "price_default": PLAN_CONFIG[plan]["price"],
+            "limits": {key: raw.get("limits", {}).get(key) for key in LIMIT_KEYS},
+            "limits_default": {key: PLAN_CONFIG[plan]["limits"].get(key) for key in LIMIT_KEYS},
+            "features": {key: raw.get("features", {}).get(key) for key in FEATURE_KEYS},
+            "features_default": {key: PLAN_CONFIG[plan]["features"].get(key) for key in FEATURE_KEYS},
+        }
+
     return render_template(
-        "admin/settings.html", tab=tab, tabs=SETTINGS_TABS, values=values, ceiling=ceiling
+        "admin/settings.html", tab=tab, tabs=SETTINGS_TABS, values=values, ceiling=ceiling,
+        plans=PLANS, plans_editor=plans_editor, limit_keys=LIMIT_KEYS, feature_keys=FEATURE_KEYS,
     )
 
 

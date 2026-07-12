@@ -45,6 +45,9 @@
                 <a href="{{ url_for('admin.users') }}" class="admin-nav-link {% if request.endpoint in ('admin.users', 'admin.user_detail') %}is-active{% endif %}">
                     <i data-lucide="users"></i><span>users</span>
                 </a>
+                <a href="{{ url_for('admin.billing') }}" class="admin-nav-link {% if request.endpoint == 'admin.billing' %}is-active{% endif %}">
+                    <i data-lucide="dollar-sign"></i><span>billing</span>
+                </a>
             </div>
             <div class="admin-nav-group">
                 <span class="admin-nav-label">system</span>

@@ -734,6 +734,32 @@ class AdminAuditLog(db.Model):
         return f'<AdminAuditLog {self.action} by {self.actor_id}>'
 
 
+class Payment(db.Model):
+    """Manually-recorded payment (Faz 5 billing foundation): no payment
+    provider is integrated, so an admin logs "user X paid Y for plan Z on
+    this date" here. `plan` is a snapshot of what was paid for at the time --
+    it doesn't have to match the user's current plan later. A future payment
+    provider's webhook would insert rows here the same way."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    plan = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default='USD', server_default='USD')
+    status = db.Column(db.String(20), nullable=False, default='paid', server_default='paid', index=True)
+    method = db.Column(db.String(40), nullable=True)
+    period_start = db.Column(db.Date, nullable=True)
+    period_end = db.Column(db.Date, nullable=True)
+    note = db.Column(db.Text, nullable=True)
+    recorded_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship('User', foreign_keys=[user_id])
+    recorded_by = db.relationship('User', foreign_keys=[recorded_by_id])
+
+    def __repr__(self):
+        return f'<Payment {self.id} user={self.user_id} plan={self.plan} amount={self.amount}>'
+
+
 class ConversionJob(db.Model):
     """DB-backed conversion job queue (academic_ar pattern).
 

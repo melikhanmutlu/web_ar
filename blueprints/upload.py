@@ -11,6 +11,7 @@ import threading
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 
 from flask import Blueprint, Response, jsonify, request, session, stream_with_context, url_for
 from flask_login import current_user
@@ -585,6 +586,33 @@ def init_chunked_upload():
     return jsonify({"success": True, "upload_id": upload_id}), 201
 
 
+@contextmanager
+def _session_lock(session_dir):
+    """Serialize the size-check-then-write critical section in
+    put_upload_chunk across concurrent requests (possibly different gunicorn
+    worker processes, so a plain threading.Lock isn't enough). Without this,
+    two chunk PUTs firing concurrently each compute existing_bytes before
+    either has written its file, so both can independently pass the
+    declared_total check -- an attacker firing many concurrent oversized
+    chunk PUTs could get well past the declared size before any single check
+    would have caught it. fcntl is POSIX-only (fine: production runs on
+    Linux/Railway); on a platform without it, fall back to no locking rather
+    than fail the upload outright.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    lock_path = os.path.join(session_dir, ".lock")
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
 @upload_bp.route("/api/uploads/chunked/<upload_id>/chunks/<int:index>", methods=["PUT"])
 def put_upload_chunk(upload_id, index):
     """Store one chunk (raw request body). Safe to retry/re-PUT the same
@@ -600,30 +628,33 @@ def put_upload_chunk(upload_id, index):
     if not data:
         return jsonify({"success": False, "error": "Empty chunk body"}), 400
 
-    # Enforce the declared total_size against the ACTUAL bytes received. Without
-    # this, a client could declare total_size=1 (passing the init-time quota /
-    # upload-limit checks) and then PUT arbitrarily large chunks, bypassing the
-    # storage quota and exhausting the volume. Count on-disk bytes for the other
-    # chunks (a re-PUT of this index replaces, so exclude the old copy) plus the
-    # incoming body, and reject once the sum exceeds the declared size.
-    declared_total = int(meta.get("total_size") or 0)
-    existing_bytes = 0
-    for other in _received_chunk_indices(session_dir):
-        if other == index:
-            continue
-        try:
-            existing_bytes += os.path.getsize(os.path.join(session_dir, f"chunk_{other}"))
-        except OSError:
-            pass
-    if declared_total and existing_bytes + len(data) > declared_total:
-        return jsonify({
-            "success": False,
-            "error": "Uploaded data exceeds the declared total size",
-        }), 413
+    with _session_lock(session_dir):
+        # Enforce the declared total_size against the ACTUAL bytes received.
+        # Without this, a client could declare total_size=1 (passing the
+        # init-time quota/upload-limit checks) and then PUT arbitrarily large
+        # chunks, bypassing the storage quota and exhausting the volume.
+        # Count on-disk bytes for the other chunks (a re-PUT of this index
+        # replaces, so exclude the old copy) plus the incoming body, and
+        # reject once the sum exceeds the declared size. The lock above makes
+        # this check-then-write atomic across concurrent chunk PUTs.
+        declared_total = int(meta.get("total_size") or 0)
+        existing_bytes = 0
+        for other in _received_chunk_indices(session_dir):
+            if other == index:
+                continue
+            try:
+                existing_bytes += os.path.getsize(os.path.join(session_dir, f"chunk_{other}"))
+            except OSError:
+                pass
+        if declared_total and existing_bytes + len(data) > declared_total:
+            return jsonify({
+                "success": False,
+                "error": "Uploaded data exceeds the declared total size",
+            }), 413
 
-    with open(os.path.join(session_dir, f"chunk_{index}"), "wb") as f:
-        f.write(data)
-    received = _received_chunk_indices(session_dir)
+        with open(os.path.join(session_dir, f"chunk_{index}"), "wb") as f:
+            f.write(data)
+        received = _received_chunk_indices(session_dir)
     return jsonify({"success": True, "received_count": len(received), "total_chunks": meta["total_chunks"]})
 
 

@@ -20,8 +20,9 @@ from pygltflib import GLTF2
 
 import app as app_module
 from app import app, db
-from models import RigAnimationJob, User, UserModel
-from services.webhooks import is_safe_webhook_url
+from models import RigAnimationJob, User, UserModel, WebhookSubscription
+from services.webhooks import dispatch_webhook_event, is_safe_webhook_url
+import services.webhooks as webhooks_service
 
 
 # ── Webhook SSRF guard ────────────────────────────────────────────────────
@@ -48,6 +49,55 @@ def test_is_safe_webhook_url_allows_public(monkeypatch):
         lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 443))],
     )
     assert is_safe_webhook_url("https://example.com/hook") is True
+
+
+def test_dispatch_pins_dns_against_rebinding(client, monkeypatch):
+    """DNS-rebinding guard: the safety check and the real request must use
+    the SAME resolved address, or a low-TTL/stateful DNS record could return
+    a public IP for the check and a private one moments later for the actual
+    connection -- defeating the guard despite it re-checking "at delivery
+    time". Simulates this by having the (unpinned) resolver return a
+    different address on each call, then asserting the real request -- which
+    itself calls socket.getaddrinfo, like urllib3 would -- observes the
+    pinned (first, validated-public) address, not the rebound one."""
+    user = User(username="pinner", email="pinner@test.com")
+    user.set_password("testpassword")
+    db.session.add(user)
+    db.session.commit()
+    subscription = WebhookSubscription(
+        user_id=user.id, url="https://rebinder.example/hook", secret="s",
+        event_types="conversion.completed",
+    )
+    db.session.add(subscription)
+    db.session.commit()
+
+    call_count = {"n": 0}
+
+    def rebinding_getaddrinfo(host, port, *a, **k):
+        call_count["n"] += 1
+        addr = "93.184.216.34" if call_count["n"] == 1 else "127.0.0.1"
+        return [(2, 1, 6, "", (addr, port))]
+
+    monkeypatch.setattr(webhooks_service.socket, "getaddrinfo", rebinding_getaddrinfo)
+
+    observed = {}
+
+    def fake_post(url, data=None, headers=None, timeout=None):
+        # Simulate what urllib3 does internally: resolve the host to connect.
+        import socket as socket_module
+        infos = socket_module.getaddrinfo(webhooks_service.urlsplit(url).hostname, 443)
+        observed["ip"] = infos[0][4][0]
+
+        class FakeResponse:
+            status_code = 200
+        return FakeResponse()
+
+    monkeypatch.setattr(webhooks_service.requests, "post", fake_post)
+
+    dispatch_webhook_event("conversion.completed", user.id, {"model_id": "x"})
+
+    # Without pinning this would be "127.0.0.1" (the second, rebound call).
+    assert observed["ip"] == "93.184.216.34"
 
 
 def test_create_webhook_rejects_private_url(client, monkeypatch):

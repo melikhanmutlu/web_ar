@@ -236,6 +236,44 @@ def test_chunked_upload_rejects_bytes_exceeding_declared_total(client):
     assert resp.status_code == 413, resp.get_json()
 
 
+def test_chunked_upload_size_check_serialized_under_concurrency(client):
+    """Without the per-session fcntl lock, concurrent PUTs each compute
+    "bytes so far" before any other has finished writing, so more than the
+    declared total_size could land on disk before the final check at
+    /complete catches it. Declare a total_size that only fits 3 of 6
+    chunks, fire all 6 concurrently, and assert exactly 3 succeed -- a
+    race would let more than 3 (potentially all 6) through."""
+    import concurrent.futures
+
+    from app import app as flask_app
+
+    chunk_size = 1000
+    total_chunks = 6
+    fits = 3
+    init = client.post("/api/uploads/chunked/init", json={
+        "filename": "race.stl", "total_size": chunk_size * fits, "total_chunks": total_chunks,
+    })
+    assert init.status_code == 201, init.get_json()
+    upload_id = init.get_json()["upload_id"]
+
+    def put_chunk(index):
+        with flask_app.test_client() as c:
+            resp = c.put(
+                f"/api/uploads/chunked/{upload_id}/chunks/{index}",
+                data=b"x" * chunk_size,
+                content_type="application/octet-stream",
+            )
+            return resp.status_code
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=total_chunks) as pool:
+        statuses = list(pool.map(put_chunk, range(total_chunks)))
+
+    accepted = statuses.count(200)
+    rejected = statuses.count(413)
+    assert accepted == fits, f"expected exactly {fits} accepted, got {accepted} (statuses={statuses})"
+    assert rejected == total_chunks - fits
+
+
 # ── update-model-color regenerates USDZ ───────────────────────────────────
 def test_update_model_color_refreshes_usdz(client, monkeypatch):
     user = User(username="colorer", email="colorer@test.com")

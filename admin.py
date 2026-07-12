@@ -45,7 +45,6 @@ from models import (
     ModelLike,
     ModelSave,
     ModelVersion,
-    RigAnimationJob,
     User,
     UserModel,
     db,
@@ -285,8 +284,6 @@ def dashboard():
         "shares": engagement[2],
         "ai_ready": AIGenerationJob.query.filter_by(status="ready").count(),
         "ai_failed": AIGenerationJob.query.filter_by(status="failed").count(),
-        "rig_ready": RigAnimationJob.query.filter_by(status="ready").count(),
-        "rig_failed": RigAnimationJob.query.filter_by(status="failed").count(),
         "queue_pending": ConversionJob.query.filter_by(status="pending").count(),
     }
     stats["meshy_balance"], stats["meshy_balance_error"] = get_cached_meshy_balance()
@@ -305,10 +302,6 @@ def dashboard():
         "stale_ai_jobs": AIGenerationJob.query.filter(
             AIGenerationJob.status == "generating",
             AIGenerationJob.updated_at < ai_stale_cutoff,
-        ).count(),
-        "stale_rig_jobs": RigAnimationJob.query.filter(
-            RigAnimationJob.status == "generating",
-            RigAnimationJob.updated_at < ai_stale_cutoff,
         ).count(),
         "worker_last_seen": worker_last_seen,
         "worker_seconds_ago": worker_seconds_ago,
@@ -766,11 +759,6 @@ def model_detail(model_id):
         .order_by(CameraView.created_at)
         .all()
     )
-    rig_jobs = (
-        RigAnimationJob.query.filter_by(model_id=model_id)
-        .order_by(RigAnimationJob.created_at.desc())
-        .all()
-    )
 
     return render_template(
         "admin/model_detail.html",
@@ -779,7 +767,6 @@ def model_detail(model_id):
         version_bytes=sum(v.file_size or 0 for v in versions),
         hotspots=hotspots,
         camera_views=camera_views,
-        rig_jobs=rig_jobs,
         likes=ModelLike.query.filter_by(model_id=model_id).count(),
         saves=ModelSave.query.filter_by(model_id=model_id).count(),
     )
@@ -1158,95 +1145,6 @@ def refresh_meshy_balance():
 
 
 # ---------------------------------------------------------------------------
-# Rig + animate generations
-# ---------------------------------------------------------------------------
-
-
-def _rig_jobs_query():
-    q = (request.args.get("q") or "").strip()
-    status = (request.args.get("status") or "").strip()
-    query = db.session.query(User.username, RigAnimationJob).select_from(
-        RigAnimationJob
-    ).outerjoin(User, RigAnimationJob.user_id == User.id)
-    if q:
-        query = query.filter(RigAnimationJob.id.ilike(f"%{q}%"))
-    if status:
-        query = query.filter(RigAnimationJob.status == status)
-    query = query.order_by(RigAnimationJob.created_at.desc())
-    return query, status, q
-
-
-@admin_bp.route("/rig-jobs")
-@admin_required
-def rig_jobs():
-    query, status, q = _rig_jobs_query()
-
-    counts = dict(
-        db.session.query(RigAnimationJob.status, func.count())
-        .group_by(RigAnimationJob.status)
-        .all()
-    )
-
-    page = paginate(query, _page_arg())
-    return render_template(
-        "admin/rig_jobs.html",
-        page=page,
-        status=status,
-        q=q,
-        counts=counts,
-        stale_minutes=AI_STALE_MINUTES,
-        stale_cutoff=datetime.utcnow() - timedelta(minutes=AI_STALE_MINUTES),
-    )
-
-
-@admin_bp.route("/rig-jobs/export.csv")
-@admin_required
-def export_rig_jobs_csv():
-    query, _, _ = _rig_jobs_query()
-    rows = (
-        (
-            j.id, username or "anonymous", j.model_id, j.height_meters,
-            len(j.animation_action_ids or []), j.status, j.stage or "", j.progress or 0,
-            j.result_model_id or "", j.created_at.isoformat() if j.created_at else "",
-            j.error or "",
-        )
-        for username, j in query.all()
-    )
-    return _csv_response(
-        "rig_jobs.csv",
-        ["id", "owner", "model_id", "height_meters", "animation_count", "status",
-         "stage", "progress", "result_model_id", "created", "error"],
-        rows,
-    )
-
-
-@admin_bp.route("/rig-jobs/<job_id>/delete", methods=["POST"])
-@admin_required
-def delete_rig_job(job_id):
-    job = RigAnimationJob.query.get_or_404(job_id)
-    log_action("rig_job.delete", "rig_job", job_id)
-    db.session.delete(job)
-    db.session.commit()
-    return jsonify({"success": True})
-
-
-@admin_bp.route("/rig-jobs/<job_id>/mark-failed", methods=["POST"])
-@admin_required
-def mark_rig_job_failed(job_id):
-    """Same rationale as mark_ai_job_failed: closes out a stuck job without
-    contacting Meshy, since only client-side polling (and the reconciliation
-    sweep) ever advances these."""
-    job = RigAnimationJob.query.get_or_404(job_id)
-    if job.status in ("ready", "failed"):
-        return jsonify({"success": False, "error": "Job is already finished"}), 400
-    job.status = "failed"
-    job.error = "Marked as failed by an admin (job was stuck)."
-    log_action("rig_job.mark_failed", "rig_job", job_id)
-    db.session.commit()
-    return jsonify({"success": True})
-
-
-# ---------------------------------------------------------------------------
 # Analytics
 # ---------------------------------------------------------------------------
 
@@ -1286,7 +1184,6 @@ def analytics():
         "registrations": _daily_series(User.created_at, days=days),
         "likes": _daily_series(ModelLike.created_at, days=days),
         "ai_jobs": _daily_series(AIGenerationJob.created_at, days=days),
-        "rig_jobs": _daily_series(RigAnimationJob.created_at, days=days),
     }
 
     return render_template(
@@ -1330,17 +1227,11 @@ def analytics_day(date_str):
         .order_by(AIGenerationJob.created_at.desc())
         .all()
     )
-    rig_jobs = (
-        RigAnimationJob.query.filter(_in_day(RigAnimationJob.created_at))
-        .order_by(RigAnimationJob.created_at.desc())
-        .all()
-    )
 
     counts = {
         "registrations": len(registrations),
         "uploads": len(uploads),
         "ai_jobs": len(ai_jobs),
-        "rig_jobs": len(rig_jobs),
         "likes": ModelLike.query.filter(_in_day(ModelLike.created_at)).count(),
         "saves": ModelSave.query.filter(_in_day(ModelSave.created_at)).count(),
     }
@@ -1362,7 +1253,6 @@ def analytics_day(date_str):
         registrations=registrations,
         uploads=uploads,
         ai_jobs=ai_jobs,
-        rig_jobs=rig_jobs,
         job_status_breakdown=job_status_breakdown,
     )
 

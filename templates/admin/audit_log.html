@@ -59,8 +59,6 @@
                         <a href="{{ url_for('admin.model_detail', model_id=entry.target_id) }}">model {{ entry.target_id[:8] }}…</a>
                         {% elif entry.target_type == 'ai_job' and entry.target_id %}
                         <a href="{{ url_for('admin.ai_jobs', q=entry.target_id) }}">ai_job {{ entry.target_id[:8] }}…</a>
-                        {% elif entry.target_type == 'rig_job' and entry.target_id %}
-                        <a href="{{ url_for('admin.rig_jobs', q=entry.target_id) }}">rig_job {{ entry.target_id[:8] }}…</a>
                         {% elif entry.target_type == 'job' and entry.target_id %}
                         <a href="{{ url_for('admin.jobs', q=entry.target_id) }}">job {{ entry.target_id[:8] }}…</a>
                         {% elif entry.target_type %}

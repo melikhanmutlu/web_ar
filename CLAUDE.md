@@ -95,7 +95,7 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
 - **`blueprints/`** — all HTTP routes, one module per domain
   (`upload.py`, `viewer.py`, `models_crud.py`, `model_editing.py`,
   `model_geometry.py`, `versions.py`, `hotspots.py`, `sharing.py`,
-  `organizations.py`, `ai_generation.py`, `ai_image.py`, `rigging.py`,
+  `organizations.py`, `ai_generation.py`, `ai_image.py`,
   `engagement.py`, `discover.py`, `scenes.py`, `webhooks.py`, `seo.py`,
   `health.py`, `api_tokens.py`, `material_presets.py`, `main.py`, …).
 - **`services/`** — business logic / policy layer imported by blueprints and the
@@ -112,9 +112,9 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
 - **`admin.py`** — admin dashboard blueprint (`/admin`), Jinja + small fetch POSTs.
 - **`models.py`** — ~29 SQLAlchemy models (`User`, `UserModel`, `Folder`,
   `Organization*`, `ModelVersion`, `ModelLOD`, `ModelHotspot`, `ModelShareLink`,
-  `ConversionJob`, `AIGenerationJob`, `RigAnimationJob`, `SiteSetting`, …).
+  `ConversionJob`, `AIGenerationJob`, `SiteSetting`, …).
 - **`worker.py`** — background conversion queue (`JOB_QUEUE=true`): claims
-  `ConversionJob` rows, heartbeats, requeues stale jobs, reconciles AI/rig jobs.
+  `ConversionJob` rows, heartbeats, requeues stale jobs, reconciles AI jobs.
 - **`glb_modifier.py`, `mesh_slicer.py`, `version_manager.py`** — GLB transform,
   slicing, and version snapshots.
 - **`ai_generator.py`** — Meshy AI text/image → 3D client (server-side only).

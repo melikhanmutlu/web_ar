@@ -391,12 +391,6 @@
         .tp-note { font-size: 0.65rem; color: var(--color-gray-500); font-style: italic; margin-top: 0.2rem; }
         .tp-checkbox { width: 0.85rem; height: 0.85rem; accent-color: var(--color-gray-200); cursor: pointer; }
 
-        /* Rig & Animate: curated preset picker */
-        .rig-anim-grid { max-height: 11rem; overflow-y: auto; border: 1px solid var(--color-gray-700); padding: 0.4rem; }
-        .rig-anim-category { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-gray-500); margin: 0.35rem 0 0.15rem; }
-        .rig-anim-category:first-child { margin-top: 0; }
-        .rig-anim-item { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; color: var(--color-gray-300); cursor: pointer; }
-
         /* Dimensions block */
         .tp-dims { padding: 0.45rem 0.55rem; background: var(--color-gray-800); border: 1px solid var(--color-gray-700); margin-bottom: 0.55rem; }
         .tp-dim-row { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--color-gray-400); padding: 0.12rem 0; }
@@ -712,16 +706,6 @@
         }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }
-
-        /* Rig & Animate progress bar: view.html doesn't link arvision.css
-           (only the Tailwind CDN + this inline block), so without these the
-           bar renders as zero-height and only the status text moves. */
-        .progress-bar-container { width: 100%; height: 0.5rem; background: var(--color-white); overflow: hidden; }
-        .dark .progress-bar-container { background: var(--color-gray-900); }
-        .progress-bar { height: 100%; width: 0%; background: var(--color-gray-900); transition: width 0.35s ease, background-color 0.3s ease; }
-        .dark .progress-bar { background: var(--color-gray-200); }
-        .progress-bar.error { background: #dc2626; }
-        .dark .progress-bar.error { background: #ef4444; }
     </style>
 
     <script>
@@ -1420,37 +1404,6 @@
             </div>
             {% endif %}
 
-            {% if is_owner %}
-            <!-- ─── AI RIG & ANIMATE ─── -->
-            <div class="tp-section" id="rigAnimateSection">
-                <button class="tp-section-header">
-                    <i data-lucide="user" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
-                    <span>Rig &amp; Animate (AI)</span>
-                    <i data-lucide="chevron-right" class="tp-chevron"></i>
-                </button>
-                <div class="tp-section-body">
-                    <p class="tp-note" style="margin:0 0 0.5rem;">Auto-rig this model and apply animations. Uses AI credits; works best on textured humanoid models.</p>
-                    <div class="tp-field">
-                        <label class="tp-label">Height (meters)</label>
-                        <input type="number" id="rigHeight" class="tp-input" min="0.05" max="10" step="0.01" value="1.7">
-                    </div>
-                    <div class="tp-field">
-                        <label class="tp-label">Animations (up to 10) — <span id="rigAnimCount">0/10</span></label>
-                        <div id="rigAnimationGrid" class="rig-anim-grid"><p class="tp-note">Loading animation presets…</p></div>
-                    </div>
-                    <button id="startRigBtn" class="tp-btn-full" style="margin-top:0.5rem;">
-                        <i data-lucide="sparkles" style="width:0.8rem;height:0.8rem;"></i>
-                        Start Rig &amp; Animate
-                    </button>
-                    <div id="rigStatus" class="hidden" style="margin-top:0.5rem;">
-                        <div class="progress-bar-container"><div class="progress-bar" id="rigProgressBar"></div></div>
-                        <p class="tp-note" id="rigStatusText">Starting…</p>
-                    </div>
-                    <p id="rigError" class="tp-note hidden" style="color:#ef4444;"></p>
-                </div>
-            </div>
-            {% endif %}
-
             </div><!-- /.showcase-content -->
 
             {% if can_edit %}
@@ -1709,7 +1662,6 @@
     <script src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/embed-panel.js') }}"></script>
     {% endif %}
-    <script src="{{ url_for('static', filename='js/viewer/rig-animate.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/panel-ui.js') }}"></script>

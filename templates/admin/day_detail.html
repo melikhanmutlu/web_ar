@@ -27,10 +27,6 @@
         <div class="kpi-label">ai generations</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">{{ counts.rig_jobs }}</div>
-        <div class="kpi-label">rig &amp; animate jobs</div>
-    </div>
-    <div class="kpi-card">
         <div class="kpi-value">{{ counts.likes }}</div>
         <div class="kpi-label">likes</div>
     </div>
@@ -89,19 +85,6 @@
             </li>
             {% else %}
             <li><span class="muted">no ai generations this day</span></li>
-            {% endfor %}
-        </ul>
-    </div>
-    <div class="admin-card">
-        <h2 class="admin-card-title">rig &amp; animate jobs</h2>
-        <ul class="admin-activity">
-            {% for job in rig_jobs %}
-            <li>
-                <span class="title"><a href="{{ url_for('admin.model_detail', model_id=job.model_id) }}">{{ job.model_id[:8] }}…</a></span>
-                <span class="meta">{{ badge(job.status) }}</span>
-            </li>
-            {% else %}
-            <li><span class="muted">no rig jobs this day</span></li>
             {% endfor %}
         </ul>
     </div>

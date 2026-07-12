@@ -25,11 +25,11 @@ from services.time_utils import datetime
 from sqlalchemy import or_
 
 from app import (
-    app, db, run_conversion_job, _advance_ai_job, _advance_rig_job,
-    _claim_ai_stage, _claim_rig_stage,
+    app, db, run_conversion_job, _advance_ai_job,
+    _claim_ai_stage,
 )
 from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
-from models import AIGenerationJob, ConversionJob, RigAnimationJob, WorkerHeartbeat
+from models import AIGenerationJob, ConversionJob, WorkerHeartbeat
 from site_settings import set_setting
 
 logging.basicConfig(
@@ -180,7 +180,7 @@ def requeue_stale_jobs():
         db.session.commit()
 
 
-# _finalize_ai_job/_finalize_rig_job download the result GLB (and sometimes a
+# _finalize_ai_job downloads the result GLB (and sometimes a
 # USDZ) with no intermediate commit, so "finalizing"/"refining" can look
 # stale under the ordinary AI_RECONCILE_MINUTES window while a real transfer
 # is still in flight -- give the unstick logic a much longer grace period
@@ -224,19 +224,6 @@ def _unstick_orphaned_ai_stage(job):
             logger.warning(f"AI job {job.id} had an orphaned 'finalizing' claim; rolled back to '{target}'")
 
 
-def _unstick_orphaned_rig_stage(job):
-    """Same recovery as _unstick_orphaned_ai_stage, for RigAnimationJob.
-    "finalizing" is claimed only from "animating" (the only transitional-only
-    stage in this job type's chain)."""
-    grace_cutoff = datetime.utcnow() - timedelta(minutes=AI_ORPHAN_STAGE_GRACE_MINUTES)
-    if job.updated_at is not None and job.updated_at >= grace_cutoff:
-        return
-    if job.stage == "finalizing":
-        if _claim_rig_stage(job.id, "finalizing", "animating"):
-            db.session.refresh(job)
-            logger.warning(f"Rig job {job.id} had an orphaned 'finalizing' claim; rolled back to 'animating'")
-
-
 def reconcile_stale_ai_jobs():
     """Re-advance any AIGenerationJob that hasn't moved in AI_RECONCILE_MINUTES.
 
@@ -259,23 +246,6 @@ def reconcile_stale_ai_jobs():
             _advance_ai_job(job)
         except Exception as e:
             logger.warning(f"AI reconcile failed for job {job.id}: {e}")
-            db.session.rollback()
-
-
-def reconcile_stale_rig_jobs():
-    """Same reconciliation as reconcile_stale_ai_jobs, for RigAnimationJob --
-    a rig/animate job is exactly as vulnerable to a closed browser tab."""
-    cutoff = datetime.utcnow() - timedelta(minutes=AI_RECONCILE_MINUTES)
-    stuck = RigAnimationJob.query.filter(
-        RigAnimationJob.status == "generating",
-        RigAnimationJob.updated_at < cutoff,
-    ).all()
-    for job in stuck:
-        try:
-            _unstick_orphaned_rig_stage(job)
-            _advance_rig_job(job)
-        except Exception as e:
-            logger.warning(f"Rig reconcile failed for job {job.id}: {e}")
             db.session.rollback()
 
 
@@ -305,7 +275,6 @@ def main():
 
             if time.monotonic() - last_ai_reconcile > 60:
                 reconcile_stale_ai_jobs()
-                reconcile_stale_rig_jobs()
                 last_ai_reconcile = time.monotonic()
 
             if time.monotonic() - last_heartbeat_prune > 3600:

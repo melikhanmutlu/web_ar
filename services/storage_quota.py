@@ -23,10 +23,9 @@ def _purge_expired_trash(user_id):
         UserModel.user_id == user_id, UserModel.deleted_at < cutoff
     ).all()
     for model in expired:
-        # Use the shared purge helper so engagement rows and RigAnimationJob
-        # FK rows are cleared too — a bare db.session.delete(model) raises an
-        # IntegrityError at commit for any rigged model, which previously made
-        # the whole My Models page unreachable.
+        # Use the shared purge helper so engagement rows (ModelLike/ModelSave)
+        # are cleared too — a bare db.session.delete(model) can raise an
+        # IntegrityError at commit under Postgres FK enforcement.
         purge_model_completely(db.session, model)
     if expired:
         db.session.commit()

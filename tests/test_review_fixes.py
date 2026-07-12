@@ -4,7 +4,6 @@ Each test pins a concrete bug found during the review so it can't regress:
 - webhook SSRF guard (private/loopback URLs rejected at create + delivery)
 - GLB texture embedding keeps the buffer 4-byte aligned (UV accessor valid)
 - a textured BLEND material isn't silently flattened to OPAQUE at opacity 1.0
-- a rigged model can be hard-deleted (RigAnimationJob FK no longer blocks it)
 - chunked upload enforces the declared total_size (quota/disk bypass closed)
 - update-model-color regenerates the USDZ (iOS Quick Look stays in sync)
 """
@@ -22,7 +21,7 @@ from pygltflib import GLTF2
 
 import app as app_module
 from app import app, db
-from models import RigAnimationJob, User, UserModel, WebhookSubscription
+from models import User, UserModel, WebhookSubscription
 from services.webhooks import dispatch_webhook_event, is_safe_webhook_url
 import services.webhooks as webhooks_service
 
@@ -194,33 +193,6 @@ def test_textured_blend_material_not_flattened_to_opaque_at_full_opacity():
     assert out.materials[0].alphaMode == "BLEND"
 
 
-# ── RigAnimationJob no longer blocks hard-delete ──────────────────────────
-def test_rigged_model_can_be_hard_deleted(client, monkeypatch):
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit", lambda *a, **k: None)
-    from model_cleanup import purge_model_completely
-
-    model_id = "rig-" + uuid.uuid4().hex[:8]
-    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
-    os.makedirs(model_dir, exist_ok=True)
-    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(os.path.join(model_dir, "model.glb"))
-    model = UserModel(id=model_id, filename=os.path.join(model_dir, "model.glb"),
-                      file_type="glb", file_size=100, user_id=None, cumulative_scale=1.0)
-    db.session.add(model)
-    db.session.commit()
-
-    job = RigAnimationJob(id=uuid.uuid4().hex, model_id=model_id, status="completed",
-                          height_meters=0.1)
-    db.session.add(job)
-    db.session.commit()
-
-    # Would raise IntegrityError before the fix (FK with no cascade).
-    purge_model_completely(db.session, model)
-    db.session.commit()
-
-    assert db.session.get(UserModel, model_id) is None
-    assert RigAnimationJob.query.filter_by(model_id=model_id).count() == 0
-
-
 # ── Chunked upload enforces the declared total size ───────────────────────
 def test_chunked_upload_rejects_bytes_exceeding_declared_total(client):
     init = client.post("/api/uploads/chunked/init", json={
@@ -303,7 +275,7 @@ def test_update_model_color_refreshes_usdz(client, monkeypatch):
     assert len(calls) == 1 and calls[0][0] == model_id
 
 
-# ── Orphaned AI/rig job stage recovery ────────────────────────────────────
+# ── Orphaned AI job stage recovery ────────────────────────────────────────
 def _backdate(job, minutes):
     """Force job.updated_at into the past, bypassing the onupdate=utcnow
     default, so the orphan-stage grace-period check in worker.py treats it
@@ -384,29 +356,6 @@ def test_unstick_orphaned_ai_stage_leaves_recently_active_finalize_alone(client)
 
     _unstick_orphaned_ai_stage(job)
     assert job.stage == "finalizing", "a recently-active claim must not be rolled back"
-
-
-def test_unstick_orphaned_rig_stage_rolls_back_finalizing(client):
-    import worker
-    from models import RigAnimationJob
-    from worker import _unstick_orphaned_rig_stage
-
-    model_id = "rigorphan-" + uuid.uuid4().hex[:8]
-    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
-    os.makedirs(model_dir, exist_ok=True)
-    trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(os.path.join(model_dir, "model.glb"))
-    model = UserModel(id=model_id, filename=os.path.join(model_dir, "model.glb"),
-                      file_type="glb", file_size=100, user_id=None, cumulative_scale=1.0)
-    db.session.add(model)
-    db.session.commit()
-
-    job = RigAnimationJob(id=uuid.uuid4().hex, model_id=model_id, status="generating",
-                          stage="finalizing", height_meters=0.1)
-    db.session.add(job)
-    db.session.commit()
-    _backdate(job, worker.AI_ORPHAN_STAGE_GRACE_MINUTES + 1)
-    _unstick_orphaned_rig_stage(job)
-    assert job.stage == "animating"
 
 
 # ── Upload pipeline retry idempotency ─────────────────────────────────────

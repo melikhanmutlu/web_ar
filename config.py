@@ -154,7 +154,7 @@ EMAIL_NOTIFICATIONS_ENABLED = bool(SMTP_HOST) and os.getenv('EMAIL_NOTIFICATIONS
 # AI 3D generation (Meshy) — server-side only, never expose the key to clients.
 MESHY_API_KEY = os.getenv('MESHY_API_KEY', '')
 MESHY_API_BASE = os.getenv('MESHY_API_BASE', 'https://api.meshy.ai/openapi')
-MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-5')
+MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-6')
 # Image generation model for the optional pre-processing step (text-to-image /
 # image-to-image before image-to-3D).
 MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')

@@ -139,20 +139,4 @@
     </div>
 </div>
 
-<div class="admin-card">
-    <h2 class="admin-card-title">rig &amp; animate jobs <span class="count">{{ rig_jobs | length }}</span></h2>
-    <ul class="admin-activity">
-        {% for j in rig_jobs %}
-        <li>
-            <span class="title">
-                <a href="{{ url_for('admin.rig_jobs') }}">{{ j.id[:8] }}…</a>
-                — {{ j.height_meters }}m, {{ (j.animation_action_ids or []) | length }} animation(s)
-            </span>
-            <span class="meta">{{ badge(j.status) }}</span>
-        </li>
-        {% else %}
-        <li><span class="muted">no rig/animate jobs</span></li>
-        {% endfor %}
-    </ul>
-</div>
 {% endblock %}

@@ -257,7 +257,7 @@ class UserModel(db.Model):
     share_count = db.Column(db.Integer, default=0)
 
     # How this model was created: None/'' for a plain upload, or
-    # 'ai-text'/'ai-image'/'ai-rig-animate' etc. for AI-generated ones (see
+    # 'ai-text'/'ai-image' etc. for AI-generated ones (see
     # register_glb_as_model's `source` param). description already carries
     # this as free text ("AI generated (...)"); this column makes it
     # queryable for a badge/filter without string-parsing description.
@@ -697,48 +697,6 @@ class MaterialPreset(db.Model):
     roughness = db.Column(db.Float, nullable=False, default=0.5)
     opacity = db.Column(db.Float, nullable=False, default=1.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-
-class RigAnimationJob(db.Model):
-    """Tracks a Meshy auto-rig (+ optional animation) job applied to an
-    existing UserModel. Kept separate from AIGenerationJob: rigging applies
-    to any model (uploaded or AI-generated), not just "one prompt -> one
-    generated model", and its stage chain (remesh? -> rig -> animate) is its
-    own shape."""
-    id = db.Column(db.String(36), primary_key=True)
-    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-
-    height_meters = db.Column(db.Float, nullable=False)
-    animation_action_ids = db.Column(db.JSON, nullable=True)  # list[int], up to 10
-
-    # Meshy task ids for each stage this job goes through. meshy_remesh_id is
-    # only set when the source model exceeded the rigging face-count limit
-    # and was AI-generated (remesh needs a source Meshy task id -- it cannot
-    # remesh an arbitrary uploaded GLB).
-    meshy_remesh_id = db.Column(db.String(80), nullable=True)
-    meshy_rig_id = db.Column(db.String(80), nullable=True)
-    meshy_animate_id = db.Column(db.String(80), nullable=True)
-    stage = db.Column(db.String(20), nullable=True)  # remeshing | rigging | animating
-
-    status = db.Column(db.String(20), default='generating')  # generating | ready | failed
-    progress = db.Column(db.Integer, default=0)
-    result_model_id = db.Column(db.String(36), nullable=True)  # new UserModel once ready
-    error = db.Column(db.Text, nullable=True)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'job_id': self.id,
-            'model_id': self.model_id,
-            'status': self.status,
-            'stage': self.stage,
-            'progress': self.progress,
-            'result_model_id': self.result_model_id,
-            'error': self.error,
-        }
 
 
 class SiteSetting(db.Model):

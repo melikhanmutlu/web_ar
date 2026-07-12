@@ -8,7 +8,7 @@ import pytest
 
 from admin import _daily_series
 from app import db
-from models import AIGenerationJob, RigAnimationJob, User, UserModel
+from models import AIGenerationJob, User, UserModel
 
 
 @pytest.fixture
@@ -87,21 +87,11 @@ def test_analytics_day_shows_that_days_activity_only(client, admin_user, owner):
     AIGenerationJob.query.filter_by(id=today_ai_job.id).update({"created_at": today})
     db.session.commit()
 
-    today_rig_job = RigAnimationJob(id=str(uuid.uuid4()), model_id=today_model.id,
-                                    user_id=owner.id, height_meters=1.7,
-                                    animation_action_ids=[0], meshy_rig_id="r-1",
-                                    stage="rigging", status="ready")
-    db.session.add(today_rig_job)
-    db.session.commit()
-    RigAnimationJob.query.filter_by(id=today_rig_job.id).update({"created_at": today})
-    db.session.commit()
-
     login(client, "dayadmin", "adminpassword")
     resp = client.get(f"/admin/analytics/day/{today.strftime('%Y-%m-%d')}")
     assert resp.status_code == 200
     assert today_model.id.encode() in resp.data
     assert b"today job" in resp.data
-    assert today_rig_job.model_id[:8].encode() in resp.data
 
 
 def test_analytics_day_prev_next_links(client, admin_user):
@@ -115,9 +105,8 @@ def test_analytics_day_prev_next_links(client, admin_user):
     assert f"/admin/analytics/day/{next_day}".encode() not in resp.data
 
 
-def test_analytics_chart_includes_rig_jobs(client, admin_user):
+def test_analytics_charts_render(client, admin_user):
     login(client, "dayadmin", "adminpassword")
     resp = client.get("/admin/analytics")
     assert resp.status_code == 200
-    assert b"rig &amp; animate jobs" in resp.data
     assert b"data-drill-base=" in resp.data

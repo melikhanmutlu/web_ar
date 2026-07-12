@@ -32,7 +32,7 @@ import logging
 import shutil
 import subprocess
 import threading
-from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat, RigAnimationJob
+from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 from admin import admin_bp
 from blueprints.health import health_bp
@@ -53,7 +53,6 @@ from blueprints.upload import upload_bp
 from blueprints.main import main_bp
 from blueprints.viewer import viewer_bp
 from blueprints.ai_generation import ai_generation_bp
-from blueprints.rigging import rigging_bp
 from blueprints.ai_image import ai_image_bp
 from blueprints.webhooks import webhooks_bp
 from blueprints.discover import discover_bp
@@ -364,7 +363,6 @@ app.register_blueprint(upload_bp)
 app.register_blueprint(main_bp)
 app.register_blueprint(viewer_bp)
 app.register_blueprint(ai_generation_bp)
-app.register_blueprint(rigging_bp)
 app.register_blueprint(ai_image_bp)
 app.register_blueprint(webhooks_bp)
 app.register_blueprint(discover_bp)
@@ -424,9 +422,6 @@ app.view_functions["ai_generation.meshy_webhook"] = limiter.limit(
     "120 per minute"
 )(app.view_functions["ai_generation.meshy_webhook"])
 csrf.exempt(app.view_functions["ai_generation.meshy_webhook"])
-app.view_functions["rigging.rig_model"] = limiter.limit(
-    "6 per minute"
-)(app.view_functions["rigging.rig_model"])
 app.view_functions["ai_image.generate_image"] = limiter.limit(
     "10 per minute"
 )(app.view_functions["ai_image.generate_image"])
@@ -2580,10 +2575,9 @@ def _load_texture_reference(path):
 
 
 def _ai_quota_state(user_id):
-    """Counts both AIGenerationJob and RigAnimationJob rows -- rigging and
-    animation spend real Meshy credits exactly like text/image generation,
-    so an admin setting ai_daily_limit to 0 to disable Meshy usage entirely
-    must also cover it."""
+    """Counts AIGenerationJob rows -- text/image generation spends real Meshy
+    credits, so an admin setting ai_daily_limit to 0 to disable Meshy usage
+    entirely must cover it."""
     from datetime import timedelta
     from services.plans import effective_ai_daily_limit
     since = datetime.utcnow() - timedelta(days=1)
@@ -2595,9 +2589,6 @@ def _ai_quota_state(user_id):
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,
-    ).count() + RigAnimationJob.query.filter(
-        RigAnimationJob.user_id == user_id,
-        RigAnimationJob.created_at >= since,
     ).count()
     return (count >= limit), count, limit
 
@@ -2766,132 +2757,6 @@ def _advance_ai_job(job):
         dispatch_webhook_event("ai_generation.failed", job.user_id, {
             "job_id": job.id, "error": job.error,
         })
-
-
-# --------------------------------------------------------------------------- #
-#  Rigging + Animation (Meshy) -- applies to any existing model, uploaded or
-#  AI-generated, not just "one prompt -> one generation".
-# --------------------------------------------------------------------------- #
-def _claim_rig_stage(job_id, expect_stage, new_stage):
-    """Same atomic-claim pattern as _claim_ai_stage, against RigAnimationJob."""
-    claimed = RigAnimationJob.query.filter_by(
-        id=job_id, stage=expect_stage
-    ).update({"stage": new_stage}, synchronize_session=False)
-    db.session.commit()
-    return bool(claimed)
-
-
-def _finalize_rig_job(job, task):
-    """Download the finished animated GLB, register it as a new UserModel
-    (the source model is left untouched), mark the job ready. Pure
-    job-mutation + commit, mirrors _finalize_ai_job's shape."""
-    import ai_generator
-
-    model_urls = task.get("model_urls") or {}
-    glb_url = model_urls.get("glb")
-    if not glb_url:
-        job.status = "failed"
-        job.error = "Animation finished but returned no GLB"
-        db.session.commit()
-        return None
-
-    tmp_dir = os.path.join(app.config["TEMP_FOLDER"], "rig_" + job.id)
-    os.makedirs(tmp_dir, exist_ok=True)
-    glb_tmp = os.path.join(tmp_dir, "model.glb")
-    ai_generator.download(glb_url, glb_tmp)
-
-    source_model = UserModel.query.get(job.model_id)
-    model = register_glb_as_model(
-        glb_tmp, user_id=job.user_id, source="ai-rig-animate",
-        prompt=(source_model.display_name if source_model else None),
-    )
-    try:
-        shutil.rmtree(tmp_dir)
-    except Exception:
-        pass
-
-    job.status = "ready"
-    job.progress = 100
-    job.result_model_id = model.id
-    db.session.commit()
-    return model
-
-
-def _advance_rig_job(job):
-    """Advance a 'generating' RigAnimationJob by one step (remesh? -> rig ->
-    animate -> finalize). Mirrors _advance_ai_job's shape and guarantees:
-    shared by the client-poll route and worker.py's reconciliation sweep, and
-    protected against double-processing by the same atomic-claim pattern."""
-    import ai_generator
-
-    if job.status in ("ready", "failed"):
-        return
-
-    if job.stage == "remeshing":
-        t = ai_generator.get_remesh_task(job.meshy_remesh_id)
-        job.progress = min(19, t["progress"] // 5)
-        if t["status"] == ai_generator.SUCCEEDED:
-            glb_url = (t.get("model_urls") or {}).get("glb")
-            if not glb_url:
-                job.status = "failed"
-                job.error = "Remesh finished but returned no GLB"
-            elif not _claim_rig_stage(job.id, "remeshing", "rigging"):
-                db.session.refresh(job)  # another poll started rigging
-            else:
-                try:
-                    # The remeshed GLB's URL comes straight from Meshy's own
-                    # response (not client input), so handing it back to
-                    # Meshy as model_url carries no SSRF risk.
-                    rig_id = ai_generator.start_rig(model_url=glb_url,
-                                                    height_meters=job.height_meters)
-                except Exception:
-                    _claim_rig_stage(job.id, "rigging", "remeshing")
-                    raise
-                job.meshy_rig_id = rig_id
-                job.stage = "rigging"
-                job.progress = 20
-        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-            job.status = "failed"
-            job.error = t.get("task_error") or "Remesh failed"
-
-    elif job.stage == "rigging":
-        t = ai_generator.get_rig_task(job.meshy_rig_id)
-        job.progress = min(59, 20 + t["progress"] * 2 // 5)
-        if t["status"] == ai_generator.SUCCEEDED:
-            if not _claim_rig_stage(job.id, "rigging", "animating"):
-                db.session.refresh(job)  # another poll started animating
-            else:
-                try:
-                    animate_id = ai_generator.start_animate(
-                        job.meshy_rig_id, job.animation_action_ids)
-                except Exception:
-                    _claim_rig_stage(job.id, "animating", "rigging")
-                    raise
-                job.meshy_animate_id = animate_id
-                job.stage = "animating"
-                job.progress = 60
-        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-            job.status = "failed"
-            job.error = t.get("task_error") or "Rigging failed"
-
-    elif job.stage == "animating":
-        t = ai_generator.get_animate_task(job.meshy_animate_id)
-        job.progress = min(99, 60 + t["progress"] * 2 // 5)
-        if t["status"] == ai_generator.SUCCEEDED:
-            if not _claim_rig_stage(job.id, "animating", "finalizing"):
-                db.session.refresh(job)
-            else:
-                try:
-                    _finalize_rig_job(job, t)
-                    return
-                except Exception:
-                    _claim_rig_stage(job.id, "finalizing", "animating")
-                    raise
-        elif t["status"] in (ai_generator.FAILED, ai_generator.CANCELED):
-            job.status = "failed"
-            job.error = t.get("task_error") or "Animation failed"
-
-    db.session.commit()
 
 
 if __name__ == "__main__":

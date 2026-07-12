@@ -64,5 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
     [
         'metalnessValue', 'roughnessValue', 'opacityValue', 'explodeValue',
         'rotateXValue', 'rotateYValue', 'rotateZValue',
+        'exposureValue', 'shadowIntensityValue', 'shadowSoftnessValue',
     ].forEach(wire);
 });

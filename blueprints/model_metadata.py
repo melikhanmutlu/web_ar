@@ -96,6 +96,7 @@ def model_viewer_settings(model_id):
         current["ar_placement"] = data["ar_placement"]
     for field, minimum, maximum in (
         ("exposure", 0.1, 3.0), ("shadow_intensity", 0.0, 3.0),
+        ("shadow_softness", 0.0, 1.0),
         ("auto_rotate_delay", 0, 30000),
     ):
         if field in data:

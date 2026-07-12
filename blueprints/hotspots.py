@@ -5,7 +5,7 @@ import time
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
-from models import CameraView, HotspotComment, ModelHotspot, UserModel, db
+from models import CameraView, HotspotComment, ModelHotspot, ModelMeasurement, UserModel, db
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 
 hotspots_bp = Blueprint("hotspots", __name__)
@@ -310,6 +310,80 @@ def create_camera_view(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error creating camera view for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@hotspots_bp.route("/api/models/<model_id>/measurements", methods=["GET"])
+def get_measurements(model_id):
+    """List saved distance measurements — same read access as the model."""
+    import app as app_module
+
+    try:
+        if not get_live_model(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
+        rows = ModelMeasurement.query.filter_by(model_id=model_id).order_by(ModelMeasurement.created_at).all()
+        return jsonify({"success": True, "measurements": [m.to_dict() for m in rows]})
+    except Exception as e:
+        app_module.logger.error(f"Error getting measurements for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@hotspots_bp.route("/api/models/<model_id>/measurements", methods=["POST"])
+def create_measurement(model_id):
+    """Save a distance measurement between two points (editor only)."""
+    import app as app_module
+
+    try:
+        if not UserModel.query.get(model_id):
+            return jsonify({"success": False, "error": "Model not found"}), 404
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
+
+        data = request.get_json(silent=True) or {}
+        try:
+            a = data["a"]
+            b = data["b"]
+            measurement = ModelMeasurement(
+                model_id=model_id,
+                label=(str(data.get("label") or "").strip()[:120] or None),
+                ax=float(a["x"]), ay=float(a["y"]), az=float(a["z"]),
+                bx=float(b["x"]), by=float(b["y"]), bz=float(b["z"]),
+                distance_cm=float(data["distance_cm"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid measurement data"}), 400
+
+        db.session.add(measurement)
+        db.session.commit()
+        return jsonify({"success": True, "measurement": measurement.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        app_module.logger.error(f"Error creating measurement for {model_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@hotspots_bp.route("/api/models/<model_id>/measurements/<int:measurement_id>", methods=["DELETE"])
+def delete_measurement(model_id, measurement_id):
+    """Delete a saved measurement (editor only)."""
+    import app as app_module
+
+    try:
+        guard = check_model_mutation_allowed(model_id)
+        if guard:
+            return guard
+        row = ModelMeasurement.query.filter_by(id=measurement_id, model_id=model_id).first()
+        if not row:
+            return jsonify({"success": False, "error": "Measurement not found"}), 404
+        db.session.delete(row)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        app_module.logger.error(f"Error deleting measurement {measurement_id} for {model_id}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

@@ -7,6 +7,7 @@ DEFAULT_VIEWER_SETTINGS = {
     "background_color": "#ffffff",
     "exposure": 0.96,
     "shadow_intensity": 1.2,
+    "shadow_softness": 0.72,
     "auto_rotate": False,
     "auto_rotate_delay": 3000,
     "camera_orbit": "30deg 70deg auto",

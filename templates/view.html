@@ -260,9 +260,40 @@
             .download-menu:hover .format-ply, .download-menu:focus-within .format-ply { transform: translate(-3.4rem, 0) scale(1); }
         }
 
-        .measure-result-panel { position: fixed; right: 1rem; bottom: 5rem; z-index: 40; padding: 0.5rem 0.7rem; background: rgba(15, 23, 42, 0.9); color: white; font-size: 0.78rem; border-radius: 0.4rem; max-width: 16rem; }
+        .measure-result-panel { position: fixed; right: 1rem; bottom: 5rem; z-index: 40; padding: 0.6rem 0.7rem; background: rgba(15, 23, 42, 0.92); color: white; font-size: 0.78rem; border-radius: 0.4rem; max-width: 17rem; }
         .measure-dot { background: rgba(37, 99, 235, 0.9); color: white; border: 2px solid white; border-radius: 50%; width: 16px; height: 16px; cursor: default; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-        .measure-label { background: rgba(37, 99, 235, 0.92); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; white-space: nowrap; pointer-events: none; }
+        .measure-label { background: rgba(37, 99, 235, 0.92); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; white-space: nowrap; cursor: pointer; }
+        .measure-anchor { width: 0; height: 0; }
+        .measure-label.mt-label-x { background: rgba(220, 38, 38, 0.92); }
+        .measure-label.mt-label-y { background: rgba(22, 163, 74, 0.92); }
+        .measure-label.mt-label-z { background: rgba(37, 99, 235, 0.92); }
+        /* SVG line overlay — sits above the model-viewer, never intercepts clicks. */
+        .measure-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; width: 100%; height: 100%; }
+        .measure-overlay .mt-line { stroke-linecap: round; }
+        .measure-overlay .mt-line-total { stroke: #ffffff; stroke-dasharray: 6 4; }
+        .measure-overlay .mt-line-x { stroke: #f87171; }
+        .measure-overlay .mt-line-y { stroke: #4ade80; }
+        .measure-overlay .mt-line-z { stroke: #60a5fa; }
+        /* Measure panel contents */
+        .measure-result-panel .mt-hint { line-height: 1.4; }
+        .measure-result-panel .mt-rows { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.4rem; }
+        .measure-result-panel .mt-row { text-align: left; background: rgba(255,255,255,0.08); border: 1px solid transparent; color: #fff; font-size: 0.72rem; font-family: monospace; padding: 0.25rem 0.4rem; border-radius: 4px; cursor: pointer; }
+        .measure-result-panel .mt-row:hover { background: rgba(255,255,255,0.16); }
+        .measure-result-panel .mt-row.is-focused { border-color: rgba(255,255,255,0.6); }
+        .measure-result-panel .mt-row-x { border-left: 3px solid #f87171; }
+        .measure-result-panel .mt-row-y { border-left: 3px solid #4ade80; }
+        .measure-result-panel .mt-row-z { border-left: 3px solid #60a5fa; }
+        .measure-result-panel .mt-toggle { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; margin-bottom: 0.4rem; cursor: pointer; }
+        .measure-result-panel .mt-actions { display: flex; gap: 0.3rem; }
+        .measure-result-panel .mt-actions .tp-btn-sm { flex: 1; }
+        .measure-result-panel .mt-status { font-size: 0.68rem; color: #a7f3d0; min-height: 0.9rem; margin-top: 0.2rem; }
+        .measure-result-panel .mt-saved-title { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.6); margin: 0.5rem 0 0.25rem; }
+        .measure-result-panel .mt-saved-list { display: flex; flex-direction: column; gap: 0.2rem; max-height: 9rem; overflow-y: auto; }
+        .measure-result-panel .mt-saved-item { display: flex; gap: 0.25rem; }
+        .measure-result-panel .mt-saved-load { flex: 1; text-align: left; background: rgba(255,255,255,0.08); border: none; color: #fff; font-size: 0.7rem; padding: 0.25rem 0.4rem; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .measure-result-panel .mt-saved-load:hover { background: rgba(255,255,255,0.16); }
+        .measure-result-panel .mt-saved-del { background: none; border: none; color: rgba(255,255,255,0.55); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.3rem; }
+        .measure-result-panel .mt-saved-del:hover { color: #fca5a5; }
 
         /* Tools panel */
         #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 23rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }
@@ -347,6 +378,9 @@
         .tp-btn-sm:hover { background: var(--color-gray-700); color: var(--color-gray-200); }
         .tp-view-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
         .tp-view-grid .tp-btn-sm { padding: 0.4rem 0.3rem; }
+        .tp-preset-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; }
+        .tp-preset-grid .tp-btn-sm { padding: 0.4rem 0.2rem; }
+        .tp-preset-grid .tp-btn-sm.is-active { background: var(--color-gray-700); color: var(--color-white); border-color: var(--color-gray-500); }
         .tp-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; padding: 0.45rem 0.7rem; background: var(--color-gray-200); border: 1px solid var(--color-gray-300); color: var(--color-gray-900); font-size: 0.72rem; font-weight: 700; cursor: pointer; transition: background 0.12s; }
         .tp-btn-primary:hover { background: var(--color-white); }
         .tp-note { font-size: 0.65rem; color: var(--color-gray-500); font-style: italic; margin-top: 0.2rem; }
@@ -381,6 +415,15 @@
         /* Version cards */
         .tp-version-card { padding: 0.45rem 0.55rem; border: 1px solid var(--color-gray-700); background: var(--color-gray-800); margin-bottom: 0.35rem; }
         .tp-version-badge { font-size: 0.58rem; padding: 0.1rem 0.35rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--color-gray-700); color: var(--color-gray-400); background: var(--color-gray-900); }
+        .tp-version-card.is-previewing { border-color: var(--color-white); box-shadow: 0 0 0 1px var(--color-white) inset; }
+
+        /* Version preview banner (shown while viewing a past version, not saved) */
+        .version-preview-banner { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 10000; display: none; align-items: center; gap: 0.75rem; padding: 0.55rem 0.9rem; background: rgba(17, 17, 17, 0.92); border: 1px solid var(--color-gray-600); border-radius: 8px; backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); }
+        .version-preview-banner.is-visible { display: flex; }
+        .version-preview-banner .vpb-label { color: var(--color-white); font-size: 0.82rem; font-weight: 600; }
+        .version-preview-banner button { padding: 0.35rem 0.75rem; font-size: 0.78rem; border-radius: 6px; cursor: pointer; border: 1px solid var(--color-gray-500); background: transparent; color: var(--color-gray-200); }
+        .version-preview-banner .vpb-restore { background: var(--color-white); color: #111; border-color: transparent; font-weight: 600; }
+        .version-preview-banner button:hover { opacity: 0.85; }
 
         /* Save bar */
         .tp-save-bar { padding: 0.65rem 0.85rem; border-top: 1px solid var(--color-gray-700); background: var(--color-gray-900); }
@@ -742,7 +785,7 @@
                 src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
                 {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
                 shadow-intensity="{{ viewer_settings.shadow_intensity }}"
-                shadow-softness="0.72"
+                shadow-softness="{{ viewer_settings.shadow_softness }}"
                 exposure="{{ viewer_settings.exposure }}"
                 environment-image="{{ viewer_settings.environment }}"
                 tone-mapping="neutral"
@@ -758,13 +801,13 @@
                 xr-environment
             >
             </model-viewer>
-            {% if viewer_settings.show_dimensions %}
-            <div id="measureToolResult" class="measure-result-panel hidden"></div>
-            {% endif %}
         </div>
 
         {% if viewer_settings.show_dimensions %}
-    <script src="{{ url_for('static', filename='js/viewer/measure-tool.js') }}"></script>
+        <!-- Kept OUTSIDE .viewer-stage (which is its own z-index:1 stacking
+             context) so the panel's z-index actually sits above the sidebar. -->
+        <div id="measureToolResult" class="measure-result-panel hidden"></div>
+        <script src="{{ url_for('static', filename='js/viewer/measure-tool.js') }}"></script>
         {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/camera-overlay.js') }}"></script>
 
@@ -973,6 +1016,19 @@
                 </button>
                 <div class="tp-section-body" id="materialPanel">
                     <div class="tp-field">
+                        <label class="tp-label">Presets</label>
+                        <div class="tp-preset-grid">
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="gold">Gold</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="chrome">Chrome</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="copper">Copper</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="plastic">Plastic</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="rubber">Rubber</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="glass">Glass</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="ceramic">Ceramic</button>
+                            <button type="button" class="tp-btn-sm material-preset-btn" data-preset="matte">Matte</button>
+                        </div>
+                    </div>
+                    <div class="tp-field">
                         <label class="tp-label">Base Color</label>
                         <div style="display:flex;gap:0.4rem;align-items:center;">
                             <input type="color" id="materialColor" class="tp-color-swatch" value="#ffffff">
@@ -1014,6 +1070,60 @@
                         </div>
                     </div>
                     <button id="resetMaterial" class="tp-btn-full">Reset Material</button>
+                </div>
+            </div>
+
+            <!-- ─── LIGHTING ─── -->
+            <div class="tp-section" id="lightingContainer">
+                <button class="tp-section-header">
+                    <i data-lucide="sun" style="width:0.85rem;height:0.85rem;color:var(--color-gray-500);"></i>
+                    <span>Lighting</span>
+                    <i data-lucide="chevron-right" class="tp-chevron"></i>
+                </button>
+                <div class="tp-section-body" id="lightingPanel">
+                    <div class="tp-field">
+                        <label class="tp-label">Presets</label>
+                        <div class="tp-preset-grid">
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="studio">Studio</button>
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="soft">Soft</button>
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="dramatic">Dramatic</button>
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="bright">Bright</button>
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="flat">Flat</button>
+                            <button type="button" class="tp-btn-sm lighting-preset-btn" data-preset="dim">Dim</button>
+                        </div>
+                    </div>
+                    <div class="tp-field">
+                        <div class="tp-slider-row">
+                            <label class="tp-label">Exposure</label>
+                            <span id="exposureValue" class="tp-val">0.96</span>
+                        </div>
+                        <input type="range" id="exposureSlider" min="0.1" max="3" step="0.01" value="{{ viewer_settings.exposure }}" class="tp-range">
+                    </div>
+                    <div class="tp-field">
+                        <div class="tp-slider-row">
+                            <label class="tp-label">Shadow Intensity</label>
+                            <span id="shadowIntensityValue" class="tp-val">1.2</span>
+                        </div>
+                        <input type="range" id="shadowIntensitySlider" min="0" max="3" step="0.05" value="{{ viewer_settings.shadow_intensity }}" class="tp-range">
+                    </div>
+                    <div class="tp-field">
+                        <div class="tp-slider-row">
+                            <label class="tp-label">Shadow Softness</label>
+                            <span id="shadowSoftnessValue" class="tp-val">0.72</span>
+                        </div>
+                        <input type="range" id="shadowSoftnessSlider" min="0" max="1" step="0.01" value="{{ viewer_settings.shadow_softness }}" class="tp-range">
+                    </div>
+                    <div class="tp-field">
+                        <label class="tp-label">Environment</label>
+                        <select id="environmentSelect" class="tp-select">
+                            <option value="neutral" {% if viewer_settings.environment == 'neutral' %}selected{% endif %}>Neutral</option>
+                            <option value="legacy" {% if viewer_settings.environment == 'legacy' %}selected{% endif %}>Legacy</option>
+                        </select>
+                    </div>
+                    {% if can_edit %}
+                    <button id="saveLighting" class="tp-btn-full">Save Lighting</button>
+                    <p id="saveLightingStatus" class="tp-note hidden"></p>
+                    {% endif %}
                 </div>
             </div>
 
@@ -1577,6 +1687,7 @@
     <script src="{{ url_for('static', filename='js/viewer/panel-nav.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/animation-controls.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/material-editor.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/viewer/presets.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/transform-editor.js') }}"></script>
     {% if can_edit %}
     <script src="{{ url_for('static', filename='js/viewer/undo-redo.js') }}"></script>

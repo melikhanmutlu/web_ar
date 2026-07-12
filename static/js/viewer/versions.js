@@ -14,6 +14,60 @@ document.addEventListener('DOMContentLoaded', () => {
         let versionPreviewItems = [];
         let selectedForCompare = [];
 
+        // ---- Version preview: load a past version into the viewer so the user
+        // can SEE which one they'd restore, without committing to it. ----
+        const modelViewer = document.getElementById('modelViewer');
+        const liveModelSrc = modelViewer ? modelViewer.getAttribute('src') : null;
+        let previewingVersion = null;
+
+        function buildPreviewBanner() {
+            let banner = document.getElementById('versionPreviewBanner');
+            if (banner) return banner;
+            banner = document.createElement('div');
+            banner.id = 'versionPreviewBanner';
+            banner.className = 'version-preview-banner';
+            banner.innerHTML =
+                '<span class="vpb-label"></span>' +
+                (CAN_EDIT ? '<button type="button" class="vpb-restore">Restore this version</button>' : '') +
+                '<button type="button" class="vpb-exit">Back to current</button>';
+            document.body.appendChild(banner);
+            banner.querySelector('.vpb-exit').addEventListener('click', exitPreview);
+            const restoreBtn = banner.querySelector('.vpb-restore');
+            if (restoreBtn) restoreBtn.addEventListener('click', () => {
+                if (previewingVersion != null) restoreVersion(previewingVersion);
+            });
+            return banner;
+        }
+
+        function previewVersion(v) {
+            if (!modelViewer) return;
+            previewingVersion = v.version_number;
+            modelViewer.setAttribute('src', '/api/versions/' + modelId + '/download/' + v.version_number);
+            const banner = buildPreviewBanner();
+            banner.querySelector('.vpb-label').textContent = 'Previewing v' + v.version_number + ' (not saved)';
+            banner.classList.add('is-visible');
+            // Reflect which card is being previewed.
+            document.querySelectorAll('.tp-version-card.is-previewing').forEach(c => c.classList.remove('is-previewing'));
+        }
+
+        function exitPreview() {
+            previewingVersion = null;
+            if (modelViewer && liveModelSrc) modelViewer.setAttribute('src', liveModelSrc);
+            const banner = document.getElementById('versionPreviewBanner');
+            if (banner) banner.classList.remove('is-visible');
+            document.querySelectorAll('.tp-version-card.is-previewing').forEach(c => c.classList.remove('is-previewing'));
+        }
+
+        async function restoreVersion(versionNumber) {
+            if (!confirm('Restore to version ' + versionNumber + '? Current model will be replaced.')) return;
+            try {
+                const res = await fetch('/api/versions/' + modelId + '/restore/' + versionNumber, { method: 'POST' });
+                const result = await res.json();
+                if (result.success) window.location.reload();
+                else alert('Restore failed: ' + (result.error || ''));
+            } catch (e) { alert('Restore failed.'); }
+        }
+
         function updateCompareButton() {
             if (compareVersionsBtn) compareVersionsBtn.disabled = selectedForCompare.length !== 2;
         }
@@ -88,6 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             (v.comment ? '<p style="font-size:0.68rem;color:var(--color-gray-500);margin-bottom:0.2rem;">' + escapeHtml(v.comment) + '</p>' : '') +
                             (v.file_size_formatted ? '<p style="font-size:0.6rem;color:var(--color-gray-500);margin-bottom:0.3rem;">Size: ' + v.file_size_formatted + '</p>' : '') +
                             '<div style="display:flex;gap:3px;">' +
+                            '<button class="preview-btn tp-btn-sm" style="flex:1;">Preview</button>' +
                             (CAN_EDIT ? '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' : '') +
                             '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' +
                             (CAN_EDIT ? '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' : '') +
@@ -114,6 +169,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (result.success) window.location.reload();
                                 else alert('Restore failed: ' + (result.error || ''));
                             } catch (e) { alert('Restore failed.'); }
+                        });
+
+                        div.querySelector('.preview-btn').addEventListener('click', () => {
+                            previewVersion(v);
+                            div.classList.add('is-previewing');
                         });
 
                         div.querySelector('.download-btn').addEventListener('click', () => {

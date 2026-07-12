@@ -572,6 +572,34 @@ class CameraView(db.Model):
         }
 
 
+class ModelMeasurement(db.Model):
+    """A saved distance measurement between two points on a 3D model."""
+    id = db.Column(db.Integer, primary_key=True)
+    model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False, index=True)
+    label = db.Column(db.String(120), nullable=True)
+    # Both endpoints in model space (metres).
+    ax = db.Column(db.Float, nullable=False)
+    ay = db.Column(db.Float, nullable=False)
+    az = db.Column(db.Float, nullable=False)
+    bx = db.Column(db.Float, nullable=False)
+    by = db.Column(db.Float, nullable=False)
+    bz = db.Column(db.Float, nullable=False)
+    distance_cm = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    model = db.relationship('UserModel', backref=db.backref('measurements', lazy=True, cascade='all, delete-orphan', passive_deletes=True, order_by='ModelMeasurement.created_at'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'label': self.label,
+            'a': {'x': self.ax, 'y': self.ay, 'z': self.az},
+            'b': {'x': self.bx, 'y': self.by, 'z': self.bz},
+            'distance_cm': self.distance_cm,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ModelLike(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     model_id = db.Column(db.String(36), db.ForeignKey('user_model.id', ondelete='CASCADE'), nullable=False)

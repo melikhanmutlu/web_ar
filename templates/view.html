@@ -260,44 +260,46 @@
             .download-menu:hover .format-ply, .download-menu:focus-within .format-ply { transform: translate(-3.4rem, 0) scale(1); }
         }
 
-        .measure-result-panel { position: fixed; right: 1rem; bottom: 5rem; z-index: 40; padding: 0.6rem 0.7rem; background: rgba(15, 23, 42, 0.92); color: white; font-size: 0.78rem; border-radius: 0.4rem; max-width: 17rem; }
-        .measure-dot { background: rgba(37, 99, 235, 0.9); color: white; border: 2px solid white; border-radius: 50%; width: 16px; height: 16px; cursor: default; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-        /* A point that snapped to a model vertex gets a distinct green ring. */
-        .measure-dot.is-snapped { background: rgba(22, 163, 74, 0.95); border-color: #d1fae5; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.35), 0 2px 8px rgba(0, 0, 0, 0.3); }
+        /* Always-dark, matching #toolsPanel — the app's tool surfaces read the
+           same in light and dark site themes. */
+        .measure-result-panel { position: fixed; right: 1rem; bottom: 5rem; z-index: 40; padding: 0.7rem 0.8rem; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); font-size: 0.78rem; font-family: var(--font-sans); max-width: 18rem; }
+        .measure-dot { background: var(--color-gray-900); color: var(--color-white); border: 2px solid var(--color-white); border-radius: 50%; width: 16px; height: 16px; cursor: default; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+        /* A point that snapped to a model vertex inverts to signal the lock. */
+        .measure-dot.is-snapped { background: var(--color-white); color: var(--color-gray-900); border-color: var(--color-gray-900); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45), 0 2px 8px rgba(0, 0, 0, 0.35); }
         /* Crosshair while measuring so it's clear you're aiming, not orbiting. */
         #modelViewer.measure-cursor { cursor: crosshair; }
-        .measure-label { background: rgba(37, 99, 235, 0.92); color: white; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-family: monospace; white-space: nowrap; cursor: pointer; }
+        .measure-label { background: var(--color-gray-900); color: var(--color-white); border: 1px solid var(--color-gray-700); padding: 2px 7px; border-radius: 3px; font-size: 11px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
         .measure-anchor { width: 0; height: 0; }
-        .measure-label.mt-label-x { background: rgba(220, 38, 38, 0.92); }
-        .measure-label.mt-label-y { background: rgba(22, 163, 74, 0.92); }
-        .measure-label.mt-label-z { background: rgba(37, 99, 235, 0.92); }
+        /* Axis labels stay monochrome (muted) — the X:/Y:/Z: prefix distinguishes them. */
+        .measure-label.mt-label-x, .measure-label.mt-label-y, .measure-label.mt-label-z { background: var(--color-gray-800); color: var(--color-gray-300); }
         /* SVG line overlay — sits above the model-viewer, never intercepts clicks. */
         .measure-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; width: 100%; height: 100%; }
         .measure-overlay .mt-line { stroke-linecap: round; }
-        .measure-overlay .mt-line-total { stroke: #ffffff; stroke-dasharray: 6 4; }
-        .measure-overlay .mt-line-x { stroke: #f87171; }
-        .measure-overlay .mt-line-y { stroke: #4ade80; }
-        .measure-overlay .mt-line-z { stroke: #60a5fa; }
+        /* Total line uses the theme ink (dark on the light stage, light on the
+           dark stage); axis lines are a mid-gray, told apart by dash pattern. */
+        .measure-overlay .mt-line-total { stroke: var(--color-gray-900); }
+        .dark .measure-overlay .mt-line-total { stroke: var(--color-white); }
+        .measure-overlay .mt-line-x { stroke: var(--color-gray-500); stroke-dasharray: 2 3; }
+        .measure-overlay .mt-line-y { stroke: var(--color-gray-500); stroke-dasharray: 7 3; }
+        .measure-overlay .mt-line-z { stroke: var(--color-gray-500); stroke-dasharray: 1 4; }
         /* Measure panel contents */
-        .measure-result-panel .mt-hint { line-height: 1.4; }
+        .measure-result-panel .mt-hint { line-height: 1.4; color: var(--color-gray-400); }
         .measure-result-panel .mt-rows { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.4rem; }
-        .measure-result-panel .mt-row { text-align: left; background: rgba(255,255,255,0.08); border: 1px solid transparent; color: #fff; font-size: 0.72rem; font-family: monospace; padding: 0.25rem 0.4rem; border-radius: 4px; cursor: pointer; }
-        .measure-result-panel .mt-row:hover { background: rgba(255,255,255,0.16); }
-        .measure-result-panel .mt-row.is-focused { border-color: rgba(255,255,255,0.6); }
-        .measure-result-panel .mt-row-x { border-left: 3px solid #f87171; }
-        .measure-result-panel .mt-row-y { border-left: 3px solid #4ade80; }
-        .measure-result-panel .mt-row-z { border-left: 3px solid #60a5fa; }
-        .measure-result-panel .mt-toggle { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; margin-bottom: 0.4rem; cursor: pointer; }
+        .measure-result-panel .mt-row { text-align: left; background: var(--color-gray-800); border: 1px solid transparent; color: var(--color-gray-200); font-size: 0.72rem; font-variant-numeric: tabular-nums; padding: 0.25rem 0.4rem; cursor: pointer; }
+        .measure-result-panel .mt-row:hover { background: var(--color-gray-700); }
+        .measure-result-panel .mt-row.is-focused { border-color: var(--color-gray-500); }
+        .measure-result-panel .mt-row-x, .measure-result-panel .mt-row-y, .measure-result-panel .mt-row-z { border-left: 2px solid var(--color-gray-600); }
+        .measure-result-panel .mt-toggle { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; margin-bottom: 0.4rem; color: var(--color-gray-300); cursor: pointer; }
         .measure-result-panel .mt-actions { display: flex; gap: 0.3rem; }
         .measure-result-panel .mt-actions .tp-btn-sm { flex: 1; }
-        .measure-result-panel .mt-status { font-size: 0.68rem; color: #a7f3d0; min-height: 0.9rem; margin-top: 0.2rem; }
-        .measure-result-panel .mt-saved-title { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: rgba(255,255,255,0.6); margin: 0.5rem 0 0.25rem; }
+        .measure-result-panel .mt-status { font-size: 0.68rem; color: var(--color-gray-400); min-height: 0.9rem; margin-top: 0.2rem; }
+        .measure-result-panel .mt-saved-title { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-gray-500); margin: 0.5rem 0 0.25rem; }
         .measure-result-panel .mt-saved-list { display: flex; flex-direction: column; gap: 0.2rem; max-height: 9rem; overflow-y: auto; }
         .measure-result-panel .mt-saved-item { display: flex; gap: 0.25rem; }
-        .measure-result-panel .mt-saved-load { flex: 1; text-align: left; background: rgba(255,255,255,0.08); border: none; color: #fff; font-size: 0.7rem; padding: 0.25rem 0.4rem; border-radius: 4px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .measure-result-panel .mt-saved-load:hover { background: rgba(255,255,255,0.16); }
-        .measure-result-panel .mt-saved-del { background: none; border: none; color: rgba(255,255,255,0.55); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.3rem; }
-        .measure-result-panel .mt-saved-del:hover { color: #fca5a5; }
+        .measure-result-panel .mt-saved-load { flex: 1; text-align: left; background: var(--color-gray-800); border: none; color: var(--color-gray-200); font-size: 0.7rem; padding: 0.25rem 0.4rem; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .measure-result-panel .mt-saved-load:hover { background: var(--color-gray-700); }
+        .measure-result-panel .mt-saved-del { background: none; border: none; color: var(--color-gray-500); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.3rem; }
+        .measure-result-panel .mt-saved-del:hover { color: var(--color-gray-200); }
 
         /* Tools panel */
         #toolsPanel { position: fixed; top: 50%; right: 1rem; transform: translateY(-50%); width: 23rem; max-height: calc(100vh - 4rem); display: none; flex-direction: column; z-index: 36; background: var(--color-gray-900); border: 1px solid var(--color-gray-700); color: var(--color-gray-200); overflow: hidden; }

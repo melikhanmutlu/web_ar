@@ -26,6 +26,25 @@ DEFAULT_MESH_COLOR = (160, 170, 180)
 # gets too slow for the on-the-fly /thumbnail route, so give up and let the
 # caller fall back to a placeholder.
 MAX_RENDER_FACES = int(os.environ.get("MAX_THUMBNAIL_FACES", 500_000))
+THUMBNAIL_RENDER_VERSION = "2-texture-sampling"
+
+
+def _version_path(png_path: str) -> str:
+    return f"{png_path}.render-version"
+
+
+def thumbnail_is_current(png_path: str) -> bool:
+    try:
+        return Path(_version_path(png_path)).read_text(encoding="utf-8") == THUMBNAIL_RENDER_VERSION
+    except OSError:
+        return False
+
+
+def mark_thumbnail_current(png_path: str) -> None:
+    marker = _version_path(png_path)
+    tmp_marker = f"{marker}.tmp{os.getpid()}"
+    Path(tmp_marker).write_text(THUMBNAIL_RENDER_VERSION, encoding="utf-8")
+    os.replace(tmp_marker, marker)
 
 
 def render_thumbnail(glb_path: str, png_path: str) -> bool:
@@ -33,7 +52,10 @@ def render_thumbnail(glb_path: str, png_path: str) -> bool:
     if not os.path.isfile(glb_path):
         return False
     try:
-        return _rasterize(glb_path, png_path)
+        rendered = _rasterize(glb_path, png_path)
+        if rendered:
+            mark_thumbnail_current(png_path)
+        return rendered
     except Exception:
         logger.warning("Thumbnail rasterization failed for %s", glb_path, exc_info=True)
         return False
@@ -45,6 +67,40 @@ def _geometry_face_colors(geometry, n_faces):
     Tries vertex/face colors first, then a flat material baseColorFactor
     (textures are not sampled — those parts fall back to gray).
     """
+    try:
+        uv = np.asarray(geometry.visual.uv, dtype=np.float64)
+        material = geometry.visual.material
+        texture = getattr(material, "baseColorTexture", None)
+        if texture is None:
+            texture = getattr(material, "image", None)
+        if uv.shape == (len(geometry.vertices), 2) and texture is not None:
+            from PIL import Image
+
+            image = texture.convert("RGB") if isinstance(texture, Image.Image) else Image.open(texture).convert("RGB")
+            pixels = np.asarray(image, dtype=np.float64)
+            face_uv = uv[np.asarray(geometry.faces, dtype=np.int64)]
+            # Preserve triangles crossing a repeat seam (0.99 -> 0.01).
+            angles = face_uv * (2.0 * np.pi)
+            centers = np.mod(
+                np.arctan2(np.sin(angles).mean(axis=1), np.cos(angles).mean(axis=1))
+                / (2.0 * np.pi),
+                1.0,
+            )
+            x = np.clip(np.rint(centers[:, 0] * (image.width - 1)), 0, image.width - 1).astype(int)
+            # glTF UV origin is bottom-left; Pillow's origin is top-left.
+            y = np.clip(np.rint((1.0 - centers[:, 1]) * (image.height - 1)), 0, image.height - 1).astype(int)
+            sampled = pixels[y, x, :3]
+            factor = getattr(material, "baseColorFactor", None)
+            if factor is not None:
+                factor = np.asarray(factor, dtype=np.float64).flatten()[:3]
+                if factor.size == 3:
+                    if factor.max() > 1.0:
+                        factor = factor / 255.0
+                    sampled = sampled * factor
+            return np.clip(sampled, 0, 255)
+    except Exception:
+        logger.debug("Could not sample thumbnail texture", exc_info=True)
+
     try:
         face_colors = np.asarray(geometry.visual.face_colors, dtype=np.float64)
         if face_colors.shape[0] == n_faces:

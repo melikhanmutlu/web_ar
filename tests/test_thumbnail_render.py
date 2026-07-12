@@ -20,6 +20,7 @@ def test_renders_real_geometry(tmp_path):
 
     assert render_thumbnail(glb, str(out)) is True
     assert out.exists()
+    assert thumbnail_render.thumbnail_is_current(str(out)) is True
 
     from PIL import Image
 
@@ -49,6 +50,27 @@ def test_uses_vertex_colors(tmp_path):
     # Red model on a neutral background: red channel must dominate on a
     # meaningful share of pixels.
     reddish = ((img[:, :, 0] - img[:, :, 1] > 50) & (img[:, :, 0] - img[:, :, 2] > 50)).mean()
+    assert reddish > 0.05
+
+
+def test_samples_embedded_base_color_texture(tmp_path):
+    from PIL import Image
+
+    box = trimesh.creation.box(extents=[1, 1, 1])
+    box.visual = trimesh.visual.TextureVisuals(
+        uv=np.zeros((len(box.vertices), 2), dtype=np.float64),
+        image=Image.new("RGB", (2, 2), (180, 25, 15)),
+    )
+    glb = _make_glb(tmp_path, box)
+    out = tmp_path / "thumb.png"
+
+    assert render_thumbnail(glb, str(out)) is True
+
+    img = np.asarray(Image.open(out).convert("RGB")).astype(int)
+    reddish = (
+        (img[:, :, 0] - img[:, :, 1] > 50)
+        & (img[:, :, 0] - img[:, :, 2] > 50)
+    ).mean()
     assert reddish > 0.05
 
 

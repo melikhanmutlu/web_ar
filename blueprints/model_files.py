@@ -135,6 +135,8 @@ def save_viewer_thumbnail(unique_id):
 
         with open(thumb_path, "wb") as f:
             f.write(img_bytes)
+        from converters.thumbnail_render import mark_thumbnail_current
+        mark_thumbnail_current(thumb_path)
 
         return jsonify({"success": True})
     except Exception as e:
@@ -147,7 +149,8 @@ def serve_thumbnail(unique_id):
     """Serve model thumbnail image, generating one on-the-fly if needed."""
     import app as app_module
 
-    if not get_live_model(unique_id):
+    model = get_live_model(unique_id)
+    if not model:
         return "Model not found", 404
     denied = check_model_view_allowed(unique_id)
     if denied:
@@ -157,6 +160,17 @@ def serve_thumbnail(unique_id):
         current_app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.png"
     )
 
+    # AI thumbnails rendered before texture sampling was added are cached on
+    # the persistent volume. Refresh those once; manually captured/non-AI
+    # thumbnails remain untouched.
+    if os.path.exists(thumbnail_path) and (model.source or "").startswith("ai"):
+        from converters.thumbnail_render import thumbnail_is_current
+        if not thumbnail_is_current(thumbnail_path):
+            try:
+                os.remove(thumbnail_path)
+            except OSError:
+                pass
+
     # If thumbnail exists, serve it
     if os.path.exists(thumbnail_path):
         return send_from_directory(
@@ -165,10 +179,6 @@ def serve_thumbnail(unique_id):
 
     # Generate thumbnail on-the-fly
     try:
-        model = UserModel.query.get(unique_id)
-        if not model:
-            return "Model not found", 404
-
         # Try to generate from 3D model using trimesh
         model_path = os.path.join(
             current_app.config["CONVERTED_FOLDER"], unique_id, "model.glb"

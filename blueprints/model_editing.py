@@ -20,11 +20,16 @@ model_editing_bp = Blueprint("model_editing", __name__)
 def _mesh_vertex_face_counts(mesh):
     """Total vertex/face counts for either a Trimesh or a Scene (summed
     across all its geometries) -- mirrors how the upload pipeline populates
-    UserModel.vertices/faces from the initial conversion."""
+    UserModel.vertices/faces from the initial conversion. Geometries without
+    faces (e.g. a POINTS-mode primitive loaded as a trimesh.PointCloud, which
+    has .vertices but no .faces at all) are skipped rather than counted as
+    zero, since counting them at all would still crash on `g.faces`."""
     if isinstance(mesh, trimesh.Scene):
-        geoms = [g for g in mesh.geometry.values() if hasattr(g, "vertices")]
+        geoms = [g for g in mesh.geometry.values() if hasattr(g, "vertices") and hasattr(g, "faces")]
         return sum(len(g.vertices) for g in geoms), sum(len(g.faces) for g in geoms)
-    return len(mesh.vertices), len(mesh.faces)
+    if hasattr(mesh, "vertices") and hasattr(mesh, "faces"):
+        return len(mesh.vertices), len(mesh.faces)
+    return None, None
 
 
 def _invalidate_thumbnail(app_module, model):

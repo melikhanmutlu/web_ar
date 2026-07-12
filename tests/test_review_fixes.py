@@ -13,7 +13,9 @@ import io
 import os
 import struct
 import uuid
+from datetime import datetime, timedelta
 
+import numpy as np
 import pytest
 import trimesh
 from pygltflib import GLTF2
@@ -302,14 +304,30 @@ def test_update_model_color_refreshes_usdz(client, monkeypatch):
 
 
 # ── Orphaned AI/rig job stage recovery ────────────────────────────────────
+def _backdate(job, minutes):
+    """Force job.updated_at into the past, bypassing the onupdate=utcnow
+    default, so the orphan-stage grace-period check in worker.py treats it
+    as stale. A raw UPDATE avoids the ORM re-applying onupdate on commit."""
+    from models import db as _db
+    _db.session.execute(
+        type(job).__table__.update()
+        .where(type(job).id == job.id)
+        .values(updated_at=datetime.utcnow() - timedelta(minutes=minutes))
+    )
+    _db.session.commit()
+    _db.session.refresh(job)
+
+
 def test_unstick_orphaned_ai_stage_rolls_back_refining_and_finalizing(client):
     from models import AIGenerationJob
+    import worker
     from worker import _unstick_orphaned_ai_stage
 
     user = User(username="aiorphan", email="aiorphan@test.com")
     user.set_password("testpassword")
     db.session.add(user)
     db.session.commit()
+    grace = worker.AI_ORPHAN_STAGE_GRACE_MINUTES + 1
 
     # "refining" is only ever a transitional claim from "preview" -- if the
     # process dies right after the claim commits, no `if job.stage ==`
@@ -318,6 +336,7 @@ def test_unstick_orphaned_ai_stage_rolls_back_refining_and_finalizing(client):
     refining = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="refining")
     db.session.add(refining)
     db.session.commit()
+    _backdate(refining, grace)
     _unstick_orphaned_ai_stage(refining)
     assert refining.stage == "preview"
 
@@ -327,6 +346,8 @@ def test_unstick_orphaned_ai_stage_rolls_back_refining_and_finalizing(client):
     finalizing_text = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="finalizing")
     db.session.add_all([finalizing_image, finalizing_text])
     db.session.commit()
+    _backdate(finalizing_image, grace)
+    _backdate(finalizing_text, grace)
     _unstick_orphaned_ai_stage(finalizing_image)
     _unstick_orphaned_ai_stage(finalizing_text)
     assert finalizing_image.stage == "image"
@@ -336,12 +357,37 @@ def test_unstick_orphaned_ai_stage_rolls_back_refining_and_finalizing(client):
     resting = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="preview")
     db.session.add(resting)
     db.session.commit()
-    from worker import _unstick_orphaned_ai_stage as unstick
-    unstick(resting)
+    _backdate(resting, grace)
+    _unstick_orphaned_ai_stage(resting)
     assert resting.stage == "preview"
 
 
+def test_unstick_orphaned_ai_stage_leaves_recently_active_finalize_alone(client):
+    """A slow-but-alive _finalize_ai_job (large GLB download, no intermediate
+    commit) can look identical to a truly-orphaned claim by DB state alone --
+    both show status='generating', stage='finalizing'. The only thing that
+    tells them apart is recency: a rollback must not fire for a job whose
+    updated_at is still within the grace period, or it would race a real
+    finalize and let a second concurrent trigger re-claim and double-process
+    the same job."""
+    from models import AIGenerationJob
+    from worker import _unstick_orphaned_ai_stage
+
+    user = User(username="aiactive", email="aiactive@test.com")
+    user.set_password("testpassword")
+    db.session.add(user)
+    db.session.commit()
+
+    job = AIGenerationJob(id=uuid.uuid4().hex, user_id=user.id, kind="text", stage="finalizing")
+    db.session.add(job)
+    db.session.commit()  # updated_at defaults to "now" -- well within the grace period
+
+    _unstick_orphaned_ai_stage(job)
+    assert job.stage == "finalizing", "a recently-active claim must not be rolled back"
+
+
 def test_unstick_orphaned_rig_stage_rolls_back_finalizing(client):
+    import worker
     from models import RigAnimationJob
     from worker import _unstick_orphaned_rig_stage
 
@@ -358,6 +404,7 @@ def test_unstick_orphaned_rig_stage_rolls_back_finalizing(client):
                           stage="finalizing", height_meters=0.1)
     db.session.add(job)
     db.session.commit()
+    _backdate(job, worker.AI_ORPHAN_STAGE_GRACE_MINUTES + 1)
     _unstick_orphaned_rig_stage(job)
     assert job.stage == "animating"
 
@@ -414,3 +461,28 @@ def test_save_modifications_invalidates_stale_thumbnail(client, monkeypatch):
 
     assert not os.path.exists(thumbnail_path), "stale thumbnail should have been removed"
     assert enqueued and enqueued[0][0] == "thumbnail" and enqueued[0][1] == model_id
+
+
+def test_mesh_vertex_face_counts_skips_faceless_geometry():
+    """A Scene can contain a POINTS-mode primitive, loaded by trimesh as a
+    PointCloud -- it has .vertices but no .faces attribute at all. The
+    original hasattr(g, "vertices") filter let it through and then crashed on
+    g.faces; it must be skipped instead (both call sites already wrap this in
+    a broad except, so the crash degraded to a silent no-op rather than a
+    500, but the counts should still work correctly for the normal case)."""
+    from blueprints.model_editing import _mesh_vertex_face_counts
+
+    box = trimesh.creation.box(extents=(0.1, 0.1, 0.1))
+    cloud = trimesh.PointCloud(vertices=np.random.rand(10, 3))
+    assert hasattr(cloud, "vertices") and not hasattr(cloud, "faces")
+
+    scene = trimesh.Scene()
+    scene.add_geometry(box, node_name="box")
+    scene.add_geometry(cloud, node_name="cloud")
+
+    vertices, faces = _mesh_vertex_face_counts(scene)
+    assert vertices == len(box.vertices)
+    assert faces == len(box.faces)
+
+    # A bare PointCloud (not wrapped in a Scene) also has no .faces.
+    assert _mesh_vertex_face_counts(cloud) == (None, None)

@@ -24,7 +24,10 @@ from datetime import timedelta
 from services.time_utils import datetime
 from sqlalchemy import or_
 
-from app import app, db, run_conversion_job, _advance_ai_job, _advance_rig_job
+from app import (
+    app, db, run_conversion_job, _advance_ai_job, _advance_rig_job,
+    _claim_ai_stage, _claim_rig_stage,
+)
 from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
 from models import AIGenerationJob, ConversionJob, RigAnimationJob, WorkerHeartbeat
 from site_settings import set_setting
@@ -177,6 +180,15 @@ def requeue_stale_jobs():
         db.session.commit()
 
 
+# _finalize_ai_job/_finalize_rig_job download the result GLB (and sometimes a
+# USDZ) with no intermediate commit, so "finalizing"/"refining" can look
+# stale under the ordinary AI_RECONCILE_MINUTES window while a real transfer
+# is still in flight -- give the unstick logic a much longer grace period
+# before treating those specific transitional stages as truly orphaned, so a
+# slow-but-alive finalize doesn't get its claim ripped out from under it.
+AI_ORPHAN_STAGE_GRACE_MINUTES = int(os.environ.get("AI_ORPHAN_STAGE_GRACE_MINUTES", str(AI_RECONCILE_MINUTES * 4)))
+
+
 def _unstick_orphaned_ai_stage(job):
     """`stage` can be left at "refining"/"finalizing" -- values _claim_ai_stage
     moves it to right before starting the next Meshy call or finalizing, and
@@ -187,27 +199,42 @@ def _unstick_orphaned_ai_stage(job):
     _advance_ai_job, which no-ops for these stage values) while still
     counting against the user's daily AI quota. Roll the claim back to the
     stage it was claimed from so the next _advance_ai_job call has a real
-    branch to retry."""
+    branch to retry.
+
+    Only fires past AI_ORPHAN_STAGE_GRACE_MINUTES (longer than the ordinary
+    reconcile window -- see above), and via the same atomic
+    UPDATE...WHERE stage=expected pattern _claim_ai_stage uses, so this can
+    never stomp a job a concurrent _advance_ai_job call has already moved on
+    from (e.g. a slow-but-alive finalize that completes and advances the
+    stage between this function reading `job.stage` and committing the
+    rollback)."""
+    grace_cutoff = datetime.utcnow() - timedelta(minutes=AI_ORPHAN_STAGE_GRACE_MINUTES)
+    if job.updated_at is not None and job.updated_at >= grace_cutoff:
+        return
     if job.stage == "refining":
-        job.stage = "preview"
-        db.session.commit()
-        logger.warning(f"AI job {job.id} had an orphaned 'refining' claim; rolled back to 'preview'")
+        if _claim_ai_stage(job.id, "refining", "preview"):
+            db.session.refresh(job)
+            logger.warning(f"AI job {job.id} had an orphaned 'refining' claim; rolled back to 'preview'")
     elif job.stage == "finalizing":
         # "finalizing" is claimed from "image" (image-kind jobs) or "refine"
         # (text-kind jobs) -- job.kind disambiguates which.
-        job.stage = "image" if job.kind == "image" else "refine"
-        db.session.commit()
-        logger.warning(f"AI job {job.id} had an orphaned 'finalizing' claim; rolled back to '{job.stage}'")
+        target = "image" if job.kind == "image" else "refine"
+        if _claim_ai_stage(job.id, "finalizing", target):
+            db.session.refresh(job)
+            logger.warning(f"AI job {job.id} had an orphaned 'finalizing' claim; rolled back to '{target}'")
 
 
 def _unstick_orphaned_rig_stage(job):
     """Same recovery as _unstick_orphaned_ai_stage, for RigAnimationJob.
     "finalizing" is claimed only from "animating" (the only transitional-only
     stage in this job type's chain)."""
+    grace_cutoff = datetime.utcnow() - timedelta(minutes=AI_ORPHAN_STAGE_GRACE_MINUTES)
+    if job.updated_at is not None and job.updated_at >= grace_cutoff:
+        return
     if job.stage == "finalizing":
-        job.stage = "animating"
-        db.session.commit()
-        logger.warning(f"Rig job {job.id} had an orphaned 'finalizing' claim; rolled back to 'animating'")
+        if _claim_rig_stage(job.id, "finalizing", "animating"):
+            db.session.refresh(job)
+            logger.warning(f"Rig job {job.id} had an orphaned 'finalizing' claim; rolled back to 'animating'")
 
 
 def reconcile_stale_ai_jobs():

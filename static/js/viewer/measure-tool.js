@@ -91,7 +91,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function addAnchor(pos) {
         const el = document.createElement('div');
-        el.slot = 'measure-anchor-' + anchors.length + '-' + Date.now();
+        // model-viewer only positions slotted children whose slot starts with
+        // "hotspot-"; anything else stays at 0,0 and the drawn line collapses.
+        el.slot = 'hotspot-measure-anchor-' + anchors.length + '-' + Date.now();
         el.className = 'measure-anchor';
         el.dataset.position = posStr(pos);
         viewer.appendChild(el);
@@ -101,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function addDot(pos, label, snapped) {
         const dot = document.createElement('div');
-        dot.slot = 'measure-dot-' + markers.length + '-' + Date.now();
+        dot.slot = 'hotspot-measure-dot-' + markers.length + '-' + Date.now();
         dot.className = 'measure-dot' + (snapped ? ' is-snapped' : '');
         dot.dataset.position = posStr(pos);
         viewer.appendChild(dot);
@@ -118,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function addAxisLabel(pos, text, axis) {
         const labelEl = document.createElement('div');
-        labelEl.slot = 'measure-albl-' + markers.length + '-' + Date.now();
+        labelEl.slot = 'hotspot-measure-albl-' + markers.length + '-' + Date.now();
         labelEl.className = 'measure-label mt-label-' + axis;
         labelEl.dataset.position = posStr(pos);
         labelEl.dataset.axis = axis;
@@ -158,7 +160,15 @@ document.addEventListener('DOMContentLoaded', () => {
         current.labelY = addAxisLabel(mid(e1, e2), 'Y ' + fmt(current.dy), 'y');
         current.labelZ = addAxisLabel(mid(e2, b), 'Z ' + fmt(current.dz), 'z');
         renderPanel();
+        // model-viewer positions the freshly-added anchors a frame or two later;
+        // redraw across the next several frames so the line snaps onto them
+        // instead of staying collapsed at 0,0 until the camera happens to move.
+        redrawForFrames(15);
+    }
+
+    function redrawForFrames(n) {
         redraw();
+        if (n > 0) requestAnimationFrame(() => redrawForFrames(n - 1));
     }
 
     function fmt(cmVal) {

@@ -25,9 +25,18 @@ test('measure tool draws line, XYZ breakdown, and saves', async ({ page }) => {
   await expect(page.locator('.mt-row-total')).toContainText('Distance:', { timeout: 5000 });
   await expect(page.locator('.mt-row-x')).toBeVisible();
 
-  // The straight line is drawn.
+  // The straight line is drawn AND has real, non-zero length -- guards the
+  // regression where anchors weren't positioned (slot prefix) / weren't
+  // redrawn after positioning, leaving the line collapsed at 0,0.
   const totalVisible = await page.getAttribute('.mt-line-total', 'visibility');
   expect(totalVisible).toBe('visible');
+  await expect
+    .poll(async () => page.evaluate(() => {
+      const l = document.querySelector('.mt-line-total');
+      return Math.hypot(l.getAttribute('x2') - l.getAttribute('x1'),
+                        l.getAttribute('y2') - l.getAttribute('y1'));
+    }))
+    .toBeGreaterThan(20);
 
   // Toggle XYZ breakdown -> axis lines become visible.
   await page.locator('#mtXYZ').check();

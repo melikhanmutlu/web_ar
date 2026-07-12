@@ -32,6 +32,7 @@
             <div><dt>models</dt><dd>{{ model_count }}</dd></div>
             <div><dt>storage</dt><dd>{{ (storage_bytes or 0) | filesizeformat }}</dd></div>
             <div><dt>ai generations (30d)</dt><dd>{{ ai_used_month }} / {{ ai_limit }}</dd></div>
+            <div><dt>ai credits</dt><dd>{{ user.ai_credit_balance }}</dd></div>
             <div><dt>ai generations (total)</dt>
                 <dd><a href="{{ url_for('admin.ai_jobs', user=user.id) }}">{{ ai_total }}</a></dd>
             </div>
@@ -67,6 +68,17 @@
                     data-body-key="plan"
                     data-confirm="Change {{ user.username }}'s plan? This applies their new storage/AI/model limits and feature access.">
                 set plan
+            </button>
+        </span>
+        <span class="admin-inline-field">
+            <input id="adjust-credits-input" type="number" step="1" value="10" class="admin-select" style="width:6rem"
+                   aria-label="credit amount (negative deducts)">
+            <button type="button" class="admin-btn"
+                    data-action-url="{{ url_for('admin.adjust_credits', user_id=user.id) }}"
+                    data-body-from="#adjust-credits-input"
+                    data-body-key="amount"
+                    data-confirm="Adjust {{ user.username }}'s AI credit balance by the entered amount? (negative deducts; balance can't go below 0)">
+                add credits
             </button>
         </span>
         <button type="button" class="admin-btn"

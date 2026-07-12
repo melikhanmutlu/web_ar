@@ -123,6 +123,7 @@ def profile():
         "model_limit": model_limit,
         "ai_used": ai_used,
         "ai_limit": ai_limit,
+        "ai_credits": current_user.ai_credit_balance,
     }
     return render_template(
         'profile.html',

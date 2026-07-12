@@ -40,6 +40,11 @@ class User(UserMixin, db.Model):
     # now, so the schema and enforcement hooks are ready for a real billing
     # provider to drive it later without another migration.
     plan = db.Column(db.String(20), nullable=False, default="free", server_default="free")
+    # Prepaid overage credits (1 credit = 1 AI generation) consumed only after
+    # the plan's monthly AI quota is used up. An admin tops this up for now
+    # (services/credits.py::grant_ai_credits); a payment provider will call the
+    # same seam later. No expiry -- purchased credits don't reset monthly.
+    ai_credit_balance = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())

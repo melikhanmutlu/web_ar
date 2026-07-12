@@ -47,6 +47,10 @@
                         {{ usage.ai_used }}
                         <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.ai_limit }}</span>
                     </dd>
+                    <dd class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        + {{ usage.ai_credits }} extra credit{{ '' if usage.ai_credits == 1 else 's' }}
+                        <a href="{{ url_for('main.pricing') }}#credits" class="text-primary hover:underline ml-1">Buy</a>
+                    </dd>
                 </div>
             </dl>
         </div>

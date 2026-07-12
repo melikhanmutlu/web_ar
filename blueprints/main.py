@@ -27,10 +27,12 @@ def index():
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
     from services.plans import PLANS, PLAN_CONFIG
+    from services.credits import CREDIT_PACKS
 
     return render_template(
         "pricing.html",
         plans=PLANS,
         plan_config=PLAN_CONFIG,
+        credit_packs=CREDIT_PACKS,
         current_plan=current_user.plan if current_user.is_authenticated else None,
     )

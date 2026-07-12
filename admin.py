@@ -525,6 +525,26 @@ def set_plan(user_id):
     return jsonify({"success": True, "plan": user.plan})
 
 
+@admin_bp.route("/users/<int:user_id>/adjust-credits", methods=["POST"])
+@admin_required
+def adjust_credits(user_id):
+    """Grant (or deduct) prepaid AI overage credits. Provider-agnostic seam
+    for now -- a payment webhook will call the same grant_ai_credits() later.
+    The balance never goes below zero."""
+    from services.credits import grant_ai_credits
+
+    user = User.query.get_or_404(user_id)
+    try:
+        amount = int((request.get_json(silent=True) or {}).get("amount"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "amount must be an integer"}), 400
+    balance = grant_ai_credits(user, amount)
+    log_action("user.adjust_credits", "user", user.id, {"amount": amount, "balance": balance})
+    db.session.commit()
+    logger.info(f"admin: {current_user.username} adjusted credits by {amount} (-> {balance}) on {user.username}")
+    return jsonify({"success": True, "ai_credit_balance": balance})
+
+
 @admin_bp.route("/users/<int:user_id>/reset-password", methods=["POST"])
 @admin_required
 def reset_password(user_id):

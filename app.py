@@ -2594,6 +2594,29 @@ def _ai_quota_state(user_id):
     return (count >= limit), count, limit
 
 
+def _consume_ai_allowance(user):
+    """Decide whether an AI generation may proceed for `user`, consuming one
+    prepaid overage credit when the monthly plan quota is exhausted.
+
+    Call this while holding a row lock on `user` (SELECT ... FOR UPDATE) so
+    concurrent requests can't each spend the same last credit. When the plan
+    quota is used up but a credit is spent, the balance is decremented on the
+    session but NOT committed -- it rides with the caller's job-creation
+    commit, so a failed generation doesn't burn a credit.
+
+    Returns (allowed, count, limit): `count`/`limit` are the monthly plan
+    quota state (for the error message); allowance may still be granted via a
+    credit even when count >= limit.
+    """
+    exceeded, count, limit = _ai_quota_state(user.id)
+    if not exceeded:
+        return True, count, limit
+    if (user.ai_credit_balance or 0) > 0:
+        user.ai_credit_balance -= 1
+        return True, count, limit
+    return False, count, limit
+
+
 
 
 def _claim_ai_stage(job_id, expect_stage, new_stage):

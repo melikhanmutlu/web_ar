@@ -20,10 +20,9 @@
 <div class="aurora-bg" aria-hidden="true"></div>
 
 <main class="pricing-main">
-    <div class="home-hero">
+    <div class="pricing-hero">
         <p class="home-kicker">Plans &amp; pricing</p>
-        <h1 class="home-title">Choose your plan</h1>
-        <p class="av-card-desc pricing-sub">Publish 3D models as AR experiences. Upgrade any time — no long-term contract.</p>
+        <h1 class="pricing-title">Choose your plan</h1>
     </div>
 
     <div class="pricing-grid">
@@ -33,7 +32,7 @@
             {% set is_current = (plan == current_plan) %}
             <div class="pricing-card {% if plan == 'pro' %}pricing-card--featured{% endif %}">
                 {% if plan == 'pro' %}
-                    <span class="model-tag-chip" style="align-self:flex-start;margin-bottom:0.75rem;">Most popular</span>
+                    <span class="model-tag-chip pricing-badge">Most popular</span>
                 {% endif %}
                 <div class="pricing-name">{{ cfg.display_name }}</div>
                 <div class="pricing-price">
@@ -64,28 +63,19 @@
         {% endfor %}
     </div>
 
-    <div id="credits">
-        <div class="home-hero pricing-section-title">
-            <p class="home-kicker">Top up</p>
-            <h2 class="home-title">AI credit packs</h2>
-            <p class="av-card-desc pricing-sub">Need more than your monthly quota? 1 credit = 1 AI generation, and credits never expire.</p>
+    <div id="credits" class="pricing-credit-strip">
+        <div class="pricing-credit-lead">
+            <span class="pricing-credit-title">AI credit packs</span>
+            <span class="pricing-credit-sub">1 credit = 1 generation · credits never expire</span>
         </div>
-        <div class="pricing-grid">
+        <div class="pricing-credit-packs">
             {% for key, pack in credit_packs.items() %}
-                <div class="pricing-card pricing-pack">
-                    <div class="pricing-name">{{ pack.credits }} credits</div>
-                    <div class="pricing-price">
-                        <span class="pricing-price-amount">${{ pack.price }}</span>
-                    </div>
-                    <p class="pricing-pack-per">${{ '%.2f'|format(pack.price / pack.credits) }} / generation</p>
-                    <a href="mailto:sales@arvision.app?subject=Buy%20{{ pack.credits }}%20AI%20credits" class="library-btn pricing-cta" style="margin-top:1.25rem;">Buy credits</a>
-                </div>
+                <a href="mailto:sales@arvision.app?subject=Buy%20{{ pack.credits }}%20AI%20credits" class="pricing-credit-pack">
+                    <span class="pricing-credit-count">{{ pack.credits }} credits</span>
+                    <span class="pricing-credit-price">${{ pack.price }}</span>
+                </a>
             {% endfor %}
         </div>
     </div>
-
-    <p class="av-card-desc pricing-note">
-        Self-serve checkout is coming soon. To change your plan or buy credits today, contact us and we'll set it up.
-    </p>
 </main>
 {% endblock %}

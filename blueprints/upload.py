@@ -927,6 +927,17 @@ def upload_job_status(job_id):
     return jsonify(_build_job_status_payload(job))
 
 
+MAX_CONCURRENT_JOB_STREAMS = int(os.environ.get("MAX_CONCURRENT_JOB_STREAMS", 4))
+# Each open SSE stream below holds a gunicorn thread for up to
+# JOB_STREAM_MAX_SECONDS. Production runs a single gthread worker with a
+# small, fixed thread pool (see nixpacks.toml/Dockerfile: --threads 8) shared
+# with every other request, so an unbounded number of concurrent streams
+# (e.g. one batch upload with several viewers watching) can starve the whole
+# site. Cap it and have callers over the limit fall back to polling -- the
+# frontend's EventSource.onerror handler already does this automatically.
+_job_stream_semaphore = threading.Semaphore(MAX_CONCURRENT_JOB_STREAMS)
+
+
 @upload_bp.route("/api/upload-jobs/<job_id>/stream", methods=["GET"])
 def upload_job_status_stream(job_id):
     """Real-time (SSE) alternative to polling /api/upload-jobs/<id>: pushes a
@@ -942,31 +953,40 @@ def upload_job_status_stream(job_id):
     if auth_error:
         return auth_error
 
+    if not _job_stream_semaphore.acquire(blocking=False):
+        return jsonify({
+            "success": False,
+            "error": "Too many active status streams; falling back to polling.",
+        }), 503
+
     poll_interval = app_module.WORKER_POLL_INTERVAL if app_module.JOB_QUEUE_ENABLED else 1
 
     def generate():
-        deadline = time.monotonic() + JOB_STREAM_MAX_SECONDS
-        last_json = None
-        while True:
-            # The conversion job is updated by a different thread/session
-            # (worker.py, or the inline background thread's own app context).
-            # Without expiring, db.session.get() would keep returning this
-            # request-scoped session's stale identity-mapped copy forever.
-            db.session.expire_all()
-            current_job = db.session.get(ConversionJob, job_id)
-            if not current_job:
-                yield 'data: {"success": false, "error": "Job not found"}\n\n'
-                return
-            payload = _build_job_status_payload(current_job)
-            payload_json = json.dumps(payload)
-            if payload_json != last_json:
-                yield f"data: {payload_json}\n\n"
-                last_json = payload_json
-            if payload["status"] in ("completed", "failed", "dead_letter"):
-                return
-            if time.monotonic() >= deadline:
-                return
-            time.sleep(poll_interval)
+        try:
+            deadline = time.monotonic() + JOB_STREAM_MAX_SECONDS
+            last_json = None
+            while True:
+                # The conversion job is updated by a different thread/session
+                # (worker.py, or the inline background thread's own app context).
+                # Without expiring, db.session.get() would keep returning this
+                # request-scoped session's stale identity-mapped copy forever.
+                db.session.expire_all()
+                current_job = db.session.get(ConversionJob, job_id)
+                if not current_job:
+                    yield 'data: {"success": false, "error": "Job not found"}\n\n'
+                    return
+                payload = _build_job_status_payload(current_job)
+                payload_json = json.dumps(payload)
+                if payload_json != last_json:
+                    yield f"data: {payload_json}\n\n"
+                    last_json = payload_json
+                if payload["status"] in ("completed", "failed", "dead_letter"):
+                    return
+                if time.monotonic() >= deadline:
+                    return
+                time.sleep(poll_interval)
+        finally:
+            _job_stream_semaphore.release()
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

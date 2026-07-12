@@ -1185,8 +1185,8 @@ body > .av-flash { margin-top: 5.5rem; }
 .pricing-price-period { font-size: 0.85rem; color: var(--color-gray-500); }
 
 .pricing-features { list-style: none; margin: 0 0 var(--spacing-lg); padding: 0; flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
-.pricing-feature { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.86rem; color: var(--color-gray-700); line-height: 1.4; }
-.pricing-feature i { width: 0.95rem; height: 0.95rem; color: var(--color-gray-900); flex-shrink: 0; margin-top: 0.1rem; }
+.pricing-feature { display: flex; align-items: flex-start; gap: 0.55rem; font-size: 0.86rem; color: var(--color-gray-700); line-height: 1.4; }
+.pricing-feature::before { content: "•"; color: var(--color-gray-400); font-size: 1rem; line-height: 1.3; flex-shrink: 0; }
 
 .pricing-cta { margin-top: auto; }
 .library-btn.pricing-cta, .btn-primary.pricing-cta { width: 100%; min-height: 2.4rem; padding: 0.6rem 0.9rem; font-size: 0.9rem; }

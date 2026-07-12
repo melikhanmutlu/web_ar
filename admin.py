@@ -178,9 +178,9 @@ def _daily_series(date_col, days=CHART_DAYS, extra_filter=None):
     return series
 
 
-def _effective_ai_daily_limit():
+def _effective_ai_monthly_limit():
     return setting_int(
-        "ai_daily_limit", current_app.config.get("AI_GEN_DAILY_LIMIT", 10)
+        "ai_monthly_limit", current_app.config.get("AI_GEN_MONTHLY_LIMIT", 0)
     )
 
 
@@ -449,13 +449,13 @@ def user_detail(user_id):
     )
     storage_bytes = (storage_bytes or 0) + (version_bytes or 0)
 
-    since = datetime.utcnow() - timedelta(days=1)
-    ai_used_24h = AIGenerationJob.query.filter(
+    since = datetime.utcnow() - timedelta(days=30)
+    ai_used_month = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user.id, AIGenerationJob.created_at >= since
     ).count()
     ai_total = AIGenerationJob.query.filter_by(user_id=user.id).count()
 
-    from services.plans import PLANS, effective_ai_daily_limit
+    from services.plans import PLANS, effective_ai_monthly_limit
 
     return render_template(
         "admin/user_detail.html",
@@ -463,9 +463,9 @@ def user_detail(user_id):
         models=models,
         model_count=model_count,
         storage_bytes=storage_bytes,
-        ai_used_24h=ai_used_24h,
+        ai_used_month=ai_used_month,
         ai_total=ai_total,
-        ai_limit=effective_ai_daily_limit(user, _effective_ai_daily_limit()),
+        ai_limit=effective_ai_monthly_limit(user, _effective_ai_monthly_limit()),
         plans=PLANS,
         likes=ModelLike.query.filter_by(user_id=user.id).count(),
         saves=ModelSave.query.filter_by(user_id=user.id).count(),
@@ -1061,8 +1061,8 @@ def ai_jobs():
         .all()
     )
 
-    since = datetime.utcnow() - timedelta(days=1)
-    usage_24h = (
+    since = datetime.utcnow() - timedelta(days=30)
+    usage_month = (
         db.session.query(User.username, func.count(AIGenerationJob.id))
         .join(User, AIGenerationJob.user_id == User.id)
         .filter(AIGenerationJob.created_at >= since)
@@ -1082,8 +1082,8 @@ def ai_jobs():
         owner=owner,
         owner_user=owner_user,
         counts=counts,
-        usage_24h=usage_24h,
-        ai_limit=_effective_ai_daily_limit(),
+        usage_month=usage_month,
+        ai_limit=_effective_ai_monthly_limit(),
         stale_minutes=AI_STALE_MINUTES,
         stale_cutoff=datetime.utcnow() - timedelta(minutes=AI_STALE_MINUTES),
     )
@@ -1288,14 +1288,14 @@ def settings():
             )
         elif tab == "ai":
             try:
-                limit = int(request.form.get("ai_daily_limit", ""))
+                limit = int(request.form.get("ai_monthly_limit", ""))
             except ValueError:
-                flash("AI daily limit must be a number.", "error")
+                flash("AI monthly limit must be a number.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
-            if not 0 <= limit <= 10000:
-                flash("AI daily limit must be between 0 and 10000.", "error")
+            if not 0 <= limit <= 100000:
+                flash("AI monthly limit must be between 0 and 100000.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
-            set_setting("ai_daily_limit", str(limit))
+            set_setting("ai_monthly_limit", str(limit))
         elif tab == "uploads":
             ceiling = _max_upload_ceiling_mb()
             try:
@@ -1331,7 +1331,7 @@ def settings():
         "maintenance_mode": setting_bool("maintenance_mode", False),
         "announcement_text": get_setting("announcement_text", "") or "",
         "registration_enabled": setting_bool("registration_enabled", True),
-        "ai_daily_limit": _effective_ai_daily_limit(),
+        "ai_monthly_limit": _effective_ai_monthly_limit(),
         "max_upload_mb": setting_int("max_upload_mb", ceiling),
         "storage_quota_mb": _effective_storage_quota_mb(),
     }

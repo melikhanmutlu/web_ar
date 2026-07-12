@@ -38,7 +38,7 @@
                     <ul class="space-y-2 text-sm text-gray-700 dark:text-gray-300 mb-6 flex-1">
                         <li>{{ limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB' }} storage</li>
                         <li>{{ limits.max_models if limits.max_models else 'Unlimited' }} models</li>
-                        <li>{{ limits.ai_daily if limits.ai_daily else 10 }} AI generations / day</li>
+                        <li>{{ limits.ai_monthly if limits.ai_monthly else 0 }} AI generations / month</li>
                         <li>Up to {{ limits.max_upload_mb }} MB per file</li>
                         <li>{{ limits.batch_size }} files per batch upload</li>
                         <li>{{ limits.analytics_retention_days }}-day analytics history</li>

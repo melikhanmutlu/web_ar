@@ -33,6 +33,12 @@ def client():
     # Cookie flags are read per-response (not latched), so overriding here works.
     app.config['SESSION_COOKIE_SECURE'] = False
     app.config['REMEMBER_COOKIE_SECURE'] = False
+    # In production the fallback monthly AI quota is 0 (Free gets no AI unless
+    # an admin grants some). Most AI tests just exercise the generation
+    # pipeline, not the quota, so give the test app a generous fallback;
+    # quota-specific tests override it via the ai_monthly_limit setting or by
+    # monkeypatching setting_int.
+    app.config['AI_GEN_MONTHLY_LIMIT'] = 100
     # Flask-Limiter's storage is a process-wide singleton, so hits accumulate
     # across every test in the session, not just within one test. Its
     # `enabled` flag is latched from app.config only once, at the init_app()

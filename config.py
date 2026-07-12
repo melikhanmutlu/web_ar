@@ -158,8 +158,10 @@ MESHY_AI_MODEL = os.getenv('MESHY_AI_MODEL', 'meshy-6')
 # Image generation model for the optional pre-processing step (text-to-image /
 # image-to-image before image-to-3D).
 MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')
-# Per-user daily generation quota (each generation costs Meshy credits = money).
-AI_GEN_DAILY_LIMIT = int(os.getenv('AI_GEN_DAILY_LIMIT', 10))
+# Per-user monthly generation quota fallback (rolling 30-day window). Each
+# generation costs Meshy credits = money, so this defaults to 0 (off); paid
+# plans grant an explicit monthly allowance (services/plans.py).
+AI_GEN_MONTHLY_LIMIT = int(os.getenv('AI_GEN_MONTHLY_LIMIT', 0))
 METRICS_TOKEN = os.getenv('METRICS_TOKEN', '')
 
 # SEO / canonical site config. SITE_URL is env-var-driven (never derived from

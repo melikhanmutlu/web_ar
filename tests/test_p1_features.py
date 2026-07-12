@@ -68,13 +68,13 @@ def test_mutations_are_recorded_in_audit_log(client, admin_user, init_database):
 
 def test_settings_save_is_recorded_without_csrf_token_leaking(client, admin_user):
     login(client, "adminuser", "adminpassword")
-    client.post("/admin/settings?tab=ai", data={"ai_daily_limit": "7", "csrf_token": "should-not-be-logged"})
+    client.post("/admin/settings?tab=ai", data={"ai_monthly_limit": "7", "csrf_token": "should-not-be-logged"})
 
     entry = AdminAuditLog.query.filter_by(action="settings.update").first()
     assert entry is not None
     assert entry.target_id == "ai"
     assert "csrf_token" not in entry.detail
-    assert entry.detail["ai_daily_limit"] == "7"
+    assert entry.detail["ai_monthly_limit"] == "7"
 
 
 def test_audit_log_page_lists_and_filters(client, admin_user, init_database):

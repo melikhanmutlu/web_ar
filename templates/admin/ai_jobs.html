@@ -23,9 +23,9 @@
 
 <div class="admin-grid-2">
     <div class="admin-card">
-        <h2 class="admin-card-title">usage — last 24 hours (limit {{ ai_limit }}/day)</h2>
+        <h2 class="admin-card-title">usage — last 30 days (limit {{ ai_limit }}/month)</h2>
         <ul class="admin-activity">
-            {% for username, count in usage_24h %}
+            {% for username, count in usage_month %}
             <li>
                 <span class="title">{{ username }}</span>
                 <span class="meta {% if count >= ai_limit %}admin-health-warn{% endif %}">{{ count }} / {{ ai_limit }}</span>

@@ -2575,17 +2575,18 @@ def _load_texture_reference(path):
 
 
 def _ai_quota_state(user_id):
-    """Counts AIGenerationJob rows -- text/image generation spends real Meshy
-    credits, so an admin setting ai_daily_limit to 0 to disable Meshy usage
-    entirely must cover it."""
+    """Per-user monthly (rolling 30-day) AI generation quota. Counts
+    AIGenerationJob rows -- text/image generation spends real Meshy credits,
+    so an admin setting ai_monthly_limit to 0 to disable Meshy usage entirely
+    must cover it."""
     from datetime import timedelta
-    from services.plans import effective_ai_daily_limit
-    since = datetime.utcnow() - timedelta(days=1)
+    from services.plans import effective_ai_monthly_limit
+    since = datetime.utcnow() - timedelta(days=30)
     # Admin-editable override; falls back to the env default when unset.
-    # The user's plan (services/plans.py) can raise that ceiling further.
-    global_default_limit = setting_int("ai_daily_limit", app.config.get("AI_GEN_DAILY_LIMIT", 10))
+    # The user's plan (services/plans.py) sets the per-tier monthly ceiling.
+    global_default_limit = setting_int("ai_monthly_limit", app.config.get("AI_GEN_MONTHLY_LIMIT", 0))
     user = db.session.get(User, user_id) if user_id else None
-    limit = effective_ai_daily_limit(user, global_default_limit)
+    limit = effective_ai_monthly_limit(user, global_default_limit)
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,

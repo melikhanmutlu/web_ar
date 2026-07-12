@@ -46,10 +46,10 @@
 
     {% elif tab == 'ai' %}
     <div class="admin-field">
-        <label class="field-label" for="ai_daily_limit">daily generation limit per user</label>
-        <input type="number" id="ai_daily_limit" name="ai_daily_limit" class="av-input" min="0" max="10000"
-               value="{{ values.ai_daily_limit }}">
-        <p class="field-help">Rolling 24-hour window. Each generation costs Meshy credits. 0 disables AI generation entirely.</p>
+        <label class="field-label" for="ai_monthly_limit">monthly generation limit per user</label>
+        <input type="number" id="ai_monthly_limit" name="ai_monthly_limit" class="av-input" min="0" max="100000"
+               value="{{ values.ai_monthly_limit }}">
+        <p class="field-help">Rolling 30-day window; the fallback for users whose plan doesn't set its own monthly allowance (e.g. Free). Each generation costs Meshy credits. 0 disables AI generation entirely.</p>
     </div>
 
     {% elif tab == 'uploads' %}

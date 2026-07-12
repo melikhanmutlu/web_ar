@@ -35,7 +35,7 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
     # Plan/billing foundation (Faz 5): which tier's limits apply to this
-    # user's storage quota and AI daily limit (services/plans.py). Payment
+    # user's storage quota and monthly AI limit (services/plans.py). Payment
     # processing itself is out of scope -- an admin sets this directly for
     # now, so the schema and enforcement hooks are ready for a real billing
     # provider to drive it later without another migration.

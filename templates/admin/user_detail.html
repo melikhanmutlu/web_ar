@@ -31,7 +31,7 @@
         <dl class="admin-dl">
             <div><dt>models</dt><dd>{{ model_count }}</dd></div>
             <div><dt>storage</dt><dd>{{ (storage_bytes or 0) | filesizeformat }}</dd></div>
-            <div><dt>ai generations (24h)</dt><dd>{{ ai_used_24h }} / {{ ai_limit }}</dd></div>
+            <div><dt>ai generations (30d)</dt><dd>{{ ai_used_month }} / {{ ai_limit }}</dd></div>
             <div><dt>ai generations (total)</dt>
                 <dd><a href="{{ url_for('admin.ai_jobs', user=user.id) }}">{{ ai_total }}</a></dd>
             </div>

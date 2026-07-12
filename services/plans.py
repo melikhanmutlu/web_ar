@@ -10,11 +10,14 @@ to write User.plan -- no new schema/migration (columns like plan_expires_at
 or stripe_customer_id are deferred to that future billing phase).
 
 Value conventions (shared with the enforcement sites):
-- storage_mb / ai_daily / max_models / max_upload_mb == None  -> no
+- storage_mb / ai_monthly / max_models / max_upload_mb == None  -> no
   plan-imposed limit; fall through to the global admin default (storage/AI)
   or treat as unlimited (model count).
-- ai_daily must never be 0 for a paid tier: 0 means "disabled entirely" in
-  app.py::_ai_quota_state, not unlimited -- so paid tiers use a large ceiling.
+- ai_monthly is a per-user monthly (rolling 30-day) cap. 0 means "disabled
+  entirely" (see app.py::_ai_quota_state), not unlimited. "free" leaves it
+  None so it falls through to the global ai_monthly_limit setting (default 0
+  -> AI generation off for free users unless an admin grants some); paid
+  tiers set an explicit positive ceiling.
 """
 
 import os
@@ -31,7 +34,7 @@ PLAN_CONFIG = {
         "price": 0,
         "limits": {
             "storage_mb": None,       # -> global storage_quota_mb default (1 GB)
-            "ai_daily": None,         # -> global ai_daily_limit default (10)
+            "ai_monthly": None,       # -> global ai_monthly_limit default (0 = off)
             "max_models": 10,
             "max_upload_mb": 50,
             "batch_size": 3,
@@ -53,7 +56,7 @@ PLAN_CONFIG = {
         "limits": {
             # Keep the existing env hooks so env-based tuning isn't dropped.
             "storage_mb": int(os.getenv("PLAN_PRO_STORAGE_QUOTA_MB", 10240)),  # 10 GB
-            "ai_daily": int(os.getenv("PLAN_PRO_AI_DAILY_LIMIT", 1000)),
+            "ai_monthly": int(os.getenv("PLAN_PRO_AI_MONTHLY_LIMIT", 20)),
             "max_models": 200,
             "max_upload_mb": 100,
             "batch_size": 10,
@@ -74,7 +77,7 @@ PLAN_CONFIG = {
         "price": 99,
         "limits": {
             "storage_mb": int(os.getenv("PLAN_BUSINESS_STORAGE_QUOTA_MB", 102400)),  # 100 GB
-            "ai_daily": int(os.getenv("PLAN_BUSINESS_AI_DAILY_LIMIT", 5000)),
+            "ai_monthly": int(os.getenv("PLAN_BUSINESS_AI_MONTHLY_LIMIT", 200)),
             "max_models": None,       # unlimited
             "max_upload_mb": 100,
             "batch_size": 25,
@@ -121,5 +124,5 @@ def effective_storage_quota_mb(user, global_default_mb):
     return plan_limit(user, "storage_mb", global_default_mb)
 
 
-def effective_ai_daily_limit(user, global_default_limit):
-    return plan_limit(user, "ai_daily", global_default_limit)
+def effective_ai_monthly_limit(user, global_default_limit):
+    return plan_limit(user, "ai_monthly", global_default_limit)

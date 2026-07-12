@@ -1,5 +1,5 @@
 """Plan/billing foundation (Faz 5: "Kullanım kotaları ve plan/faturalama
-temeli"): User.plan overrides the global storage/AI daily quotas."""
+temeli"): User.plan overrides the global storage/monthly-AI quotas."""
 
 import io
 
@@ -8,7 +8,7 @@ import site_settings
 from app import app, db
 from models import User, UserModel
 from services.plans import (
-    effective_ai_daily_limit,
+    effective_ai_monthly_limit,
     effective_storage_quota_mb,
     plan_allows,
     plan_limit,
@@ -56,9 +56,9 @@ def test_effective_storage_quota_mb_no_user_uses_global_default():
     assert effective_storage_quota_mb(None, 500) == 500
 
 
-def test_effective_ai_daily_limit_pro_overrides_global_default():
+def test_effective_ai_monthly_limit_pro_overrides_global_default():
     u = User(plan="pro")
-    assert effective_ai_daily_limit(u, 10) > 10
+    assert effective_ai_monthly_limit(u, 5) == 20
 
 
 def test_pro_plan_gets_a_higher_storage_quota_on_real_upload(client):
@@ -146,7 +146,13 @@ def test_plan_allows_api_access_by_tier():
 
 def test_business_gets_a_higher_storage_and_ai_ceiling():
     assert effective_storage_quota_mb(User(plan="business"), 500) > 10240
-    assert effective_ai_daily_limit(User(plan="business"), 10) > 1000
+    assert effective_ai_monthly_limit(User(plan="business"), 5) == 200
+
+
+def test_free_ai_monthly_falls_through_to_global_default():
+    # free leaves ai_monthly None -> uses the admin global (0 = off by default).
+    assert effective_ai_monthly_limit(User(plan="free"), 0) == 0
+    assert effective_ai_monthly_limit(User(plan="free"), 3) == 3
 
 
 # --- model-count gate ---

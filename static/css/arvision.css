@@ -1535,9 +1535,25 @@ body > .av-flash { margin-top: 5.5rem; }
 .landing-footer-links a:hover { color: var(--color-gray-900); text-decoration: underline; text-underline-offset: 3px; }
 .landing-footer-copy { width: 100%; font-size: 0.76rem; color: var(--color-gray-400); text-align: center; margin-top: 1rem; }
 
+/* Product tour: real product screenshots, not mockups */
+.landing-showcase { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.landing-showcase-card {
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--color-gray-100);
+    box-shadow: var(--shadow-md);
+    transition: transform 0.2s var(--ease-premium), box-shadow 0.2s var(--ease-premium);
+}
+.landing-showcase-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+.landing-showcase-card img { display: block; width: 100%; height: auto; }
+.landing-showcase-caption { padding: 1.1rem 1.3rem; border-top: 1px solid var(--color-gray-200); background: var(--color-white); }
+.landing-showcase-caption h3 { font-size: 0.95rem; font-weight: 700; color: var(--color-gray-900); margin: 0 0 0.25rem; }
+.landing-showcase-caption p { font-size: 0.82rem; color: var(--color-gray-500); margin: 0; line-height: 1.5; }
+
 @media (max-width: 860px) {
     .landing-hero { padding-top: 7.5rem; }
-    .landing-steps, .landing-features { grid-template-columns: 1fr; }
+    .landing-steps, .landing-features, .landing-showcase { grid-template-columns: 1fr; }
     .landing-audience { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .landing-section { padding-top: 4.5rem; }
     .landing-cta-banner { margin-top: 4.5rem; padding: 3rem 1.5rem; }

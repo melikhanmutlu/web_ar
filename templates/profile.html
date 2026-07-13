@@ -1,94 +1,70 @@
 {% extends "base.html" %}
 
-{% block title %}Profile - ARVision{% endblock %}
+{% block title %}Profile - arvision{% endblock %}
 
 {% block content %}
-<div class="container mx-auto px-4 pt-28 pb-12">
-    <div class="max-w-4xl mx-auto">
-        <!-- Profile Header -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-            <div class="flex items-center space-x-4">
-                <div class="flex-1">
-                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ current_user.username }}</h2>
-                    <p class="text-gray-600 dark:text-gray-400">{{ current_user.email }}</p>
-                </div>
-            </div>
+<main class="library-main">
+    <section class="library-header">
+        <div>
+            <p class="home-kicker">Account</p>
+            <h1 class="home-title">{{ user.username }}</h1>
+            <p class="av-card-desc" style="margin-top:0.35rem;">{{ user.email }}</p>
         </div>
-
-        <!-- Plan & Usage -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Plan</h3>
-                <div class="flex items-center space-x-3">
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary dark:bg-primary/20">{{ plan_display }}</span>
-                    {% if plan != 'business' %}
-                        <a href="{{ url_for('main.pricing') }}" class="text-sm font-medium text-primary hover:underline">Upgrade</a>
-                    {% endif %}
-                </div>
-            </div>
-            <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Storage</dt>
-                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
-                        {{ usage.storage_used_mb }} MB
-                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.storage_quota_mb ~ ' MB' if usage.storage_quota_mb else 'Unlimited' }}</span>
-                    </dd>
-                </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">Models</dt>
-                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
-                        {{ usage.model_count }}
-                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.model_limit if usage.model_limit else 'Unlimited' }}</span>
-                    </dd>
-                </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                    <dt class="text-sm text-gray-500 dark:text-gray-400">AI generations (this month)</dt>
-                    <dd class="text-lg font-medium text-gray-900 dark:text-white">
-                        {{ usage.ai_used }}
-                        <span class="text-sm text-gray-500 dark:text-gray-400">/ {{ usage.ai_limit }}</span>
-                    </dd>
-                    <dd class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        + {{ usage.ai_credits }} extra credit{{ '' if usage.ai_credits == 1 else 's' }}
-                        <a href="{{ url_for('main.pricing') }}#credits" class="text-primary hover:underline ml-1">Buy</a>
-                    </dd>
-                </div>
-            </dl>
-        </div>
-
-        <!-- User Models -->
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-            <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">My Models</h3>
-            
-            {% if user.models %}
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {% for model in user.models %}
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                            <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ model.original_filename }}</h4>
-                            <div class="flex space-x-2">
-                                <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-                                    View
-                                </a>
-                                <a href="{{ url_for('models_crud.download_model', filename=model.original_filename) }}" 
-                                   class="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-                                    Download
-                                </a>
-                            </div>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p class="text-gray-600 dark:text-gray-400">No models uploaded yet.</p>
+        <div class="library-actions">
+            <span class="model-tag-chip" style="font-size:0.78rem;padding:0.3rem 0.8rem;">{{ plan_display }}</span>
+            {% if plan != 'business' %}
+            <a href="{{ url_for('main.pricing') }}" class="library-btn">Upgrade</a>
             {% endif %}
+        </div>
+    </section>
 
-            <!-- Upload New Model -->
-            <div class="mt-6">
-                <a href="{{ url_for('main.studio') }}"
-                   class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-                    Upload New Model
-                </a>
+    <section class="av-card" style="margin-bottom:1.5rem;">
+        <div class="av-card-title" style="margin-bottom:0.9rem;">Usage</div>
+        <div class="progress-meta" style="grid-template-columns:repeat(3,minmax(0,1fr));">
+            <div class="progress-chip">
+                <span>Storage</span>
+                <strong>{{ usage.storage_used_mb }} MB / {{ usage.storage_quota_mb ~ ' MB' if usage.storage_quota_mb else 'Unlimited' }}</strong>
+            </div>
+            <div class="progress-chip">
+                <span>Models</span>
+                <strong>{{ usage.model_count }} / {{ usage.model_limit if usage.model_limit else 'Unlimited' }}</strong>
+            </div>
+            <div class="progress-chip">
+                <span>AI generations</span>
+                <strong>{{ usage.ai_used }} / {{ usage.ai_limit }}</strong>
             </div>
         </div>
-    </div>
-</div>
+        <p class="av-card-desc" style="margin-top:0.75rem;">
+            + {{ usage.ai_credits }} extra AI credit{{ '' if usage.ai_credits == 1 else 's' }}
+            <a href="{{ url_for('main.pricing') }}#credits" style="text-decoration:underline;">Buy more</a>
+        </p>
+    </section>
+
+    <section class="library-section">
+        <div class="library-section-title">
+            <h2>My Models</h2>
+        </div>
+
+        {% if user.models %}
+        <div class="library-model-grid">
+            {% for model in user.models %}
+            <div class="av-card" style="padding:1.1rem;">
+                <h3 style="font-size:0.95rem;font-weight:700;margin:0 0 0.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ model.original_filename }}</h3>
+                <div style="display:flex;gap:0.5rem;">
+                    <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" class="btn-primary library-primary" style="flex:1;text-decoration:none;">View</a>
+                    <a href="{{ url_for('models_crud.download_model', filename=model.original_filename) }}" class="library-btn" style="flex:1;text-decoration:none;">Download</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="library-empty">
+            <i data-lucide="box"></i>
+            <h2>No models uploaded yet</h2>
+            <p>Upload a 3D model to see it here.</p>
+            <a href="{{ url_for('main.studio') }}" class="btn-primary" style="display:inline-flex;width:auto;text-decoration:none;">Upload a model</a>
+        </div>
+        {% endif %}
+    </section>
+</main>
 {% endblock %}

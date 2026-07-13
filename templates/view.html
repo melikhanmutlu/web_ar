@@ -53,20 +53,29 @@
 
     <!-- Custom Styles -->
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@500;600;700&display=swap');
         :root {
-            --color-black: #000000;
-            --color-gray-900: #111111;
-            --color-gray-800: #1a1a1a;
-            --color-gray-700: #333333;
-            --color-gray-600: #555555;
-            --color-gray-500: #777777;
-            --color-gray-400: #999999;
-            --color-gray-300: #cccccc;
-            --color-gray-200: #eeeeee;
-            --color-gray-100: #f5f5f5;
-            --color-white: #ffffff;
-            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            /* Warm-neutral scale, tinted toward the coral accent hue (see
+               static/css/arvision.css :root). gray-400/500 here are tuned for
+               this page's always-dark tool surfaces (#toolsPanel, .showcase-card,
+               .measure-result-panel) rather than the light chrome around them --
+               the handful of light-background usages are repointed to
+               gray-600/700 individually below. */
+            --color-black: #15110c;
+            --color-gray-900: #211c17;
+            --color-gray-800: #2a241d;
+            --color-gray-700: #453d33;
+            --color-gray-600: #675c4f;
+            --color-gray-500: #9c8f80;
+            --color-gray-400: #a99c8c;
+            --color-gray-300: #c9bfb2;
+            --color-gray-200: #e8e0d5;
+            --color-gray-100: #f2ece4;
+            --color-white: #fbf8f4;
+            --accent: #bb4020;
+            --accent-dark: #9c3419;
+            --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
             --spacing-xs: 0.25rem;
             --spacing-sm: 0.5rem;
             --spacing-md: 0.75rem;
@@ -155,7 +164,7 @@
         .brand-mark { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--color-gray-900); text-decoration: none; }
         .dark .brand-mark { color: var(--color-gray-200); }
         .top-actions { gap: 0.45rem; padding: 0.4rem 0.8rem; }
-        .showcase-nav a, .showcase-nav-link { font-size: 0.88rem; color: var(--color-gray-500); text-decoration: none; letter-spacing: 0.02em; padding: 0.25rem 0.5rem; transition: color 0.15s; }
+        .showcase-nav a, .showcase-nav-link { font-size: 0.88rem; color: var(--color-gray-600); text-decoration: none; letter-spacing: 0.02em; padding: 0.25rem 0.5rem; transition: color 0.15s; }
         .showcase-nav a:hover, .showcase-nav-link:hover, .showcase-nav a.is-active { color: var(--color-gray-900); text-decoration: underline; }
         .dark .showcase-nav a, .dark .showcase-nav-link { color: var(--color-gray-400); }
         .dark .showcase-nav a:hover, .dark .showcase-nav-link:hover, .dark .showcase-nav a.is-active { color: var(--color-gray-200); }
@@ -781,9 +790,9 @@
                 <div style="flex:1;min-width:0;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
                         <h3 style="font-size:0.95rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
-                        <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+                        <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-600);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
                     </div>
-                    <p style="font-size:0.8rem;color:var(--color-gray-500);margin:0;line-height:1.5;">Scan this QR code with your mobile device to view the model in AR</p>
+                    <p style="font-size:0.8rem;color:var(--color-gray-600);margin:0;line-height:1.5;">Scan this QR code with your mobile device to view the model in AR</p>
                 </div>
                 <div style="background:#fff;padding:0.4rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
                     <div id="qrcode"></div>
@@ -885,7 +894,7 @@
                             {% endfor %}
                         </div>
                         {% elif current_user.is_authenticated %}
-                        <p style="font-size:0.7rem;color:#64748b;text-align:center;padding:0.8rem 0.4rem;">No other models yet. <a href="/app" style="color:#3b82f6;text-decoration:underline;">Upload one</a></p>
+                        <p style="font-size:0.7rem;color:var(--color-gray-500);text-align:center;padding:0.8rem 0.4rem;">No other models yet. <a href="/app" style="color:var(--accent);text-decoration:underline;">Upload one</a></p>
                         {% else %}
                         <div style="text-align:center;padding:1rem 0.5rem;">
                             <p style="font-size:0.72rem;color:var(--color-gray-500);margin-bottom:0.6rem;">Sign in to explore more models</p>
@@ -1079,7 +1088,7 @@
                             <img id="texturePreviewImg" style="width:100%;height:3.5rem;object-fit:cover;border:1px solid var(--color-gray-700);">
                             <p id="textureUvNote" class="hidden" style="margin:0.3rem 0 0;font-size:0.68rem;line-height:1.4;color:#fbbf24;">
                                 This model has no UV map, so the live preview is approximate.
-                                Click Save Changes — proper texture coordinates are generated automatically.
+                                Click Save Changes; proper texture coordinates are generated automatically.
                             </p>
                             <button onclick="removeTexture()" class="tp-btn-full" style="margin-top:0.25rem;color:var(--color-gray-400);">Remove Texture</button>
                         </div>
@@ -1170,9 +1179,9 @@
                         <i data-lucide="expand" style="width:0.75rem;height:0.75rem;"></i>
                         Save Exploded Layout
                     </button>
-                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
+                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only unless you press Save Exploded Layout, which permanently moves the parts, including in AR.</p>
                     {% else %}
-                    <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>
+                    <p class="tp-note">Preview only: visibility, color and explode changes reset on reload.</p>
                     {% endif %}
                 </div>
             </div>
@@ -1266,7 +1275,7 @@
                     </div>
                     {% endif %}
                     <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
-                    <p id="slicerPreviewWarn" class="tp-note hidden" style="margin-bottom:0.5rem;color:#f59e0b;">Live preview isn't available in this browser — the slice will still apply correctly when you press Apply.</p>
+                    <p id="slicerPreviewWarn" class="tp-note hidden" style="margin-bottom:0.5rem;color:#f59e0b;">Live preview isn't available in this browser, but the slice will still apply correctly when you press Apply.</p>
 
                     <!-- X Axis -->
                     <div class="tp-slicer-axis" id="slicerAxisX">
@@ -1343,7 +1352,7 @@
                     {% if can_edit %}
                     <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Permanently cuts the model as a new version</p>
                     {% else %}
-                    <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Preview only — you don't own this model</p>
+                    <p class="tp-note" style="text-align:center;margin-top:0.3rem;">Preview only: you don't own this model</p>
                     {% endif %}
                 </div>
             </div>
@@ -1457,7 +1466,7 @@
             <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>
             {% endif %}
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
-            <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i></button>
+            <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay: freely move the model over your real object, no surface lock"><i data-lucide="scan"></i></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
             <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i></button>
             <div class="download-menu" id="downloadMenu">
@@ -1642,11 +1651,11 @@
     <!-- AR Modal -->
     <div id="arModal">
         <div class="modal-card">
-            <button id="closeArModal" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <button id="closeArModal" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-600);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
             <div style="display:flex;align-items:flex-start;gap:1.25rem;">
                 <div style="flex:1;min-width:0;">
                     <h3 id="arModalTitle" style="font-size:0.95rem;font-weight:700;margin:0 0 0.5rem;color:var(--color-gray-900);">AR Not Supported</h3>
-                    <p id="arModalMessage" style="font-size:0.8rem;color:var(--color-gray-500);margin:0;line-height:1.5;">Your device doesn't support AR. Scan the QR code with a mobile device.</p>
+                    <p id="arModalMessage" style="font-size:0.8rem;color:var(--color-gray-600);margin:0;line-height:1.5;">Your device doesn't support AR. Scan the QR code with a mobile device.</p>
                 </div>
                 <div style="background:#fff;padding:0.4rem;border:1px solid var(--color-gray-200);flex-shrink:0;">
                     <div id="arModalQrCode"></div>
@@ -1657,7 +1666,7 @@
 
     <div id="hotspotDiscussionModal">
         <div class="modal-card">
-            <button id="closeHotspotDiscussion" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <button id="closeHotspotDiscussion" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-600);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
             <h3 id="hotspotDiscussionTitle" style="font-size:0.95rem;font-weight:700;margin:0 0 0.75rem;color:var(--color-gray-900);padding-right:1.5rem;"></h3>
             <div id="hotspotDiscussionComments"><p class="tp-note">No comments yet.</p></div>
             <div id="hotspotDiscussionFormWrap" style="margin-top:0.75rem;">

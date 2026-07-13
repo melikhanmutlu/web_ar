@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set seo_title = "ARVision — Turn 3D Models into Augmented Reality" %}
-{% set seo_description = "Upload STL, OBJ, FBX or STEP — or generate a model with AI — and get an instant AR-ready link that opens in Android Scene Viewer and iOS Quick Look. No app install required." %}
+{% set seo_description = "Upload STL, OBJ, FBX or STEP, or generate a model with AI, and get an instant AR-ready link that opens in Android Scene Viewer and iOS Quick Look. No app install required." %}
 {% set seo_robots = "index, follow" %}
 
 {% block title %}ARVision — Turn 3D Models into Augmented Reality{% endblock %}
@@ -18,7 +18,7 @@
 }
 </script>
 <script type="module" src="{{ url_for('static', filename='js/model-viewer.min.js') }}"></script>
-<!-- The hero model is Meshopt-compressed (Web Compression: Meshopt) --
+<!-- The hero model is Meshopt-compressed (Web Compression: Meshopt).
      model-viewer needs the decoder registered before it loads one, or
      the model silently never renders (mirrors templates/view.html). -->
 <script>
@@ -37,8 +37,8 @@
         <span class="landing-badge"><i data-lucide="sparkles"></i> AI-generated 3D, now built in</span>
         <h1 class="landing-title">Any 3D model, <em>instantly</em> in augmented reality.</h1>
         <p class="landing-subtitle">
-            Upload STL, OBJ, FBX or STEP — or describe what you want and let AI build it — and get a
-            link that opens straight into AR on any modern phone. No app to install, nothing to render.
+            Upload STL, OBJ, FBX or STEP, or describe what you want and let AI build it. Get a link
+            that opens straight into AR on any modern phone — no app, nothing to install.
         </p>
         <div class="landing-cta-row">
             <a href="{{ url_for('main.studio') }}" class="btn-primary">
@@ -65,7 +65,7 @@
                 ar-modes="scene-viewer webxr"
                 alt="A sample 3D model rotating in the ARVision viewer">
             </model-viewer>
-            <div class="landing-stage-caption"><i data-lucide="move-3d"></i> Drag to orbit — this is a live viewer, not a video</div>
+            <div class="landing-stage-caption"><i data-lucide="move-3d"></i> Drag to orbit. This is a live viewer, not a video.</div>
         </div>
 
         <div class="landing-formats">
@@ -91,7 +91,7 @@
         <div class="landing-section-head">
             <p class="landing-eyebrow">How it works</p>
             <h2 class="landing-section-title">From file to AR link in three steps</h2>
-            <p class="landing-section-desc">The whole pipeline — conversion, optimization, hosting — runs on our
+            <p class="landing-section-desc">The whole pipeline (conversion, optimization, hosting) runs on our
                 servers. You never touch a 3D tool.</p>
         </div>
         <div class="landing-steps">
@@ -104,8 +104,8 @@
             <div class="landing-step">
                 <span class="landing-step-num">2</span>
                 <h3>Convert &amp; optimize</h3>
-                <p>Automatic conversion to GLB and USDZ, with compression, thumbnailing, and material repair —
-                    no local software needed.</p>
+                <p>Automatic conversion to GLB and USDZ, with compression, thumbnailing, and material repair.
+                    No local software needed.</p>
             </div>
             <div class="landing-step">
                 <span class="landing-step-num">3</span>
@@ -125,19 +125,19 @@
             <div class="landing-feature">
                 <span class="landing-feature-icon"><i data-lucide="boxes"></i></span>
                 <h3>Multi-format conversion</h3>
-                <p>STL, OBJ, FBX and STEP in — clean, optimized GLB and USDZ out, with textures and materials
+                <p>STL, OBJ, FBX and STEP in. Clean, optimized GLB and USDZ out, with textures and materials
                     preserved.</p>
             </div>
             <div class="landing-feature">
                 <span class="landing-feature-icon"><i data-lucide="wand-sparkles"></i></span>
                 <h3>AI-generated 3D</h3>
-                <p>Turn a text prompt or a product photo into a real, texturable mesh — no modeling
+                <p>Turn a text prompt or a product photo into a real, texturable mesh. No modeling
                     experience required.</p>
             </div>
             <div class="landing-feature">
                 <span class="landing-feature-icon"><i data-lucide="scan-line"></i></span>
                 <h3>AR on every phone</h3>
-                <p>Google Scene Viewer on Android, Quick Look on iOS — visitors tap a link, no app install.</p>
+                <p>Google Scene Viewer on Android, Quick Look on iOS. Visitors tap a link, no app to install.</p>
             </div>
             <div class="landing-feature">
                 <span class="landing-feature-icon"><i data-lucide="ruler"></i></span>
@@ -169,14 +169,14 @@
                 <img src="{{ url_for('static', filename='marketing/showcase-studio.jpg') }}" alt="The ARVision studio: drag-and-drop upload with conversion options" loading="lazy">
                 <div class="landing-showcase-caption">
                     <h3>Upload, generate, convert</h3>
-                    <p>Drag in a file or generate one with AI — pick compression and sizing before it converts.</p>
+                    <p>Drag in a file or generate one with AI, then pick compression and sizing before it converts.</p>
                 </div>
             </div>
             <div class="landing-showcase-card">
                 <img src="{{ url_for('static', filename='marketing/showcase-tools.jpg') }}" alt="The ARVision viewer's tools panel: view, material, lighting, layers, transform, annotations, slicer, history" loading="lazy">
                 <div class="landing-showcase-caption">
                     <h3>A full editing toolkit</h3>
-                    <p>Materials, lighting, measurements, annotations, slicing, and version history — in the viewer.</p>
+                    <p>Materials, lighting, measurements, annotations, slicing, and version history, all inside the viewer.</p>
                 </div>
             </div>
         </div>
@@ -190,22 +190,22 @@
         <div class="landing-audience">
             <div class="landing-audience-item">
                 <i data-lucide="shopping-bag"></i>
-                <h4>E-commerce</h4>
+                <h3>E-commerce</h3>
                 <p>Let shoppers place products in their own space before they buy.</p>
             </div>
             <div class="landing-audience-item">
                 <i data-lucide="palette"></i>
-                <h4>Designers &amp; artists</h4>
+                <h3>Designers &amp; artists</h3>
                 <p>Share portfolio pieces as AR links instead of static renders.</p>
             </div>
             <div class="landing-audience-item">
                 <i data-lucide="drafting-compass"></i>
-                <h4>Engineers &amp; makers</h4>
+                <h3>Engineers &amp; makers</h3>
                 <p>Check CAD/STEP exports and prints at real-world scale.</p>
             </div>
             <div class="landing-audience-item">
                 <i data-lucide="graduation-cap"></i>
-                <h4>Educators</h4>
+                <h3>Educators</h3>
                 <p>Turn any object into an interactive, walk-around AR lesson.</p>
             </div>
         </div>
@@ -213,7 +213,7 @@
 
     <div class="landing-cta-banner">
         <h2>Have a model? See it in AR in under a minute.</h2>
-        <p>No account required to try it — upload a file and get a shareable AR link right away.</p>
+        <p>No account required to try it. Upload a file and get a shareable AR link right away.</p>
         <div class="landing-cta-row">
             <a href="{{ url_for('main.studio') }}" class="btn-primary">
                 <i data-lucide="rocket" style="width:1.05rem;height:1.05rem;"></i> Open Studio

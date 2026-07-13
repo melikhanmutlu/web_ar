@@ -1,29 +1,32 @@
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench (product-led) · theme: Coral (warm-neutral) · nav: N5 · footer: Ft2 */
 /* ===================================================================
-   arvision design system — refined light-premium, grayscale + one
-   accent, themable. Extracted from templates/view.html. See DESIGN.md.
+   arvision design system — warm-neutral premium, one coral accent,
+   Geist + Geist Mono. Extracted from templates/view.html. See DESIGN.md.
    =================================================================== */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Geist+Mono:wght@500;600;700&display=swap');
 
 :root {
-    --color-black:    #000000;
-    --color-gray-900: #111111;
-    --color-gray-800: #1a1a1a;
-    --color-gray-700: #333333;
-    --color-gray-600: #555555;
-    --color-gray-500: #777777;
-    --color-gray-400: #999999;
-    --color-gray-300: #cccccc;
-    --color-gray-200: #eeeeee;
-    --color-gray-100: #f5f5f5;
-    --color-white:    #ffffff;
+    /* Warm-neutral scale (oklch-derived; tinted toward the coral accent's hue,
+       never pure achromatic grays or #000/#fff — see the hallmark colour rules). */
+    --color-black:    #15110c;
+    --color-gray-900: #211c17;
+    --color-gray-800: #2a241d;
+    --color-gray-700: #453d33;
+    --color-gray-600: #675c4f;
+    --color-gray-500: #6e6255;
+    --color-gray-400: #9b8f80;
+    --color-gray-300: #c9bfb2;
+    --color-gray-200: #e8e0d5;
+    --color-gray-100: #f2ece4;
+    --color-white:    #fbf8f4;
 
-    /* Single premium accent, used sparingly (CTAs, focus, highlights) */
-    --accent:      #3b6cf6;
-    --accent-dark: #2e56d1;
-    --accent-soft: rgba(59, 108, 246, 0.08);
+    /* Single warm-coral accent, used sparingly (CTAs, focus, highlights) */
+    --accent:      #bb4020;
+    --accent-dark: #9c3419;
+    --accent-soft: rgba(187, 64, 32, 0.08);
 
-    --error:      #dc2626;
-    --error-dark: #ef4444;
+    --error:      #c23b1f;
+    --error-dark: #e0492a;
 
     --spacing-xs:  0.25rem;
     --spacing-sm:  0.5rem;
@@ -40,13 +43,15 @@
     --radius-lg: 1.35rem;
     --radius-pill: 999px;
 
-    --shadow-sm: 0 1px 2px rgba(17, 17, 17, 0.05), 0 1px 1px rgba(17, 17, 17, 0.04);
-    --shadow-md: 0 0.6rem 1.75rem rgba(17, 17, 17, 0.08), 0 0.1rem 0.4rem rgba(17, 17, 17, 0.04);
-    --shadow-lg: 0 1.5rem 4rem rgba(17, 17, 17, 0.14), 0 0.4rem 1rem rgba(17, 17, 17, 0.06);
+    --shadow-sm: 0 1px 2px rgba(21, 17, 12, 0.06), 0 1px 1px rgba(21, 17, 12, 0.05);
+    --shadow-md: 0 0.6rem 1.75rem rgba(21, 17, 12, 0.09), 0 0.1rem 0.4rem rgba(21, 17, 12, 0.05);
+    --shadow-lg: 0 1.5rem 4rem rgba(21, 17, 12, 0.16), 0 0.4rem 1rem rgba(21, 17, 12, 0.07);
 
     --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    /* Outlier face — wordmark only (nav + footer brand mark), nowhere else. */
+    --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -100,10 +105,11 @@ a { color: inherit; }
 .dark .top-header { background: rgba(17, 17, 17, 0.6); border-color: rgba(255, 255, 255, 0.08); }
 .brand-shell { display: flex; align-items: center; gap: 0.8rem; }
 .brand-mark {
-    font-size: 2.1rem;
-    font-weight: 800;
+    font-family: var(--font-mono);
+    font-size: 1.7rem;
+    font-weight: 600;
     line-height: 1;
-    letter-spacing: -0.04em;
+    letter-spacing: -0.03em;
     color: var(--color-gray-900);
     text-decoration: none;
     transition: opacity 0.15s ease;
@@ -1485,7 +1491,7 @@ body > .av-flash { margin-top: 5.5rem; }
     border-radius: var(--radius-md);
 }
 .landing-audience-item i { width: 1.5rem; height: 1.5rem; color: var(--color-gray-700); margin-bottom: 0.6rem; }
-.landing-audience-item h4 { font-size: 0.88rem; font-weight: 700; color: var(--color-gray-900); margin: 0 0 0.3rem; }
+.landing-audience-item h3 { font-size: 0.88rem; font-weight: 700; color: var(--color-gray-900); margin: 0 0 0.3rem; }
 .landing-audience-item p { font-size: 0.76rem; color: var(--color-gray-500); margin: 0; line-height: 1.5; }
 
 /* Closing CTA banner */
@@ -1529,7 +1535,7 @@ body > .av-flash { margin-top: 5.5rem; }
     flex-wrap: wrap;
     gap: 1rem;
 }
-.landing-footer-brand { font-size: 1.1rem; font-weight: 800; letter-spacing: -0.03em; color: var(--color-gray-900); }
+.landing-footer-brand { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; letter-spacing: -0.02em; color: var(--color-gray-900); }
 .landing-footer-links { display: flex; flex-wrap: wrap; gap: 1.25rem; }
 .landing-footer-links a { font-size: 0.85rem; color: var(--color-gray-500); text-decoration: none; }
 .landing-footer-links a:hover { color: var(--color-gray-900); text-decoration: underline; text-underline-offset: 3px; }

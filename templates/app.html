@@ -62,12 +62,12 @@
                     <input id="file-upload" name="file" type="file" class="hidden" accept="{{ upload_accept }}" multiple>
                     <i data-lucide="upload-cloud" class="av-dropzone-icon"></i>
                     <p class="av-dropzone-title">Drag &amp; drop your 3D model(s) here</p>
-                    <p class="av-dropzone-hint">or click to browse — select multiple files to convert them all at once</p>
+                    <p class="av-dropzone-hint">or click to browse. Select multiple files to convert them all at once.</p>
                     <p class="av-dropzone-formats">Supported: <strong>{{ upload_extensions | map('upper') | join(', ') }}</strong> (max. {{ upload_max_mb }}MB each)</p>
                     <div id="selectedFileName" class="av-dropzone-selected hidden"></div>
                 </div>
                 <p id="batchNote" class="av-card-desc hidden" style="margin-top:0.4rem;">
-                    Multiple files selected — each is converted as its own independent job. MTL/texture
+                    Multiple files selected. Each is converted as its own independent job. MTL/texture
                     attachments and per-file source unit aren't available in this mode; bundle those with
                     their model in a ZIP instead.
                 </p>
@@ -117,7 +117,7 @@
                 <div class="av-card-row">
                     <div>
                         <div class="av-card-title">Source Unit</div>
-                        <p class="av-card-desc">STL/OBJ files are unitless — choose how to interpret the source size.</p>
+                        <p class="av-card-desc">STL/OBJ files are unitless. Choose how to interpret the source size.</p>
                     </div>
                     <select id="sourceUnit" name="sourceUnit" class="av-select">
                         <option value="auto" selected>Auto-detect (recommended)</option>
@@ -208,7 +208,7 @@
             <div class="av-stack">
                 <div class="home-hero" style="margin-bottom:0.5rem;">
                     <p class="home-kicker">AI Studio</p>
-                    <h1 class="home-title">Describe it or show it — get a 3D model.</h1>
+                    <h2 class="home-title">Describe it or show it, get a 3D model.</h2>
                 </div>
 
                 <div class="av-tabs av-tabs--sub" role="tablist">
@@ -227,11 +227,11 @@
                             <i data-lucide="image-plus" style="width:1rem;height:1rem;"></i>
                             Visualize first
                         </button>
-                        <span class="av-card-desc" style="margin:0;">Optional — preview as an image, pick one, then build 3D from it.</span>
+                        <span class="av-card-desc" style="margin:0;">Optional: preview as an image, pick one, then build 3D from it.</span>
                     </div>
                     <div id="t2iResults" class="imgen-grid hidden"></div>
                     <p id="t2iSelectedNote" class="av-card-desc hidden" style="margin-top:0.5rem;">
-                        Image selected — the 3D model will be built from it.
+                        Image selected. The 3D model will be built from it.
                         <a href="#" id="t2iClear" style="text-decoration:underline;">Clear selection</a>
                     </p>
 
@@ -351,7 +351,7 @@
                                     <span class="track"></span>
                                     <span class="knob"></span>
                                 </span>
-                                <span class="av-switch-text">Clean cutout — remove baked-in lighting (better for AR)</span>
+                                <span class="av-switch-text">Clean cutout: remove baked-in lighting (better for AR)</span>
                             </label>
                             {% endif %}
                             <label class="av-switch-label">
@@ -419,22 +419,22 @@
         <section class="home-features">
             <div class="feature-card">
                 <i data-lucide="boxes" class="feature-icon"></i>
-                <h3 class="feature-title">Multiple Formats</h3>
+                <h2 class="feature-title">Multiple Formats</h2>
                 <p class="feature-desc">FBX, OBJ, STL and GLTF with textures and materials.</p>
             </div>
             <div class="feature-card">
                 <i data-lucide="scan-line" class="feature-icon"></i>
-                <h3 class="feature-title">AR Ready</h3>
+                <h2 class="feature-title">AR Ready</h2>
                 <p class="feature-desc">View your models in AR on iPhone and Android.</p>
             </div>
             <div class="feature-card">
                 <i data-lucide="zap" class="feature-icon"></i>
-                <h3 class="feature-title">Fast Conversion</h3>
+                <h2 class="feature-title">Fast Conversion</h2>
                 <p class="feature-desc">Quick and efficient conversion to GLB.</p>
             </div>
             <div class="feature-card">
                 <i data-lucide="history" class="feature-icon"></i>
-                <h3 class="feature-title">Save History</h3>
+                <h2 class="feature-title">Save History</h2>
                 <p class="feature-desc">Registered users keep their conversion history.</p>
             </div>
         </section>
@@ -1363,7 +1363,7 @@
         // the texturing task under concurrent load.
         const STAGE_LABELS = {
             preview: 'Generating base mesh…',
-            refining: 'Base mesh done — queueing texture stage…',
+            refining: 'Base mesh done, queueing texture stage…',
             refine: 'Texturing…',
             finalizing: 'Downloading & saving model…',
             image: 'Generating 3D model…'
@@ -1384,7 +1384,7 @@
                 const busy = r.status === 502 && /rate limit|429|try again shortly/i.test(d.error || '');
                 if (!busy || attempt >= 3) throw new Error(d.error || 'Failed to start');
                 const wait = 10 * (attempt + 1);
-                setProgress(2, busyLabel + ' — busy, retrying in ' + wait + 's…');
+                setProgress(2, busyLabel + ' (busy, retrying in ' + wait + 's…)');
                 await new Promise(res => setTimeout(res, wait * 1000));
             }
         }

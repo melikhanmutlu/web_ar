@@ -54,18 +54,28 @@
     <!-- Custom Styles -->
     <style>
         :root {
-            --color-black: #000000;
-            --color-gray-900: #111111;
-            --color-gray-800: #1a1a1a;
-            --color-gray-700: #333333;
-            --color-gray-600: #555555;
-            --color-gray-500: #777777;
-            --color-gray-400: #999999;
-            --color-gray-300: #cccccc;
-            --color-gray-200: #eeeeee;
-            --color-gray-100: #f5f5f5;
+            /* Mirrors static/css/arvision.css (view.html doesn't load it):
+               CG neutrals + indigo accent, remapped onto the legacy names. */
+            --bg: #f6f7f9;
+            --paper: #ffffff;
+            --ink: #111318;
+            --muted: #626b78;
+            --line: #dfe3e9;
+            --soft: #eceef3;
+            --accent: #625df5;
+            --accent2: #8d62ff;
+            --color-black: #0b0c10;
+            --color-gray-900: #111318;
+            --color-gray-800: #15161c;
+            --color-gray-700: #30313a;
+            --color-gray-600: #454b56;
+            --color-gray-500: #626b78;
+            --color-gray-400: #868d98;
+            --color-gray-300: #c4c9d1;
+            --color-gray-200: #dfe3e9;
+            --color-gray-100: #eceef3;
             --color-white: #ffffff;
-            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            --font-sans: Arial, Helvetica, sans-serif;
             --spacing-xs: 0.25rem;
             --spacing-sm: 0.5rem;
             --spacing-md: 0.75rem;
@@ -131,21 +141,40 @@
         .dark .viewer-stage { background: var(--color-gray-900); }
         model-viewer { background: transparent !important; width: 100%; height: 100%; }
 
-        .top-header { position: fixed; top: var(--spacing-lg); left: var(--spacing-lg); right: var(--spacing-lg); z-index: 45; display: flex; justify-content: space-between; align-items: flex-start; gap: var(--spacing-lg); pointer-events: none; }
-        .brand-shell, .top-actions { pointer-events: auto; display: flex; align-items: center; background: transparent; }
-        .brand-shell { gap: 0.8rem; padding: 0; min-width: 14rem; }
-        .brand-mark { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -0.04em; color: var(--color-gray-900); text-decoration: none; }
-        .dark .brand-mark { color: var(--color-gray-200); }
-        .top-actions { gap: 0.45rem; padding: 0; }
-        .showcase-nav a, .showcase-nav-link { font-size: 0.88rem; color: var(--color-gray-500); text-decoration: none; letter-spacing: 0.02em; padding: 0.25rem 0.5rem; transition: color 0.15s; }
-        .showcase-nav a:hover, .showcase-nav-link:hover, .showcase-nav a.is-active { color: var(--color-gray-900); text-decoration: underline; }
-        .dark .showcase-nav a, .dark .showcase-nav-link { color: var(--color-gray-400); }
-        .dark .showcase-nav a:hover, .dark .showcase-nav-link:hover, .dark .showcase-nav a.is-active { color: var(--color-gray-200); }
+        /* CG site nav (mirrors arvision.css's port — view.html doesn't load it) */
+        .nav { height: 64px; position: fixed; z-index: 45; inset: 0 0 auto; transition: .3s; background: rgba(246,247,249,.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 1px 0 rgba(17,19,24,.08); }
+        .nav-inner { width: min(1280px, calc(100% - 48px)); height: 100%; margin: auto; display: flex; align-items: center; position: relative; }
+        .brand { font-size: 23px; font-weight: 800; letter-spacing: -1.4px; display: flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; }
+        .brand-mark { width: 29px; height: 29px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; display: grid; place-items: center; font-size: 12px; letter-spacing: 0; }
+        .nav nav { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; font-size: 13px; color: #454b56; }
+        .nav nav a { text-decoration: none; }
+        .nav nav a:hover, .nav nav a.is-active { color: var(--accent); }
+        .nav-actions { display: flex; align-items: center; margin-left: auto; gap: 18px; }
+        .nav-auth-link { font-size: 13px; color: #454b56; text-decoration: none; transition: color 0.2s; }
+        .nav-auth-link:hover { color: var(--accent); }
+        .primary-btn.mini { border: 0; padding: 11px 15px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 20px; transition: .25s; background: var(--ink); color: #fff; text-decoration: none; box-shadow: 0 10px 24px rgba(17,19,24,.13); }
+        .primary-btn.mini:hover { transform: translateY(-2px); }
         /* "log out" is a <button> (POST-only route) while the rest are <a>;
-           reset UA button defaults so it lines up identically in this page's
-           floating header too (view.html doesn't load arvision.css). */
+           reset UA button defaults so it lines up identically. */
         .logout-form { display: inline-flex; align-items: center; margin: 0; padding: 0; }
-        .logout-form button.showcase-nav-link { background: none; border: none; cursor: pointer; font: inherit; font-size: 0.88rem; letter-spacing: 0.02em; line-height: inherit; }
+        .logout-form button { background: none; border: none; cursor: pointer; font: inherit; line-height: inherit; padding: 0; }
+        /* Mobile hamburger + dropdown (mirrors arvision.css) */
+        .nav-burger { display: none; width: 40px; height: 40px; border: 0; background: transparent; flex-direction: column; align-items: center; justify-content: center; gap: 5px; cursor: pointer; }
+        .nav-burger span { display: block; width: 20px; height: 2px; background: var(--ink); border-radius: 2px; transition: transform 0.25s, opacity 0.2s; }
+        .nav.menu-open .nav-burger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+        .nav.menu-open .nav-burger span:nth-child(2) { opacity: 0; }
+        .nav.menu-open .nav-burger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+        .mobile-menu { display: none; flex-direction: column; gap: 4px; padding: 12px 24px 22px; background: rgba(255,255,255,0.97); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line); box-shadow: 0 12px 30px rgba(17,19,24,0.08); }
+        .nav.menu-open .mobile-menu { display: flex; }
+        .mobile-menu > a, .mobile-menu-actions a, .mobile-menu-actions button { display: block; width: 100%; text-align: left; padding: 12px 4px; font-size: 16px; color: var(--ink); text-decoration: none; background: none; border: 0; border-bottom: 1px solid var(--soft); cursor: pointer; }
+        .mobile-menu > a:hover, .mobile-menu-actions a:hover, .mobile-menu-actions button:hover { color: var(--accent); }
+        .mobile-menu-actions { margin-top: 10px; }
+        .mobile-menu-actions a, .mobile-menu-actions button { font-weight: 700; }
+        @media (max-width: 950px) {
+            .nav nav { display: none; }
+            .nav-burger { display: flex; }
+            .nav-auth-link { display: none; }
+        }
 
         .showcase-sidebar { position: fixed !important; top: 50% !important; right: 1rem !important; transform: translateY(-50%) !important; bottom: auto !important; width: 19rem !important; max-width: 19rem !important; max-height: calc(100vh - 4rem); z-index: 35; overflow-y: auto; transition: opacity 0.2s ease !important; }
         #rightSidebar.info-hidden { opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; }
@@ -218,18 +247,18 @@
         .dark .tb-btn { color: var(--color-gray-400); }
         .dark .tb-btn:hover { background: var(--color-gray-800); color: var(--color-gray-200); border-color: var(--color-gray-700); }
         .tb-btn i { width: 1.6rem; height: 1.6rem; }
-        #infoToggleBtn.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        #infoToggleBtn.is-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
         .dark #infoToggleBtn.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
-        #measureToolButton.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        #measureToolButton.is-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
         .dark #measureToolButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
-        #cameraOverlayButton.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        #cameraOverlayButton.is-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
         .dark #cameraOverlayButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
         /* Camera Overlay mode: live rear camera behind the transparent
            model canvas (static/js/viewer/camera-overlay.js). */
         #cameraOverlayVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
         body.camera-overlay-active model-viewer { position: relative; z-index: 1; }
-        body.camera-overlay-active .top-header { display: none; } /* maximum viewfinder room */
+        body.camera-overlay-active .nav { display: none; } /* maximum viewfinder room */
         .camera-overlay-hint { position: fixed; top: 0.75rem; left: 50%; transform: translateX(-50%); z-index: 45; max-width: min(26rem, calc(100vw - 2rem)); padding: 0.45rem 0.8rem; background: rgba(15, 23, 42, 0.85); color: white; font-size: 0.75rem; border-radius: 999px; text-align: center; pointer-events: none; }
 
         /* Download button: hover fan-out on desktop (see fullscreen-modal.js
@@ -430,7 +459,7 @@
         .tp-save-bar { padding: 0.65rem 0.85rem; border-top: 1px solid var(--color-gray-700); background: var(--color-gray-900); }
 
         .bottom-right-controls { display: flex; align-items: center; gap: 0.25rem; }
-        #toolsPanelToggle.is-active { background: var(--color-gray-900) !important; color: var(--color-white) !important; border-color: var(--color-gray-700) !important; }
+        #toolsPanelToggle.is-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
         .dark #toolsPanelToggle.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
 
         .canvas-control-shell { position: fixed; left: var(--spacing-xl); bottom: var(--spacing-lg); z-index: 30; }
@@ -482,41 +511,18 @@
             /* Mobile + tablet layout (matches JS isMobile() <= 1024) */
             .viewer-shell { display: flex; flex-direction: column; }
 
-            /* Header: fixed top, full width, compact */
-            .top-header {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: auto;
-                width: 100%;
-                height: auto;
-                padding: var(--spacing-sm) var(--spacing-md);
-                background: var(--color-white);
-                border-bottom: 1px solid var(--color-gray-200);
-                z-index: 50;
-                transform: none;
-                gap: var(--spacing-sm);
-                justify-content: space-between;
-            }
-            .dark .top-header { background: var(--color-gray-900); border-color: var(--color-gray-800); }
+            /* Header: compact bar */
+            .nav { height: 52px; z-index: 50; }
+            .nav-inner { width: calc(100% - 24px); }
+            .brand { font-size: 18px; }
+            .brand-mark { width: 24px; height: 24px; border-radius: 7px; }
+            .primary-btn.mini { padding: 8px 12px; }
 
-            .brand-shell {
-                min-width: 0;
-                flex: 1 1 auto;
-                padding: 0;
-                justify-content: flex-start;
-            }
-            .brand-mark { font-size: 1.5rem; }
-
-            .top-actions { gap: 0.3rem; }
-
-            /* Hide decorative-only nav on mobile; keep real action links visible */
-            .showcase-nav, .color-picker-container, .portfolio-tagline { display: none !important; }
+            .color-picker-container, .portfolio-tagline { display: none !important; }
 
             /* Viewer stage: account for header and toolbar */
             .viewer-stage {
-                top: var(--spacing-xl);
+                top: 52px;
                 bottom: 3.5rem;
                 height: auto;
             }
@@ -616,20 +622,11 @@
 
         @media (max-width: 640px) {
             /* Extra small screens */
-            .brand-mark { font-size: 1.25rem; }
-
-            .top-header {
-                padding: var(--spacing-xs) var(--spacing-sm);
-                height: 3rem;
-            }
-
-            /* Compact header links so home / my models / log out fit one line */
-            .top-actions { gap: 0.15rem; }
-            .showcase-nav-link, .logout-form button.showcase-nav-link { font-size: 0.8rem; padding: 0.25rem 0.3rem; }
-            .login-pill { padding: 0.2rem 0.5rem; }
+            .nav { height: 48px; }
+            .nav-actions { gap: 10px; }
 
             .viewer-stage {
-                top: 3rem;
+                top: 48px;
                 bottom: 3rem;
             }
 
@@ -659,20 +656,6 @@
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         .animate-pulse { animation: pulse 2s ease infinite; }
-
-        /* Login pill button */
-        .login-pill {
-            border: 1.5px solid var(--color-gray-400);
-            border-radius: 9999px;
-            padding: 0.3rem 1rem;
-            font-size: 0.78rem;
-            font-weight: 500;
-            color: var(--color-gray-200);
-            text-decoration: none;
-            transition: border-color 0.15s, color 0.15s;
-        }
-        .login-pill:hover { border-color: var(--color-gray-200); color: #fff; }
-        .dark .login-pill { border-color: var(--color-gray-500); color: var(--color-gray-300); }
 
         /* Portfolio tagline */
         .portfolio-tagline {
@@ -743,11 +726,12 @@
     <script src="{{ url_for('static', filename='js/viewer/ar-onboarding.js') }}"></script>
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
-    <!-- Header: same partial every other page uses, so the link set (discover,
-         register, admin, active-state) stays in sync instead of drifting via a
-         hand-duplicated copy. Its markup reuses this page's own .top-header/
-         .brand-shell/.showcase-nav-link classes (defined above), so the
-         floating/dark viewer chrome is unaffected. -->
+    <!-- Header: same partial every other page uses, so the link set stays in
+         sync instead of drifting via a hand-duplicated copy. viewer_chrome
+         trims the nav + drops the "Open Studio" CTA (you're already in a
+         Studio workspace). Its markup reuses this page's own .nav/.brand/
+         .nav-actions classes (defined above). -->
+    {% set viewer_chrome = true %}
     {% include '_site_header.html' %}
 
     <!-- QR Modal -->
@@ -861,11 +845,11 @@
                             {% endfor %}
                         </div>
                         {% elif current_user.is_authenticated %}
-                        <p style="font-size:0.7rem;color:#64748b;text-align:center;padding:0.8rem 0.4rem;">No other models yet. <a href="/" style="color:#3b82f6;text-decoration:underline;">Upload one</a></p>
+                        <p style="font-size:0.7rem;color:#64748b;text-align:center;padding:0.8rem 0.4rem;">No other models yet. <a href="{{ url_for('main.studio') }}" style="color:#8d8aff;text-decoration:underline;">Upload one</a></p>
                         {% else %}
                         <div style="text-align:center;padding:1rem 0.5rem;">
                             <p style="font-size:0.72rem;color:var(--color-gray-500);margin-bottom:0.6rem;">Sign in to explore more models</p>
-                            <a href="{{ url_for('auth.login') }}" class="showcase-nav-link">login</a>
+                            <a href="{{ url_for('auth.login') }}" style="font-size:0.82rem;color:var(--color-gray-200);text-decoration:underline;text-underline-offset:2px;">login</a>
                         </div>
                         {% endif %}
                     </div>
@@ -1667,6 +1651,21 @@
     <script src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/panel-ui.js') }}"></script>
+    <script>
+        // Mobile hamburger toggle (site.js isn't loaded on the viewer page).
+        (function () {
+            var nav = document.getElementById('siteNav');
+            var burger = document.getElementById('navBurger');
+            var mobileMenu = document.getElementById('mobileMenu');
+            if (nav && burger && mobileMenu) {
+                burger.addEventListener('click', function () {
+                    var open = nav.classList.toggle('menu-open');
+                    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+                    mobileMenu.hidden = !open;
+                });
+            }
+        })();
+    </script>
 </body>
 </html>
 

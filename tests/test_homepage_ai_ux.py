@@ -44,7 +44,7 @@ TINY_PNG_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
 # --------------------------------------------------------------------------- #
 
 def test_homepage_shows_quota_for_logged_in_user(client, logged_in):
-    resp = client.get("/")
+    resp = client.get("/studio")
     assert resp.status_code == 200
     assert b"generations left today" in resp.data
 
@@ -57,12 +57,12 @@ def test_homepage_quota_reflects_existing_jobs_today(client, logged_in, monkeypa
                                        kind="text", prompt="x", stage="preview",
                                        status="generating"))
     db.session.commit()
-    resp = client.get("/")
+    resp = client.get("/studio")
     assert b'id="genQuotaRemaining">7<' in resp.data
 
 
 def test_homepage_no_quota_banner_for_anonymous(client):
-    resp = client.get("/")
+    resp = client.get("/studio")
     assert resp.status_code == 200
     assert b"generations left today" not in resp.data
 

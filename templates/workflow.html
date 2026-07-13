@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = "Workflow — 3D publishing, made clear — ARVision" %}
+    {% set seo_description = "ARVision turns a complex 3D production process into four focused steps: upload, optimise, refine and publish." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body>
+    {% include "_site_header.html" %}
+
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> How it works</span>
+                    <h1>3D publishing, made clear.</h1>
+                    <p>ARVision turns a complex production process into four focused steps that any team can manage.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="timeline shell">
+            {% set steps = [
+                ("01", "Upload", "Drop in GLB, STL, OBJ, FBX, STEP or ZIP. Large files are transferred securely in parts.", "↑"),
+                ("02", "Optimise", "Geometry, materials and textures are analysed for web performance, then GLB and USDZ are prepared.", "◇"),
+                ("03", "Refine", "Tune materials and add hotspots, measurements, camera views and levels of detail.", "✦"),
+                ("04", "Publish", "Deliver the model through a link, QR code, iframe, Shopify or WooCommerce.", "↗"),
+            ] %}
+            {% for n, title, copy, icon in steps %}
+            <div class="reveal" data-reveal style="--delay:{{ loop.index0 * 60 }}ms">
+                <article>
+                    <span>{{ n }}</span>
+                    <div class="timeline-visual"><i></i><b>{{ icon }}</b></div>
+                    <div>
+                        <h2>{{ title }}</h2>
+                        <p>{{ copy }}</p>
+                    </div>
+                </article>
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="process-banner">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <p>MODEL PIPELINE</p>
+                    <div>
+                        <span>Source file</span><i>&rarr;</i>
+                        <span>Security check</span><i>&rarr;</i>
+                        <span>Optimisation</span><i>&rarr;</i>
+                        <span>GLB + USDZ</span><i>&rarr;</i>
+                        <span>Live</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    {% include "_site_footer.html" %}
+
+    <script src="{{ url_for('static', filename='js/site.js') }}"></script>
+</body>
+</html>

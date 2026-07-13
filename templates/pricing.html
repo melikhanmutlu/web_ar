@@ -12,73 +12,101 @@
     'webhooks': 'Webhooks',
 } %}
 
-{% macro feature_row(text) %}
-    <li class="pricing-feature"><span>{{ text }}</span></li>
-{% endmacro %}
-
 {% block content %}
-<div class="aurora-bg" aria-hidden="true"></div>
+<main>
+    <section class="page-hero">
+        <div class="shell">
+            <div class="reveal" data-reveal>
+                <span class="status-label"><i></i> Transparent pricing</span>
+                <h1>Start small. Scale without limits.</h1>
+                <p>Increase capacity as your needs change without disrupting your workspace or published models.</p>
+                {% if current_plan == 'unlimited' %}
+                <p style="margin-top:0.75rem;font-weight:700;">You're on the Unlimited (admin) plan &mdash; no usage limits apply.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
 
-<main class="pricing-main">
-    <div class="pricing-hero">
-        <p class="home-kicker">Plans &amp; pricing</p>
-        <h1 class="pricing-title">Choose your plan</h1>
-        {% if current_plan == 'unlimited' %}
-        <p class="pricing-sub" style="margin-top:0.5rem;font-weight:600;">You're on the Unlimited (admin) plan — no usage limits apply.</p>
-        {% endif %}
-    </div>
-
-    <div class="pricing-grid">
+    <section class="pricing-grid shell">
         {% for plan in plans %}
             {% set cfg = plan_config[plan] %}
             {% set limits = cfg.limits %}
             {% set is_current = (plan == current_plan) %}
-            <div class="pricing-card {% if plan == 'pro' %}pricing-card--featured{% endif %}">
-                {% if plan == 'pro' %}
-                    <span class="model-tag-chip pricing-badge">Most popular</span>
-                {% endif %}
-                <div class="pricing-name">{{ cfg.display_name }}</div>
-                <div class="pricing-price">
-                    <span class="pricing-price-amount">${{ cfg.price }}</span>
-                    <span class="pricing-price-period">/mo</span>
-                </div>
-
-                <ul class="pricing-features">
-                    {{ feature_row((limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB') ~ ' storage') }}
-                    {{ feature_row((limits.max_models if limits.max_models else 'Unlimited') ~ ' models') }}
-                    {{ feature_row((limits.ai_monthly if limits.ai_monthly else 0) ~ ' AI generations / month') }}
-                    {{ feature_row('Up to ' ~ limits.max_upload_mb ~ ' MB per file') }}
-                    {{ feature_row(limits.batch_size ~ ' files per batch upload') }}
-                    {{ feature_row(limits.analytics_retention_days ~ '-day analytics history') }}
-                    {% for feature, enabled in cfg.features.items() %}
-                        {% if enabled %}{{ feature_row(feature_labels[feature]) }}{% endif %}
-                    {% endfor %}
-                </ul>
-
-                {% if is_current %}
-                    <span class="pricing-current">Current plan</span>
-                {% elif plan == 'free' %}
-                    <a href="{{ url_for('auth.register') }}" class="library-btn pricing-cta">Get started</a>
-                {% else %}
-                    <a href="mailto:sales@arvision.app?subject=Upgrade%20to%20{{ cfg.display_name }}" class="btn-primary pricing-cta">Contact us</a>
-                {% endif %}
+            <div class="reveal" data-reveal style="--delay:{{ loop.index0 * 80 }}ms">
+                <article class="{% if plan == 'pro' %}popular{% endif %}">
+                    {% if plan == 'pro' %}<em>MOST POPULAR</em>{% endif %}
+                    <span>{{ cfg.display_name }}</span>
+                    <strong>${{ cfg.price }}<small>/month</small></strong>
+                    <p>
+                        {% if plan == 'free' %}For publishing your first interactive models.
+                        {% elif plan == 'pro' %}For independent creators and professionals.
+                        {% else %}For teams and high-volume 3D operations.{% endif %}
+                    </p>
+                    {% if is_current %}
+                        <button type="button" class="secondary-btn wide" disabled>Current plan</button>
+                    {% elif plan == 'free' %}
+                        <a href="{{ url_for('auth.register') }}" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Start free &rarr;</a>
+                    {% else %}
+                        <a href="mailto:sales@arvision.app?subject=Upgrade%20to%20{{ cfg.display_name }}" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Choose plan &rarr;</a>
+                    {% endif %}
+                    <div>
+                        <p>&#10003; {{ (limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB') }} storage</p>
+                        <p>&#10003; {{ limits.max_models if limits.max_models else 'Unlimited' }} models</p>
+                        <p>&#10003; {{ limits.ai_monthly if limits.ai_monthly else 0 }} AI generations / month</p>
+                        <p>&#10003; Up to {{ limits.max_upload_mb }} MB per file</p>
+                        <p>&#10003; {{ limits.batch_size }} files per batch upload</p>
+                        <p>&#10003; {{ limits.analytics_retention_days }}-day analytics history</p>
+                        {% for feature, enabled in cfg.features.items() %}
+                            {% if enabled %}<p>&#10003; {{ feature_labels[feature] }}</p>{% endif %}
+                        {% endfor %}
+                    </div>
+                </article>
             </div>
         {% endfor %}
-    </div>
+    </section>
 
-    <div id="credits" class="pricing-credit-strip">
-        <div class="pricing-credit-lead">
-            <span class="pricing-credit-title">AI credit packs</span>
-            <span class="pricing-credit-sub">1 credit = 1 generation · credits never expire</span>
+    <section class="faq shell">
+        <div class="reveal" data-reveal>
+            <span class="section-tag">AI CREDIT PACKS</span>
+            <h2>Need more generations?</h2>
         </div>
-        <div class="pricing-credit-packs">
-            {% for key, pack in credit_packs.items() %}
-                <a href="mailto:sales@arvision.app?subject=Buy%20{{ pack.credits }}%20AI%20credits" class="pricing-credit-pack">
-                    <span class="pricing-credit-count">{{ pack.credits }} credits</span>
-                    <span class="pricing-credit-price">${{ pack.price }}</span>
-                </a>
-            {% endfor %}
+        <div id="credits" class="pricing-credit-strip reveal" data-reveal>
+            <div class="pricing-credit-lead">
+                <span class="pricing-credit-title">AI credit packs</span>
+                <span class="pricing-credit-sub">1 credit = 1 generation &middot; credits never expire</span>
+            </div>
+            <div class="pricing-credit-packs">
+                {% for key, pack in credit_packs.items() %}
+                    <a href="mailto:sales@arvision.app?subject=Buy%20{{ pack.credits }}%20AI%20credits" class="pricing-credit-pack">
+                        <span class="pricing-credit-count">{{ pack.credits }} credits</span>
+                        <span class="pricing-credit-price">${{ pack.price }}</span>
+                    </a>
+                {% endfor %}
+            </div>
         </div>
-    </div>
+    </section>
+
+    <section class="faq shell" style="padding-top:0;">
+        <div class="reveal" data-reveal>
+            <span class="section-tag">FREQUENTLY ASKED</span>
+            <h2>Before you decide.</h2>
+        </div>
+        {% set faq = [
+            ("Can I change my plan later?", "Yes. Upgrade or downgrade as your usage changes; your models remain in the same workspace."),
+            ("How do AI credits work?", "Your monthly Pro or Business allowance is used first. Purchased AI credits are used only after that allowance runs out."),
+            ("Can I control who sees a model?", "Every model can be private, unlisted or public. Pro also includes password-protected and expiring links."),
+            ("Does Business include a custom domain?", "Yes. Business includes organisation roles, a custom domain, a white-label viewer and webhooks."),
+        ] %}
+        {% for q, a in faq %}
+        <div class="reveal" data-reveal style="--delay:{{ loop.index0 * 40 }}ms">
+            <details>
+                <summary>{{ q }}<span>+</span></summary>
+                <p>{{ a }}</p>
+            </details>
+        </div>
+        {% endfor %}
+    </section>
 </main>
+
+{% include "_site_footer.html" %}
 {% endblock %}

@@ -1,26 +1,63 @@
-<header class="top-header">
-    <div class="brand-shell">
-        <a href="{{ url_for('main.index') }}" class="brand-mark">arvision</a>
+{# viewer_chrome (set by the viewer page before including) trims the nav and
+   hides the "Open Studio" CTA -- you're already inside a Studio workspace. #}
+<header class="nav {% if viewer_chrome %}nav-viewer{% endif %}" id="siteNav">
+    <div class="nav-inner">
+        <a href="{{ url_for('main.index') }}" class="brand"><span class="brand-mark">A</span>arvision</a>
+        <nav aria-label="Primary">
+            <a href="{{ url_for('main.studio') }}" class="{% if request.endpoint == 'main.studio' %}is-active{% endif %}">Studio</a>
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('models_crud.my_models') }}" class="{% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">Library</a>
+            {% endif %}
+            <a href="{{ url_for('discover.discover') }}" class="{% if request.endpoint == 'discover.discover' %}is-active{% endif %}">Discover</a>
+            {% if not viewer_chrome %}
+            <a href="{{ url_for('main.features') }}" class="{% if request.endpoint == 'main.features' %}is-active{% endif %}">Features</a>
+            <a href="{{ url_for('main.workflow') }}" class="{% if request.endpoint == 'main.workflow' %}is-active{% endif %}">Workflow</a>
+            <a href="{{ url_for('main.pricing') }}" class="{% if request.endpoint == 'main.pricing' %}is-active{% endif %}">Pricing</a>
+            {% endif %}
+        </nav>
+        <div class="nav-actions">
+            {% if current_user.is_authenticated %}
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}" class="nav-auth-link">Admin</a>
+            {% endif %}
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="nav-auth-link">Log out</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('auth.login', next=request.path) }}" class="nav-auth-link">Sign in</a>
+            {% endif %}
+            {% if not viewer_chrome %}
+            <a class="primary-btn mini" href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
+            {% endif %}
+            <button type="button" class="nav-burger" id="navBurger" aria-label="Menu" aria-expanded="false" aria-controls="mobileMenu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
     </div>
-    <nav class="top-actions" aria-label="Primary">
-        <a href="{{ url_for('main.index') }}" class="showcase-nav-link {% if request.endpoint == 'main.index' %}is-active{% endif %}">home</a>
-        <a href="{{ url_for('discover.discover') }}" class="showcase-nav-link {% if request.endpoint == 'discover.discover' %}is-active{% endif %}">discover</a>
+
+    <div class="mobile-menu" id="mobileMenu" hidden>
+        <a href="{{ url_for('main.studio') }}">Studio</a>
         {% if current_user.is_authenticated %}
-        <a href="{{ url_for('models_crud.my_models') }}" class="showcase-nav-link {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">my models</a>
-        {% if current_user.plan != 'business' %}
-        <a href="{{ url_for('main.pricing') }}" class="showcase-nav-link {% if request.endpoint == 'main.pricing' %}is-active{% endif %}">upgrade</a>
+        <a href="{{ url_for('models_crud.my_models') }}">Library</a>
         {% endif %}
-        {% if current_user.is_admin %}
-        <a href="{{ url_for('admin.dashboard') }}" class="showcase-nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">admin</a>
-        {% endif %}
-        <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="showcase-nav-link">log out</button>
-        </form>
-        {% else %}
-        <a href="{{ url_for('main.pricing') }}" class="showcase-nav-link {% if request.endpoint == 'main.pricing' %}is-active{% endif %}">pricing</a>
-        <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.register' %}is-active{% endif %}">register</a>
-        <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link login-pill {% if request.endpoint == 'auth.login' %}is-active{% endif %}">login</a>
-        {% endif %}
-    </nav>
+        <a href="{{ url_for('discover.discover') }}">Discover</a>
+        <a href="{{ url_for('main.features') }}">Features</a>
+        <a href="{{ url_for('main.workflow') }}">Workflow</a>
+        <a href="{{ url_for('main.pricing') }}">Pricing</a>
+        <div class="mobile-menu-actions">
+            {% if current_user.is_authenticated %}
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.dashboard') }}">Admin</a>
+            {% endif %}
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit">Log out</button>
+            </form>
+            {% else %}
+            <a href="{{ url_for('auth.login', next=request.path) }}">Sign in</a>
+            <a href="{{ url_for('auth.register', next=request.path) }}">Create account</a>
+            {% endif %}
+        </div>
+    </div>
 </header>

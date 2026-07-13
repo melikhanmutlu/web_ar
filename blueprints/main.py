@@ -1,4 +1,4 @@
-"""Site root / homepage."""
+"""Site root / marketing pages / studio."""
 
 from flask import Blueprint, render_template
 from flask_login import current_user
@@ -10,6 +10,11 @@ main_bp = Blueprint("main", __name__)
 
 @main_bp.route("/", methods=["GET"])
 def index():
+    return render_template("index.html")
+
+
+@main_bp.route("/studio", methods=["GET"])
+def studio():
     import ai_generator
     import app as app_module
 
@@ -18,10 +23,20 @@ def index():
     if current_user.is_authenticated:
         exceeded, used, limit = app_module._ai_quota_state(current_user.id)
         ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
-    return render_template("index.html",
+    return render_template("studio.html",
                             ai_remove_lighting_supported=ai_remove_lighting_supported,
                             ai_quota=ai_quota,
                             worker_poll_interval_ms=int(WORKER_POLL_INTERVAL * 1000))
+
+
+@main_bp.route("/features", methods=["GET"])
+def features():
+    return render_template("features.html")
+
+
+@main_bp.route("/workflow", methods=["GET"])
+def workflow():
+    return render_template("workflow.html")
 
 
 @main_bp.route("/pricing", methods=["GET"])

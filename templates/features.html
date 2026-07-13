@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = "Features — Your complete 3D workflow — ARVision" %}
+    {% set seo_description = "Everything you need to create, manage, collaborate and publish interactive 3D experiences: viewer, AI generation, library, sharing, analytics, API and version history." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body>
+    {% include "_site_header.html" %}
+
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> Platform capabilities</span>
+                    <h1>Your complete 3D workflow. In one place.</h1>
+                    <p>Everything you need to create, manage, collaborate and publish interactive 3D experiences.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="feature-grid shell">
+            {% set features = [
+                ("3D + AR Viewer", "A complete viewer with materials, lighting, measurements, hotspots, sections and version tools.", "◇", url_for('main.studio')),
+                ("AI 3D Generation", "Create textured, publication-ready 3D models from a text prompt or reference image.", "✦", url_for('main.studio')),
+                ("Model Library", "Keep every asset organised with folders, tags, bulk actions and smart search.", "▱", url_for('models_crud.my_models')),
+                ("Team Collaboration", "Work safely with owner, admin, editor and viewer roles.", "◎", url_for('main.pricing')),
+                ("Sharing + Embed", "Create protected links, domain-restricted embeds and commerce-ready snippets.", "↗", url_for('main.studio')),
+                ("Analytics", "Track views, unique visitors, traffic sources and model interactions.", "⌁", url_for('main.studio')),
+                ("API + Webhooks", "Connect a full REST API, personal tokens and signed event notifications.", "{ }", url_for('main.pricing')),
+                ("Version History", "Save every change automatically, then compare, download or restore any version.", "↶", url_for('main.studio')),
+            ] %}
+            {% for title, copy, icon, href in features %}
+            <div class="reveal" data-reveal style="--delay:{{ (loop.index0 % 4) * 60 }}ms">
+                <article>
+                    <div class="feature-icon">{{ icon }}</div>
+                    <span>0{{ loop.index }}</span>
+                    <h2>{{ title }}</h2>
+                    <p>{{ copy }}</p>
+                    <a href="{{ href }}">Open related workspace <b>&rarr;</b></a>
+                </article>
+            </div>
+            {% endfor %}
+        </section>
+
+        <section class="integration-strip">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span>Delivery and integration surfaces supported by ARVision</span>
+                    <div><b>Shopify</b><b>WooCommerce</b><b>REST API</b><b>WebXR</b><b>iOS Quick Look</b></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    {% include "_site_footer.html" %}
+
+    <script src="{{ url_for('static', filename='js/site.js') }}"></script>
+</body>
+</html>

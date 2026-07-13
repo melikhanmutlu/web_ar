@@ -2,7 +2,7 @@
    hides the "Open Studio" CTA -- you're already inside a Studio workspace. #}
 <header class="nav {% if viewer_chrome %}nav-viewer{% endif %}" id="siteNav">
     <div class="nav-inner">
-        <a href="{{ url_for('main.index') }}" class="brand"><span class="brand-mark">A</span>arvision</a>
+        <a href="{{ url_for('main.index') }}" class="brand">arvision</a>
         <nav aria-label="Primary">
             <a href="{{ url_for('main.studio') }}" class="{% if request.endpoint == 'main.studio' %}is-active{% endif %}">Studio</a>
             {% if current_user.is_authenticated %}

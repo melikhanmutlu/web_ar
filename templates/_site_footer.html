@@ -1,14 +1,26 @@
 <footer>
     <div class="footer-inner">
-        <a href="{{ url_for('main.index') }}" class="brand"><span class="brand-mark">A</span>arvision</a>
-        <p>One workspace for your 3D publishing workflow.</p>
-        <div>
-            <a href="{{ url_for('main.studio') }}">Studio</a>
-            <a href="{{ url_for('discover.discover') }}">Discover</a>
-            <a href="{{ url_for('main.features') }}">Features</a>
-            <a href="{{ url_for('main.workflow') }}">Workflow</a>
-            <a href="{{ url_for('main.pricing') }}">Pricing</a>
+        <div class="footer-brand">
+            <a href="{{ url_for('main.index') }}" class="brand">arvision</a>
+            <p>One workspace for turning 3D files into fast web viewers and app-free AR experiences.</p>
         </div>
-        <span>&copy; 2026 ARVISION</span>
+        <div class="footer-group">
+            <b>Product</b>
+            <a href="{{ url_for('main.studio') }}">Studio</a>
+            <a href="{{ url_for('models_crud.my_models') }}">Model library</a>
+            <a href="{{ url_for('main.features') }}">Web viewer</a>
+            <a href="{{ url_for('main.features') }}">Mobile AR</a>
+        </div>
+        <div class="footer-group">
+            <b>Explore</b>
+            <a href="{{ url_for('main.workflow') }}">Workflow</a>
+            <a href="{{ url_for('main.features') }}">Features</a>
+            <a href="{{ url_for('main.pricing') }}">Pricing</a>
+            <a href="{{ url_for('main.studio') }}">Open Studio</a>
+        </div>
+        <div class="footer-meta">
+            <span>&copy; 2026 ARVISION</span>
+            <p>Web &middot; AR &middot; Embed</p>
+        </div>
     </div>
 </footer>

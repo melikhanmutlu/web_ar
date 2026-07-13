@@ -55,27 +55,10 @@
             </div>
         </section>
 
-        <!-- 01 — CREATE -->
-        <section class="section shell create-section story-section" id="start">
-            <div class="story-copy reveal" data-reveal>
-                <span class="section-tag">01 — CREATE</span>
-                <h2>Bring the model.<br>We prepare the rest.</h2>
-                <p>Start with the 3D asset you already have. ARVision optimises geometry, preserves materials and turns it into a fast, dependable web-ready model.</p>
-                <div class="story-links">
-                    <a class="primary-btn" href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
-                    <a class="text-btn" href="{{ url_for('main.workflow') }}">See the workflow <span>&nearr;</span></a>
-                </div>
-            </div>
-            <div class="story-visual story-upload reveal" data-reveal style="--delay:100ms">
-                <img src="{{ url_for('static', filename='marketing/home-upload-3d.png') }}" alt="A 3D model being prepared for upload into ARVision" loading="lazy">
-            </div>
-        </section>
-
-        <!-- 02 — WORKFLOW -->
+        <!-- WORKFLOW -->
         <section class="flow-section workflow-section">
             <div class="shell">
                 <div class="workflow-heading reveal" data-reveal>
-                    <span class="section-tag">02 — WORKFLOW</span>
                     <h2>Three steps. One continuous workspace.</h2>
                     <p>Move from source file to an interactive experience without handing the model between disconnected tools.</p>
                 </div>
@@ -114,10 +97,27 @@
             </div>
         </section>
 
-        <!-- 03 — PUBLISH -->
+        <!-- CREATE -->
+        <section class="section shell create-section story-section" id="start">
+            <div class="story-copy reveal" data-reveal>
+                <h2>Bring the model.<br>We prepare the rest.</h2>
+                <p>Start with the 3D asset you already have. ARVision optimises geometry, preserves materials and turns it into a fast, dependable web-ready model.</p>
+                <div class="story-links">
+                    <a class="primary-btn" href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
+                    <a class="text-btn" href="{{ url_for('main.workflow') }}">See the workflow <span>&nearr;</span></a>
+                </div>
+            </div>
+            <div class="story-visual story-viewer reveal" data-reveal style="--delay:100ms">
+                <div class="browser-shot">
+                    <div class="browser-bar"><i aria-hidden="true"></i><span>arvision.app/viewer</span></div>
+                    <img src="{{ url_for('static', filename='marketing/home-viewer-workspace.png') }}" alt="ARVision viewer showing a purple 3D model and editing tools" width="1920" height="1015">
+                </div>
+            </div>
+        </section>
+
+        <!-- PUBLISH -->
         <section class="section shell outcome">
             <div class="reveal" data-reveal>
-                <span class="section-tag">03 — PUBLISH</span>
                 <h2>Built once.<br><span>Ready wherever people discover it.</span></h2>
             </div>
             <div class="outcome-copy reveal" data-reveal style="--delay:90ms">
@@ -135,7 +135,6 @@
         <section class="cta">
             <div class="shell">
                 <div class="reveal" data-reveal>
-                    <span class="status-label dark"><i></i> Ready when you are</span>
                     <h2>Give your next 3D model<br>a life beyond the file.</h2>
                     <p>Publish your first interactive model for free.</p>
                     <a href="{{ url_for('main.studio') }}" class="light-btn">Start creating &rarr;</a>

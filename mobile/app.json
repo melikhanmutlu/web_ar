@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "ARVision",
+    "slug": "arvision-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "arvision",
+    "userInterfaceStyle": "light",
+    "plugins": ["expo-router"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.arvision.mobile",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ARVision uses the camera to place your 3D models in AR."
+      }
+    },
+    "android": {
+      "package": "app.arvision.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

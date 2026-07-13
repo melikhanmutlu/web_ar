@@ -1,0 +1,7 @@
+{
+  "name": "ar-launcher",
+  "version": "1.0.0",
+  "description": "Local Expo module: presents iOS AR Quick Look for a local USDZ file.",
+  "main": "index.js",
+  "private": true
+}

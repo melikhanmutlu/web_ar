@@ -382,6 +382,14 @@ app.view_functions["auth.login"] = limiter.limit(
 app.view_functions["auth.register"] = limiter.limit(
     "5 per hour", methods=["POST"]
 )(app.view_functions["auth.register"])
+# Mobile app auth (Bearer-token, no session) -- same brute-force/spam limits
+# as their web counterparts above.
+app.view_functions["auth.api_login"] = limiter.limit(
+    "10 per minute", methods=["POST"]
+)(app.view_functions["auth.api_login"])
+app.view_functions["auth.api_register"] = limiter.limit(
+    "5 per hour", methods=["POST"]
+)(app.view_functions["auth.api_register"])
 app.view_functions["sharing.open_model_share_link"] = limiter.limit(
     "30 per minute"
 )(app.view_functions["sharing.open_model_share_link"])
@@ -419,6 +427,13 @@ app.view_functions["upload.batch_upload_models"] = limiter.limit(
 app.view_functions["upload.retry_upload_job"] = limiter.limit(
     "10 per hour"
 )(app.view_functions["upload.retry_upload_job"])
+# Mobile app chunked upload (Bearer-token): rate-limit the /complete step the
+# same as upload.upload_model, since it's the equivalent one-model-created
+# checkpoint. init/chunks aren't limited, matching their web siblings above
+# (which also carry no rate limit).
+app.view_functions["upload.complete_chunked_upload_v1"] = limiter.limit(
+    "30 per hour"
+)(app.view_functions["upload.complete_chunked_upload_v1"])
 # Admins are exempt from the AI abuse-guard rate limits (they're also exempt
 # from the monthly quota via the unlimited plan) so admin testing/support isn't
 # throttled.
@@ -442,6 +457,18 @@ csrf.exempt(app.view_functions["upload.convert"])  # 410 stub
 csrf.exempt(app.view_functions["upload.retry_upload_job"])  # capability-token auth
 csrf.exempt(app.view_functions["engagement.track_download"])  # anonymous beacon
 csrf.exempt(app.view_functions["engagement.create_model_analytics_event"])  # embed beacon
+
+# Mobile app API (Bearer-token, no session cookie -- see blueprints/auth.py's
+# /api/v1/auth/* and blueprints/upload.py's /api/v1/uploads/chunked/* routes).
+# Bearer-only: no session/cookie caller ever reaches these URLs, so exempting
+# them doesn't weaken CSRF protection for the equivalent session-authenticated
+# browser routes, which are untouched.
+csrf.exempt(app.view_functions["auth.api_login"])
+csrf.exempt(app.view_functions["auth.api_register"])
+csrf.exempt(app.view_functions["auth.api_logout"])
+csrf.exempt(app.view_functions["upload.init_chunked_upload_v1"])
+csrf.exempt(app.view_functions["upload.put_upload_chunk_v1"])
+csrf.exempt(app.view_functions["upload.complete_chunked_upload_v1"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(

@@ -1,7 +1,9 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
+from werkzeug.datastructures import MultiDict
 from models import User, UserModel, db
+from services.time_utils import datetime
 from site_settings import setting_bool
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
@@ -95,6 +97,86 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('main.index'))
+
+
+def _api_user_payload(user):
+    return {"id": user.id, "username": user.username, "email": user.email, "plan": user.plan}
+
+
+# --- Mobile app auth (Bearer-token, no session/cookie) -----------------
+# These mirror login()/register() above exactly (same forms, same User
+# methods) but respond with JSON + an ApiToken instead of a session cookie,
+# since the native OS AR viewers a mobile client hands files off to can't
+# carry a session cookie or CSRF token. See blueprints/api_tokens.py for the
+# token model and CLAUDE.md/app.py for why these are csrf.exempt()'d.
+
+@auth.route('/api/v1/auth/register', methods=['POST'])
+def api_register():
+    from blueprints.api_tokens import MOBILE_TOKEN_SCOPES, _issue_api_token
+
+    if not setting_bool('registration_enabled', True):
+        return jsonify({'success': False, 'error': 'Registration is currently disabled.'}), 403
+
+    form = RegistrationForm(MultiDict(request.get_json(silent=True) or {}))
+    if not form.validate():
+        return jsonify({'success': False, 'errors': form.errors}), 400
+
+    user = User(username=form.username.data, email=form.email.data)
+    user.set_password(form.password.data)
+    db.session.add(user)
+    db.session.commit()
+
+    issued = _issue_api_token(user, name='ARVision Mobile', scopes=MOBILE_TOKEN_SCOPES, expires_in_days=365)
+    return jsonify({'success': True, 'token': issued['token'], 'user': _api_user_payload(user)}), 201
+
+
+@auth.route('/api/v1/auth/login', methods=['POST'])
+def api_login():
+    from blueprints.api_tokens import MOBILE_TOKEN_SCOPES, _issue_api_token
+
+    form = LoginForm(MultiDict(request.get_json(silent=True) or {}))
+    if not form.validate():
+        return jsonify({'success': False, 'errors': form.errors}), 400
+
+    user = User.query.filter(
+        (User.username == form.username.data) | (User.email == form.username.data)
+    ).first()
+
+    if user is not None and user.is_locked:
+        return jsonify({
+            'success': False,
+            'error': 'Too many failed login attempts. Please try again in a few minutes.',
+        }), 423
+
+    if user is None or not user.check_password(form.password.data):
+        if user is not None:
+            user.register_failed_login()
+            db.session.commit()
+        return jsonify({'success': False, 'error': 'Invalid username/email or password'}), 401
+
+    if not user.is_active:
+        # Mirrors login_user()'s own refusal of deactivated accounts -- there's
+        # no login_user() call on this token-only path to do that check for us.
+        return jsonify({'success': False, 'error': 'This account has been deactivated.'}), 403
+
+    user.register_successful_login()
+    db.session.commit()
+
+    issued = _issue_api_token(user, name='ARVision Mobile', scopes=MOBILE_TOKEN_SCOPES, expires_in_days=365)
+    return jsonify({'success': True, 'token': issued['token'], 'user': _api_user_payload(user)})
+
+
+@auth.route('/api/v1/auth/logout', methods=['POST'])
+def api_logout():
+    from blueprints.api_tokens import _bearer_token
+
+    token, error = _bearer_token('models:read')
+    if error:
+        return error
+    token.revoked_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'success': True})
+
 
 @auth.route('/profile')
 @login_required

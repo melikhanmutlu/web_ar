@@ -26,6 +26,7 @@ from config import (
     JOB_STREAM_MAX_SECONDS,
     MAX_MODEL_DIMENSION_METERS,
 )
+from blueprints.api_tokens import _bearer_user
 from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -37,15 +38,20 @@ from site_settings import setting_int
 upload_bp = Blueprint("upload", __name__)
 
 
-def _effective_max_upload_mb():
+def _effective_max_upload_mb(user=None):
     """Smallest positive per-file upload cap across the admin-global setting
-    (max_upload_mb) and the current user's plan (services/plans.py). A 0/None
+    (max_upload_mb) and the actor's plan (services/plans.py). A 0/None
     from either source means "no cap from that source"; returns 0 when neither
     imposes one. The env-derived MAX_CONTENT_LENGTH stays the hard ceiling
-    enforced by Werkzeug regardless."""
+    enforced by Werkzeug regardless.
+
+    `user` lets a Bearer-token-authenticated route (no session/current_user)
+    pass the token's owner explicitly; omitted, this falls back to the
+    session's current_user exactly as before."""
+    actor = user if user is not None else current_user
     caps = [setting_int("max_upload_mb", 0)]
-    if current_user.is_authenticated:
-        caps.append(plan_limit(current_user, "max_upload_mb"))
+    if actor.is_authenticated:
+        caps.append(plan_limit(actor, "max_upload_mb"))
     positive = [c for c in caps if c]
     return min(positive) if positive else 0
 
@@ -59,23 +65,27 @@ def _check_upload_size_limit():
     return None
 
 
-def _check_model_count_limit():
-    """Per-user model-count cap from the user's plan (None => unlimited).
+def _check_model_count_limit(user=None):
+    """Per-user model-count cap from the actor's plan (None => unlimited).
 
     Unlike the storage quota (which counts trashed models still on disk), this
     excludes soft-deleted models (deleted_at IS NULL) so a user can't be
     permanently locked out of uploading by rows sitting in the trash. Runs
     before the file is written, so it gates on the pre-existing total.
     Returns a response tuple or None.
+
+    `user` lets a Bearer-token-authenticated route pass the token's owner
+    explicitly; omitted, this falls back to the session's current_user.
     """
-    if not current_user.is_authenticated:
+    actor = user if user is not None else current_user
+    if not actor.is_authenticated:
         return None
-    cap = plan_limit(current_user, "max_models")
+    cap = plan_limit(actor, "max_models")
     if not cap:
         return None
     count = (
         db.session.query(db.func.count(UserModel.id))
-        .filter(UserModel.user_id == current_user.id, UserModel.deleted_at.is_(None))
+        .filter(UserModel.user_id == actor.id, UserModel.deleted_at.is_(None))
         .scalar()
     )
     if count >= cap:
@@ -397,12 +407,18 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
 
 
 def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimension,
-                            source_unit, compression, edit_token, status_token):
+                            source_unit, compression, edit_token, status_token, user=None):
     """Shared tail of every upload entrypoint (single-shot /upload_model and
     the chunked-upload /complete step): build the ConversionJob payload,
-    persist it, and kick off processing (queue or inline thread)."""
+    persist it, and kick off processing (queue or inline thread).
+
+    `user` lets a Bearer-token-authenticated route pass the token's owner
+    explicitly, so the created model is attributed to them instead of coming
+    out anonymous; omitted, this falls back to the session's current_user.
+    """
     import app as app_module
 
+    actor = user if user is not None else current_user
     payload = {
         "unique_id": unique_id,
         "original_filename": staged["original_filename"],
@@ -417,7 +433,7 @@ def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimensio
         "max_dimension": max_dimension,
         "source_unit": source_unit,
         "compression": compression,
-        "user_id": current_user.id if current_user.is_authenticated else None,
+        "user_id": actor.id if actor.is_authenticated else None,
         "edit_token_hash": generate_password_hash(edit_token) if edit_token else None,
     }
     job = ConversionJob(
@@ -652,13 +668,14 @@ def _write_chunk_meta(session_dir, meta):
     os.replace(tmp_path, path)
 
 
-@upload_bp.route("/api/uploads/chunked/init", methods=["POST"])
-def init_chunked_upload():
-    """Start a resumable upload session for one large model file (no ZIP/MTL/
-    texture companions -- those stay on the single-shot /upload_model path).
-    The client slices the file into chunks itself and PUTs each one."""
+def _init_chunked_upload_impl(user=None):
+    """Body of init_chunked_upload(), reused as-is by the Bearer-token mobile
+    route (POST /api/v1/uploads/chunked/init, blueprints/upload.py below).
+    `user` lets that route pass the token's owner explicitly; omitted, this
+    falls back to the session's current_user exactly as before."""
     import app as app_module
 
+    actor = user if user is not None else current_user
     data = request.get_json(silent=True) or {}
     filename = secure_filename(data.get("filename") or "")
     if not filename or not app_module.allowed_file(filename):
@@ -674,22 +691,22 @@ def init_chunked_upload():
     if total_size <= 0 or total_chunks <= 0 or total_chunks > CHUNK_UPLOAD_MAX_CHUNKS:
         return jsonify({"success": False, "error": "Invalid total_size/total_chunks"}), 400
 
-    max_mb = _effective_max_upload_mb()
+    max_mb = _effective_max_upload_mb(user=actor)
     if max_mb and total_size > max_mb * 1024 * 1024:
         return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
 
-    if current_user.is_authenticated:
+    if actor.is_authenticated:
         global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
-        quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
+        quota_mb = effective_storage_quota_mb(actor, global_default_mb)
         if quota_mb:
             used = (
                 db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-                .filter(UserModel.user_id == current_user.id)
+                .filter(UserModel.user_id == actor.id)
                 .scalar()
             )
             if used + total_size > quota_mb * 1024 * 1024:
                 return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
-    count_guard = _check_model_count_limit()
+    count_guard = _check_model_count_limit(user=actor)
     if count_guard is not None:
         return count_guard
 
@@ -701,6 +718,14 @@ def init_chunked_upload():
         "total_chunks": total_chunks, "received": [],
     })
     return jsonify({"success": True, "upload_id": upload_id}), 201
+
+
+@upload_bp.route("/api/uploads/chunked/init", methods=["POST"])
+def init_chunked_upload():
+    """Start a resumable upload session for one large model file (no ZIP/MTL/
+    texture companions -- those stay on the single-shot /upload_model path).
+    The client slices the file into chunks itself and PUTs each one."""
+    return _init_chunked_upload_impl()
 
 
 @contextmanager
@@ -788,12 +813,14 @@ def get_chunked_upload_status(upload_id):
     return jsonify({"success": True, **body})
 
 
-@upload_bp.route("/api/uploads/chunked/<upload_id>/complete", methods=["POST"])
-def complete_chunked_upload(upload_id):
-    """Assemble the received chunks in order into one file, then hand off to
-    the same staging + ConversionJob pipeline /upload_model uses."""
+def _complete_chunked_upload_impl(upload_id, user=None):
+    """Body of complete_chunked_upload(), reused as-is by the Bearer-token
+    mobile route (POST /api/v1/uploads/chunked/<id>/complete) below. `user`
+    lets that route pass the token's owner explicitly; omitted, this falls
+    back to the session's current_user exactly as before."""
     import app as app_module
 
+    actor = user if user is not None else current_user
     session_dir = _chunk_session_dir(upload_id)
     meta = _read_chunk_meta(session_dir) if session_dir else None
     if not meta:
@@ -839,25 +866,25 @@ def complete_chunked_upload(upload_id):
         # user's quota (the init-time checks trusted the client's declared
         # total_size; enforce against the bytes actually delivered).
         assembled_size = os.path.getsize(assembled_path)
-        max_mb = _effective_max_upload_mb()
+        max_mb = _effective_max_upload_mb(user=actor)
         if max_mb and assembled_size > max_mb * 1024 * 1024:
             return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
-        if current_user.is_authenticated:
+        if actor.is_authenticated:
             global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
-            quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
+            quota_mb = effective_storage_quota_mb(actor, global_default_mb)
             if quota_mb:
                 used = (
                     db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-                    .filter(UserModel.user_id == current_user.id)
+                    .filter(UserModel.user_id == actor.id)
                     .scalar()
                 )
                 if used + assembled_size > quota_mb * 1024 * 1024:
                     return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
-        count_guard = _check_model_count_limit()
+        count_guard = _check_model_count_limit(user=actor)
         if count_guard is not None:
             return count_guard
 
-        edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
+        edit_token = secrets.token_urlsafe(32) if not actor.is_authenticated else None
         status_token = secrets.token_urlsafe(32)
         unique_id = upload_id
         staged = app_module.upload_staging.stage(
@@ -867,12 +894,55 @@ def complete_chunked_upload(upload_id):
             unique_id, staged,
             use_color=use_color, color=color, max_dimension=max_dimension,
             source_unit=data.get("sourceUnit"), compression=compression,
-            edit_token=edit_token, status_token=status_token,
+            edit_token=edit_token, status_token=status_token, user=actor,
         )
     except UploadStagingError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     finally:
         shutil.rmtree(session_dir, ignore_errors=True)
+
+
+@upload_bp.route("/api/uploads/chunked/<upload_id>/complete", methods=["POST"])
+def complete_chunked_upload(upload_id):
+    """Assemble the received chunks in order into one file, then hand off to
+    the same staging + ConversionJob pipeline /upload_model uses."""
+    return _complete_chunked_upload_impl(upload_id)
+
+
+# --- Mobile app chunked upload (Bearer-token, no session/CSRF) ---------
+# Parallel to the three routes above, dedicated to Bearer-token callers (the
+# mobile app) so the session-authenticated browser routes above stay
+# untouched. csrf.exempt()'d in app.py -- safe because no session/cookie
+# caller ever uses these URLs (see CLAUDE.md/app.py for the reasoning other
+# exemptions there already follow).
+
+@upload_bp.route("/api/v1/uploads/chunked/init", methods=["POST"])
+def init_chunked_upload_v1():
+    """Bearer-token mobile equivalent of init_chunked_upload()."""
+    user, error = _bearer_user("models:write")
+    if error:
+        return error
+    return _init_chunked_upload_impl(user=user)
+
+
+@upload_bp.route("/api/v1/uploads/chunked/<upload_id>/chunks/<int:index>", methods=["PUT"])
+def put_upload_chunk_v1(upload_id, index):
+    """Bearer-token mobile equivalent of put_upload_chunk() -- that view has
+    no current_user/CSRF dependency at all, so it's reused unchanged once the
+    token itself is verified."""
+    _, error = _bearer_user("models:write")
+    if error:
+        return error
+    return put_upload_chunk(upload_id, index)
+
+
+@upload_bp.route("/api/v1/uploads/chunked/<upload_id>/complete", methods=["POST"])
+def complete_chunked_upload_v1(upload_id):
+    """Bearer-token mobile equivalent of complete_chunked_upload()."""
+    user, error = _bearer_user("models:write")
+    if error:
+        return error
+    return _complete_chunked_upload_impl(upload_id, user=user)
 
 
 @upload_bp.route("/api/uploads/batch", methods=["POST"])

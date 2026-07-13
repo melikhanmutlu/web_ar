@@ -41,10 +41,10 @@
     <style type="text/tailwindcss">
         @layer base {
             body {
-                @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
+                @apply bg-gray-50 text-gray-900;
             }
             .arvision-logo {
-                @apply text-4xl font-bold text-gray-900 dark:text-white ml-4 hover:opacity-80 transition-opacity;
+                @apply text-4xl font-bold text-gray-900 ml-4 hover:opacity-80 transition-opacity;
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             }
         }
@@ -59,7 +59,7 @@
                 @apply text-white bg-gray-700 hover:bg-gray-600 focus:ring-gray-700;
             }
             .nav-link {
-                @apply text-gray-700 dark:text-white font-medium hover:text-gray-900 dark:hover:text-cyan-400 transition-colors duration-200;
+                @apply text-gray-700 font-medium hover:text-gray-900 transition-colors duration-200;
             }
         }
         /* Custom Styles */
@@ -73,15 +73,8 @@
             @apply bg-gray-700 text-white hover:bg-gray-600;
         }
         .arvision-logo {
-            @apply text-4xl font-bold text-gray-900 dark:text-white ml-4 hover:opacity-80 transition-opacity;
+            @apply text-4xl font-bold text-gray-900 ml-4 hover:opacity-80 transition-opacity;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        /* Dark mode styles */
-        .dark .btn-primary {
-            @apply bg-gray-800 hover:bg-gray-700;
-        }
-        .dark .btn-secondary {
-            @apply bg-gray-700 hover:bg-gray-600;
         }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">

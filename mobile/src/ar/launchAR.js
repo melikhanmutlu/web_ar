@@ -35,7 +35,16 @@ async function launchIOSQuickLook(model, token) {
     headers: { Authorization: `Bearer ${token}` },
     idempotent: true,
   });
-  await presentQuickLook(downloaded.uri);
+  try {
+    await presentQuickLook(downloaded.uri);
+  } catch (err) {
+    // Thrown by ar-launcher's requireNativeModule() when this custom module
+    // isn't linked -- i.e. running in plain Expo Go rather than a
+    // prebuilt/dev-client or EAS build. Everything else in the app (login,
+    // browsing, upload) still works there; only this final AR step needs
+    // the custom build.
+    throw new Error('AR viewing needs a custom development build of this app (not available in Expo Go).');
+  }
 }
 
 export async function launchModelInAR({ model, token }) {

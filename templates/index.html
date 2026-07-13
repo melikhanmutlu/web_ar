@@ -30,39 +30,33 @@
 {% endblock %}
 
 {% block content %}
-<div class="aurora-bg aurora-bg--static" aria-hidden="true"></div>
-
 <main>
-    <section class="landing-hero">
-        <div class="landing-hero-copy">
-            <span class="landing-badge"><i data-lucide="sparkles"></i> AI-generated 3D, now built in</span>
-            <h1 class="landing-title">Any 3D model, <em>instantly</em> in augmented reality.</h1>
-            <p class="landing-subtitle">
-                Upload STL, OBJ, FBX or STEP, or describe what you want and let AI build it. Get a link
-                that opens straight into AR on any modern phone, no app, nothing to install.
-            </p>
-            <div class="landing-cta-row">
-                <a href="{{ url_for('main.studio') }}" class="btn-primary">
-                    <i data-lucide="rocket" style="width:1.05rem;height:1.05rem;"></i> Open Studio
-                </a>
-                <a href="{{ url_for('discover.discover') }}" class="btn-secondary">
-                    <i data-lucide="compass" style="width:1.05rem;height:1.05rem;"></i> Explore the gallery
-                </a>
-            </div>
-            <p class="landing-hint">Free to start · no credit card required</p>
-
-            <div class="landing-formats">
-                <span class="landing-formats-label">Supports</span>
-                <span class="landing-format-chip">OBJ</span>
-                <span class="landing-format-chip">STL</span>
-                <span class="landing-format-chip">FBX</span>
-                <span class="landing-format-chip">STEP</span>
-                <span class="landing-format-chip">glTF / GLB</span>
-                <span class="landing-format-chip">ZIP bundles</span>
-            </div>
+    <section class="hero">
+        <div class="hero-grid" aria-hidden="true"></div>
+        <span class="hero-kicker"><i data-lucide="sparkles"></i> AI-generated 3D, now built in</span>
+        <h1 class="hero-title">Scan reality.<br>Ship it in <em>AR</em>.</h1>
+        <p class="hero-subtitle">
+            Upload STL, OBJ, FBX or STEP, or describe what you want and let AI build it. Get a link
+            that opens straight into AR on any modern phone, no app, nothing to install.
+        </p>
+        <div class="hero-cta-row">
+            <a href="{{ url_for('main.studio') }}" class="btn-primary">
+                <i data-lucide="rocket" style="width:1.05rem;height:1.05rem;"></i> Open Studio
+            </a>
+            <a href="{{ url_for('discover.discover') }}" class="btn-secondary">
+                <i data-lucide="compass" style="width:1.05rem;height:1.05rem;"></i> Explore the gallery
+            </a>
         </div>
+        <p class="hero-hint">Free to start · no credit card required</p>
 
-        <div class="landing-stage">
+        <div class="apparatus">
+            <div class="apparatus-frame">
+                <span class="apparatus-corner apparatus-corner--tl"></span>
+                <span class="apparatus-corner apparatus-corner--tr"></span>
+                <span class="apparatus-corner apparatus-corner--bl"></span>
+                <span class="apparatus-corner apparatus-corner--br"></span>
+                <span class="apparatus-scanline"></span>
+            </div>
             <model-viewer
                 src="{{ url_for('static', filename='marketing/hero-boombox.glb') }}"
                 camera-controls
@@ -77,9 +71,34 @@
                 ar-modes="scene-viewer webxr"
                 alt="A sample 3D model rotating in the ARVision viewer">
             </model-viewer>
-            <div class="landing-stage-caption"><i data-lucide="move-3d"></i> Drag to orbit. Live viewer, not a video.</div>
+            <ul class="apparatus-callouts" aria-hidden="true">
+                <li class="apparatus-callout" style="--x:2%; --y:14%;">FORMAT · GLB</li>
+                <li class="apparatus-callout apparatus-callout--right" style="--x:78%; --y:38%;">SIZE · 184 KB</li>
+                <li class="apparatus-callout" style="--x:2%; --y:86%;">MESHOPT · COMPRESSED</li>
+            </ul>
         </div>
     </section>
+
+    <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+            <span>OBJ</span><span class="is-dot">·</span>
+            <span>STL</span><span class="is-dot">·</span>
+            <span>FBX</span><span class="is-dot">·</span>
+            <span>STEP</span><span class="is-dot">·</span>
+            <span>glTF / GLB</span><span class="is-dot">·</span>
+            <span>ZIP bundles</span><span class="is-dot">·</span>
+            <span>Scene Viewer</span><span class="is-dot">·</span>
+            <span>Quick Look</span><span class="is-dot">·</span>
+            <span>OBJ</span><span class="is-dot">·</span>
+            <span>STL</span><span class="is-dot">·</span>
+            <span>FBX</span><span class="is-dot">·</span>
+            <span>STEP</span><span class="is-dot">·</span>
+            <span>glTF / GLB</span><span class="is-dot">·</span>
+            <span>ZIP bundles</span><span class="is-dot">·</span>
+            <span>Scene Viewer</span><span class="is-dot">·</span>
+            <span>Quick Look</span><span class="is-dot">·</span>
+        </div>
+    </div>
 
     <section class="landing-tour" aria-label="Product walkthrough">
         <p class="landing-eyebrow">Watch it work</p>
@@ -89,77 +108,68 @@
         </div>
     </section>
 
-    <section class="landing-section" aria-label="How it works">
-        <div class="landing-section-head">
-            <p class="landing-eyebrow">How it works</p>
-            <h2 class="landing-section-title">From file to AR link in three steps</h2>
-            <p class="landing-section-desc">The whole pipeline (conversion, optimization, hosting) runs on our
-                servers. You never touch a 3D tool.</p>
+    <section class="narrative" aria-label="How it works and what's included">
+        <div class="narrative-row reveal" style="--i:0">
+            <span class="narrative-ghost" aria-hidden="true">01</span>
+            <span class="narrative-num">01</span>
+            <div class="narrative-copy">
+                <h2>Upload, or describe it</h2>
+                <p>Drag in a model file, or describe an object (or upload a photo of one) and let AI build a real,
+                    texturable mesh. No modeling experience required.</p>
+            </div>
         </div>
-        <div class="landing-steps">
-            <div class="landing-step">
-                <span class="landing-step-num">01</span>
-                <h3>Upload or generate</h3>
-                <p>Drag in a model file, or describe an object (or upload a photo of one) and let AI build the
-                    mesh for you.</p>
+        <div class="narrative-row narrative-row--reverse reveal" style="--i:1">
+            <span class="narrative-ghost" aria-hidden="true">02</span>
+            <span class="narrative-num">02</span>
+            <div class="narrative-copy">
+                <h2>Convert &amp; optimize</h2>
+                <p>STL, OBJ, FBX and STEP in. Clean, compressed GLB and USDZ out, with textures and materials
+                    preserved. No local software needed.</p>
             </div>
-            <div class="landing-step">
-                <span class="landing-step-num">02</span>
-                <h3>Convert &amp; optimize</h3>
-                <p>Automatic conversion to GLB and USDZ, with compression, thumbnailing, and material repair.
-                    No local software needed.</p>
+        </div>
+        <div class="narrative-row reveal" style="--i:0">
+            <span class="narrative-ghost" aria-hidden="true">03</span>
+            <span class="narrative-num">03</span>
+            <div class="narrative-copy">
+                <h2>AR on every phone</h2>
+                <p>Google Scene Viewer on Android, Quick Look on iOS. Visitors tap a link and it opens straight
+                    into AR, no app to install.</p>
             </div>
-            <div class="landing-step">
-                <span class="landing-step-num">03</span>
-                <h3>Share in AR</h3>
-                <p>Get a viewer link or embeddable player that opens straight into Scene Viewer on Android and
-                    Quick Look on iOS.</p>
+        </div>
+        <div class="narrative-row narrative-row--reverse reveal" style="--i:1">
+            <span class="narrative-ghost" aria-hidden="true">04</span>
+            <span class="narrative-num">04</span>
+            <div class="narrative-copy">
+                <h2>A full editing toolkit</h2>
+                <p>Measure, place hotspots, apply material presets, slice, and manage versions, right inside the
+                    viewer.</p>
+            </div>
+        </div>
+        <div class="narrative-row reveal" style="--i:0">
+            <span class="narrative-ghost" aria-hidden="true">05</span>
+            <span class="narrative-num">05</span>
+            <div class="narrative-copy">
+                <h2>Share and collaborate</h2>
+                <p>Public links, embeddable players, password-protected shares, and organizations with shared
+                    model libraries for teams.</p>
             </div>
         </div>
     </section>
 
-    <section class="landing-section" aria-label="Features">
-        <div class="landing-section-head">
-            <p class="landing-eyebrow">Everything included</p>
-            <h2 class="landing-section-title">One platform, the whole 3D → AR workflow</h2>
+    <div class="stat-band reveal">
+        <div class="stat-item">
+            <span class="stat-num">6</span>
+            <span class="stat-label">Formats supported</span>
         </div>
-        <div class="landing-features">
-            <div class="landing-feature landing-feature--lg">
-                <span class="landing-feature-icon"><i data-lucide="wand-sparkles"></i></span>
-                <h3>AI-generated 3D</h3>
-                <p>Turn a text prompt or a product photo into a real, texturable mesh. No modeling
-                    experience required.</p>
-            </div>
-            <div class="landing-feature landing-feature--wide">
-                <span class="landing-feature-icon"><i data-lucide="boxes"></i></span>
-                <h3>Multi-format conversion</h3>
-                <p>STL, OBJ, FBX and STEP in. Clean, optimized GLB and USDZ out, with textures and materials
-                    preserved.</p>
-            </div>
-            <div class="landing-feature">
-                <span class="landing-feature-icon"><i data-lucide="scan-line"></i></span>
-                <h3>AR on every phone</h3>
-                <p>Google Scene Viewer on Android, Quick Look on iOS. Visitors tap a link, no app to install.</p>
-            </div>
-            <div class="landing-feature">
-                <span class="landing-feature-icon"><i data-lucide="ruler"></i></span>
-                <h3>Editing tools built in</h3>
-                <p>Measure, place hotspots, apply material presets, and manage versions right inside the
-                    viewer.</p>
-            </div>
-            <div class="landing-feature landing-feature--wide">
-                <span class="landing-feature-icon"><i data-lucide="share-2"></i></span>
-                <h3>Share your way</h3>
-                <p>Public links, embeddable players, password-protected shares, and custom domains for teams.</p>
-            </div>
-            <div class="landing-feature landing-feature--wide">
-                <span class="landing-feature-icon"><i data-lucide="building-2"></i></span>
-                <h3>Built for teams</h3>
-                <p>Organizations, shared model libraries, and usage analytics to track what's converted and
-                    viewed.</p>
-            </div>
+        <div class="stat-item">
+            <span class="stat-num">2</span>
+            <span class="stat-label">AR platforms</span>
         </div>
-    </section>
+        <div class="stat-item">
+            <span class="stat-num">0</span>
+            <span class="stat-label">Apps to install</span>
+        </div>
+    </div>
 
     <section class="landing-section" aria-label="Product tour">
         <div class="landing-tourpane">
@@ -193,26 +203,22 @@
             <p class="landing-eyebrow">Who it's for</p>
             <h2 class="landing-section-title">Built for anyone who needs a model in the real world</h2>
         </div>
-        <div class="landing-audience">
-            <div class="landing-audience-item">
-                <i data-lucide="shopping-bag"></i>
-                <h3>E-commerce</h3>
-                <p>Let shoppers place products in their own space before they buy.</p>
+        <div class="audience-list">
+            <div class="audience-line">
+                <span class="audience-name">E-commerce</span>
+                <span class="audience-desc">Let shoppers place products in their own space before they buy.</span>
             </div>
-            <div class="landing-audience-item">
-                <i data-lucide="palette"></i>
-                <h3>Designers &amp; artists</h3>
-                <p>Share portfolio pieces as AR links instead of static renders.</p>
+            <div class="audience-line">
+                <span class="audience-name">Designers &amp; artists</span>
+                <span class="audience-desc">Share portfolio pieces as AR links instead of static renders.</span>
             </div>
-            <div class="landing-audience-item">
-                <i data-lucide="drafting-compass"></i>
-                <h3>Engineers &amp; makers</h3>
-                <p>Check CAD/STEP exports and prints at real-world scale.</p>
+            <div class="audience-line">
+                <span class="audience-name">Engineers &amp; makers</span>
+                <span class="audience-desc">Check CAD/STEP exports and prints at real-world scale.</span>
             </div>
-            <div class="landing-audience-item">
-                <i data-lucide="graduation-cap"></i>
-                <h3>Educators</h3>
-                <p>Turn any object into an interactive, walk-around AR lesson.</p>
+            <div class="audience-line">
+                <span class="audience-name">Educators</span>
+                <span class="audience-desc">Turn any object into an interactive, walk-around AR lesson.</span>
             </div>
         </div>
     </section>

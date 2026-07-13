@@ -1304,241 +1304,346 @@ body > .av-flash { margin-top: 5.5rem; }
 }
 
 /* ===================================================================
-   Landing page ('/') — marketing surface, distinct from the studio
-   (app.html) and library pages. All classes are landing-* scoped so
-   they can't collide with anything else in this file.
+   Landing page ('/') — a free-form kinetic build, deliberately NOT a
+   grid-of-cards page. The 3D model is the one visual anchor (an
+   apparatus built around the live viewer, not an illustration); every
+   other section is a continuous vertical narrative -- alternating
+   full-width rows, a scrolling marquee, a stat band -- rather than
+   uniform tiles. See DESIGN.md.
    =================================================================== */
-.landing-hero {
+
+/* ---- Hero: massive kinetic headline behind/around a live apparatus ---- */
+.hero {
     position: relative;
     z-index: 1;
-    max-width: 84rem;
+    min-height: 92vh;
+    max-width: 100rem;
     margin: 0 auto;
-    padding: 8.5rem 1.5rem 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-    align-items: center;
-    gap: 2.5rem 3.5rem;
+    padding: 8rem 1.5rem 4rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: clip;
 }
-.landing-hero-copy { max-width: 32rem; }
-.landing-badge {
+.hero-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 48px 48px,
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 48px 48px;
+    -webkit-mask-image: radial-gradient(60% 60% at 70% 40%, #000 0%, transparent 75%);
+    mask-image: radial-gradient(60% 60% at 70% 40%, #000 0%, transparent 75%);
+    pointer-events: none;
+}
+.hero-kicker {
+    position: relative;
+    z-index: 2;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-pill);
-    background: var(--color-white);
-    padding: 0.35rem 0.85rem 0.35rem 0.6rem;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
     font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--color-gray-600);
-    box-shadow: var(--shadow-sm);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
 }
-.landing-badge i { width: 0.9rem; height: 0.9rem; color: var(--accent); }
-.landing-title {
-    margin: 1.5rem 0 0;
-    font-size: clamp(2.35rem, 4.2vw, 3.6rem);
+.hero-kicker i { width: 0.95rem; height: 0.95rem; }
+.hero-title {
+    position: relative;
+    z-index: 2;
+    margin: 1.1rem 0 0;
+    max-width: 20ch;
+    font-family: var(--font-display);
+    font-size: clamp(3.2rem, 8vw, 7.5rem);
     font-weight: 800;
-    line-height: 1.06;
-    letter-spacing: -0.035em;
+    line-height: 0.96;
+    letter-spacing: -0.02em;
     color: var(--color-white);
 }
-.landing-title em { color: var(--accent); font-style: normal; }
-.landing-subtitle {
-    max-width: 32rem;
-    margin: 1.35rem 0 0;
-    font-size: 1.05rem;
+.hero-title em { color: var(--accent); font-style: normal; }
+.hero-subtitle {
+    position: relative;
+    z-index: 2;
+    max-width: 34rem;
+    margin: 1.75rem 0 0;
+    font-size: 1.1rem;
     line-height: 1.65;
-    color: var(--color-gray-500);
-}
-.landing-cta-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    margin-top: 2.25rem;
-}
-.landing-cta-row .btn-primary,
-.landing-cta-row .btn-secondary {
-    width: auto;
-    padding: 0.85rem 1.6rem;
-    border-radius: var(--radius-pill);
-    font-size: 0.95rem;
-}
-.landing-hint {
-    margin: 1rem 0 0;
-    font-size: 0.78rem;
     color: var(--color-gray-400);
 }
-
-/* Hero stage: live rotating model-viewer, open in space -- no card frame,
-   just an ambient glow behind it (kills the boxed-preview look). */
-.landing-stage {
+.hero-cta-row {
     position: relative;
-    grid-column: 2;
-    height: clamp(360px, 34vw, 520px);
+    z-index: 2;
     display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    margin-top: 2.5rem;
 }
-.landing-stage::before {
+.hero-cta-row .btn-primary,
+.hero-cta-row .btn-secondary {
+    width: auto;
+    padding: 0.95rem 1.75rem;
+    border-radius: var(--radius-pill);
+    font-size: 1rem;
+}
+.hero-hint {
+    position: relative;
+    z-index: 2;
+    margin: 1.1rem 0 0;
+    font-size: 0.8rem;
+    color: var(--color-gray-500);
+}
+
+/* The apparatus: a scan-frame built around the real, live model-viewer --
+   corner brackets, an animated scan sweep, and mono leader-line callouts
+   carrying real data (never invented numbers). Deliberately overlaps the
+   headline column instead of sitting in a clean side-by-side split. */
+.apparatus {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: -4vw;
+    transform: translateY(-50%);
+    width: min(52vw, 44rem);
+    aspect-ratio: 1 / 0.92;
+}
+.apparatus::before {
     content: "";
     position: absolute;
-    inset: -10%;
-    background: radial-gradient(55% 55% at 55% 45%, var(--accent-soft), transparent 72%);
-    filter: blur(2px);
+    inset: -18%;
+    background: radial-gradient(55% 55% at 55% 45%, var(--accent-glow), transparent 72%);
+    filter: blur(4px);
+    opacity: 0.5;
     pointer-events: none;
-    z-index: 0;
 }
-.landing-stage model-viewer {
+.apparatus-frame {
+    position: absolute;
+    inset: 6%;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.apparatus-corner {
+    position: absolute;
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 2px solid var(--accent);
+}
+.apparatus-corner--tl { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.apparatus-corner--tr { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+.apparatus-corner--bl { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+.apparatus-corner--br { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+.apparatus-scanline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent) 20%, var(--accent) 80%, transparent);
+    box-shadow: 0 0 12px 1px var(--accent-glow);
+    animation: apparatus-sweep 4s var(--ease-premium) infinite;
+}
+@keyframes apparatus-sweep {
+    0%   { top: 4%; opacity: 0; }
+    8%   { opacity: 1; }
+    50%  { top: 96%; opacity: 1; }
+    58%  { opacity: 0; }
+    100% { top: 96%; opacity: 0; }
+}
+.apparatus model-viewer {
     position: relative;
     z-index: 1;
     width: 100%;
     height: 100%;
     --poster-color: transparent;
 }
-.landing-stage-caption {
+.apparatus-callouts { position: absolute; inset: 0; z-index: 2; pointer-events: none; list-style: none; margin: 0; padding: 0; }
+.apparatus-callout {
     position: absolute;
-    z-index: 2;
-    left: 0.25rem;
-    bottom: 0.25rem;
-    display: inline-flex;
+    left: var(--x);
+    top: var(--y);
+    display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.5rem 0.9rem;
-    border-radius: var(--radius-pill);
-    background: rgba(249, 250, 252, 0.72);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    font-size: 0.74rem;
-    color: var(--color-gray-600);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-gray-300);
+    white-space: nowrap;
 }
-.landing-stage-caption i { width: 0.8rem; height: 0.8rem; }
-@media (max-width: 860px) { .landing-stage { height: 340px; } }
+.apparatus-callout::before { content: ""; width: 1.1rem; height: 1px; background: rgba(255, 255, 255, 0.35); }
+.apparatus-callout--right { flex-direction: row-reverse; }
+.apparatus-callout--right::before { order: 1; }
+@media (prefers-reduced-motion: reduce) {
+    .apparatus-scanline { animation: none; opacity: 0.6; top: 50%; }
+}
+@media (max-width: 960px) {
+    .apparatus { position: relative; inset: auto; right: auto; top: auto; transform: none; width: 100%; max-width: 26rem; margin: 3rem auto 0; }
+    .hero { min-height: 0; }
+}
 
-/* Format strip */
-.landing-formats {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 0.6rem;
-    margin: 2.75rem 0 0;
+/* ---- Marquee: continuously scrolling format/capability ticker ---- */
+.marquee {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    border-top: 1px solid var(--color-gray-800);
+    border-bottom: 1px solid var(--color-gray-800);
+    padding: 1.1rem 0;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 }
-.landing-formats-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-gray-400); margin-right: 0.35rem; }
-.landing-format-chip {
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-pill);
-    padding: 0.3rem 0.85rem;
-    font-size: 0.76rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    color: var(--color-gray-600);
-    background: var(--color-white);
+.marquee-track {
+    display: flex;
+    width: max-content;
+    gap: 2.5rem;
+    animation: marquee-scroll 32s linear infinite;
+}
+.marquee-track span {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-gray-500);
+    white-space: nowrap;
+}
+.marquee-track span.is-dot { color: var(--accent); }
+@keyframes marquee-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .marquee-track { animation: none; }
 }
 
 /* Generic section shell */
-.landing-section { position: relative; z-index: 1; max-width: 74rem; margin: 0 auto; padding: 6.5rem 1.5rem 0; }
-.landing-section-head { max-width: 38rem; margin: 0 auto 3rem; text-align: center; }
+.landing-section { position: relative; z-index: 1; max-width: 74rem; margin: 0 auto; padding: 7rem 1.5rem 0; }
+.landing-section-head { max-width: 40rem; margin: 0 auto 3.5rem; text-align: center; }
 .landing-eyebrow {
+    font-family: var(--font-mono);
     font-size: 0.72rem;
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--accent);
     margin: 0 0 0.6rem;
 }
-.landing-section-title { font-size: clamp(1.6rem, 3vw, 2.1rem); font-weight: 800; letter-spacing: -0.03em; color: var(--color-white); margin: 0; }
-.landing-section-desc { margin: 0.75rem 0 0; color: var(--color-gray-500); font-size: 0.98rem; line-height: 1.6; }
+.landing-section-title { font-family: var(--font-display); font-size: clamp(1.9rem, 3.6vw, 2.75rem); font-weight: 800; letter-spacing: -0.01em; color: var(--color-white); margin: 0; }
+.landing-section-desc { margin: 0.9rem 0 0; color: var(--color-gray-500); font-size: 1rem; line-height: 1.6; }
 
-/* How it works — a light numbered flow, not a card grid */
-.landing-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2.5rem; }
-.landing-step {
+/* ---- Narrative: one continuous vertical sequence, alternating sides,
+   a huge ghost numeral behind each row for texture -- not a card grid. ---- */
+.narrative { position: relative; z-index: 1; max-width: 68rem; margin: 0 auto; padding: 7rem 1.5rem 0; }
+.narrative-row {
     position: relative;
-    padding: 1.75rem 1.5rem 0 0;
-    border-top: 1px solid var(--color-gray-200);
-}
-.landing-step-num {
-    display: block;
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--accent);
-    margin-bottom: 0.9rem;
-}
-.landing-step h3 { font-size: 1.08rem; font-weight: 700; color: var(--color-white); margin: 0 0 0.4rem; }
-.landing-step p { font-size: 0.88rem; color: var(--color-gray-500); line-height: 1.55; margin: 0; }
-.landing-step:nth-child(2) { margin-top: 2rem; }
-.landing-step:nth-child(3) { margin-top: 4rem; }
-
-/* Feature grid — asymmetric bento (Hallmark F1): mixed tile spans instead
-   of a uniform 3x2 table. One flagship 2x2 tile, the rest mixed 2x1/1x1.
-   Spans are chosen so sparse auto-flow tiles the 4x3 grid exactly (no
-   gaps): 2x2 + 2x1 fill row 1-2, two 1x1 fill row 2, two 2x1 fill row 3. */
-.landing-features {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-rows: 11rem;
-    gap: 1.1rem;
-}
-.landing-feature {
-    position: relative;
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-lg);
-    padding: 1.75rem;
-    background: var(--color-white);
     display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    transition: transform 0.2s var(--ease-premium), box-shadow 0.2s var(--ease-premium), border-color 0.2s var(--ease-premium);
+    align-items: flex-start;
+    gap: 3rem;
+    padding: 3.5rem 0;
+    border-top: 1px solid var(--color-gray-800);
 }
-.landing-feature:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: var(--color-gray-300); }
-.landing-feature--lg { grid-column: span 2; grid-row: span 2; background: var(--color-gray-900); border-color: var(--color-gray-900); }
-.landing-feature--wide { grid-column: span 2; }
-.landing-feature-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: var(--radius-md);
-    background: var(--accent-soft);
+.narrative-row:first-child { border-top: none; }
+.narrative-row--reverse { flex-direction: row-reverse; text-align: right; }
+.narrative-ghost {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-52%);
+    font-family: var(--font-display);
+    font-size: clamp(6rem, 16vw, 13rem);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--color-gray-800);
+    z-index: 0;
+    pointer-events: none;
+    user-select: none;
+}
+.narrative-row--reverse .narrative-ghost { left: auto; right: 0; }
+.narrative-num {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
     color: var(--accent);
-    margin-bottom: 1.1rem;
+    padding-top: 0.4rem;
 }
-.landing-feature--lg .landing-feature-icon { width: 3.25rem; height: 3.25rem; background: rgba(255, 255, 255, 0.1); color: var(--color-white); }
-.landing-feature h3 { font-size: 1.02rem; font-weight: 700; color: var(--color-white); margin: 0 0 0.45rem; }
-.landing-feature p { font-size: 0.86rem; color: var(--color-gray-500); line-height: 1.6; margin: 0; }
-.landing-feature--lg h3 { font-size: 1.3rem; color: var(--color-white); }
-.landing-feature--lg p { color: var(--color-gray-400); }
-@media (max-width: 640px) {
-    .landing-feature--lg, .landing-feature--wide { grid-column: span 1; grid-row: span 1; }
-}
-
-/* Audience strip ("who it's for") — staggered, not a uniform table */
-.landing-audience { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem 1rem; }
-.landing-audience-item {
-    padding: 1.25rem 0 0;
-    border-top: 1px solid var(--color-gray-200);
-}
-.landing-audience-item i { width: 1.4rem; height: 1.4rem; color: var(--accent); margin-bottom: 0.75rem; }
-.landing-audience-item h3 { font-size: 0.9rem; font-weight: 700; color: var(--color-white); margin: 0 0 0.3rem; }
-.landing-audience-item p { font-size: 0.78rem; color: var(--color-gray-500); margin: 0; line-height: 1.5; }
-.landing-audience-item:nth-child(2) { margin-top: 1.75rem; }
-.landing-audience-item:nth-child(4) { margin-top: 1.75rem; }
-@media (max-width: 640px) {
-    .landing-audience-item:nth-child(2), .landing-audience-item:nth-child(4) { margin-top: 0; }
+.narrative-copy { position: relative; z-index: 1; max-width: 30rem; }
+.narrative-row--reverse .narrative-copy { margin-left: auto; }
+.narrative-copy h2 { font-family: var(--font-display); font-size: clamp(1.6rem, 3vw, 2.3rem); font-weight: 800; letter-spacing: -0.01em; color: var(--color-white); margin: 0 0 0.6rem; }
+.narrative-copy p { font-size: 1rem; line-height: 1.65; color: var(--color-gray-400); margin: 0; }
+@media (max-width: 720px) {
+    .narrative-row, .narrative-row--reverse { flex-direction: column; text-align: left; gap: 1rem; }
+    .narrative-row--reverse .narrative-copy { margin-left: 0; }
+    .narrative-ghost { display: none; }
 }
 
-/* Closing CTA banner */
+/* ---- Stat band: full-bleed dark strip, huge tabular numerals ---- */
+.stat-band {
+    position: relative;
+    z-index: 1;
+    max-width: 74rem;
+    margin: 7rem auto 0;
+    padding: 3.5rem 1.5rem;
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 2rem;
+    border-top: 1px solid var(--color-gray-800);
+    border-bottom: 1px solid var(--color-gray-800);
+}
+.stat-item { text-align: center; }
+.stat-num { display: block; font-family: var(--font-display); font-size: clamp(2.75rem, 5vw, 4.5rem); font-weight: 800; line-height: 1; color: var(--color-white); font-variant-numeric: tabular-nums; }
+.stat-label { display: block; margin-top: 0.6rem; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-gray-500); }
+
+/* ---- Product tour: sticky-scroll stack -- a pinned text pane next to a
+   taller image column, so the visible screenshot changes as you scroll. ---- */
+.landing-tourpane { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 3rem; align-items: start; }
+.landing-tourpane-sticky { position: sticky; top: 6rem; }
+.landing-tourpane-scroll { display: flex; flex-direction: column; gap: 3rem; }
+.landing-showcase-card { overflow: hidden; }
+.landing-showcase-card img { display: block; width: 100%; height: auto; border-radius: var(--radius-lg); }
+.landing-showcase-card:nth-child(2) { margin-left: clamp(0px, 8vw, 4rem); max-width: 88%; }
+.landing-showcase-caption { padding: 1rem 0 0; }
+.landing-showcase-caption h3 { font-size: 0.98rem; font-weight: 700; color: var(--color-white); margin: 0 0 0.25rem; }
+.landing-showcase-caption p { font-size: 0.84rem; color: var(--color-gray-500); margin: 0; line-height: 1.5; }
+
+/* ---- Audience: a large stacked typographic list, not boxed cards ---- */
+.audience-list { position: relative; z-index: 1; max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+.audience-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    padding: 1.75rem 0;
+    border-top: 1px solid var(--color-gray-800);
+    transition: transform 0.25s var(--ease-premium);
+}
+.audience-list > .audience-line:last-child { border-bottom: 1px solid var(--color-gray-800); }
+.audience-line:hover { transform: translateX(0.75rem); }
+.audience-name { font-family: var(--font-display); font-size: clamp(1.4rem, 2.6vw, 2rem); font-weight: 800; color: var(--color-white); }
+.audience-line:hover .audience-name { color: var(--accent); }
+.audience-desc { flex: 1 1 20rem; text-align: right; font-size: 0.95rem; color: var(--color-gray-500); max-width: 26rem; }
+@media (max-width: 640px) {
+    .audience-line { flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+    .audience-desc { text-align: left; }
+}
+
+/* ---- Closing CTA banner ---- */
 .landing-cta-banner {
     position: relative;
     z-index: 1;
     max-width: 74rem;
-    margin: 6.5rem auto 0;
+    margin: 7rem auto 0;
     border-radius: var(--radius-lg);
-    background: var(--color-gray-900);
+    background: var(--color-gray-800);
     color: var(--color-white);
-    padding: 4rem 2rem;
+    padding: 5rem 2rem;
     text-align: center;
     overflow: hidden;
 }
@@ -1546,18 +1651,20 @@ body > .av-flash { margin-top: 5.5rem; }
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(60% 120% at 50% 0%, rgba(187, 64, 32, 0.35), transparent 70%);
+    background: radial-gradient(60% 120% at 50% 0%, var(--accent-glow), transparent 70%);
     pointer-events: none;
 }
-.landing-cta-banner h2 { position: relative; font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 800; letter-spacing: -0.03em; margin: 0; }
-.landing-cta-banner p { position: relative; margin: 0.75rem auto 0; max-width: 32rem; color: var(--color-gray-400); font-size: 0.95rem; }
-.landing-cta-banner .landing-cta-row { position: relative; margin-top: 2rem; }
+.landing-cta-banner h2 { position: relative; font-family: var(--font-display); font-size: clamp(1.9rem, 4vw, 3rem); font-weight: 800; letter-spacing: -0.01em; margin: 0; }
+.landing-cta-banner p { position: relative; margin: 0.85rem auto 0; max-width: 32rem; color: var(--color-gray-400); font-size: 1rem; }
+.landing-cta-banner .landing-cta-row { position: relative; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.85rem; margin-top: 2.25rem; }
+.landing-cta-banner .btn-primary,
+.landing-cta-banner .btn-secondary { width: auto; padding: 0.95rem 1.75rem; border-radius: var(--radius-pill); }
 .landing-cta-banner .btn-primary { background: var(--color-white); color: var(--color-gray-900); border-color: var(--color-white); }
 .landing-cta-banner .btn-primary:hover { background: var(--color-gray-200); }
 .landing-cta-banner .btn-secondary { background: transparent; border-color: rgba(255, 255, 255, 0.25); color: var(--color-white); }
 .landing-cta-banner .btn-secondary:hover { border-color: rgba(255, 255, 255, 0.5); }
 
-/* Footer */
+/* ---- Footer ---- */
 .landing-footer {
     position: relative;
     z-index: 1;
@@ -1576,31 +1683,17 @@ body > .av-flash { margin-top: 5.5rem; }
 .landing-footer-links a:hover { color: var(--color-white); text-decoration: underline; text-underline-offset: 3px; }
 .landing-footer-copy { width: 100%; font-size: 0.76rem; color: var(--color-gray-400); text-align: center; margin-top: 1rem; }
 
-/* Product tour: sticky-scroll stack (Hallmark F2) -- a pinned text pane next
-   to a taller image column, so the visible screenshot changes as you scroll
-   instead of two equal boxed cards sitting side by side. */
-.landing-tourpane { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 3rem; align-items: start; }
-.landing-tourpane-sticky { position: sticky; top: 6rem; }
-.landing-tourpane-scroll { display: flex; flex-direction: column; gap: 3rem; }
-.landing-showcase-card { overflow: hidden; }
-.landing-showcase-card img { display: block; width: 100%; height: auto; border-radius: var(--radius-lg); }
-.landing-showcase-card:nth-child(2) { margin-left: clamp(0px, 8vw, 4rem); max-width: 88%; }
-.landing-showcase-caption { padding: 1rem 0 0; }
-.landing-showcase-caption h3 { font-size: 0.98rem; font-weight: 700; color: var(--color-white); margin: 0 0 0.25rem; }
-.landing-showcase-caption p { font-size: 0.84rem; color: var(--color-gray-500); margin: 0; line-height: 1.5; }
-
-/* Hero tool-usage GIF: large, 16:9, right under the hero CTAs -- open frame,
-   no card border/box, just enough radius to feel deliberate. */
+/* ---- Hero tool-usage GIF section ---- */
 .landing-tour {
     position: relative;
     z-index: 1;
-    max-width: 72rem;
-    margin: 3.5rem auto 0;
-    padding: 0 1.5rem;
+    max-width: 76rem;
+    margin: 0 auto;
+    padding: 5rem 1.5rem 0;
     text-align: center;
 }
 .landing-tour-frame {
-    margin-top: 1.5rem;
+    margin-top: 1.75rem;
     border-radius: var(--radius-lg);
     overflow: hidden;
     aspect-ratio: 16 / 9;
@@ -1608,20 +1701,12 @@ body > .av-flash { margin-top: 5.5rem; }
 .landing-tour-frame img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 @media (max-width: 860px) {
-    .landing-hero { grid-template-columns: 1fr; padding-top: 7.5rem; }
-    .landing-hero-copy { max-width: none; }
-    .landing-stage { grid-column: 1; margin-top: 1rem; }
-    .landing-steps, .landing-features { grid-template-columns: 1fr; grid-auto-rows: auto; }
-    .landing-feature--lg, .landing-feature--wide { grid-row: auto; }
-    .landing-step:nth-child(2), .landing-step:nth-child(3) { margin-top: 0; }
+    .hero { padding-top: 7rem; }
     .landing-tourpane { grid-template-columns: 1fr; gap: 1.5rem; }
     .landing-tourpane-sticky { position: static; }
     .landing-showcase-card:nth-child(2) { margin-left: 0; max-width: 100%; }
-    .landing-audience { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .landing-section { padding-top: 4.5rem; }
+    .landing-section, .narrative { padding-top: 4.5rem; }
     .landing-cta-banner { margin-top: 4.5rem; padding: 3rem 1.5rem; }
-    .landing-tour { margin-top: 2.5rem; }
-}
-@media (max-width: 480px) {
-    .landing-audience { grid-template-columns: 1fr; }
+    .landing-tour { padding-top: 3rem; }
+    .stat-band { margin-top: 4.5rem; }
 }

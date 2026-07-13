@@ -10,6 +10,11 @@ main_bp = Blueprint("main", __name__)
 
 @main_bp.route("/", methods=["GET"])
 def index():
+    return render_template("index.html")
+
+
+@main_bp.route("/app", methods=["GET"])
+def studio():
     import ai_generator
     import app as app_module
 
@@ -18,7 +23,7 @@ def index():
     if current_user.is_authenticated:
         exceeded, used, limit = app_module._ai_quota_state(current_user.id)
         ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
-    return render_template("index.html",
+    return render_template("app.html",
                             ai_remove_lighting_supported=ai_remove_lighting_supported,
                             ai_quota=ai_quota,
                             worker_poll_interval_ms=int(WORKER_POLL_INTERVAL * 1000))

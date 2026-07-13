@@ -34,7 +34,7 @@ auth = Blueprint('auth', __name__)
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.studio'))
     
     form = LoginForm(request.form)
     if request.method == 'POST' and form.validate():
@@ -62,7 +62,7 @@ def login():
             return redirect(url_for('auth.login'))
         next_page = request.args.get('next')
         if not next_page or urlparse(next_page).netloc != '':
-            next_page = url_for('main.index')
+            next_page = url_for('main.studio')
         return redirect(next_page)
     
     return render_template('login.html', form=form)
@@ -70,7 +70,7 @@ def login():
 @auth.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('main.studio'))
 
     if not setting_bool('registration_enabled', True):
         flash('Registration is currently disabled.', 'error')

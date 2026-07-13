@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = "Studio — Upload a 3D Model, Get an AR Viewer Link | ARVision" %}
+    {% set seo_description = "Upload a 3D model (FBX, OBJ, STL, or GLTF) and get an instant AR-ready viewer link. View your models in augmented reality on iPhone and Android." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": {{ "ARVision" | tojson }},
+      "url": {{ (SITE_URL + '/app') | tojson }},
+      "description": {{ seo_description | tojson }},
+      "applicationCategory": {{ "MultimediaApplication" | tojson }},
+      "operatingSystem": {{ "Web Browser" | tojson }}
+    }
+    </script>
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+    <script>
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
+    </script>
+</head>
+<body>
+    <!-- Aurora animated background (pure-CSS port of Aceternity aurora) -->
+    <div class="aurora-bg" aria-hidden="true"></div>
+
+    {% include "_site_header.html" %}
+
+    <main class="home-main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="av-flash {% if category == 'error' %}av-flash--error{% endif %}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="home-hero">
+            <p class="home-kicker">Studio</p>
+            <h1 class="home-title">Upload a model. Get an AR-ready link.</h1>
+        </div>
+
+        <div class="av-tabs" role="tablist">
+            <button type="button" class="av-tab is-active" data-panel="panel-upload">Upload</button>
+            <button type="button" class="av-tab" data-panel="panel-generate">Generate with AI</button>
+        </div>
+
+        <div id="panel-upload" class="home-panel">
+        <form id="uploadForm" action="{{ url_for('upload.upload_model') }}" method="post" enctype="multipart/form-data" class="av-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <!-- File Upload -->
+            <div>
+                <div id="dropZone" class="av-dropzone">
+                    <input id="file-upload" name="file" type="file" class="hidden" accept="{{ upload_accept }}" multiple>
+                    <i data-lucide="upload-cloud" class="av-dropzone-icon"></i>
+                    <p class="av-dropzone-title">Drag &amp; drop your 3D model(s) here</p>
+                    <p class="av-dropzone-hint">or click to browse — select multiple files to convert them all at once</p>
+                    <p class="av-dropzone-formats">Supported: <strong>{{ upload_extensions | map('upper') | join(', ') }}</strong> (max. {{ upload_max_mb }}MB each)</p>
+                    <div id="selectedFileName" class="av-dropzone-selected hidden"></div>
+                </div>
+                <p id="batchNote" class="av-card-desc hidden" style="margin-top:0.4rem;">
+                    Multiple files selected — each is converted as its own independent job. MTL/texture
+                    attachments and per-file source unit aren't available in this mode; bundle those with
+                    their model in a ZIP instead.
+                </p>
+            </div>
+
+            <!-- MTL File Upload (OBJ, optional) -->
+            <div id="mtlUpload" class="hidden">
+                <label for="mtl-upload" class="av-subdrop">
+                    <div id="mtlUploadText"><span class="av-subdrop-label">Upload MTL file</span></div>
+                    <div id="selectedMtlFileName" class="av-subdrop-files hidden"></div>
+                    <input id="mtl-upload" name="mtl" type="file" class="hidden" accept=".mtl">
+                </label>
+            </div>
+
+            <!-- Texture Files Upload (OBJ, optional) -->
+            <div id="textureUpload" class="hidden">
+                <label for="texture-upload" class="av-subdrop">
+                    <div id="textureUploadText"><span class="av-subdrop-label">Upload texture files</span></div>
+                    <div id="selectedTextureFileNames" class="av-subdrop-files hidden"></div>
+                    <input id="texture-upload" name="textures" type="file" class="hidden" accept=".jpg,.jpeg,.png,.tga,.bmp" multiple>
+                </label>
+            </div>
+
+            <!-- Options -->
+            <!-- Limit Model Size -->
+            <div class="av-card">
+                <div class="av-card-row">
+                    <label class="av-switch-label">
+                        <span class="av-switch">
+                            <input type="checkbox" id="useMaxDimension" name="use_max_dimension">
+                            <span class="track"></span>
+                            <span class="knob"></span>
+                        </span>
+                        <span class="av-switch-text">Limit Model Size</span>
+                    </label>
+                    <div id="maxDimensionInput" class="hidden">
+                        <span class="av-number-wrap">
+                            <input type="number" id="max-dimension" name="max_dimension" min="10" max="100" value="50" class="av-number" style="padding-right:1.8rem;">
+                            <span class="av-number-unit">cm</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Source Unit (unitless STL/OBJ) -->
+            <div id="sourceUnitSection" class="av-card hidden">
+                <div class="av-card-row">
+                    <div>
+                        <div class="av-card-title">Source Unit</div>
+                        <p class="av-card-desc">STL/OBJ files are unitless — choose how to interpret the source size.</p>
+                    </div>
+                    <select id="sourceUnit" name="sourceUnit" class="av-select">
+                        <option value="auto" selected>Auto-detect (recommended)</option>
+                        <option value="mm">Millimeters (mm)</option>
+                        <option value="cm">Centimeters (cm)</option>
+                        <option value="m">Meters (m)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Apply Color -->
+            <div class="av-card">
+                <div class="av-card-row">
+                    <div>
+                        <div class="av-card-title">Web Compression</div>
+                        <p class="av-card-desc">Meshopt reduces download size; choose None when the model must remain editable.</p>
+                    </div>
+                    <select id="compression" name="compression" class="av-select">
+                        <option value="none" selected>None (editable)</option>
+                        <option value="meshopt">Meshopt (smaller)</option>
+                        <option value="draco">Draco (widely compatible)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Apply Color -->
+            <div class="av-card">
+                <div class="av-card-row">
+                    <label class="av-switch-label">
+                        <span class="av-switch">
+                            <input type="checkbox" id="useColor" name="useColor" value="true">
+                            <span class="track"></span>
+                            <span class="knob"></span>
+                        </span>
+                        <span class="av-switch-text">Apply Color</span>
+                    </label>
+                    <div id="colorPickerContainer" class="hidden" style="display:flex;align-items:center;gap:0.6rem;">
+                        <input type="color" id="colorPicker" name="color" value="#4CAF50" class="av-color">
+                        <input type="text" id="colorInput" class="av-input" style="width:7rem;" value="#4CAF50" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#4CAF50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload Status -->
+            <div id="uploadStatus" class="hidden">
+                <div class="progress-wrapper">
+                    <div class="progress-status">
+                        <span class="progress-label" id="uploadStatusText">Uploading...</span>
+                        <span class="progress-percentage" id="progressText">0%</span>
+                    </div>
+                    <p class="progress-detail" id="uploadStatusDetail">Preparing upload...</p>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="progress-meta" aria-label="Upload details">
+                        <div class="progress-chip">
+                            <span>File</span>
+                            <strong id="progressFileName">-</strong>
+                        </div>
+                        <div class="progress-chip">
+                            <span>Stage</span>
+                            <strong id="progressStage">Queued</strong>
+                        </div>
+                        <div class="progress-chip">
+                            <span>Elapsed</span>
+                            <strong id="progressElapsed">0s</strong>
+                        </div>
+                    </div>
+                </div>
+                <div id="uploadResult" class="upload-result" style="display: none;"></div>
+            </div>
+
+            <!-- Batch Upload Progress: one row per file, each an independent
+                 job (see submitBatchUpload / pollBatchJob below). -->
+            <div id="batchUploadList" class="hidden av-stack" style="gap:0.5rem;"></div>
+
+            <!-- Submit -->
+            <button type="submit" id="submitBtn" class="btn-primary" disabled>
+                <i data-lucide="upload-cloud" style="width:1.1rem;height:1.1rem;"></i>
+                Upload and Convert
+            </button>
+        </form>
+        </div>
+
+        <!-- AI Generation panel -->
+        <div id="panel-generate" class="home-panel hidden">
+            {% if current_user.is_authenticated %}
+            <div class="av-stack">
+                <div class="home-hero" style="margin-bottom:0.5rem;">
+                    <p class="home-kicker">AI Studio</p>
+                    <h1 class="home-title">Describe it or show it — get a 3D model.</h1>
+                </div>
+
+                <div class="av-tabs av-tabs--sub" role="tablist">
+                    <button type="button" class="av-tab is-active" data-genmode="image">From Image</button>
+                    <button type="button" class="av-tab" data-genmode="text">From Text</button>
+                </div>
+
+                <div id="genText" class="av-card hidden">
+                    <label class="av-card-title" for="aiPrompt">Prompt</label>
+                    <p class="av-card-desc" style="margin:0.15rem 0 0.6rem;">Describe the object you want.</p>
+                    <textarea id="aiPrompt" class="av-textarea" rows="3" maxlength="600" placeholder="a red ceramic vase with a glossy finish"></textarea>
+
+                    <!-- Optional pre-step: text -> reference image -> 3D -->
+                    <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-top:0.7rem;">
+                        <button type="button" id="visualizeBtn" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.4rem;width:auto;">
+                            <i data-lucide="image-plus" style="width:1rem;height:1rem;"></i>
+                            Visualize first
+                        </button>
+                        <span class="av-card-desc" style="margin:0;">Optional — preview as an image, pick one, then build 3D from it.</span>
+                    </div>
+                    <div id="t2iResults" class="imgen-grid hidden"></div>
+                    <p id="t2iSelectedNote" class="av-card-desc hidden" style="margin-top:0.5rem;">
+                        Image selected — the 3D model will be built from it.
+                        <a href="#" id="t2iClear" style="text-decoration:underline;">Clear selection</a>
+                    </p>
+
+                    <details class="av-advanced">
+                        <summary>Advanced options</summary>
+                        <div class="av-advanced-body">
+                            <label class="av-card-title" for="optNegativePrompt" style="font-size:0.85rem;">Negative prompt</label>
+                            <input type="text" id="optNegativePrompt" class="av-input" maxlength="600" placeholder="blurry, low quality, extra limbs">
+
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optTopology" style="font-size:0.85rem;">Topology</label>
+                                    <select id="optTopology" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="quad">Quad (smooth surfaces)</option>
+                                        <option value="triangle">Triangle (detailed geometry)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSymmetry" style="font-size:0.85rem;">Symmetry</label>
+                                    <select id="optSymmetry" class="av-select">
+                                        <option value="auto">Auto</option>
+                                        <option value="on">On</option>
+                                        <option value="off">Off</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optPolycount" style="font-size:0.85rem;">Target polycount</label>
+                                    <input type="number" id="optPolycount" class="av-number" min="100" max="300000" placeholder="e.g. 30000">
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSeed" style="font-size:0.85rem;">Seed</label>
+                                    <input type="number" id="optSeed" class="av-number" placeholder="random">
+                                </div>
+                            </div>
+                            <label class="av-card-title" for="optTexturePrompt" style="font-size:0.85rem;">Texture prompt</label>
+                            <input type="text" id="optTexturePrompt" class="av-input" maxlength="600" placeholder="brushed steel, weathered patina">
+                            <label class="av-switch-label" style="margin-top:0.6rem;">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optModeration" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Content moderation</span>
+                            </label>
+                        </div>
+                    </details>
+                </div>
+
+                <div id="genImage" class="av-card">
+                    <div id="aiImageDrop" class="av-dropzone" style="padding:2rem 1.5rem;">
+                        <input id="ai-image" type="file" class="hidden" accept="image/png,image/jpeg">
+                        <i data-lucide="image" class="av-dropzone-icon"></i>
+                        <p class="av-dropzone-title" style="font-size:1rem;">Drop a photo or click to browse</p>
+                        <p class="av-dropzone-hint">PNG or JPG · a single object on a clean background works best.</p>
+                        <img id="aiImagePreview" alt="" class="hidden" style="max-height:160px;margin:1rem auto 0;display:block;">
+                    </div>
+
+                    <!-- Optional pre-step: transform the photo before 3D -->
+                    <div id="i2iTools" class="hidden" style="margin-top:0.9rem;">
+                        <label class="av-card-title" for="i2iPrompt" style="font-size:0.9rem;">Transform the image first (optional)</label>
+                        <p class="av-card-desc" style="margin:0.15rem 0 0.5rem;">e.g. “remove the background”, “clean studio product photo on white”.</p>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                            <input id="i2iPrompt" type="text" class="av-input" maxlength="600" style="flex:1;min-width:220px;" placeholder="remove the background, soft studio lighting">
+                            <button type="button" id="transformBtn" class="btn-secondary" style="display:inline-flex;align-items:center;gap:0.4rem;width:auto;">
+                                <i data-lucide="wand-2" style="width:1rem;height:1rem;"></i>
+                                Transform
+                            </button>
+                        </div>
+                        <p id="i2iNote" class="av-card-desc hidden" style="margin-top:0.5rem;">
+                            Transformed image will be used for 3D.
+                            <a href="#" id="i2iRevert" style="text-decoration:underline;">Revert to original</a>
+                        </p>
+                    </div>
+
+                    <details class="av-advanced">
+                        <summary>Advanced options</summary>
+                        <div class="av-advanced-body">
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optTopologyImg" style="font-size:0.85rem;">Topology</label>
+                                    <select id="optTopologyImg" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="quad">Quad (smooth surfaces)</option>
+                                        <option value="triangle">Triangle (detailed geometry)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optSymmetryImg" style="font-size:0.85rem;">Symmetry</label>
+                                    <select id="optSymmetryImg" class="av-select">
+                                        <option value="auto">Auto</option>
+                                        <option value="on">On</option>
+                                        <option value="off">Off</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="av-advanced-row">
+                                <div>
+                                    <label class="av-card-title" for="optPolycountImg" style="font-size:0.85rem;">Target polycount</label>
+                                    <input type="number" id="optPolycountImg" class="av-number" min="100" max="300000" placeholder="e.g. 30000">
+                                </div>
+                                <div>
+                                    <label class="av-card-title" for="optPoseMode" style="font-size:0.85rem;">Pose</label>
+                                    <select id="optPoseMode" class="av-select">
+                                        <option value="">Default</option>
+                                        <option value="a-pose">A-pose</option>
+                                        <option value="t-pose">T-pose</option>
+                                    </select>
+                                </div>
+                            </div>
+                            {% if ai_remove_lighting_supported %}
+                            <label class="av-switch-label">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optRemoveLighting">
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Clean cutout — remove baked-in lighting (better for AR)</span>
+                            </label>
+                            {% endif %}
+                            <label class="av-switch-label">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optShouldTexture" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Add texture and materials</span>
+                            </label>
+                            <label class="av-switch-label" style="margin-top:0.6rem;">
+                                <span class="av-switch">
+                                    <input type="checkbox" id="optModerationImg" checked>
+                                    <span class="track"></span>
+                                    <span class="knob"></span>
+                                </span>
+                                <span class="av-switch-text">Content moderation</span>
+                            </label>
+                        </div>
+                    </details>
+                </div>
+
+                <div id="generationStatus" class="hidden">
+                    <div class="progress-wrapper">
+                        <div class="progress-status">
+                            <span class="progress-label" id="generationLabel">Generating 3D model…</span>
+                            <span class="progress-percentage" id="generationText">0%</span>
+                        </div>
+                        <div class="progress-bar-container"><div class="progress-bar" id="generationBar"></div></div>
+                    </div>
+                    <div id="generationError" class="av-alert av-alert--error hidden"></div>
+                </div>
+
+                <div id="genResultPreview" class="av-card hidden" style="text-align:center;">
+                    <model-viewer id="genPreviewViewer" camera-controls auto-rotate
+                                  style="width:100%;height:260px;background:var(--color-gray-100);"></model-viewer>
+                    <div style="display:flex;gap:0.6rem;justify-content:center;margin-top:0.75rem;">
+                        <button type="button" id="genKeepBtn" class="btn-primary" style="width:auto;">Keep &amp; open in viewer</button>
+                        <button type="button" id="genDiscardBtn" class="btn-secondary" style="width:auto;">Discard</button>
+                    </div>
+                </div>
+
+                <button type="button" id="generateBtn" class="btn-primary">
+                    <i data-lucide="sparkles" style="width:1.1rem;height:1.1rem;"></i>
+                    Generate 3D Model
+                </button>
+                <p class="av-card-desc" style="text-align:center;" id="genQuotaNote">
+                    {% if ai_quota %}
+                    <span id="genQuotaRemaining">{{ ai_quota.remaining }}</span> of {{ ai_quota.limit }} generations left today
+                    {% else %}
+                    Uses AI credits · subject to a daily limit.
+                    {% endif %}
+                </p>
+            </div>
+            {% else %}
+            <div class="av-card" style="text-align:center;">
+                <div class="av-card-title">Generate 3D with AI</div>
+                <p class="av-card-desc" style="margin:0.5rem 0 1rem;">Turn a text prompt or a photo into a 3D model. Sign in to start.</p>
+                <a href="{{ url_for('auth.login', next=request.path) }}" class="btn-primary" style="display:inline-flex;width:auto;text-decoration:none;">Login to generate</a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Features -->
+        <section class="home-features">
+            <div class="feature-card">
+                <i data-lucide="boxes" class="feature-icon"></i>
+                <h3 class="feature-title">Multiple Formats</h3>
+                <p class="feature-desc">FBX, OBJ, STL and GLTF with textures and materials.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="scan-line" class="feature-icon"></i>
+                <h3 class="feature-title">AR Ready</h3>
+                <p class="feature-desc">View your models in AR on iPhone and Android.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="zap" class="feature-icon"></i>
+                <h3 class="feature-title">Fast Conversion</h3>
+                <p class="feature-desc">Quick and efficient conversion to GLB.</p>
+            </div>
+            <div class="feature-card">
+                <i data-lucide="history" class="feature-icon"></i>
+                <h3 class="feature-title">Save History</h3>
+                <p class="feature-desc">Registered users keep their conversion history.</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- Tagline -->
+    <div class="portfolio-tagline">
+        <p class="tagline-line">A Perfect Place</p>
+        <p class="tagline-line">for: <span class="tagline-main">Your Models</span><span class="tagline-cursor"></span></p>
+    </div>
+
+    <script>
+        document.documentElement.classList.remove('dark');
+        localStorage.theme = 'light';
+        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    </script>
+
+    <!-- Upload logic (ported verbatim; only class names adapted to the design system) -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('file-upload');
+        const selectedFileName = document.getElementById('selectedFileName');
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadResult = document.getElementById('uploadResult');
+
+        // Initialize color picker functionality
+        const colorPickerCheckbox = document.getElementById('useColor');
+        const colorPickerContainer = document.getElementById('colorPickerContainer');
+        const colorPicker = document.getElementById('colorPicker');
+        const colorInput = document.getElementById('colorInput');
+
+        if (colorPickerCheckbox && colorPickerContainer) {
+            colorPickerCheckbox.addEventListener('change', function() {
+                if (this.checked) {
+                    colorPickerContainer.classList.remove('hidden');
+                } else {
+                    colorPickerContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        // Sync color picker and text input
+        if (colorPicker && colorInput) {
+            colorPicker.addEventListener('input', function() {
+                colorInput.value = this.value.toUpperCase();
+            });
+
+            colorInput.addEventListener('input', function() {
+                const value = this.value.trim();
+                if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+                    colorPicker.value = value;
+                    this.classList.remove('is-invalid');
+                } else {
+                    this.classList.add('is-invalid');
+                }
+            });
+        }
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                handleFiles(files);
+                fileInput.files = files; // Set the files to the input element
+            }
+        });
+
+        // Handle clicked files
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Handle selected files
+        const submitBtn = document.getElementById('submitBtn');
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFiles(e.target.files);
+                submitBtn.disabled = false; // Enable submit button
+            }
+        });
+
+        // Handle MTL file selection
+        const mtlInput = document.getElementById('mtl-upload');
+        const selectedMtlFileName = document.getElementById('selectedMtlFileName');
+        const mtlUploadText = document.getElementById('mtlUploadText');
+
+        mtlInput.addEventListener('change', (e) => {
+            // Remove existing MTL color warning if any
+            document.getElementById('mtlColorWarning')?.remove();
+
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                selectedMtlFileName.innerHTML = `Selected: ${escapeHtml(file.name)}<br>(${fileSizeMB} MB)`;
+                selectedMtlFileName.classList.remove('hidden');
+                mtlUploadText.classList.add('hidden');
+
+                // Show warning that color will be ignored when MTL is present
+                const warning = document.createElement('div');
+                warning.id = 'mtlColorWarning';
+                warning.className = 'av-note';
+                warning.innerHTML = '<strong>Note:</strong> When an MTL file is provided, the selected color will be ignored. The model will use materials defined in the MTL file.';
+                selectedMtlFileName.parentElement.appendChild(warning);
+            } else {
+                selectedMtlFileName.classList.add('hidden');
+                mtlUploadText.classList.remove('hidden');
+            }
+        });
+
+        // Handle texture files selection
+        const textureInput = document.getElementById('texture-upload');
+        const selectedTextureFileNames = document.getElementById('selectedTextureFileNames');
+        const textureUploadText = document.getElementById('textureUploadText');
+
+        textureInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const files = Array.from(e.target.files);
+                const totalSizeMB = (files.reduce((total, file) => total + file.size, 0) / (1024 * 1024)).toFixed(2);
+                const fileList = files.map(file => escapeHtml(file.name)).join('<br>');
+                selectedTextureFileNames.innerHTML = `Selected ${files.length} file(s):<br>${fileList}<br>Total: ${totalSizeMB} MB`;
+                selectedTextureFileNames.classList.remove('hidden');
+                textureUploadText.classList.add('hidden');
+            } else {
+                selectedTextureFileNames.classList.add('hidden');
+                textureUploadText.classList.remove('hidden');
+            }
+        });
+
+        // Derived from the backend's ALLOWED_EXTENSIONS (single source of
+        // truth) so the client never rejects a type the server accepts — the
+        // hardcoded list previously omitted .zip, blocking the very ZIP bundle
+        // workflow the UI instructs users to use.
+        const VALID_UPLOAD_EXTENSIONS = {{ upload_extensions | tojson }}.map((e) => '.' + e);
+        const UPLOAD_MAX_BYTES = {{ upload_max_bytes }};
+
+        function fileExtensionOf(file) {
+            return '.' + file.name.split('.').pop().toLowerCase();
+        }
+
+        function handleFiles(files) {
+            if (files.length > 1) {
+                handleMultipleFiles(files);
+                return;
+            }
+            const file = files[0];
+            if (file) {
+                // Check file type
+                const fileExtension = fileExtensionOf(file);
+
+                if (!VALID_UPLOAD_EXTENSIONS.includes(fileExtension)) {
+                    displayError('Invalid file type. Supported: {{ upload_extensions | map("upper") | join(", ") }}.');
+                    return;
+                }
+
+                // Upload policy is rendered from the backend's single source of truth.
+                if (file.size > UPLOAD_MAX_BYTES) {
+                    displayError('File size exceeds {{ upload_max_mb }}MB limit. Please choose a smaller file.');
+                    return;
+                }
+
+                // Update the filename display
+                const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                selectedFileName.innerHTML = `Selected: ${escapeHtml(file.name)}<br>(${fileSizeMB} MB)`;
+                selectedFileName.classList.remove('hidden');
+                document.getElementById('batchNote')?.classList.add('hidden');
+
+                // Enable submit button
+                const submitBtn = document.getElementById('submitBtn');
+                if (submitBtn) submitBtn.disabled = false;
+
+                // Show/hide MTL and texture upload based on file type
+                const mtlUpload = document.getElementById('mtlUpload');
+                const textureUpload = document.getElementById('textureUpload');
+
+                if (fileExtension === '.obj') {
+                    mtlUpload?.classList.remove('hidden');
+                    textureUpload?.classList.remove('hidden');
+                } else {
+                    mtlUpload?.classList.add('hidden');
+                    textureUpload?.classList.add('hidden');
+                    // Clear any previously-selected MTL/texture files -- the
+                    // submit handler appends them whenever they're non-empty,
+                    // so selecting OBJ+MTL then re-selecting e.g. an STL used
+                    // to silently submit the STL with the leftover MTL.
+                    const mtlInputEl = document.getElementById('mtl-upload');
+                    const textureInputEl = document.getElementById('texture-upload');
+                    if (mtlInputEl) mtlInputEl.value = '';
+                    if (textureInputEl) textureInputEl.value = '';
+                }
+
+                // Source-unit selector is only meaningful for unitless STL/OBJ files.
+                // Default to auto-detect: the server measures the raw extents and
+                // picks the most plausible unit; the user can still override.
+                const sourceUnitSection = document.getElementById('sourceUnitSection');
+                const sourceUnitSelect = document.getElementById('sourceUnit');
+                const unitlessType = (fileExtension === '.stl' || fileExtension === '.obj');
+                sourceUnitSection?.classList.toggle('hidden', !unitlessType);
+                if (sourceUnitSelect && unitlessType) {
+                    sourceUnitSelect.value = 'auto';
+                }
+            }
+        }
+
+        // Multi-file selection: each file becomes its own independent
+        // conversion job via /api/uploads/batch (no MTL/texture companions,
+        // no per-file source unit -- those need the single-file form).
+        let pendingBatchFiles = [];
+        function handleMultipleFiles(fileList) {
+            const files = Array.from(fileList);
+            const valid = [];
+            const rejected = [];
+            for (const file of files) {
+                const ext = fileExtensionOf(file);
+                if (!VALID_UPLOAD_EXTENSIONS.includes(ext)) {
+                    rejected.push(`${file.name} (unsupported type)`);
+                } else if (file.size > UPLOAD_MAX_BYTES) {
+                    rejected.push(`${file.name} (exceeds {{ upload_max_mb }}MB)`);
+                } else {
+                    valid.push(file);
+                }
+            }
+
+            pendingBatchFiles = valid;
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (valid.length === 0) {
+                // Escape: rejected[] contains raw, attacker-influenceable
+                // filenames and displayError injects into innerHTML.
+                displayError(`No valid files selected. ${escapeHtml(rejected.join(', '))}`);
+                if (submitBtn) submitBtn.disabled = true;
+                return;
+            }
+
+            const totalMB = (valid.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024)).toFixed(2);
+            let summary = `Selected ${valid.length} file(s) (${totalMB} MB total)`;
+            if (rejected.length > 0) summary += `<br><span class="av-text-error">Skipped: ${escapeHtml(rejected.join(', '))}</span>`;
+            selectedFileName.innerHTML = summary;
+            selectedFileName.classList.remove('hidden');
+            document.getElementById('batchNote')?.classList.remove('hidden');
+            if (submitBtn) submitBtn.disabled = false;
+
+            // Batch mode has no per-file MTL/texture/source-unit controls.
+            document.getElementById('mtlUpload')?.classList.add('hidden');
+            document.getElementById('textureUpload')?.classList.add('hidden');
+            document.getElementById('sourceUnitSection')?.classList.add('hidden');
+        }
+
+        function displayError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'av-alert av-alert--error';
+            errorDiv.innerHTML = `
+                <div class="av-alert-title">Upload Failed</div>
+                <div style="margin-top:0.25rem;font-size:0.85rem;">${message}</div>
+            `;
+
+            // Remove any existing error messages
+            const existingError = uploadForm.querySelector('.av-alert--error');
+            if (existingError) {
+                existingError.remove();
+            }
+
+            // Insert error message at the top of the form
+            uploadForm.insertBefore(errorDiv, uploadForm.firstChild);
+
+            // Clear the file input
+            fileInput.value = '';
+            selectedFileName.classList.add('hidden');
+        }
+
+        function highlight(e) {
+            dropZone.classList.add('is-dragover');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('is-dragover');
+        }
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function formatBytes(bytes) {
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let size = bytes;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+        }
+
+        // Render one progress row per name into #batchUploadList and return the
+        // row refs (position-indexed). Shared by multi-file upload and the
+        // multi-model-ZIP flow so both show the same progress list.
+        function renderBatchRows(names) {
+            const batchList = document.getElementById('batchUploadList');
+            const uploadStatus = document.getElementById('uploadStatus');
+            uploadStatus.classList.add('hidden');
+            uploadStatus.style.display = 'none';
+            batchList.innerHTML = '';
+            batchList.classList.remove('hidden');
+            const rows = [];
+            names.forEach((name) => {
+                const row = document.createElement('div');
+                row.className = 'batch-row';
+                row.innerHTML = `
+                    <div class="batch-row-head">
+                        <span class="batch-row-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+                        <span class="batch-row-status">Uploading…</span>
+                    </div>
+                    <div class="progress-bar-container"><div class="progress-bar" style="width:5%;"></div></div>
+                `;
+                batchList.appendChild(row);
+                rows.push({
+                    el: row,
+                    statusEl: row.querySelector('.batch-row-status'),
+                    barEl: row.querySelector('.progress-bar'),
+                });
+            });
+            return rows;
+        }
+
+        // Attach polling (and any errors) to already-rendered rows from a
+        // batch-style response ({jobs:[{index,...}], errors:[{index,...}]}).
+        function trackBatchJobs(rows, data) {
+            (data.errors || []).forEach((err) => {
+                const refs = rows[err.index];
+                if (!refs) return;
+                refs.statusEl.textContent = err.error;
+                refs.statusEl.classList.add('is-error');
+                refs.barEl.classList.add('error');
+            });
+            (data.jobs || []).forEach((job) => {
+                const refs = rows[job.index];
+                if (!refs) return;
+                pollBatchJob(refs, job.job_id, job.status_token, job.edit_token);
+            });
+        }
+
+        // Multi-file upload: each file becomes its own independent
+        // ConversionJob via /api/uploads/batch (blueprints/upload.py), tracked
+        // with its own progress row instead of the single-file progress bar.
+        async function submitBatchUpload(files) {
+            const batchList = document.getElementById('batchUploadList');
+            const rows = renderBatchRows(files.map((f) => f.name));
+
+            const formData = new FormData();
+            files.forEach((file) => formData.append('files', file));
+            const useColorCheckbox = document.getElementById('useColor');
+            formData.append('useColor', (useColorCheckbox && useColorCheckbox.checked) ? 'true' : 'false');
+            formData.append('color', document.getElementById('colorPicker').value);
+            const useMaxDimensionCheckbox = document.getElementById('useMaxDimension');
+            formData.append('useMaxDimension', (useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked) ? 'true' : 'false');
+            formData.append('maxDimension', document.getElementById('max-dimension').value);
+            const compressionSelect = document.getElementById('compression');
+            if (compressionSelect) formData.append('compression', compressionSelect.value);
+
+            let data;
+            try {
+                const response = await fetch('/api/uploads/batch', { method: 'POST', body: formData });
+                data = await response.json();
+                if (!response.ok && !(data.jobs && data.jobs.length)) {
+                    displayError(data.error || 'Batch upload failed.');
+                    batchList.classList.add('hidden');
+                    return;
+                }
+            } catch (err) {
+                rows.forEach(({ statusEl, barEl }) => {
+                    statusEl.textContent = 'Network error';
+                    statusEl.classList.add('is-error');
+                    barEl.classList.add('error');
+                });
+                return;
+            }
+
+            // Rows and jobs share the backend's request-order index.
+            trackBatchJobs(rows, data);
+        }
+
+        // Tracks one batch row's job to completion (mirrors pollUploadJob's
+        // SSE-with-polling-fallback approach, but updates a specific row's
+        // elements instead of the single-file progress UI).
+        function pollBatchJob(refs, jobId, statusToken, editToken) {
+            const stageText = { pending: 'Queued', processing: 'Converting', completed: 'Complete', failed: 'Failed' };
+
+            function apply(job) {
+                if (!job.success) return false;
+                if (job.status === 'completed' && job.viewer_url) {
+                    const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
+                    refs.statusEl.textContent = 'Ready';
+                    refs.statusEl.classList.add('is-done');
+                    refs.barEl.style.width = '100%';
+                    const link = document.createElement('a');
+                    link.href = viewerUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener';
+                    link.className = 'batch-row-link';
+                    link.textContent = 'View model →';
+                    refs.el.appendChild(link);
+                    return true;
+                } else if (job.status === 'failed' || job.status === 'dead_letter') {
+                    refs.statusEl.textContent = job.error || 'Conversion failed';
+                    refs.statusEl.classList.add('is-error');
+                    refs.barEl.classList.add('error');
+                    return true;
+                }
+                const progress = typeof job.progress === 'number' ? job.progress : (job.status === 'processing' ? 60 : 20);
+                refs.barEl.style.width = Math.min(progress, 96) + '%';
+                refs.statusEl.textContent = job.stage || stageText[job.status] || job.status || 'Processing';
+                return false;
+            }
+
+            function pollFallback() {
+                const poll = setInterval(() => {
+                    fetch(`/api/upload-jobs/${jobId}`, {headers: {'X-Job-Status-Token': statusToken}})
+                        .then(r => r.json())
+                        .then(job => { if (apply(job)) clearInterval(poll); })
+                        .catch(() => { /* transient network error; keep polling */ });
+                }, {{ worker_poll_interval_ms }});
+            }
+
+            if (typeof EventSource === 'undefined') {
+                pollFallback();
+                return;
+            }
+            const source = new EventSource(`/api/upload-jobs/${jobId}/stream?status_token=${encodeURIComponent(statusToken)}`);
+            let fellBack = false;
+            source.onmessage = (event) => {
+                try {
+                    const job = JSON.parse(event.data);
+                    if (apply(job)) source.close();
+                } catch (e) { /* ignore malformed event */ }
+            };
+            source.onerror = () => {
+                source.close();
+                if (!fellBack) {
+                    fellBack = true;
+                    pollFallback();
+                }
+            };
+        }
+
+        // Handle form submission
+        let uploadInProgress = false; // guards against duplicate single-file submits
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const fileInput = document.getElementById('file-upload');
+
+            if (fileInput.files.length > 1) {
+                if (pendingBatchFiles.length === 0) {
+                    displayError('Please select at least one valid file to upload.');
+                    return;
+                }
+                submitBatchUpload(pendingBatchFiles);
+                return;
+            }
+
+            const file = fileInput.files[0];
+
+            if (!file) {
+                displayError('Please select a file to upload.');
+                return;
+            }
+
+            // Prevent a second click from starting a duplicate conversion job
+            // (both would convert, then race to redirect). The button is
+            // re-enabled by endUpload() on any error terminal; the success
+            // path navigates away, so it intentionally stays disabled.
+            const submitBtnEl = document.getElementById('submitBtn');
+            if (uploadInProgress) return;
+            uploadInProgress = true;
+            if (submitBtnEl) submitBtnEl.disabled = true;
+            const endUpload = () => {
+                uploadInProgress = false;
+                if (submitBtnEl) submitBtnEl.disabled = false;
+            };
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Check if color should be applied
+            const useColorCheckbox = document.getElementById('useColor');
+            const shouldApplyColor = useColorCheckbox && useColorCheckbox.checked;
+            formData.append('useColor', shouldApplyColor ? 'true' : 'false');
+            formData.append('color', document.getElementById('colorPicker').value);
+
+            const useMaxDimensionCheckbox = document.getElementById('useMaxDimension');
+            const shouldLimitDimension = useMaxDimensionCheckbox && useMaxDimensionCheckbox.checked;
+            formData.append('useMaxDimension', shouldLimitDimension ? 'true' : 'false');
+            formData.append('maxDimension', document.getElementById('max-dimension').value);
+
+            // Source unit for unitless STL/OBJ (ignored by the backend for other types)
+            const sourceUnitSelect = document.getElementById('sourceUnit');
+            if (sourceUnitSelect) formData.append('sourceUnit', sourceUnitSelect.value);
+            const compressionSelect = document.getElementById('compression');
+            if (compressionSelect) formData.append('compression', compressionSelect.value);
+
+            console.log('Upload settings:', {
+                useColor: shouldApplyColor,
+                color: document.getElementById('colorPicker').value,
+                useMaxDimension: shouldLimitDimension,
+                maxDimension: document.getElementById('max-dimension').value
+            });
+
+            // Add MTL file if present (for OBJ files)
+            const mtlInput = document.getElementById('mtl-upload');
+            if (mtlInput && mtlInput.files.length > 0) {
+                formData.append('mtl', mtlInput.files[0]);
+                console.log('MTL file added:', mtlInput.files[0].name);
+            }
+
+            // Add texture files if present (for OBJ files)
+            const textureInput = document.getElementById('texture-upload');
+            if (textureInput && textureInput.files.length > 0) {
+                for (let i = 0; i < textureInput.files.length; i++) {
+                    formData.append('textures', textureInput.files[i]);
+                    console.log('Texture file added:', textureInput.files[i].name);
+                }
+            }
+
+            // Reset progress bar and show upload status
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const statusText = document.getElementById('uploadStatusText');
+            const statusDetail = document.getElementById('uploadStatusDetail');
+            const progressFileName = document.getElementById('progressFileName');
+            const progressStage = document.getElementById('progressStage');
+            const progressElapsed = document.getElementById('progressElapsed');
+            const uploadStatus = document.getElementById('uploadStatus');
+            const uploadResult = document.getElementById('uploadResult');
+
+            progressBar.style.width = '0%';
+            progressBar.classList.remove('error');
+            progressText.textContent = '0%';
+            statusText.textContent = 'Preparing upload';
+            statusDetail.textContent = `Validating ${file.name} and staging conversion options.`;
+            progressFileName.textContent = file.name;
+            progressStage.textContent = 'Preparing';
+            progressElapsed.textContent = '0s';
+            uploadStatus.classList.remove('hidden');
+            uploadStatus.style.display = 'block';
+            uploadResult.style.display = 'none';
+
+            let currentProgress = 0;
+            const startedAt = Date.now();
+            const elapsedTimer = setInterval(() => {
+                progressElapsed.textContent = `${Math.max(1, Math.round((Date.now() - startedAt) / 1000))}s`;
+            }, 1000);
+
+            const stageText = {
+                pending: 'Queued',
+                processing: 'Converting',
+                completed: 'Complete',
+                failed: 'Failed'
+            };
+
+            function setProgress(percent, label, detail, stage) {
+                currentProgress = Math.max(currentProgress, Math.min(100, percent));
+                progressBar.style.width = currentProgress + '%';
+                progressText.textContent = Math.round(currentProgress) + '%';
+                if (label) statusText.textContent = label;
+                if (detail) statusDetail.textContent = detail;
+                if (stage) progressStage.textContent = stage;
+            }
+
+            // Shows success UI then redirects to the viewer
+            function finishUpload(message, viewerUrl) {
+                clearInterval(elapsedTimer);
+                uploadResult.className = 'upload-result success';
+                uploadResult.style.display = 'block';
+
+                setProgress(100, 'Upload completed', 'Model is ready. Opening the viewer now.', 'Ready');
+
+                setTimeout(() => {
+                    uploadResult.innerHTML = `<div>${escapeHtml(message)}</div>`;
+                    setTimeout(() => {
+                        window.location.href = viewerUrl;
+                    }, 1000);
+                }, 500);
+            }
+
+            // Applies one job-status update to the progress UI. Returns true
+            // once the job reaches a terminal state (caller stops watching).
+            function applyJobUpdate(job, editToken) {
+                if (!job.success) {
+                    // Terminal: an expired/invalid status token or a GC'd job
+                    // returns success:false. Returning false here left the
+                    // poll interval / SSE running forever with the bar stuck.
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Conversion status unavailable',
+                        job.error || 'The upload job could not be tracked. Please check My Models or try again.', 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Upload job status unavailable')}</div>`;
+                    endUpload();
+                    return true;
+                }
+                const jobProgress = typeof job.progress === 'number' ? job.progress : null;
+                const nextProgress = jobProgress !== null ? jobProgress : (job.status === 'processing' ? 72 : currentProgress);
+                const stage = job.stage || stageText[job.status] || job.status || 'Processing';
+                const attempts = job.attempts ? ` Attempt ${job.attempts}.` : '';
+
+                if (job.status === 'completed' && job.viewer_url) {
+                    const viewerUrl = editToken ? `${job.viewer_url}?edit_token=${encodeURIComponent(editToken)}` : job.viewer_url;
+                    finishUpload('Model converted successfully', viewerUrl);
+                    return true;
+                } else if (job.status === 'failed' || job.status === 'dead_letter') {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Conversion failed', job.error || 'The model could not be converted.', 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(job.error || 'Conversion failed')}</div>`;
+                    endUpload();
+                    return true;
+                }
+                setProgress(
+                    Math.min(nextProgress, 96),
+                    stage,
+                    `${job.detail || 'Processing model geometry, materials, and viewer assets.'}${attempts}`,
+                    stage
+                );
+                return false;
+            }
+
+            // Falls back to 2s polling if SSE isn't available or drops --
+            // e.g. the stream hit its server-side max duration for a
+            // long-running conversion, or a proxy buffered/killed it.
+            function pollUploadJobFallback(jobId, statusToken, editToken) {
+                const poll = setInterval(() => {
+                    fetch(`/api/upload-jobs/${jobId}`, {headers: {'X-Job-Status-Token': statusToken}})
+                        .then(r => r.json())
+                        .then(job => { if (applyJobUpdate(job, editToken)) clearInterval(poll); })
+                        .catch(() => { /* transient network error; keep polling */ });
+                }, {{ worker_poll_interval_ms }});
+            }
+
+            // Real-time job progress (Faz 4: SSE), falling back to polling
+            // if EventSource isn't available or the connection errors out.
+            function pollUploadJob(jobId, statusToken, editToken) {
+                setProgress(Math.max(currentProgress, 45), 'Conversion queued', 'Waiting for the conversion worker to pick up the model.', 'Queued');
+
+                if (typeof EventSource === 'undefined') {
+                    pollUploadJobFallback(jobId, statusToken, editToken);
+                    return;
+                }
+
+                const source = new EventSource(`/api/upload-jobs/${jobId}/stream?status_token=${encodeURIComponent(statusToken)}`);
+                let fellBack = false;
+                source.onmessage = (event) => {
+                    try {
+                        const job = JSON.parse(event.data);
+                        if (applyJobUpdate(job, editToken)) source.close();
+                    } catch (e) { /* ignore malformed event */ }
+                };
+                source.onerror = () => {
+                    source.close();
+                    if (!fellBack && currentProgress < 100) {
+                        fellBack = true;
+                        pollUploadJobFallback(jobId, statusToken, editToken);
+                    }
+                };
+            }
+
+            // Large single files (no MTL/texture companions -- those still
+            // need the single-shot multipart path) go through the chunked,
+            // resumable-within-session upload endpoint instead of one big
+            // XHR, so a dropped connection only costs the current chunk.
+            const CHUNK_THRESHOLD_BYTES = 20 * 1024 * 1024;
+            const hasCompanions = (mtlInput && mtlInput.files.length > 0) ||
+                (textureInput && textureInput.files.length > 0);
+            // ZIPs go through the regular multipart path even when large: the
+            // chunked endpoint can't accept archives (it needs to fan a
+            // multi-model ZIP into several jobs, which /upload_model does).
+            const isZip = /\.zip$/i.test(file.name);
+            if (file.size > CHUNK_THRESHOLD_BYTES && !hasCompanions && !isZip) {
+                uploadFileChunked(file, {
+                    useColor: shouldApplyColor,
+                    color: document.getElementById('colorPicker').value,
+                    useMaxDimension: shouldLimitDimension,
+                    maxDimension: document.getElementById('max-dimension').value,
+                    sourceUnit: sourceUnitSelect ? sourceUnitSelect.value : undefined,
+                    compression: compressionSelect ? compressionSelect.value : undefined,
+                });
+                return;
+            }
+
+            // Uploads `file` in chunks with per-chunk retry, then completes
+            // the session to hand off into the same job/polling flow as a
+            // regular upload. Only called for large, companion-free files.
+            async function uploadFileChunked(file, options) {
+                const CHUNK_SIZE = 5 * 1024 * 1024;
+                const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+                try {
+                    const initResp = await fetch('/api/uploads/chunked/init', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: file.name, total_size: file.size, total_chunks: totalChunks }),
+                    });
+                    const initData = await initResp.json();
+                    if (!initResp.ok || !initData.success) throw new Error(initData.error || 'Could not start upload');
+                    const uploadId = initData.upload_id;
+
+                    setProgress(4, 'Uploading model', `Sending ${file.name} in ${totalChunks} chunk(s).`, 'Uploading');
+                    let uploaded = 0;
+                    for (let i = 0; i < totalChunks; i++) {
+                        const chunk = file.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, file.size));
+                        let lastError = null;
+                        let ok = false;
+                        for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+                            if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * attempt));
+                            try {
+                                const chunkResp = await fetch(`/api/uploads/chunked/${uploadId}/chunks/${i}`, {
+                                    method: 'PUT', body: chunk,
+                                });
+                                if (!chunkResp.ok) throw new Error('Chunk upload failed');
+                                ok = true;
+                            } catch (err) {
+                                lastError = err;
+                            }
+                        }
+                        if (!ok) throw lastError || new Error('Chunk upload failed');
+                        uploaded += chunk.size;
+                        const uploadPercent = Math.round((uploaded / file.size) * 38);
+                        setProgress(uploadPercent, 'Uploading model', `${formatBytes(uploaded)} of ${formatBytes(file.size)} transferred.`, 'Uploading');
+                    }
+
+                    setProgress(40, 'Finalizing upload', 'Assembling chunks and starting conversion.', 'Finalizing');
+                    const completeResp = await fetch(`/api/uploads/chunked/${uploadId}/complete`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(options),
+                    });
+                    const completeData = await completeResp.json();
+                    if (!completeResp.ok || !completeData.success) throw new Error(completeData.error || 'Upload failed');
+
+                    if (completeData.viewer_url) {
+                        finishUpload(completeData.message, completeData.viewer_url);
+                    } else if (completeData.job_id) {
+                        pollUploadJob(completeData.job_id, completeData.status_token, completeData.edit_token);
+                    }
+                } catch (error) {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(error.message)}</div>`;
+                }
+            }
+
+            // Upload file
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload_model');
+            // XHR isn't covered by the global fetch CSRF wrapper, so set the
+            // token header here explicitly.
+            (function () {
+                const m = document.querySelector('meta[name="csrf-token"]');
+                if (m) xhr.setRequestHeader('X-CSRFToken', m.getAttribute('content'));
+            })();
+            xhr.upload.addEventListener('progress', (event) => {
+                if (!event.lengthComputable) {
+                    setProgress(18, 'Uploading model', 'Sending file to the local server.', 'Uploading');
+                    return;
+                }
+                const uploadPercent = Math.round((event.loaded / event.total) * 38);
+                setProgress(uploadPercent, 'Uploading model', `${formatBytes(event.loaded)} of ${formatBytes(event.total)} transferred.`, 'Uploading');
+            });
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState !== XMLHttpRequest.DONE) return;
+                try {
+                    const response = JSON.parse(xhr.responseText || '{}');
+                    if (xhr.status >= 200 && xhr.status < 300 && response.success && response.multi) {
+                        // A single ZIP held several models -> the backend fanned
+                        // them into one job each; show the batch progress list.
+                        clearInterval(elapsedTimer);
+                        endUpload();
+                        const uploadStatusEl = document.getElementById('uploadStatus');
+                        if (uploadStatusEl) { uploadStatusEl.classList.add('hidden'); uploadStatusEl.style.display = 'none'; }
+                        const names = (response.jobs || []).map((j) => j.filename);
+                        trackBatchJobs(renderBatchRows(names), response);
+                    } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.viewer_url) {
+                        setProgress(96, 'Finalizing model', 'Conversion finished; preparing the viewer route.', 'Finalizing');
+                        finishUpload(response.message, response.viewer_url);
+                    } else if (xhr.status >= 200 && xhr.status < 300 && response.success && response.job_id) {
+                        pollUploadJob(response.job_id, response.status_token, response.edit_token);
+                    } else {
+                        throw new Error(response.error || 'Upload failed');
+                    }
+                } catch (error) {
+                    clearInterval(elapsedTimer);
+                    progressBar.classList.add('error');
+                    uploadResult.className = 'upload-result error';
+                    uploadResult.style.display = 'block';
+                    setProgress(currentProgress, 'Upload failed', error.message, 'Failed');
+                    uploadResult.innerHTML = `<div class="av-text-error">${escapeHtml(error.message)}</div>`;
+                    endUpload();
+                }
+            };
+            xhr.onerror = () => {
+                clearInterval(elapsedTimer);
+                progressBar.classList.add('error');
+                uploadResult.className = 'upload-result error';
+                uploadResult.style.display = 'block';
+                setProgress(currentProgress, 'Network error', 'Could not reach the local upload endpoint.', 'Failed');
+                uploadResult.innerHTML = '<div class="av-text-error">Network error while uploading.</div>';
+                endUpload();
+            };
+            setProgress(4, 'Preparing upload', 'Packaging selected file, materials, textures, and options.', 'Preparing');
+            xhr.send(formData);
+        });
+
+        // Limit Model Size toggle
+        const useMaxDimension = document.getElementById('useMaxDimension');
+        const maxDimensionInput = document.getElementById('maxDimensionInput');
+        if (useMaxDimension && maxDimensionInput) {
+            useMaxDimension.addEventListener('change', function() {
+                maxDimensionInput.classList.toggle('hidden', !this.checked);
+            });
+        }
+    });
+    </script>
+
+    <!-- Tab switching + AI generation -->
+    <script>
+    (function () {
+        // Top-level tabs: Upload | Generate
+        document.querySelectorAll('.av-tabs:not(.av-tabs--sub) .av-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.av-tabs:not(.av-tabs--sub) .av-tab').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                const panel = btn.dataset.panel;
+                document.getElementById('panel-upload')?.classList.toggle('hidden', panel !== 'panel-upload');
+                document.getElementById('panel-generate')?.classList.toggle('hidden', panel !== 'panel-generate');
+            });
+        });
+
+        const genBtn = document.getElementById('generateBtn');
+        if (!genBtn) return; // not authenticated -> no generate UI
+
+        let genMode = 'image';
+        let imageDataUri = null;
+
+        // Sub-tabs: From Text | From Image
+        document.querySelectorAll('.av-tabs--sub .av-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.av-tabs--sub .av-tab').forEach(b => b.classList.remove('is-active'));
+                btn.classList.add('is-active');
+                genMode = btn.dataset.genmode;
+                document.getElementById('genText').classList.toggle('hidden', genMode !== 'text');
+                document.getElementById('genImage').classList.toggle('hidden', genMode !== 'image');
+            });
+        });
+
+        // Pre-processing selections (Meshy image-gen task references; the
+        // server re-resolves them by task id — raw URLs are never sent)
+        let t2iSelection = null;   // {kind:'t2i', task_id, index}
+        let i2iSelection = null;   // {kind:'i2i', task_id, index}
+        let originalDataUri = null;
+
+        // Image selection -> data URI + preview
+        const aiImageDrop = document.getElementById('aiImageDrop');
+        const aiImage = document.getElementById('ai-image');
+        const aiImagePreview = document.getElementById('aiImagePreview');
+        aiImageDrop?.addEventListener('click', () => aiImage.click());
+        aiImage?.addEventListener('change', (e) => {
+            const f = e.target.files[0];
+            if (!f) return;
+            if (f.size > 10 * 1024 * 1024) { alert('Image too large (max 10MB).'); return; }
+            const reader = new FileReader();
+            reader.onload = () => {
+                imageDataUri = reader.result;
+                originalDataUri = reader.result;
+                i2iSelection = null;
+                document.getElementById('i2iNote').classList.add('hidden');
+                aiImagePreview.src = reader.result;
+                aiImagePreview.classList.remove('hidden');
+                document.getElementById('i2iTools').classList.remove('hidden');
+            };
+            reader.readAsDataURL(f);
+        });
+
+        const statusDiv = document.getElementById('generationStatus');
+        const bar = document.getElementById('generationBar');
+        const txt = document.getElementById('generationText');
+        const label = document.getElementById('generationLabel');
+        const errBox = document.getElementById('generationError');
+
+        function setProgress(p, msg) {
+            bar.style.width = p + '%';
+            txt.textContent = Math.round(p) + '%';
+            if (msg) label.textContent = msg;
+        }
+
+        function showGenError(message) {
+            bar.classList.add('error');
+            errBox.textContent = message;
+            errBox.classList.remove('hidden');
+            setProgress(0, 'Failed');
+        }
+
+        // Human-readable labels per pipeline stage so the bar never looks
+        // "stuck" at the preview→refine boundary (~49%) while Meshy queues
+        // the texturing task under concurrent load.
+        const STAGE_LABELS = {
+            preview: 'Generating base mesh…',
+            refining: 'Base mesh done — queueing texture stage…',
+            refine: 'Texturing…',
+            finalizing: 'Downloading & saving model…',
+            image: 'Generating 3D model…'
+        };
+
+        // Start a task; if Meshy itself is at its concurrent-task limit
+        // (surfaced as 502 + rate-limit message), retry with backoff
+        // instead of failing — daily-quota 429s are NOT retried.
+        async function startTask(url, body, busyLabel) {
+            for (let attempt = 0; ; attempt++) {
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const d = await r.json();
+                if (d.success) return d;
+                const busy = r.status === 502 && /rate limit|429|try again shortly/i.test(d.error || '');
+                if (!busy || attempt >= 3) throw new Error(d.error || 'Failed to start');
+                const wait = 10 * (attempt + 1);
+                setProgress(2, busyLabel + ' — busy, retrying in ' + wait + 's…');
+                await new Promise(res => setTimeout(res, wait * 1000));
+            }
+        }
+
+        // Poll a Meshy image-generation task until it yields image URLs.
+        async function pollImageTask(taskId, kind, labelMsg) {
+            let tries = 0;
+            while (tries < 90) {
+                await new Promise(res => setTimeout(res, 2000));
+                tries++;
+                const r = await fetch('/api/generate-image/' + taskId + '/status?kind=' + kind);
+                const d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Status check failed');
+                if (d.status === 'ready') return d.image_urls || [];
+                if (d.status === 'failed') throw new Error(d.error || 'Image generation failed');
+                setProgress(Math.max(3, d.progress || 0), labelMsg);
+            }
+            throw new Error('Image generation timed out.');
+        }
+
+        // ---- Text mode pre-step: visualize prompt as image(s), pick one ----
+        const t2iResults = document.getElementById('t2iResults');
+        const t2iNote = document.getElementById('t2iSelectedNote');
+
+        function clearT2iSelection() {
+            t2iSelection = null;
+            t2iNote.classList.add('hidden');
+            t2iResults.querySelectorAll('.imgen-item').forEach(b => b.classList.remove('selected'));
+            genBtn.lastChild.textContent = ' Generate 3D Model';
+        }
+        document.getElementById('t2iClear')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearT2iSelection();
+        });
+
+        document.getElementById('visualizeBtn')?.addEventListener('click', async () => {
+            const visualizeBtn = document.getElementById('visualizeBtn');
+            const p = document.getElementById('aiPrompt').value.trim();
+            if (!p) { alert('Please enter a prompt.'); return; }
+            // Unlike transformBtn/genBtn, this button wasn't disabled during
+            // its task -- a double click started two Meshy image-gen tasks
+            // (both burning AI quota) racing on the shared progress bar.
+            if (visualizeBtn.disabled) return;
+            visualizeBtn.disabled = true;
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            clearT2iSelection();
+            t2iResults.classList.add('hidden');
+            t2iResults.innerHTML = '';
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Generating image…');
+            try {
+                const d = await startTask('/api/generate-image',
+                    { mode: 'text', prompt: p }, 'Generating image');
+                const urls = await pollImageTask(d.task_id, d.kind, 'Generating image…');
+                if (!urls.length) throw new Error('No images were generated.');
+                setProgress(100, 'Pick an image');
+                urls.forEach((u, i) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'imgen-item';
+                    // Build the image via the DOM so the (server-provided) URL
+                    // can never break out of the attribute into markup.
+                    const imgEl = document.createElement('img');
+                    imgEl.src = u;
+                    imgEl.alt = 'Generated option ' + (i + 1);
+                    item.appendChild(imgEl);
+                    item.addEventListener('click', () => {
+                        t2iResults.querySelectorAll('.imgen-item').forEach(b => b.classList.remove('selected'));
+                        item.classList.add('selected');
+                        t2iSelection = { kind: d.kind, task_id: d.task_id, index: i };
+                        t2iNote.classList.remove('hidden');
+                        genBtn.lastChild.textContent = ' Generate 3D from selected image';
+                    });
+                    t2iResults.appendChild(item);
+                });
+                t2iResults.classList.remove('hidden');
+            } catch (e) {
+                showGenError(e.message);
+            } finally {
+                visualizeBtn.disabled = false;
+            }
+        });
+
+        // ---- Image mode pre-step: transform the uploaded photo ----
+        const transformBtn = document.getElementById('transformBtn');
+        document.getElementById('i2iRevert')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            i2iSelection = null;
+            document.getElementById('i2iNote').classList.add('hidden');
+            if (originalDataUri) aiImagePreview.src = originalDataUri;
+        });
+
+        transformBtn?.addEventListener('click', async () => {
+            const p = document.getElementById('i2iPrompt').value.trim();
+            if (!originalDataUri) { alert('Please choose an image first.'); return; }
+            if (!p) { alert('Describe how to transform the image.'); return; }
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            transformBtn.disabled = true;
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Transforming image…');
+            try {
+                const d = await startTask('/api/generate-image',
+                    { mode: 'image', image: originalDataUri, prompt: p }, 'Transforming image');
+                const urls = await pollImageTask(d.task_id, d.kind, 'Transforming image…');
+                if (!urls.length) throw new Error('No image was generated.');
+                setProgress(100, 'Image ready');
+                aiImagePreview.src = urls[0];
+                i2iSelection = { kind: d.kind, task_id: d.task_id, index: 0 };
+                document.getElementById('i2iNote').classList.remove('hidden');
+            } catch (e) {
+                showGenError(e.message);
+            } finally {
+                transformBtn.disabled = false;
+            }
+        });
+
+        // Collect the collapsed "Advanced options" panel into a plain object;
+        // blank/default fields are omitted so the server sees no options at
+        // all when the panel was never touched (identical to pre-Advanced-
+        // options behavior).
+        function collectAdvancedOptions(mode) {
+            const opts = {};
+            if (mode === 'text') {
+                const neg = document.getElementById('optNegativePrompt').value.trim();
+                if (neg) opts.negative_prompt = neg;
+                const topology = document.getElementById('optTopology').value;
+                if (topology) opts.topology = topology;
+                const symmetry = document.getElementById('optSymmetry').value;
+                if (symmetry) opts.symmetry_mode = symmetry;
+                const polycount = document.getElementById('optPolycount').value;
+                if (polycount) opts.target_polycount = parseInt(polycount, 10);
+                const seed = document.getElementById('optSeed').value;
+                if (seed) opts.seed = parseInt(seed, 10);
+                const texturePrompt = document.getElementById('optTexturePrompt').value.trim();
+                if (texturePrompt) opts.texture_prompt = texturePrompt;
+                opts.moderation = document.getElementById('optModeration').checked;
+            } else {
+                const topology = document.getElementById('optTopologyImg').value;
+                if (topology) opts.topology = topology;
+                const symmetry = document.getElementById('optSymmetryImg').value;
+                if (symmetry) opts.symmetry_mode = symmetry;
+                const polycount = document.getElementById('optPolycountImg').value;
+                if (polycount) opts.target_polycount = parseInt(polycount, 10);
+                const pose = document.getElementById('optPoseMode').value;
+                if (pose) opts.pose_mode = pose;
+                const removeLighting = document.getElementById('optRemoveLighting');
+                if (removeLighting && removeLighting.checked) opts.remove_lighting = true;
+                opts.should_texture = document.getElementById('optShouldTexture').checked;
+                opts.moderation = document.getElementById('optModerationImg').checked;
+            }
+            return opts;
+        }
+
+        // model-viewer is only needed once a generation actually finishes, so
+        // it's loaded on demand rather than unconditionally in <head> (kept
+        // out of pure-upload visits' page weight).
+        let modelViewerLoading = null;
+        function ensureModelViewerLoaded() {
+            if (customElements.get('model-viewer')) return Promise.resolve();
+            if (!modelViewerLoading) {
+                modelViewerLoading = new Promise((resolve, reject) => {
+                    const s = document.createElement('script');
+                    s.type = 'module';
+                    s.src = "{{ url_for('static', filename='js/model-viewer.min.js') }}";
+                    s.onload = () => {
+                        // Meshopt-compressed GLBs need this decoder registered
+                        // before any model loads, same as templates/view.html.
+                        customElements.whenDefined('model-viewer').then(() => {
+                            customElements.get('model-viewer').meshoptDecoderLocation =
+                                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+                        });
+                        resolve();
+                    };
+                    s.onerror = () => reject(new Error('Failed to load 3D preview.'));
+                    document.head.appendChild(s);
+                });
+            }
+            return modelViewerLoading;
+        }
+
+        const genResultPreview = document.getElementById('genResultPreview');
+        const genPreviewViewer = document.getElementById('genPreviewViewer');
+        const genKeepBtn = document.getElementById('genKeepBtn');
+        const genDiscardBtn = document.getElementById('genDiscardBtn');
+        const genQuotaRemaining = document.getElementById('genQuotaRemaining');
+
+        function decrementQuota() {
+            if (!genQuotaRemaining) return;
+            const n = parseInt(genQuotaRemaining.textContent, 10);
+            if (!isNaN(n) && n > 0) genQuotaRemaining.textContent = n - 1;
+        }
+
+        async function showGenResult(sd) {
+            await ensureModelViewerLoaded();
+            genPreviewViewer.src = sd.model_glb_url;
+            genResultPreview.classList.remove('hidden');
+            genKeepBtn.onclick = () => { window.location.href = sd.viewer_url; };
+            genDiscardBtn.onclick = async () => {
+                genDiscardBtn.disabled = true;
+                try {
+                    await fetch('/delete_model/' + sd.model_id, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({})
+                    });
+                } catch (e) { /* best-effort; model just stays until the user retries from My Models */ }
+                genResultPreview.classList.add('hidden');
+                statusDiv.classList.add('hidden');
+            };
+        }
+
+        genBtn.addEventListener('click', async () => {
+            errBox.classList.add('hidden'); errBox.textContent = '';
+            const body = { mode: genMode, options: collectAdvancedOptions(genMode) };
+            if (genMode === 'text') {
+                if (t2iSelection) {
+                    // build 3D from the AI-generated reference image
+                    body.mode = 'image';
+                    body.image_task = t2iSelection;
+                } else {
+                    const p = document.getElementById('aiPrompt').value.trim();
+                    if (!p) { alert('Please enter a prompt.'); return; }
+                    body.prompt = p;
+                }
+            } else {
+                if (i2iSelection) {
+                    body.image_task = i2iSelection;
+                } else {
+                    if (!imageDataUri) { alert('Please choose an image.'); return; }
+                    body.image = imageDataUri;
+                }
+            }
+
+            genBtn.disabled = true;
+            genResultPreview.classList.add('hidden');
+            statusDiv.classList.remove('hidden');
+            bar.classList.remove('error');
+            setProgress(2, 'Starting…');
+
+            try {
+                const d = await startTask('/api/generate-3d', body, 'Starting 3D generation');
+                const jobId = d.job_id;
+                decrementQuota();
+
+                let done = false, tries = 0;
+                while (!done && tries < 200) {
+                    await new Promise(res => setTimeout(res, 2500));
+                    tries++;
+                    const sr = await fetch('/api/generate-3d/' + jobId + '/status');
+                    const sd = await sr.json();
+                    if (!sd.success) throw new Error(sd.error || 'Status check failed');
+                    setProgress(Math.max(2, sd.progress || 0),
+                        STAGE_LABELS[sd.stage] || 'Generating 3D model…');
+                    if (sd.status === 'ready' && sd.viewer_url) {
+                        setProgress(100, 'Done');
+                        if (sd.model_glb_url) {
+                            await showGenResult(sd);
+                        } else {
+                            window.location.href = sd.viewer_url;
+                        }
+                        done = true;
+                    } else if (sd.status === 'failed') {
+                        throw new Error(sd.error || 'Generation failed');
+                    }
+                }
+                if (!done) throw new Error('Generation timed out. Please try again.');
+            } catch (e) {
+                bar.classList.add('error');
+                errBox.textContent = e.message;
+                errBox.classList.remove('hidden');
+                setProgress(0, 'Failed');
+            } finally {
+                genBtn.disabled = false;
+            }
+        });
+    })();
+    </script>
+    {% if announcement_text %}
+    <div role="status" style="position:fixed;bottom:0;left:0;right:0;z-index:60;background:#111111;color:#ffffff;text-align:center;font-size:0.85rem;padding:0.5rem 1rem;border-top:1px solid #333333;">
+        {{ announcement_text }}
+    </div>
+    {% endif %}
+</body>
+</html>

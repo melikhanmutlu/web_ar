@@ -98,7 +98,7 @@ def test_upload_model_requires_token_but_accepts_it(csrf_client):
     assert rejected.status_code == 302
     # With the token from the upload page, the view runs (and reports the
     # actual validation problem: no file).
-    token = _page_token(csrf_client, "/")
+    token = _page_token(csrf_client, "/app")
     accepted = csrf_client.post(
         "/upload_model", data={"csrf_token": token}
     )

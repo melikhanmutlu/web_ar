@@ -8,9 +8,9 @@ def test_valid_login(client, init_database):
         password='testpassword'
     ), follow_redirects=True)
     
-    # We should be redirected to the index page or see successful login message
+    # We should be redirected to the studio (the post-login landing page)
     assert response.status_code == 200
-    assert response.request.path == '/'
+    assert response.request.path == '/app'
 
 def test_invalid_login(client, init_database):
     response = client.post('/login', data=dict(

@@ -3,7 +3,6 @@
         <a href="{{ url_for('main.index') }}" class="brand-mark">arvision</a>
     </div>
     <nav class="top-actions" aria-label="Primary">
-        <a href="{{ url_for('main.index') }}" class="showcase-nav-link {% if request.endpoint == 'main.index' %}is-active{% endif %}">home</a>
         <a href="{{ url_for('discover.discover') }}" class="showcase-nav-link {% if request.endpoint == 'discover.discover' %}is-active{% endif %}">discover</a>
         {% if current_user.is_authenticated %}
         <a href="{{ url_for('models_crud.my_models') }}" class="showcase-nav-link {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">my models</a>
@@ -20,7 +19,8 @@
         {% else %}
         <a href="{{ url_for('main.pricing') }}" class="showcase-nav-link {% if request.endpoint == 'main.pricing' %}is-active{% endif %}">pricing</a>
         <a href="{{ url_for('auth.register', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.register' %}is-active{% endif %}">register</a>
-        <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link login-pill {% if request.endpoint == 'auth.login' %}is-active{% endif %}">login</a>
+        <a href="{{ url_for('auth.login', next=request.path) }}" class="showcase-nav-link {% if request.endpoint == 'auth.login' %}is-active{% endif %}">login</a>
         {% endif %}
+        <a href="{{ url_for('main.studio') }}" class="nav-cta {% if request.endpoint == 'main.studio' %}is-active{% endif %}">Open Studio</a>
     </nav>
 </header>

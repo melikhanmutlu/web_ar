@@ -737,7 +737,7 @@ function navigateBack() {
 }
 
 function showUploadModal() {
-    window.location.href = "/";  // Redirect to home page for upload
+    window.location.href = "/app";  // Redirect to the studio (upload) page
 }
 
 // Drag and Drop Functions

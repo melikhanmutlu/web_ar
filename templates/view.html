@@ -55,15 +55,15 @@
     <style>
         :root {
             --color-black: #000000;
-            --color-gray-900: #111111;
-            --color-gray-800: #1a1a1a;
+            --color-gray-900: #0b1020;
+            --color-gray-800: #111827;
             --color-gray-700: #333333;
             --color-gray-600: #555555;
             --color-gray-500: #777777;
             --color-gray-400: #999999;
             --color-gray-300: #cccccc;
             --color-gray-200: #eeeeee;
-            --color-gray-100: #f5f5f5;
+            --color-gray-100: #f8fafc;
             --color-white: #ffffff;
             --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             --spacing-xs: 0.25rem;
@@ -126,8 +126,17 @@
         .hotspot-comment-meta { font-size: 0.68rem; color: #94a3b8; margin-top: 0.15rem; display: flex; justify-content: space-between; align-items: center; }
         model-viewer::part(ar-button) { display: none; }
 
+        /* v33 premium viewer refresh */
+        .brand-shell, .top-actions { background: rgba(255,255,255,.62); border: 1px solid rgba(15,23,42,.08); border-radius: 999px; padding: .35rem .55rem; box-shadow: 0 18px 50px rgba(15,23,42,.10); backdrop-filter: blur(18px); }
+        .brand-mark { font-size: 1.55rem; padding: 0 .35rem; }
+        .action-button { border-radius: 999px; background: rgba(255,255,255,.78); border-color: rgba(15,23,42,.08); box-shadow: 0 12px 34px rgba(15,23,42,.10); backdrop-filter: blur(16px); }
+        .action-button:hover { transform: translateY(-1px); background: #fff; border-color: rgba(37,99,235,.24); color: #1d4ed8; }
+        .panel-container { border-radius: 1rem; background: rgba(255,255,255,.76); border-color: rgba(15,23,42,.10); box-shadow: 0 18px 60px rgba(15,23,42,.10); backdrop-filter: blur(20px); }
+        .viewer-stage::before { content: ""; position: absolute; inset: 8rem 18rem auto auto; width: 22rem; height: 22rem; border: 1px dashed rgba(37,99,235,.16); border-radius: 50%; animation: viewer-orbit 18s linear infinite; pointer-events: none; }
+        @keyframes viewer-orbit { to { transform: rotate(360deg); } }
+
         .viewer-shell { position: relative; height: 100vh; overflow: hidden; }
-        .viewer-stage { position: absolute; inset: 0; z-index: 1; background: var(--color-gray-100); }
+        .viewer-stage { position: absolute; inset: 0; z-index: 1; background: radial-gradient(circle at 20% 10%, rgba(66,232,244,.20), transparent 28rem), radial-gradient(circle at 82% 12%, rgba(139,92,246,.18), transparent 30rem), linear-gradient(180deg, #f8fbff, #eef4fb); }
         .dark .viewer-stage { background: var(--color-gray-900); }
         model-viewer { background: transparent !important; width: 100%; height: 100%; }
 
@@ -155,10 +164,12 @@
         /* Tools Panel body — ensure moved content inherits dark theme */
         #toolsPanelBody .showcase-content { padding-right: 0; margin-top: 0; overflow: visible; }
 
-        .showcase-card { display: flex; flex-direction: column; height: auto; padding: var(--spacing-xl); background: var(--color-gray-900); color: var(--color-gray-200); border: 1px solid var(--color-gray-700); overflow: hidden; transition: opacity 0.2s ease, transform 0.2s ease; }
+        .showcase-card { display: flex; flex-direction: column; height: auto; padding: var(--spacing-xl); background: rgba(11,16,32,.88); color: var(--color-gray-200); border: 1px solid rgba(255,255,255,.14); border-radius: 1.25rem; box-shadow: 0 24px 80px rgba(15,23,42,.22); backdrop-filter: blur(22px); overflow: hidden; transition: opacity 0.2s ease, transform 0.2s ease; }
         .showcase-card.is-collapsed { opacity: 0; pointer-events: none; transform: translateX(var(--spacing-lg)); }
 
         #rightSidebar.info-hidden .showcase-card { opacity: 0; pointer-events: none; }
+        .top-header .brand-shell, .top-header .top-actions { background: rgba(255,255,255,.62); border: 1px solid rgba(15,23,42,.08); border-radius: 999px; padding: .35rem .55rem; box-shadow: 0 18px 50px rgba(15,23,42,.10); backdrop-filter: blur(18px); }
+        .top-header .brand-mark { font-size: 1.55rem; padding: 0 .35rem; }
 
         .showcase-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--spacing-md); padding-bottom: var(--spacing-sm); }
         .showcase-kicker { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-gray-400); }

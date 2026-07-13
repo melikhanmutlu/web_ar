@@ -43,10 +43,58 @@
             {% endif %}
         {% endwith %}
 
-        <div class="home-hero">
-            <p class="home-kicker">3D → AR Converter</p>
-            <h1 class="home-title">Upload a model. Get an AR-ready link.</h1>
-        </div>
+        <section class="landing-hero" aria-labelledby="landing-title">
+            <div class="hero-copy">
+                <p class="home-kicker">Premium 3D → AR workspace</p>
+                <h1 id="landing-title" class="home-title">Turn every product model into an immersive AR experience.</h1>
+                <p class="hero-lede">ARVision converts, optimizes, hosts and shares 3D assets for ecommerce teams, studios and founders who need polished web and mobile AR without a native app.</p>
+                <div class="hero-actions">
+                    <a href="#create" class="btn-primary hero-cta"><i data-lucide="rocket"></i> Start creating</a>
+                    <a href="#workflow" class="btn-secondary hero-cta">See workflow</a>
+                </div>
+                <div class="hero-proof" aria-label="Product capabilities">
+                    <span>GLB/USDZ ready</span>
+                    <span>QR handoff</span>
+                    <span>AI 3D generation</span>
+                </div>
+            </div>
+            <div class="hero-visual" aria-hidden="true">
+                <div class="orbital-card orbital-card--main">
+                    <div class="model-orbit"><span></span><span></span><span></span></div>
+                    <div class="floating-cube cube-a"></div>
+                    <div class="floating-cube cube-b"></div>
+                    <div class="scan-plane"></div>
+                </div>
+                <div class="orbital-card orbital-card--tools">
+                    <span>Viewer tools</span>
+                    <strong>Measure · Annotate · Embed</strong>
+                </div>
+                <div class="orbital-card orbital-card--ar">
+                    <span>Mobile AR</span>
+                    <strong>One scan away</strong>
+                </div>
+            </div>
+        </section>
+
+        <section id="workflow" class="landing-section">
+            <div class="section-heading">
+                <p class="home-kicker">How teams use it</p>
+                <h2>From source file to sales-ready 3D in one flow.</h2>
+            </div>
+            <div class="workflow-grid">
+                <article class="feature-card"><i data-lucide="upload-cloud" class="feature-icon"></i><h3 class="feature-title">Upload or generate</h3><p class="feature-desc">Bring FBX, OBJ, STL, GLTF/GLB or create a new asset from a prompt or product photo.</p></article>
+                <article class="feature-card"><i data-lucide="sparkles" class="feature-icon"></i><h3 class="feature-title">Optimize for web AR</h3><p class="feature-desc">Scale, color, compress and preserve materials so models load fast in browsers and AR sessions.</p></article>
+                <article class="feature-card"><i data-lucide="mouse-pointer-2" class="feature-icon"></i><h3 class="feature-title">Review in the viewer</h3><p class="feature-desc">Use transform, material, measurement, comments, versions, QR and embed tools from a premium viewer UI.</p></article>
+                <article class="feature-card"><i data-lucide="share-2" class="feature-icon"></i><h3 class="feature-title">Share anywhere</h3><p class="feature-desc">Send a link, embed on storefronts, or hand off a QR code for customers to place products in their space.</p></article>
+            </div>
+        </section>
+
+        <section id="create" class="create-console" aria-labelledby="create-title">
+            <div class="section-heading section-heading--center">
+                <p class="home-kicker">Launch the app</p>
+                <h2 id="create-title">Create your next AR-ready model.</h2>
+                <p>Choose classic upload for production assets or AI Studio for early concepts and rapid product visualization.</p>
+            </div>
 
         <div class="av-tabs" role="tablist">
             <button type="button" class="av-tab is-active" data-panel="panel-upload">Upload</button>
@@ -415,8 +463,10 @@
             {% endif %}
         </div>
 
+        </section>
+
         <!-- Features -->
-        <section class="home-features">
+        <section class="home-features landing-section">
             <div class="feature-card">
                 <i data-lucide="boxes" class="feature-icon"></i>
                 <h3 class="feature-title">Multiple Formats</h3>
@@ -440,11 +490,6 @@
         </section>
     </main>
 
-    <!-- Tagline -->
-    <div class="portfolio-tagline">
-        <p class="tagline-line">A Perfect Place</p>
-        <p class="tagline-line">for: <span class="tagline-main">Your Models</span><span class="tagline-cursor"></span></p>
-    </div>
 
     <script>
         document.documentElement.classList.remove('dark');

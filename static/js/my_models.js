@@ -940,6 +940,21 @@ sortFilter?.addEventListener('change', () => {
     sortModels();
 });
 
+// Segmented format pills mirror the hidden #formatFilter select so the
+// existing filter logic keeps a single source of truth (no JS behaviour change).
+document.querySelectorAll('.format-pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+        if (!formatFilter) return;
+        document.querySelectorAll('.format-pill').forEach((p) => {
+            const on = p === pill;
+            p.classList.toggle('is-active', on);
+            p.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        formatFilter.value = pill.dataset.format || '';
+        formatFilter.dispatchEvent(new Event('change'));
+    });
+});
+
 // Restore persisted sort + initial batch on load
 document.addEventListener('DOMContentLoaded', () => {
     const savedSort = localStorage.getItem('myModelsSort');

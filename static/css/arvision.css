@@ -278,20 +278,50 @@ a { color: inherit; }
     color: var(--color-gray-900);
 }
 .library-tools {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 12rem;
-    gap: var(--spacing-lg);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
 }
 .library-search {
     display: flex;
     align-items: center;
     gap: var(--spacing-sm);
+    flex: 1 1 16rem;
     border: 1px solid var(--color-gray-300);
     background: var(--color-white);
     padding: 0 0.75rem;
     min-height: 2.75rem;
     border-radius: 10px;
+}
+/* Segmented format filter (drives the hidden #formatFilter select) */
+.format-pills {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px;
+    background: var(--color-gray-100);
+    border: 1px solid var(--color-gray-200);
+    border-radius: 10px;
+}
+.format-pill {
+    border: 0;
+    background: transparent;
+    border-radius: 7px;
+    padding: 0.5rem 0.75rem;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--color-gray-600);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.format-pill:hover { color: var(--color-gray-900); }
+.format-pill.is-active {
+    background: var(--color-white);
+    color: var(--color-gray-900);
+    box-shadow: 0 1px 2px rgba(17, 17, 17, 0.06);
 }
 .library-search i { color: var(--color-gray-400); flex-shrink: 0; }
 .library-search input {
@@ -304,6 +334,7 @@ a { color: inherit; }
     background: transparent;
 }
 .library-sort { width: 100%; min-height: 2.75rem; border-radius: 10px; }
+.library-tools > .library-sort { flex: 0 0 auto; width: auto; min-width: 10rem; margin-left: auto; }
 .library-breadcrumb {
     display: flex;
     align-items: center;
@@ -353,10 +384,12 @@ a { color: inherit; }
     height: 2.5rem;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--color-gray-300);
+    background: #e8e7ff;
+    color: var(--accent);
+    border: 1px solid transparent;
     border-radius: 10px;
 }
-.library-folder--trash .library-folder-icon { color: var(--error); border-color: rgba(220, 38, 38, 0.35); }
+.library-folder--trash .library-folder-icon { background: #fdecec; color: var(--error); border-color: rgba(220, 38, 38, 0.25); }
 .library-folder-copy { min-width: 0; }
 .library-folder h3 {
     font-size: 0.98rem;
@@ -710,6 +743,7 @@ body.selection-mode .model-card { cursor: default; }
 /* Discover / My Models / Profile share .library-header -- give them a
    bigger, lighter-tracked title than the generic .home-title default. */
 .library-header .home-title { font-size: 2.75rem; letter-spacing: -0.04em; }
+.library-subtitle { margin: 0.6rem 0 0; color: var(--color-gray-500); font-size: 0.95rem; }
 
 .av-stack > * + * { margin-top: var(--spacing-lg); }
 
@@ -1126,7 +1160,10 @@ body > .av-flash { margin-top: 5.5rem; }
     .library-main { padding-top: 5rem; }
     .library-header { align-items: flex-start; flex-direction: column; }
     .library-actions { justify-content: flex-start; width: 100%; }
-    .library-tools { grid-template-columns: 1fr; }
+    .library-tools { flex-direction: column; align-items: stretch; }
+    .library-search { flex: 0 0 auto; }
+    .library-tools > .library-sort { width: 100%; margin-left: 0; }
+    .format-pills { width: 100%; }
     .library-model-grid, .library-folder-grid { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
     .home-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .home-title { font-size: 1.5rem; }

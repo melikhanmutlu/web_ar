@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
-from models import User, UserModel, db
+from models import User, UserModel, Payment, db
 from site_settings import setting_bool
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
@@ -28,6 +28,29 @@ class RegistrationForm(Form):
         user = User.query.filter_by(email=email.data).first()
         if user:
             raise ValidationError('This email is already registered.')
+
+class ProfileForm(Form):
+    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
+
+    def __init__(self, current_user_id, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._current_user_id = current_user_id
+
+    def validate_username(self, username):
+        user = User.query.filter_by(username=username.data).first()
+        if user and user.id != self._current_user_id:
+            raise ValidationError('This username is already taken.')
+
+    def validate_email(self, email):
+        user = User.query.filter_by(email=email.data).first()
+        if user and user.id != self._current_user_id:
+            raise ValidationError('This email is already registered.')
+
+class ChangePasswordForm(Form):
+    current_password = PasswordField('Current password', validators=[DataRequired()])
+    new_password = PasswordField('New password', validators=[DataRequired(), Length(min=8)])
+    confirm_password = PasswordField('Confirm new password', validators=[DataRequired(), EqualTo('new_password')])
 
 auth = Blueprint('auth', __name__)
 
@@ -99,6 +122,42 @@ def logout():
 @auth.route('/profile')
 @login_required
 def profile():
+    profile_form = ProfileForm(current_user.id, username=current_user.username, email=current_user.email)
+    password_form = ChangePasswordForm()
+    return _render_profile(profile_form, password_form)
+
+@auth.route('/profile/update', methods=['POST'])
+@login_required
+def update_profile():
+    profile_form = ProfileForm(current_user.id, request.form)
+    if profile_form.validate():
+        current_user.username = profile_form.username.data
+        current_user.email = profile_form.email.data
+        db.session.commit()
+        flash('Profile updated.', 'success')
+        return redirect(url_for('auth.profile'))
+
+    flash('Please fix the errors below.', 'error')
+    return _render_profile(profile_form, ChangePasswordForm())
+
+@auth.route('/profile/password', methods=['POST'])
+@login_required
+def change_password():
+    password_form = ChangePasswordForm(request.form)
+    if password_form.validate():
+        if not current_user.check_password(password_form.current_password.data):
+            password_form.current_password.errors.append('Current password is incorrect.')
+        else:
+            current_user.set_password(password_form.new_password.data)
+            db.session.commit()
+            flash('Password changed.', 'success')
+            return redirect(url_for('auth.profile'))
+
+    flash('Please fix the errors below.', 'error')
+    profile_form = ProfileForm(current_user.id, username=current_user.username, email=current_user.email)
+    return _render_profile(profile_form, password_form)
+
+def _render_profile(profile_form, password_form):
     import app as app_module
     from services.plans import get_plan_config, plan_limit
     from services.storage_quota import _storage_usage_for, _storage_quota_bytes
@@ -125,10 +184,18 @@ def profile():
         "ai_limit": ai_limit,
         "ai_credits": current_user.ai_credit_balance,
     }
+    payments = (
+        Payment.query.filter_by(user_id=current_user.id)
+        .order_by(Payment.created_at.desc())
+        .all()
+    )
     return render_template(
         'profile.html',
         user=current_user,
         plan=plan,
         plan_display=plan_display,
         usage=usage,
+        payments=payments,
+        profile_form=profile_form,
+        password_form=password_form,
     )

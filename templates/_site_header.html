@@ -4,10 +4,6 @@
     <div class="nav-inner">
         <a href="{{ url_for('main.index') }}" class="brand">arvision</a>
         <nav aria-label="Primary">
-            <a href="{{ url_for('main.studio') }}" class="{% if request.endpoint == 'main.studio' %}is-active{% endif %}">Studio</a>
-            {% if current_user.is_authenticated %}
-            <a href="{{ url_for('models_crud.my_models') }}" class="{% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">Library</a>
-            {% endif %}
             <a href="{{ url_for('discover.discover') }}" class="{% if request.endpoint == 'discover.discover' %}is-active{% endif %}">Discover</a>
             {% if not viewer_chrome %}
             <a href="{{ url_for('main.features') }}" class="{% if request.endpoint == 'main.features' %}is-active{% endif %}">Features</a>
@@ -16,13 +12,27 @@
         </nav>
         <div class="nav-actions">
             {% if current_user.is_authenticated %}
-            {% if current_user.is_admin %}
-            <a href="{{ url_for('admin.dashboard') }}" class="nav-auth-link">Admin</a>
-            {% endif %}
-            <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="nav-auth-link">Log out</button>
-            </form>
+            <div class="user-menu" id="userMenu">
+                <button type="button" class="user-menu-toggle" id="userMenuToggle" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuDropdown">
+                    <span class="user-menu-avatar">{{ current_user.username[:1] | upper }}</span>
+                </button>
+                <div class="user-menu-dropdown" id="userMenuDropdown" hidden>
+                    <div class="user-menu-head">
+                        <span class="user-menu-name">{{ current_user.username }}</span>
+                        <span class="user-menu-email">{{ current_user.email }}</span>
+                    </div>
+                    <a href="{{ url_for('models_crud.my_models') }}" class="user-menu-item {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">Library</a>
+                    <a href="{{ url_for('auth.profile') }}" class="user-menu-item {% if request.endpoint == 'auth.profile' %}is-active{% endif %}">Profile settings</a>
+                    {% if current_user.is_admin %}
+                    <a href="{{ url_for('admin.dashboard') }}" class="user-menu-item {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">Admin</a>
+                    {% endif %}
+                    <div class="user-menu-divider"></div>
+                    <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="user-menu-item user-menu-item--danger">Log out</button>
+                    </form>
+                </div>
+            </div>
             {% else %}
             <a href="{{ url_for('auth.login', next=request.path) }}" class="nav-auth-link">Sign in</a>
             {% endif %}
@@ -37,15 +47,14 @@
 
     <div class="mobile-menu" id="mobileMenu" hidden>
         <a href="{{ url_for('main.studio') }}">Studio</a>
-        {% if current_user.is_authenticated %}
-        <a href="{{ url_for('models_crud.my_models') }}">Library</a>
-        {% endif %}
         <a href="{{ url_for('discover.discover') }}">Discover</a>
         <a href="{{ url_for('main.features') }}">Features</a>
         <a href="{{ url_for('main.workflow') }}">Workflow</a>
         <a href="{{ url_for('main.pricing') }}">Pricing</a>
         <div class="mobile-menu-actions">
             {% if current_user.is_authenticated %}
+            <a href="{{ url_for('models_crud.my_models') }}">Library</a>
+            <a href="{{ url_for('auth.profile') }}">Profile settings</a>
             {% if current_user.is_admin %}
             <a href="{{ url_for('admin.dashboard') }}">Admin</a>
             {% endif %}

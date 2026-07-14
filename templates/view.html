@@ -154,12 +154,26 @@
         .nav-inner { width: min(1280px, calc(100% - 48px)); height: 100%; margin: auto; display: flex; align-items: center; position: relative; }
         .brand { font-family: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace; font-size: 1.7rem; font-weight: 600; line-height: 1; letter-spacing: -0.03em; color: var(--ink); text-decoration: none; transition: opacity 0.15s ease; }
         .brand:hover { opacity: 0.68; }
-        .nav nav { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 30px; font-size: 14px; color: #292e36; font-family: Helvetica, Arial, sans-serif; }
+        .nav nav { position: static; left: auto; transform: none; margin-left: auto; margin-right: 24px; display: flex; gap: 30px; font-size: 14px; color: #292e36; font-family: Helvetica, Arial, sans-serif; }
         .nav nav a { text-decoration: none; font-weight: 700; }
         .nav nav a:hover, .nav nav a.is-active { color: var(--accent); }
-        .nav-actions { display: flex; align-items: center; margin-left: auto; gap: 22px; font-family: Helvetica, Arial, sans-serif; }
+        .nav-actions { display: flex; align-items: center; gap: 22px; font-family: Helvetica, Arial, sans-serif; }
         .nav-auth-link { font-size: 13px; font-weight: 700; color: #343a44; text-decoration: none; padding: 10px 0; transition: color 0.2s; }
         .nav-auth-link:hover { color: var(--accent); }
+        /* Signed-in avatar dropdown (mirrors arvision.css) */
+        .user-menu { position: relative; }
+        .user-menu-toggle { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+        .user-menu-avatar { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-size: 13px; font-weight: 800; font-family: Helvetica, Arial, sans-serif; }
+        .user-menu-toggle:hover .user-menu-avatar { filter: brightness(1.08); }
+        .user-menu-dropdown { position: absolute; top: calc(100% + 12px); right: 0; width: 230px; padding: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 45px rgba(17,19,24,.14); z-index: 60; }
+        .user-menu-head { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--soft); }
+        .user-menu-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+        .user-menu-email { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .user-menu-item { display: block; width: 100%; text-align: left; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; font-family: Helvetica, Arial, sans-serif; }
+        .user-menu-item:hover, .user-menu-item.is-active { background: var(--soft); }
+        .user-menu-item--danger:hover { color: #c0392b; background: #fdecec; }
+        .user-menu-divider { height: 1px; margin: 6px 4px; background: var(--soft); }
+        @media (max-width: 950px) { .user-menu { display: none; } }
         .primary-btn.mini { border: 0; padding: 11px 15px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 20px; transition: .25s; background: var(--ink); color: #fff; text-decoration: none; box-shadow: 0 10px 24px rgba(17,19,24,.13); }
         .primary-btn.mini:hover { transform: translateY(-2px); }
         /* "log out" is a <button> (POST-only route) while the rest are <a>;
@@ -261,6 +275,14 @@
         .dark #measureToolButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
         #cameraOverlayButton.is-active { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
         .dark #cameraOverlayButton.is-active { background: var(--color-gray-200) !important; color: var(--color-gray-900) !important; }
+
+        /* Stage background switcher: client-side only (localStorage), decoupled
+           from the owner-only viewer_settings.background_color embed field. */
+        .bg-switcher { position: relative; }
+        .bg-switcher-panel { position: absolute; right: 0; bottom: calc(100% + 0.5rem); display: flex; gap: 0.5rem; padding: 0.5rem; background: var(--color-white); border: 1px solid var(--color-gray-200); box-shadow: 0 10px 30px rgba(17, 19, 24, 0.14); }
+        .dark .bg-switcher-panel { background: var(--color-gray-900); border-color: var(--color-gray-700); }
+        .bg-swatch { width: 1.9rem; height: 1.9rem; border-radius: 50%; padding: 0; cursor: pointer; border: 2px solid var(--color-gray-300); }
+        .bg-swatch.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 
         /* Camera Overlay mode: live rear camera behind the transparent
            model canvas (static/js/viewer/camera-overlay.js). */
@@ -1418,8 +1440,16 @@
         <!-- Bottom-right Toolbar -->
         <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
             <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
-            <button id="modelInfoButton" class="tb-btn" title="Details"><i data-lucide="file-text"></i></button>
+            <button id="modelInfoButton" class="tb-btn" title="Details" style="display:none;"><i data-lucide="file-text"></i></button>
             <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
+            <div class="bg-switcher" id="bgSwitcher">
+                <button id="bgSwitcherButton" class="tb-btn" title="Stage background" aria-haspopup="true" aria-expanded="false"><i data-lucide="palette"></i></button>
+                <div class="bg-switcher-panel" id="bgSwitcherPanel" hidden>
+                    <button type="button" class="bg-swatch" data-bg="white" title="White" style="background:#ffffff;"></button>
+                    <button type="button" class="bg-swatch" data-bg="dark" title="Dark" style="background:#111318;"></button>
+                    <button type="button" class="bg-swatch" data-bg="black" title="Near-black" style="background:#0b0c10;"></button>
+                </div>
+            </div>
             {% if viewer_settings.show_dimensions %}
             <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>
             {% endif %}
@@ -1671,6 +1701,81 @@
                     mobileMenu.hidden = !open;
                 });
             }
+        })();
+        // Signed-in avatar dropdown toggle (mirrors site.js).
+        (function () {
+            var userMenu = document.getElementById('userMenu');
+            var userMenuToggle = document.getElementById('userMenuToggle');
+            var userMenuDropdown = document.getElementById('userMenuDropdown');
+            if (!userMenu || !userMenuToggle || !userMenuDropdown) return;
+            var setUserMenuOpen = function (open) {
+                userMenu.classList.toggle('is-open', open);
+                userMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                userMenuDropdown.hidden = !open;
+            };
+            userMenuToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                setUserMenuOpen(userMenuDropdown.hidden);
+            });
+            document.addEventListener('click', function (e) {
+                if (!userMenuDropdown.hidden && !userMenu.contains(e.target)) {
+                    setUserMenuOpen(false);
+                }
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !userMenuDropdown.hidden) {
+                    setUserMenuOpen(false);
+                    userMenuToggle.focus();
+                }
+            });
+        })();
+        // Stage background switcher: client-side only, remembered per-browser
+        // via localStorage. Independent of the owner-only, DB-persisted
+        // viewer_settings.background_color used by the Embed panel.
+        (function () {
+            var STORAGE_KEY = 'arvision.viewerBg';
+            var BG_COLORS = { white: '#ffffff', dark: '#111318', black: '#0b0c10' };
+            var stage = document.querySelector('.viewer-stage');
+            var switcher = document.getElementById('bgSwitcher');
+            var button = document.getElementById('bgSwitcherButton');
+            var panel = document.getElementById('bgSwitcherPanel');
+            if (!stage || !switcher || !button || !panel) return;
+
+            var swatches = panel.querySelectorAll('.bg-swatch');
+            var applyBg = function (key) {
+                if (!BG_COLORS[key]) return;
+                stage.style.background = BG_COLORS[key];
+                swatches.forEach(function (sw) {
+                    sw.classList.toggle('is-active', sw.getAttribute('data-bg') === key);
+                });
+            };
+            applyBg(localStorage.getItem(STORAGE_KEY) || 'white');
+
+            var setPanelOpen = function (open) {
+                button.setAttribute('aria-expanded', open ? 'true' : 'false');
+                panel.hidden = !open;
+            };
+            button.addEventListener('click', function (e) {
+                e.stopPropagation();
+                setPanelOpen(panel.hidden);
+            });
+            swatches.forEach(function (sw) {
+                sw.addEventListener('click', function () {
+                    var key = sw.getAttribute('data-bg');
+                    applyBg(key);
+                    localStorage.setItem(STORAGE_KEY, key);
+                    setPanelOpen(false);
+                });
+            });
+            document.addEventListener('click', function (e) {
+                if (!panel.hidden && !switcher.contains(e.target)) setPanelOpen(false);
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !panel.hidden) {
+                    setPanelOpen(false);
+                    button.focus();
+                }
+            });
         })();
     </script>
 </body>

@@ -20,6 +20,33 @@
         });
     }
 
+    // Signed-in avatar dropdown: toggle + close on outside click / Escape.
+    var userMenu = document.getElementById('userMenu');
+    var userMenuToggle = document.getElementById('userMenuToggle');
+    var userMenuDropdown = document.getElementById('userMenuDropdown');
+    if (userMenu && userMenuToggle && userMenuDropdown) {
+        var setUserMenuOpen = function (open) {
+            userMenu.classList.toggle('is-open', open);
+            userMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            userMenuDropdown.hidden = !open;
+        };
+        userMenuToggle.addEventListener('click', function (e) {
+            e.stopPropagation();
+            setUserMenuOpen(userMenuDropdown.hidden);
+        });
+        document.addEventListener('click', function (e) {
+            if (!userMenuDropdown.hidden && !userMenu.contains(e.target)) {
+                setUserMenuOpen(false);
+            }
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !userMenuDropdown.hidden) {
+                setUserMenuOpen(false);
+                userMenuToggle.focus();
+            }
+        });
+    }
+
     // Scroll-reveal: single observer over all [data-reveal] nodes.
     var els = document.querySelectorAll('[data-reveal]');
     if (els.length) {

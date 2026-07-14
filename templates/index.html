@@ -23,7 +23,7 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
-<body>
+<body class="av-home">
     {% include "_site_header.html" %}
 
     <main>
@@ -44,7 +44,7 @@
                     <p>Upload an existing 3D file or generate one with AI. Refine it in Studio, then publish a fast web viewer and app-free AR experience.</p>
                     <div class="hero-actions">
                         <a class="primary-btn" href="{{ url_for('main.studio') }}">Create your first model <span>&rarr;</span></a>
-                        <a class="text-btn" href="#start">See how it works <span>&darr;</span></a>
+                        <a class="text-btn" href="{{ url_for('main.studio') }}">Explore Studio <span>&nearr;</span></a>
                     </div>
                 </div>
                 <div class="viewer-drift">

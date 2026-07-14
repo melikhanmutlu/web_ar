@@ -264,6 +264,8 @@
         .dark .btn-secondary:hover { background: var(--color-gray-700); }
 
         .toolbar-shell { position: fixed !important; right: 1rem !important; bottom: 1rem !important; left: auto !important; top: auto !important; transform: none !important; z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
+        .toolbar-scroll { display: contents; }
+        .tb-label { display: none; }
         .tb-btn { width: 3rem; height: 3rem; background: transparent; border: 1px solid transparent; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--color-gray-600); transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease; cursor: pointer; }
         .tb-btn:hover { background: var(--color-gray-100); color: var(--color-gray-900); border-color: var(--color-gray-200); }
         .dark .tb-btn { color: var(--color-gray-400); }
@@ -552,7 +554,7 @@
             /* Viewer stage: account for header and toolbar */
             .viewer-stage {
                 top: 52px;
-                bottom: 3.5rem;
+                bottom: 4.25rem;
                 height: auto;
             }
 
@@ -596,40 +598,86 @@
                 display: block;
             }
 
-            /* Toolbar: fixed bottom, horizontal icons */
+            /* Toolbar: fixed bottom, horizontally scrollable icon+label pills */
             .toolbar-shell {
                 position: fixed !important;
                 bottom: 0 !important;
                 left: 0 !important;
                 right: 0 !important;
                 top: auto !important;
-                width: 100%;
-                height: auto;
                 transform: none !important;
+                display: block;
                 z-index: 40;
-                display: flex;
-                flex-direction: row;
-                align-items: center;
-                justify-content: space-around;
-                gap: 0 !important;
-                padding: 0.5rem 0;
+                height: 4.25rem;
                 background: var(--color-white);
                 border-top: 1px solid var(--color-gray-200);
             }
             .dark .toolbar-shell { background: var(--color-gray-900); border-color: var(--color-gray-800); }
 
-            /* Toolbar buttons: wrap in mobile */
+            /* Right-edge fade hints there's more to scroll. */
+            .toolbar-shell::after {
+                content: "";
+                position: absolute;
+                top: 0; right: 0; bottom: 0;
+                width: 2.25rem;
+                pointer-events: none;
+                background: linear-gradient(to right, transparent, var(--color-white));
+            }
+            .dark .toolbar-shell::after { background: linear-gradient(to right, transparent, var(--color-gray-900)); }
+
+            .toolbar-scroll {
+                display: flex;
+                align-items: stretch;
+                height: 100%;
+                gap: 0.3rem;
+                padding: 0 0.75rem;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scroll-snap-type: x proximity;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+            .toolbar-scroll::-webkit-scrollbar { display: none; }
+            .toolbar-scroll > * { flex: 0 0 auto; scroll-snap-align: start; }
+
+            /* Toolbar buttons: icon + label pill */
             .tb-btn {
                 width: auto;
-                height: auto;
-                padding: 0.5rem;
-                flex: 1;
-                min-width: 2.5rem;
+                height: 100%;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 0.2rem;
+                padding: 0.45rem 0.7rem 0.5rem;
+                min-width: 3.9rem;
             }
 
             .tb-btn i {
-                width: 1.2rem;
-                height: 1.2rem;
+                width: 1.15rem;
+                height: 1.15rem;
+            }
+
+            .tb-label {
+                display: block;
+                font-size: 0.58rem;
+                font-weight: 600;
+                letter-spacing: 0.01em;
+                line-height: 1;
+                white-space: nowrap;
+            }
+
+            .tb-btn.ar-btn { background: var(--accent); color: #fff; border-color: var(--accent); min-width: 4.5rem; }
+            .dark .tb-btn.ar-btn { background: var(--color-gray-200); color: var(--color-gray-900); border-color: var(--color-gray-200); }
+
+            /* Popover escapes the scroll container's clipping (overflow-x:auto
+               on an ancestor implicitly clips overflow-y too). */
+            .bg-switcher-panel {
+                position: fixed;
+                left: 50%;
+                right: auto;
+                transform: translateX(-50%);
+                bottom: 4.75rem;
+                z-index: 41;
             }
 
             /* Tools panel: bottom sheet docked above the bottom toolbar */
@@ -637,7 +685,7 @@
                 top: auto;
                 right: 0;
                 left: 0;
-                bottom: 3.75rem;
+                bottom: 4.25rem;
                 transform: none;
                 width: 100%;
                 max-width: 100%;
@@ -656,7 +704,7 @@
 
             .viewer-stage {
                 top: 48px;
-                bottom: 3rem;
+                bottom: 3.75rem;
             }
 
             .showcase-sidebar {
@@ -665,16 +713,27 @@
             }
 
             .toolbar-shell {
-                height: 3rem;
-                padding: 0;
+                height: 3.75rem;
             }
 
             .tb-btn {
-                flex: 1;
+                min-width: 3.5rem;
+                padding: 0.4rem 0.55rem 0.45rem;
             }
 
-            /* Dock the tools sheet flush above the 3rem toolbar */
-            #toolsPanel { bottom: 3rem; max-height: 55vh; }
+            .tb-btn i {
+                width: 1.05rem;
+                height: 1.05rem;
+            }
+
+            .tb-label {
+                font-size: 0.54rem;
+            }
+
+            .bg-switcher-panel { bottom: 4.25rem; }
+
+            /* Dock the tools sheet flush above the 3.75rem toolbar */
+            #toolsPanel { bottom: 3.75rem; max-height: 55vh; }
         }
 
         .slicer-slider { -webkit-appearance: none; appearance: none; height: 0.375rem; }
@@ -1437,13 +1496,13 @@
         </div><!-- /#toolsPanel -->
 
         <!-- Bottom-right Toolbar -->
-        <!-- Bottom-right Toolbar -->
-        <div class="toolbar-shell" style="position:fixed!important;right:1rem!important;bottom:1rem!important;left:auto!important;top:auto!important;transform:none!important;z-index:40;display:flex;flex-direction:row;align-items:center;gap:0.35rem;">
-            <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i></button>
-            <button id="modelInfoButton" class="tb-btn" title="Details" style="display:none;"><i data-lucide="file-text"></i></button>
-            <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i></button>
+        <div class="toolbar-shell" id="toolbarShell">
+            <div class="toolbar-scroll" id="toolbarScroll">
+            <button id="infoToggleBtn" class="tb-btn is-active" title="Model Info"><i data-lucide="info"></i><span class="tb-label">Info</span></button>
+            <button id="modelInfoButton" class="tb-btn" title="Details" style="display:none;"><i data-lucide="file-text"></i><span class="tb-label">Details</span></button>
+            <button id="toolsPanelToggle" class="tb-btn" title="Tools"><i data-lucide="sliders-horizontal"></i><span class="tb-label">Tools</span></button>
             <div class="bg-switcher" id="bgSwitcher">
-                <button id="bgSwitcherButton" class="tb-btn" title="Stage background" aria-haspopup="true" aria-expanded="false"><i data-lucide="palette"></i></button>
+                <button id="bgSwitcherButton" class="tb-btn" title="Stage background" aria-haspopup="true" aria-expanded="false"><i data-lucide="palette"></i><span class="tb-label">Color</span></button>
                 <div class="bg-switcher-panel" id="bgSwitcherPanel" hidden>
                     <button type="button" class="bg-swatch" data-bg="white" title="White" style="background:#ffffff;"></button>
                     <button type="button" class="bg-swatch" data-bg="dark" title="Dark" style="background:#111318;"></button>
@@ -1451,14 +1510,14 @@
                 </div>
             </div>
             {% if viewer_settings.show_dimensions %}
-            <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i></button>
+            <button id="measureToolButton" class="tb-btn" title="Measure"><i data-lucide="ruler"></i><span class="tb-label">Measure</span></button>
             {% endif %}
-            <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i></button>
-            <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i></button>
-            <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i></button>
-            <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i></button>
+            <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i><span class="tb-label">AR</span></button>
+            <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i><span class="tb-label">Scan</span></button>
+            <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i><span class="tb-label">VR</span></button>
+            <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i><span class="tb-label">QR</span></button>
             <div class="download-menu" id="downloadMenu">
-                <button id="downloadButton" class="tb-btn" title="Download" data-formats="glb{% if can_edit %},stl,obj,ply{% endif %}"><i data-lucide="download"></i></button>
+                <button id="downloadButton" class="tb-btn" title="Download" data-formats="glb{% if can_edit %},stl,obj,ply{% endif %}"><i data-lucide="download"></i><span class="tb-label">Download</span></button>
                 <div class="download-fanout">
                     <button type="button" class="download-fanout-btn format-glb" data-format="glb" title="Download GLB">GLB</button>
                     {% if can_edit %}
@@ -1468,9 +1527,10 @@
                     {% endif %}
                 </div>
             </div>
-            <button id="screenshotButton" class="tb-btn" title="Screenshot"><i data-lucide="camera"></i></button>
-            <button id="fullscreenButton" class="tb-btn" title="Fullscreen"><i data-lucide="maximize-2"></i></button>
-        </div>
+            <button id="screenshotButton" class="tb-btn" title="Screenshot"><i data-lucide="camera"></i><span class="tb-label">Photo</span></button>
+            <button id="fullscreenButton" class="tb-btn" title="Fullscreen"><i data-lucide="maximize-2"></i><span class="tb-label">Expand</span></button>
+            </div><!-- /.toolbar-scroll -->
+        </div><!-- /.toolbar-shell -->
 
         <!-- Download format picker: mobile/tablet only (see static/js/viewer/fullscreen-modal.js).
              On desktop the same formats appear as a hover fan-out around #downloadButton. -->

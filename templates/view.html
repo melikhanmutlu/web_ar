@@ -172,6 +172,8 @@
         .user-menu-item { display: block; width: 100%; text-align: left; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer; font-family: Helvetica, Arial, sans-serif; }
         .user-menu-item:hover, .user-menu-item.is-active { background: var(--soft); }
         .user-menu-item--danger:hover { color: #c0392b; background: #fdecec; }
+        /* .logout-form button below resets padding/font for its other use site (mobile menu); restate them here since it beats .user-menu-item's specificity. */
+        .user-menu-dropdown .logout-form button { padding: 9px 10px; font-size: 13px; font-weight: 600; font-family: Helvetica, Arial, sans-serif; }
         .user-menu-divider { height: 1px; margin: 6px 4px; background: var(--soft); }
         @media (max-width: 950px) { .user-menu { display: none; } }
         .primary-btn.mini { border: 0; padding: 11px 15px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; gap: 20px; transition: .25s; background: var(--ink); color: #fff; text-decoration: none; box-shadow: 0 10px 24px rgba(17,19,24,.13); }

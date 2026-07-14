@@ -252,10 +252,14 @@ a { color: inherit; }
     font-weight: 700;
     cursor: pointer;
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    border-radius: 10px;
 }
 .library-btn:hover { background: var(--color-gray-100); border-color: var(--color-gray-500); transform: translateY(-1px); }
 /* Compound selector outranks the later .btn-primary { width:100% } rule */
-.btn-primary.library-primary, .library-primary { width: auto; min-height: 2.45rem; padding: 0.55rem 0.9rem; font-size: 0.86rem; }
+.btn-primary.library-primary, .library-primary { width: auto; min-height: 2.45rem; padding: 0.55rem 0.9rem; font-size: 0.86rem; border-radius: 10px; }
+.library-main .btn-primary { border-radius: 10px; }
+.library-main .av-card { border-radius: 14px; }
+.library-main .av-input, .library-main .auth-input { border-radius: 8px; }
 .library-danger { color: var(--error); border-color: rgba(220, 38, 38, 0.35); }
 .library-selection {
     align-items: center;
@@ -287,6 +291,7 @@ a { color: inherit; }
     background: var(--color-white);
     padding: 0 0.75rem;
     min-height: 2.75rem;
+    border-radius: 10px;
 }
 .library-search i { color: var(--color-gray-400); flex-shrink: 0; }
 .library-search input {
@@ -298,7 +303,7 @@ a { color: inherit; }
     color: var(--color-gray-900);
     background: transparent;
 }
-.library-sort { width: 100%; min-height: 2.75rem; }
+.library-sort { width: 100%; min-height: 2.75rem; border-radius: 10px; }
 .library-breadcrumb {
     display: flex;
     align-items: center;
@@ -339,6 +344,7 @@ a { color: inherit; }
     padding: var(--spacing-lg);
     cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    border-radius: 14px;
 }
 .library-folder:hover, .library-folder.drag-over { transform: translateY(-2px); border-color: var(--color-gray-500); background: var(--color-gray-100); }
 .library-folder-icon {
@@ -348,6 +354,7 @@ a { color: inherit; }
     align-items: center;
     justify-content: center;
     border: 1px solid var(--color-gray-300);
+    border-radius: 10px;
 }
 .library-folder--trash .library-folder-icon { color: var(--error); border-color: rgba(220, 38, 38, 0.35); }
 .library-folder-copy { min-width: 0; }
@@ -376,6 +383,7 @@ a { color: inherit; }
     background: var(--color-white);
     cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    border-radius: 14px;
 }
 .library-model:hover {
     transform: translateY(-3px);
@@ -583,6 +591,7 @@ body.selection-mode .model-card { cursor: default; }
     background: var(--color-white);
     padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
+    border-radius: 14px;
 }
 .storage-head {
     display: flex;
@@ -613,11 +622,13 @@ body.selection-mode .model-card { cursor: default; }
     background: var(--color-gray-100);
     border: 1px solid var(--color-gray-200);
     overflow: hidden;
+    border-radius: 999px;
 }
 .storage-fill {
     height: 100%;
-    background: linear-gradient(90deg, #93c5fd, #3b82f6);
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
     transition: width 0.5s ease;
+    border-radius: 999px;
 }
 .storage-fill--danger { background: var(--error); }
 .storage-caption {
@@ -696,6 +707,9 @@ body.selection-mode .model-card { cursor: default; }
     color: var(--color-gray-900);
 }
 .dark .home-title { color: var(--color-gray-100); }
+/* Discover / My Models / Profile share .library-header -- give them a
+   bigger, lighter-tracked title than the generic .home-title default. */
+.library-header .home-title { font-size: 2.75rem; letter-spacing: -0.04em; }
 
 .av-stack > * + * { margin-top: var(--spacing-lg); }
 
@@ -720,7 +734,7 @@ body.selection-mode .model-card { cursor: default; }
    Profile page (account info / usage / billing / models)
    =================================================================== */
 .profile-usage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-lg); margin-top: var(--spacing-lg); }
-.profile-stat { display: flex; flex-direction: column; gap: 0.2rem; padding: var(--spacing-md); background: var(--color-gray-100); }
+.profile-stat { display: flex; flex-direction: column; gap: 0.2rem; padding: var(--spacing-md); background: var(--color-gray-100); border-radius: 10px; }
 .profile-stat-label { font-size: 0.72rem; color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.06em; }
 .profile-stat-value { font-size: 1.05rem; font-weight: 700; color: var(--color-gray-900); }
 .profile-stat-suffix { font-size: 0.82rem; font-weight: 400; color: var(--color-gray-500); }
@@ -735,7 +749,7 @@ body.selection-mode .model-card { cursor: default; }
 .profile-status-pill--void { background: #fdecec; color: #c0392b; }
 .profile-empty { font-size: 0.85rem; color: var(--color-gray-500); margin-top: var(--spacing-md); }
 .profile-model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--spacing-md); margin-top: var(--spacing-lg); }
-.profile-model-tile { padding: var(--spacing-md); background: var(--color-gray-100); }
+.profile-model-tile { padding: var(--spacing-md); background: var(--color-gray-100); border-radius: 10px; }
 .profile-model-name { font-size: 0.9rem; font-weight: 600; color: var(--color-gray-900); margin: 0 0 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-model-actions { display: flex; gap: 0.4rem; }
 @media (max-width: 640px) {
@@ -1116,11 +1130,13 @@ body > .av-flash { margin-top: 5.5rem; }
     .library-model-grid, .library-folder-grid { grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
     .home-features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .home-title { font-size: 1.5rem; }
+    .library-header .home-title { font-size: 2rem; }
     .progress-meta { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
     .home-features { grid-template-columns: 1fr; }
     .home-title { font-size: 1.35rem; }
+    .library-header .home-title { font-size: 1.65rem; }
     /* Stack card rows so the control drops below its label instead of squeezing */
     .av-card { padding: var(--spacing-lg); }
     .av-card-row { flex-direction: column; align-items: stretch; gap: var(--spacing-md); }
@@ -2602,6 +2618,9 @@ body {
 }
 .user-menu-item:hover, .user-menu-item.is-active { background: var(--soft); }
 .user-menu-item--danger:hover { color: #c0392b; background: #fdecec; }
+/* .logout-form button (line ~112) resets padding/font for its other use
+   sites; restate them here since it beats .user-menu-item's specificity. */
+.user-menu-dropdown .logout-form button { padding: 9px 10px; font-size: 13px; font-weight: 600; font-family: Helvetica, Arial, sans-serif; }
 .user-menu-divider { height: 1px; margin: 6px 4px; background: var(--soft); }
 @media (max-width: 950px) {
     .user-menu { display: none; }

@@ -97,11 +97,32 @@ class FBXPostProcessMixin:
                 self.log_operation(
                     f"Attempting aggressive texture recovery for {len(gltf.materials)} materials"
                 )
+                def material_key(name):
+                    # FBX exporters frequently prepend a namespace such as
+                    # "Material::" while FBX2glTF omits it. Match the stable
+                    # leaf name case-insensitively before giving up.
+                    leaf = str(name or "").replace("\\", "/").split("::")[-1]
+                    return "".join(char for char in leaf.lower() if char.isalnum())
+
+                texture_sources = self._fbx_material_textures
+                texture_sources_by_key = {
+                    material_key(name): source
+                    for name, source in texture_sources.items()
+                    if material_key(name)
+                }
                 for mat in gltf.materials:
                     mat_name = mat.name
-                    if mat_name in self._fbx_material_textures:
+                    tex_source = (
+                        texture_sources.get(mat_name)
+                        or texture_sources_by_key.get(material_key(mat_name))
+                    )
+                    # A single-material FBX with one extracted texture has no
+                    # meaningful material-name ambiguity; recover it even if
+                    # the two importers chose different names.
+                    if not tex_source and len(texture_sources) == len(gltf.materials) == 1:
+                        tex_source = next(iter(texture_sources.values()))
+                    if tex_source:
                         # Found a mapping from pyassimp
-                        tex_source = self._fbx_material_textures[mat_name]
 
                         # If baseColorTexture is missing or points to a non-existent image
                         has_texture = False
@@ -257,6 +278,16 @@ class FBXPostProcessMixin:
                 self.log_operation(
                     "No images found in GLB - FBX2glTF may have discarded textures"
                 )
+                # This is the critical recovery path for FBX files whose
+                # converter output has materials but omits the image list.
+                # The probe may still have extracted the source maps, and the
+                # in-memory helper can bind/embed them before this GLB is
+                # published as a single-file asset.
+                self._embed_external_textures_gltf(gltf, fbx_path)
+                if gltf.images:
+                    gltf.save(glb_path)
+                    self.log_operation("Recovered and embedded missing FBX textures")
+                    return
                 # Still clamp bogus FBX factor alphas so the model can't go
                 # invisible if anything later switches it to BLEND.
                 if fix_material_transparency(gltf, self.log_operation):

@@ -229,15 +229,12 @@ def test_ar_error_feedback_elements_rendered(client):
 
 
 def test_viewer_page_uses_the_shared_site_header(client):
-    """The viewer page used to hand-duplicate the top nav with a smaller,
-    hardcoded-URL link set (missing discover/register, no active-state).
-    It must render the same shared partial as every other page so the
-    link set can't drift again."""
+    """Viewer chrome uses the shared header while keeping its nav trimmed."""
     model_id, _ = make_two_material_model(user_id=None)
 
     anon_body = client.get(f"/view/{model_id}").get_data(as_text=True)
     assert 'aria-label="Primary"' in anon_body
-    assert '/discover"' in anon_body
+    assert '/discover"' not in anon_body
     assert '/register' in anon_body
 
 

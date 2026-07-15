@@ -786,6 +786,32 @@
             text-underline-offset: 4px;
         }
         .dark .tagline-main { color: var(--color-gray-200); }
+        /* The stage color picker does not change the application theme. Keep
+           its transparent viewer chrome legible when the canvas is dark. */
+        body.viewer-stage-dark .nav-viewer .brand,
+        body.viewer-stage-dark .nav-viewer .nav-auth-link,
+        body.viewer-stage-dark .tagline-line,
+        body.viewer-stage-dark .tagline-main { color: var(--color-white); }
+        body.viewer-stage-dark .nav-viewer .nav-burger span { background: var(--color-white); }
+        body.viewer-stage-dark .tb-btn { color: var(--color-gray-200); }
+        body.viewer-stage-dark .tb-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.22);
+            color: var(--color-white);
+        }
+        body.viewer-stage-dark .bg-switcher-panel {
+            background: var(--color-gray-900);
+            border-color: var(--color-gray-700);
+        }
+        @media (max-width: 768px) {
+            body.viewer-stage-dark .toolbar-shell {
+                background: var(--color-gray-900);
+                border-color: var(--color-gray-700);
+            }
+            body.viewer-stage-dark .toolbar-shell::after {
+                background: linear-gradient(to right, transparent, var(--color-gray-900));
+            }
+        }
         .tagline-cursor {
             display: inline-block;
             width: 1px;
@@ -1823,6 +1849,7 @@
             var applyBg = function (key) {
                 if (!BG_COLORS[key]) return;
                 stage.style.background = BG_COLORS[key];
+                document.body.classList.toggle('viewer-stage-dark', key === 'dark' || key === 'black');
                 swatches.forEach(function (sw) {
                     sw.classList.toggle('is-active', sw.getAttribute('data-bg') === key);
                 });

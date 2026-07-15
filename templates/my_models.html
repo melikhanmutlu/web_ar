@@ -251,34 +251,37 @@
                 </div>
 
                 <div class="library-model-body">
-                    <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
+                    <div class="library-model-heading">
+                        <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
+                        {% if not trash_view %}
+                        <details class="library-model-menu" onclick="event.stopPropagation()">
+                            <summary class="library-icon-btn" title="More options" aria-label="More options">
+                                <i data-lucide="more-horizontal"></i>
+                            </summary>
+                            <div class="library-model-menu-popover">
+                                <button type="button" onclick="event.stopPropagation(); startRenameModel('{{ model.id }}')">
+                                    <i data-lucide="pencil"></i> Rename
+                                </button>
+                                <button type="button" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')">
+                                    <i data-lucide="folder-input"></i> Move to folder
+                                </button>
+                                <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')">
+                                    <i data-lucide="tag"></i> Edit tags
+                                </button>
+                                <button type="button" class="library-model-menu-danger" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')">
+                                    <i data-lucide="trash-2"></i> Move to trash
+                                </button>
+                            </div>
+                        </details>
+                        {% endif %}
+                    </div>
                     <div class="library-card-actions">
                         {% if trash_view %}
-                        <button type="button" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')" class="library-icon-btn" title="Restore" aria-label="Restore">
-                            <i data-lucide="undo-2"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Delete forever" aria-label="Delete forever">
-                            <i data-lucide="x"></i>
-                        </button>
+                        <button type="button" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')" class="library-text-action">Restore</button>
+                        <button type="button" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')" class="library-text-action library-text-action--danger">Delete forever</button>
                         {% else %}
-                        <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-icon-btn" title="View" aria-label="View">
-                            <i data-lucide="eye"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); startRenameModel('{{ model.id }}')" class="library-icon-btn" title="Rename" aria-label="Rename">
-                            <i data-lucide="pencil"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}')" class="library-icon-btn" title="Copy link" aria-label="Copy link">
-                            <i data-lucide="link"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')" class="library-icon-btn" title="Move" aria-label="Move">
-                            <i data-lucide="folder-input"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')" class="library-icon-btn" title="Edit tags" aria-label="Edit tags">
-                            <i data-lucide="tag"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Move to trash" aria-label="Move to trash">
-                            <i data-lucide="trash-2"></i>
-                        </button>
+                        <button type="button" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}')" class="library-text-action">Copy link</button>
+                        <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-text-action library-text-action--primary">Open Viewer <span>&rarr;</span></button>
                         {% endif %}
                     </div>
                     {% if not trash_view %}

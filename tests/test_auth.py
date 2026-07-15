@@ -42,6 +42,21 @@ def test_access_protected_route_without_login(client):
     assert response.request.path == '/login'
 
 
+def test_profile_renders_account_overview(client, init_database):
+    """The redesigned authenticated profile page renders its summary and settings."""
+    client.post('/login', data=dict(
+        username='testuser',
+        password='testpassword'
+    ), follow_redirects=True)
+
+    response = client.get('/profile')
+
+    assert response.status_code == 200
+    assert b'Current plan' in response.data
+    assert b'Account information' in response.data
+    assert b'Your models' in response.data
+
+
 def test_login_rate_limit_blocks_brute_force(client):
     from app import limiter
 

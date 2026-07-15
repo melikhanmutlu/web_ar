@@ -3,49 +3,50 @@
 {% block title %}Profile - ARVision{% endblock %}
 
 {% block content %}
-<main class="library-main">
-    <section class="library-header">
+<main class="library-main profile-page">
+    <section class="profile-header">
         <div>
             <p class="home-kicker">Account</p>
             <h1 class="home-title">{{ current_user.username }}</h1>
+            <p class="profile-email">{{ current_user.email }}</p>
+        </div>
+        <div class="profile-header-actions">
+            <span class="profile-plan-badge">{{ plan_display }}</span>
+            <a href="{{ url_for('models_crud.my_models') }}" class="library-btn">Open Library</a>
         </div>
     </section>
 
-    <div class="av-stack" style="max-width: 48rem;">
-
-        <!-- Plan & usage -->
-        <div class="av-card">
-            <div class="av-card-row">
-                <div>
-                    <h2 class="av-card-title">Plan</h2>
-                    <p class="av-card-desc">{{ plan_display }}</p>
-                </div>
-                {% if plan != 'business' %}
-                <a href="{{ url_for('main.pricing') }}" class="library-btn">Upgrade</a>
-                {% endif %}
+    <section class="profile-overview">
+        <div class="profile-plan-copy">
+            <p class="profile-eyebrow">Current plan</p>
+            <h2>{{ plan_display }}</h2>
+            <p>Manage your workspace, assets and account settings in one place.</p>
+            {% if plan != 'business' %}
+            <a href="{{ url_for('main.pricing') }}" class="library-btn">Upgrade plan</a>
+            {% endif %}
+        </div>
+        <div class="profile-usage-grid">
+            <div class="profile-stat">
+                <span class="profile-stat-label">Storage</span>
+                <span class="profile-stat-value">{{ usage.storage_used_mb }} MB<span class="profile-stat-suffix"> / {{ usage.storage_quota_mb ~ ' MB' if usage.storage_quota_mb else 'Unlimited' }}</span></span>
             </div>
-            <div class="profile-usage-grid">
-                <div class="profile-stat">
-                    <span class="profile-stat-label">Storage</span>
-                    <span class="profile-stat-value">{{ usage.storage_used_mb }} MB<span class="profile-stat-suffix"> / {{ usage.storage_quota_mb ~ ' MB' if usage.storage_quota_mb else 'Unlimited' }}</span></span>
-                </div>
-                <div class="profile-stat">
-                    <span class="profile-stat-label">Models</span>
-                    <span class="profile-stat-value">{{ usage.model_count }}<span class="profile-stat-suffix"> / {{ usage.model_limit if usage.model_limit else 'Unlimited' }}</span></span>
-                </div>
-                <div class="profile-stat">
-                    <span class="profile-stat-label">AI generations (this month)</span>
-                    <span class="profile-stat-value">{{ usage.ai_used }}<span class="profile-stat-suffix"> / {{ usage.ai_limit }}</span></span>
-                    <span class="profile-stat-sub">+ {{ usage.ai_credits }} extra credit{{ '' if usage.ai_credits == 1 else 's' }} &middot; <a href="{{ url_for('main.pricing') }}#credits">Buy</a></span>
-                </div>
+            <div class="profile-stat">
+                <span class="profile-stat-label">Models</span>
+                <span class="profile-stat-value">{{ usage.model_count }}<span class="profile-stat-suffix"> / {{ usage.model_limit if usage.model_limit else 'Unlimited' }}</span></span>
+            </div>
+            <div class="profile-stat">
+                <span class="profile-stat-label">AI generations</span>
+                <span class="profile-stat-value">{{ usage.ai_used }}<span class="profile-stat-suffix"> / {{ usage.ai_limit }}</span></span>
+                <span class="profile-stat-sub">+ {{ usage.ai_credits }} extra credit{{ '' if usage.ai_credits == 1 else 's' }} &middot; <a href="{{ url_for('main.pricing') }}#credits">Buy</a></span>
             </div>
         </div>
+    </section>
 
-        <!-- Account info -->
-        <div class="av-card">
+    <div class="profile-settings-grid">
+        <section class="profile-panel">
             <h2 class="av-card-title">Account information</h2>
             <p class="av-card-desc">Update your username or email address.</p>
-            <form method="POST" action="{{ url_for('auth.update_profile') }}" class="auth-form av-stack" style="margin-top: 1rem;">
+            <form method="POST" action="{{ url_for('auth.update_profile') }}" class="profile-form av-stack">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div>
                     <label for="username" class="auth-label">Username</label>
@@ -61,15 +62,14 @@
                         <p class="auth-error">{{ error }}</p>
                     {% endfor %}
                 </div>
-                <button type="submit" class="btn-primary" style="width: auto;">Save changes</button>
+                <button type="submit" class="btn-primary profile-submit">Save changes</button>
             </form>
-        </div>
+        </section>
 
-        <!-- Change password -->
-        <div class="av-card">
+        <section class="profile-panel">
             <h2 class="av-card-title">Password</h2>
             <p class="av-card-desc">Choose a new password of at least 8 characters.</p>
-            <form method="POST" action="{{ url_for('auth.change_password') }}" class="auth-form av-stack" style="margin-top: 1rem;">
+            <form method="POST" action="{{ url_for('auth.change_password') }}" class="profile-form av-stack">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div>
                     <label for="current_password" class="auth-label">Current password</label>
@@ -92,15 +92,16 @@
                         <p class="auth-error">{{ error }}</p>
                     {% endfor %}
                 </div>
-                <button type="submit" class="btn-primary" style="width: auto;">Change password</button>
+                <button type="submit" class="btn-primary profile-submit">Change password</button>
             </form>
-        </div>
+        </section>
+    </div>
 
-        <!-- Billing history -->
-        <div class="av-card">
-            <h2 class="av-card-title">Billing history</h2>
-            <p class="av-card-desc">Payments recorded against your account.</p>
-            {% if payments %}
+    <section class="profile-panel profile-billing">
+        <h2 class="av-card-title">Billing history</h2>
+        <p class="av-card-desc">Payments recorded against your account.</p>
+        {% if payments %}
+        <div class="profile-table-wrap">
             <table class="profile-billing-table">
                 <thead>
                     <tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr>
@@ -116,34 +117,44 @@
                     {% endfor %}
                 </tbody>
             </table>
-            {% else %}
-            <p class="profile-empty">No payments recorded yet.</p>
-            {% endif %}
         </div>
+        {% else %}
+        <p class="profile-empty">No payments recorded yet.</p>
+        {% endif %}
+    </section>
 
-        <!-- My Models -->
-        <div class="av-card">
-            <div class="av-card-row">
-                <h2 class="av-card-title">My Models</h2>
-                <a href="{{ url_for('models_crud.my_models') }}" class="library-btn">Open Library</a>
+    <section class="profile-panel profile-models">
+        <div class="profile-panel-heading">
+            <div>
+                <p class="profile-eyebrow">Model library</p>
+                <h2 class="av-card-title">Your models</h2>
             </div>
-            {% if user.models %}
-            <div class="profile-model-grid">
-                {% for model in user.models %}
-                <div class="profile-model-tile">
-                    <p class="profile-model-name">{{ model.original_filename }}</p>
-                    <div class="profile-model-actions">
-                        <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" class="library-btn">View</a>
-                        <a href="{{ url_for('models_crud.download_model', model_id=model.id) }}" class="library-btn">Download</a>
-                    </div>
+            <a href="{{ url_for('models_crud.my_models') }}" class="library-btn">Open Library</a>
+        </div>
+        {% if user.models %}
+        <div class="profile-model-grid">
+            {% for model in user.models[:3] %}
+            {% set raw_name = model.display_name or model.original_filename or 'Model' %}
+            {% set model_name = raw_name.replace('\\', '/').split('/')[-1] %}
+            <article class="profile-model-tile">
+                <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" class="profile-model-preview">
+                    <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}" alt="{{ model_name }} preview" loading="lazy" onerror="this.remove();">
+                    <span>{{ model.file_type | upper if model.file_type else '3D' }}</span>
+                </a>
+                <div class="profile-model-copy">
+                    <p class="profile-model-name" title="{{ model_name }}">{{ model_name }}</p>
+                    <span>{{ model.file_size_formatted }}</span>
                 </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="profile-empty">No models uploaded yet.</p>
-            {% endif %}
+                <div class="profile-model-actions">
+                    <a href="{{ url_for('viewer.view_model', model_id=model.id) }}">View</a>
+                    <a href="{{ url_for('models_crud.download_model', model_id=model.id) }}">Download</a>
+                </div>
+            </article>
+            {% endfor %}
         </div>
-
-    </div>
+        {% else %}
+        <p class="profile-empty">No models uploaded yet.</p>
+        {% endif %}
+    </section>
 </main>
 {% endblock %}

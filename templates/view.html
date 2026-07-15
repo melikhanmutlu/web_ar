@@ -160,6 +160,13 @@
         .nav-actions { display: flex; align-items: center; gap: 22px; font-family: Helvetica, Arial, sans-serif; }
         .nav-auth-link { font-size: 13px; font-weight: 700; color: #343a44; text-decoration: none; padding: 10px 0; transition: color 0.2s; }
         .nav-auth-link:hover { color: var(--accent); }
+        /* The viewer owns the full viewport, so its chrome is intentionally
+           transparent. Keep the brand at the viewport's top-left and all
+           navigation/profile controls grouped at the top-right. */
+        .nav.nav-viewer { background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+        .nav-viewer .nav-inner { width: 100%; margin: 0; padding: 0 1rem; }
+        .nav-viewer nav { margin-left: auto; }
+        .nav-viewer .nav-actions { margin-left: 0; }
         /* Signed-in avatar dropdown (mirrors arvision.css) */
         .user-menu { position: relative; }
         .user-menu-toggle { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
@@ -266,7 +273,10 @@
         .dark .btn-secondary { background: var(--color-gray-800); border-color: var(--color-gray-700); color: var(--color-gray-300); }
         .dark .btn-secondary:hover { background: var(--color-gray-700); }
 
-        .toolbar-shell { position: fixed !important; right: 1rem !important; bottom: 1rem !important; left: auto !important; top: auto !important; transform: none !important; z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 0.4rem; }
+        /* Desktop utility controls belong in one compact row at the lower-right.
+           The mobile breakpoint below intentionally replaces this with the
+           full-width, horizontally scrollable toolbar. */
+        .toolbar-shell { position: fixed !important; right: 1rem !important; bottom: 1rem !important; left: auto !important; top: auto !important; transform: none !important; z-index: 40; display: flex; flex-direction: row; align-items: center; gap: 0.4rem; }
         .toolbar-scroll { display: contents; }
         .tb-label { display: none; }
         .tb-btn { width: 3rem; height: 3rem; background: transparent; border: 1px solid transparent; padding: 0; display: flex; align-items: center; justify-content: center; color: var(--color-gray-600); transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease; cursor: pointer; }
@@ -550,6 +560,7 @@
             /* Header: compact bar */
             .nav { height: 52px; z-index: 50; }
             .nav-inner { width: calc(100% - 24px); }
+            .nav-viewer .nav-inner { width: 100%; padding: 0 0.75rem; }
             .brand { font-size: 1.35rem; }
             .primary-btn.mini { padding: 8px 12px; }
 

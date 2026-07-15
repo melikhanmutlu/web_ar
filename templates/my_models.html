@@ -14,54 +14,58 @@
         </div>
         <div class="library-actions">
             {% if not trash_view %}
-            <button type="button" onclick="showCreateFolderModal()" class="library-btn">
-                <i data-lucide="folder-plus"></i>
-                New Folder
-            </button>
-            <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">
-                <i data-lucide="upload-cloud"></i>
-                Upload Model
-            </button>
-            <a href="{{ url_for('scenes.scene_builder_page') }}" class="library-btn">
-                <i data-lucide="boxes"></i>
-                New Scene
-            </a>
+            <div class="library-actions-primary">
+                <button type="button" onclick="showCreateFolderModal()" class="library-btn">
+                    <i data-lucide="folder-plus"></i>
+                    New Folder
+                </button>
+                <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">
+                    <i data-lucide="upload-cloud"></i>
+                    Upload Model
+                </button>
+                <a href="{{ url_for('scenes.scene_builder_page') }}" class="library-btn">
+                    <i data-lucide="boxes"></i>
+                    New Scene
+                </a>
+            </div>
             {% endif %}
-            <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn">
-                <i data-lucide="check-square"></i>
-                Select
-            </button>
-            {% if trash_view %}
-            <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-btn hidden">
-                <i data-lucide="undo-2"></i>
-                Restore Selected
-            </button>
-            <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-btn library-danger hidden">
-                <i data-lucide="x"></i>
-                Delete Forever
-            </button>
-            {% else %}
-            <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
-                <i data-lucide="folder-input"></i>
-                Move Selected
-            </button>
-            <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-btn hidden">
-                <i data-lucide="eye"></i>
-                Set Visibility
-            </button>
-            <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-btn hidden">
-                <i data-lucide="tag"></i>
-                Add Tag
-            </button>
-            <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-btn library-danger hidden">
-                <i data-lucide="trash-2"></i>
-                Delete Selected
-            </button>
-            {% endif %}
-            <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
-                <i data-lucide="x"></i>
-                Cancel
-            </button>
+            <div class="library-actions-selection">
+                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn">
+                    <i data-lucide="check-square"></i>
+                    Select
+                </button>
+                {% if trash_view %}
+                <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-btn hidden">
+                    <i data-lucide="undo-2"></i>
+                    Restore Selected
+                </button>
+                <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-btn library-danger hidden">
+                    <i data-lucide="x"></i>
+                    Delete Forever
+                </button>
+                {% else %}
+                <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
+                    <i data-lucide="folder-input"></i>
+                    Move Selected
+                </button>
+                <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-btn hidden">
+                    <i data-lucide="eye"></i>
+                    Set Visibility
+                </button>
+                <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-btn hidden">
+                    <i data-lucide="tag"></i>
+                    Add Tag
+                </button>
+                <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-btn library-danger hidden">
+                    <i data-lucide="trash-2"></i>
+                    Delete Selected
+                </button>
+                {% endif %}
+                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
+                    <i data-lucide="x"></i>
+                    Cancel
+                </button>
+            </div>
         </div>
     </section>
 

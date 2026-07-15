@@ -840,6 +840,9 @@
         body.marketing-demo #toolsPanel { width: 20rem; }
         @media (max-width: 1024px) {
             body.marketing-demo #toolsPanel { width: 100%; }
+            body.marketing-demo .nav-burger { display: none; }
+            body.marketing-demo .toolbar-scroll { justify-content: center; }
+            body.marketing-demo .toolbar-shell::after { display: none; }
         }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }

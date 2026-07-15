@@ -3415,7 +3415,7 @@ body {
 @media (max-width: 640px) {
     .hero--create { padding-top: 148px; }
     .hero--path { padding-top: 152px; padding-bottom: 64px; }
-    .browser-shot--live { aspect-ratio: 4 / 3; }
+    .browser-shot--live { aspect-ratio: 3 / 4; }
     .browser-bar { gap: 14px; padding-inline: 12px; }
     .browser-bar i { margin-right: 12px; }
 }

@@ -2274,6 +2274,10 @@ footer {
     font-weight: 700;
     line-height: 1.6;
 }
+.library-actions .library-utility-btn,
+.library-actions .library-utility-btn:hover {
+    background: transparent;
+}
 .library-actions,
 .library-actions-primary,
 .library-actions-selection {

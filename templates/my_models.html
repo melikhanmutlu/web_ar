@@ -15,11 +15,56 @@
         <div class="library-actions">
             {% if not trash_view %}
             <div class="library-actions-primary">
-                <button type="button" onclick="showCreateFolderModal()" class="library-btn">
+                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn">
+                    <i data-lucide="check-square"></i>
+                    Select
+                </button>
+                <button type="button" onclick="showCreateFolderModal()" class="library-btn library-utility-btn">
                     + New folder
                 </button>
                 <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">
                     ↑ Upload model
+                </button>
+            </div>
+            <div class="library-actions-selection">
+                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
+                    <i data-lucide="x"></i>
+                    Cancel
+                </button>
+                <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
+                    <i data-lucide="folder-input"></i>
+                    Move selected
+                </button>
+                <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-btn hidden">
+                    <i data-lucide="eye"></i>
+                    Set visibility
+                </button>
+                <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-btn hidden">
+                    <i data-lucide="tag"></i>
+                    Add tag
+                </button>
+                <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-btn library-danger hidden">
+                    <i data-lucide="trash-2"></i>
+                    Delete selected
+                </button>
+            </div>
+            {% else %}
+            <div class="library-actions-selection">
+                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn">
+                    <i data-lucide="check-square"></i>
+                    Select
+                </button>
+                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
+                    <i data-lucide="x"></i>
+                    Cancel
+                </button>
+                <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-btn hidden">
+                    <i data-lucide="undo-2"></i>
+                    Restore selected
+                </button>
+                <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-btn library-danger hidden">
+                    <i data-lucide="trash-2"></i>
+                    Delete forever
                 </button>
             </div>
             {% endif %}

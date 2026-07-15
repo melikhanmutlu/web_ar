@@ -6,6 +6,7 @@ ensure_pbr_materials.
 """
 import os
 import tempfile
+import base64
 
 import trimesh
 from pygltflib import (
@@ -15,7 +16,8 @@ from pygltflib import (
 import converters.glb_quality as gq
 from converters.glb_quality import (
     attach_base_color_texture_files, embed_remote_textures,
-    has_embedded_base_color_textures, inspect_texture_state,
+    embed_data_uri_textures, has_embedded_base_color_textures,
+    inspect_texture_state,
 )
 
 
@@ -76,6 +78,23 @@ def test_embed_remote_textures_skips_disallowed_host(monkeypatch, tmp_path):
 
     g = GLTF2.load(path)
     assert g.images[0].uri == "https://evil.example.com/x.png"  # untouched
+
+
+def test_embed_data_uri_textures_rewrites_for_viewer_loader(tmp_path):
+    """Viewer-safe GLBs keep images in binary bufferViews, not data URIs."""
+    path = str(tmp_path / "data-uri.glb")
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+    )
+    _glb_with_external_image(path, "data:image/png;base64," + base64.b64encode(png).decode())
+
+    assert embed_data_uri_textures(path) is True
+
+    repaired = GLTF2.load(path)
+    image = repaired.images[0]
+    assert image.uri is None
+    assert image.bufferView is not None
+    assert image.mimeType == "image/png"
 
 
 def test_inspect_texture_state_external_then_embedded(monkeypatch, tmp_path):

@@ -7,6 +7,7 @@ from PIL import Image
 from pygltflib import GLTF2
 
 from converters.fbx_converter import FBXConverter
+from converters.glb_quality import finalize_glb
 
 
 def test_recovers_probe_texture_when_fbx2gltf_has_no_images(tmp_path):
@@ -40,10 +41,13 @@ def test_recovers_probe_texture_when_fbx2gltf_has_no_images(tmp_path):
     converter._fbx_material_textures = {"Material::VehiclePaint": "paint.png"}
 
     converter._embed_external_textures(str(glb_path), str(fbx_path))
+    finalize_glb(str(glb_path), strict=True)
 
     repaired = GLTF2().load(glb_path)
     pbr = repaired.materials[0].pbrMetallicRoughness
     assert pbr.baseColorTexture is not None
     texture = repaired.textures[pbr.baseColorTexture.index]
     image = repaired.images[texture.source]
-    assert image.uri and image.uri.startswith("data:image/png;base64,")
+    assert image.uri is None
+    assert image.bufferView is not None
+    assert image.mimeType == "image/png"

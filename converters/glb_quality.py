@@ -124,6 +124,52 @@ def embed_external_textures(glb_path: str, search_dirs: list = None) -> bool:
     return changed
 
 
+def embed_data_uri_textures(glb_path: str) -> bool:
+    """Move image data URIs into GLB bufferViews.
+
+    A data URI is legal glTF, but the model-viewer/THREE loader used by the
+    web Viewer can fail to load it when it appears inside a binary GLB. The
+    failure leaves the model geometry visible but all affected materials white.
+    BufferView images are the native, self-contained GLB representation.
+    """
+    try:
+        gltf = _load_glb(glb_path)
+    except GLBQualityError:
+        return False
+    if not gltf.images:
+        return False
+    if gltf.bufferViews is None:
+        gltf.bufferViews = []
+
+    changed = False
+    for image in gltf.images:
+        uri = image.uri or ""
+        if not uri.startswith("data:"):
+            continue
+        try:
+            header, encoded = uri.split(",", 1)
+            payload = base64.b64decode(encoded, validate=True)
+            mime_type = header[5:].split(";", 1)[0] or "image/png"
+        except (ValueError, IndexError, base64.binascii.Error) as exc:
+            logger.warning("Leaving malformed texture data URI untouched: %s", exc)
+            continue
+        if not payload:
+            logger.warning("Leaving empty texture data URI untouched")
+            continue
+        offset = _append_blob(gltf, payload)
+        gltf.bufferViews.append(
+            BufferView(buffer=0, byteOffset=offset, byteLength=len(payload))
+        )
+        image.bufferView = len(gltf.bufferViews) - 1
+        image.mimeType = mime_type
+        image.uri = None
+        changed = True
+
+    if changed:
+        gltf.save(glb_path)
+    return changed
+
+
 def attach_base_color_texture_files(glb_path: str, texture_paths: list) -> bool:
     """Embed standalone base-color maps and bind them to GLB materials.
 
@@ -484,6 +530,13 @@ def finalize_glb(glb_path: str, search_dirs: list = None, strict: bool = False) 
     raise GLBQualityError instead of being returned as warnings.
     """
     warnings = []
+    try:
+        if embed_data_uri_textures(glb_path):
+            logger.info(f"Normalized data URI textures in {glb_path}")
+    except Exception as exc:
+        warnings.append(f"data URI texture normalization failed: {exc}")
+        logger.warning(f"embed_data_uri_textures failed for {glb_path}: {exc}")
+
     try:
         if embed_external_textures(glb_path, search_dirs):
             logger.info(f"Embedded external textures into {glb_path}")

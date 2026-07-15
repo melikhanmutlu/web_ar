@@ -49,6 +49,29 @@ def serve_converted_file(unique_id, filename):
         current_app.logger.warning(f"Potential unsafe filename detected: {filename}")
         return "Not Found", 404
     try:
+        # Older FBX jobs may have written textures as ``data:`` image URIs.
+        # model-viewer's GLTFLoader can reject those inside a GLB and display
+        # the geometry with white materials. Normalize affected legacy files
+        # on their first Viewer/download request; files already using native
+        # bufferView images are left untouched.
+        if filename.lower().endswith(".glb"):
+            glb_path = os.path.join(directory, filename)
+            if os.path.isfile(glb_path):
+                try:
+                    from converters.glb_quality import embed_data_uri_textures
+
+                    if embed_data_uri_textures(glb_path):
+                        current_app.logger.info(
+                            "Normalized data URI textures before serving %s", glb_path
+                        )
+                except Exception as exc:
+                    # Serving the original asset is safer than making a valid
+                    # model unavailable if a legacy repair cannot be applied.
+                    current_app.logger.warning(
+                        "Could not normalize GLB texture URIs for %s: %s",
+                        glb_path,
+                        exc,
+                    )
         return send_from_directory(directory, filename, as_attachment=False)
     except FileNotFoundError:
         current_app.logger.error(

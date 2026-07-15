@@ -967,6 +967,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// Keep card action menus transient: clicking elsewhere (including another
+// card's menu) closes any open menu that did not receive the interaction.
+document.addEventListener('click', (event) => {
+    const activeMenu = event.target.closest('.library-model-menu');
+    document.querySelectorAll('.library-model-menu[open]').forEach((menu) => {
+        if (menu !== activeMenu) menu.removeAttribute('open');
+    });
+});
+
 // ── Hover 3D preview: swap the screenshot for a live <model-viewer> ──
 // Only on devices with real hover (skip touch); only one viewer alive at a time.
 (function initHoverPreview() {

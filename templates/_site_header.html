@@ -4,8 +4,8 @@
     <div class="nav-inner">
         <a href="{{ url_for('main.index') }}" class="brand">arvision</a>
         <nav aria-label="Primary">
-            <a href="{{ url_for('discover.discover') }}" class="{% if request.endpoint == 'discover.discover' %}is-active{% endif %}">Discover</a>
             {% if not viewer_chrome %}
+            <a href="{{ url_for('discover.discover') }}" class="{% if request.endpoint == 'discover.discover' %}is-active{% endif %}">Discover</a>
             <a href="{{ url_for('main.features') }}" class="{% if request.endpoint == 'main.features' %}is-active{% endif %}">Features</a>
             <a href="{{ url_for('main.pricing') }}" class="{% if request.endpoint == 'main.pricing' %}is-active{% endif %}">Pricing</a>
             {% endif %}
@@ -47,7 +47,9 @@
 
     <div class="mobile-menu" id="mobileMenu" hidden>
         <a href="{{ url_for('main.studio') }}">Studio</a>
+        {% if not viewer_chrome %}
         <a href="{{ url_for('discover.discover') }}">Discover</a>
+        {% endif %}
         <a href="{{ url_for('main.features') }}">Features</a>
         <a href="{{ url_for('main.workflow') }}">Workflow</a>
         <a href="{{ url_for('main.pricing') }}">Pricing</a>

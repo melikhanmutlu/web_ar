@@ -3400,10 +3400,10 @@ body {
 /* The upload introduction now leads the page. Keep it comfortably below
    the header, then give the following model-path visual a clear lower edge. */
 .hero--create { padding-top: 180px; }
-.hero--path { padding-bottom: 96px; }
+.hero--path { padding-top: 190px; padding-bottom: 96px; }
 @media (max-width: 640px) {
     .hero--create { padding-top: 148px; }
-    .hero--path { padding-bottom: 64px; }
+    .hero--path { padding-top: 152px; padding-bottom: 64px; }
 }
 
 /* Taller closing CTA with a lavender bloom (status-label removed). */

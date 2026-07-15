@@ -1890,7 +1890,7 @@
                     sw.classList.toggle('is-active', sw.getAttribute('data-bg') === key);
                 });
             };
-            applyBg(persistBackground ? (localStorage.getItem(STORAGE_KEY) || 'white') : 'dark');
+            applyBg(persistBackground ? (localStorage.getItem(STORAGE_KEY) || 'dark') : 'dark');
 
             var setPanelOpen = function (open) {
                 button.setAttribute('aria-expanded', open ? 'true' : 'false');

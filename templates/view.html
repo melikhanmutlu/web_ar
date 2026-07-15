@@ -836,14 +836,7 @@
         body.marketing-demo #vrButton,
         body.marketing-demo #qrButton,
         body.marketing-demo #downloadMenu,
-        body.marketing-demo #screenshotButton,
-        body.marketing-demo #layersContainer,
-        body.marketing-demo #transformContainer,
-        body.marketing-demo #annotationsContainer,
-        body.marketing-demo #slicerContainer,
-        body.marketing-demo #historyContainer,
-        body.marketing-demo #embedContainer,
-        body.marketing-demo #analyticsContainer { display: none !important; }
+        body.marketing-demo #screenshotButton { display: none !important; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -865,7 +858,7 @@
         downloadFilename: {{ (display_name ~ '.glb') | tojson }},
         isMarketingDemo: {{ marketing_demo | default(false) | tojson }},
         openToolsOnDesktop: {{ marketing_demo | default(false) | tojson }},
-        initialToolsSection: {{ ('materialContainer' if marketing_demo | default(false) else none) | tojson }},
+        initialToolsSection: {{ initial_tools_section | default(none) | tojson }},
       };
     </script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>

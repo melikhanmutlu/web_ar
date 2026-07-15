@@ -65,6 +65,7 @@ def demo_viewer():
         is_saved=False,
         is_owner=False,
         can_edit=False,
+        initial_tools_section=None,
         viewer_settings=viewer_settings,
         viewer_model_src=url_for("static", filename="marketing/home-track-guide-mirror.glb"),
         seo_robots="noindex, nofollow",

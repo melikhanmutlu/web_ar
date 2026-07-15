@@ -3390,6 +3390,9 @@ body {
 .browser-shot > img { opacity: .95; filter: saturate(.84) contrast(.93); transition: .3s; }
 .browser-shot:hover > img { opacity: .97; }
 .browser-shot--live { aspect-ratio: 16 / 9; display: flex; flex-direction: column; background: #111318; }
+.story-viewer,
+.browser-shot,
+.browser-shot-viewport { min-width: 0; max-width: 100%; }
 .browser-shot-viewport { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: #111318; }
 .browser-shot-poster,
 .browser-shot-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -3403,16 +3406,18 @@ body {
 .browser-bar i:before, .browser-bar i:after { content: ""; position: absolute; top: 0; }
 .browser-bar i:before { left: 14px; }
 .browser-bar i:after { left: 28px; }
-.browser-bar span { flex: 1; max-width: 420px; padding: 7px 14px; border: 1px solid #dfe3e9; border-radius: 7px; background: #fff; color: #777f8b; }
+.browser-bar span { flex: 1; min-width: 0; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 7px 14px; border: 1px solid #dfe3e9; border-radius: 7px; background: #fff; color: #777f8b; }
 
 /* The upload introduction now leads the page. Keep it comfortably below
    the header, then give the following model-path visual a clear lower edge. */
 .hero--create { padding-top: 180px; }
-.hero--path { padding-top: 190px; padding-bottom: 96px; }
+.hero--path { overflow: hidden; padding-top: 190px; padding-bottom: 96px; }
 @media (max-width: 640px) {
     .hero--create { padding-top: 148px; }
     .hero--path { padding-top: 152px; padding-bottom: 64px; }
     .browser-shot--live { aspect-ratio: 4 / 3; }
+    .browser-bar { gap: 14px; padding-inline: 12px; }
+    .browser-bar i { margin-right: 12px; }
 }
 
 /* Taller closing CTA with a lavender bloom (status-label removed). */

@@ -21,6 +21,6 @@ def test_demo_viewer_is_static_read_only_and_not_indexable(client):
     assert 'home-track-guide-mirror.glb' in body
     assert 'marketing-demo' in body
     assert 'openToolsOnDesktop: true' in body
-    assert 'initialToolsSection: "materialContainer"' in body
+    assert 'initialToolsSection: null' in body
     assert 'js/viewer/ar-slicer-layers.js' not in body
     assert 'js/viewer/save-flow.js' not in body

@@ -3209,6 +3209,9 @@ body {
 .mobile-menu-actions button { font-weight: 700; }
 
 @media (max-width: 950px) {
+    .nav nav { display: none; }
+    .nav-actions,
+    .nav-viewer .nav-actions { margin-left: auto; }
     .nav-burger { display: flex; }
     .nav-auth-link { display: none; }
     /* On narrow screens the CTA collapses into the burger menu */

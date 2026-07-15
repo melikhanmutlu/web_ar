@@ -639,6 +639,7 @@ function inlineRename(h3, onSave) {
 
 function startRenameModel(modelId) {
     const h3 = document.querySelector(`.model-name[data-model-id="${modelId}"]`);
+    h3?.closest('.library-model')?.querySelector('.library-model-menu[open]')?.removeAttribute('open');
     inlineRename(h3, (value, revert) => {
         fetch(`/api/models/${modelId}/metadata`, {
             method: 'PATCH',

@@ -16,63 +16,13 @@
             {% if not trash_view %}
             <div class="library-actions-primary">
                 <button type="button" onclick="showCreateFolderModal()" class="library-btn">
-                    <i data-lucide="folder-plus"></i>
-                    New Folder
+                    + New folder
                 </button>
                 <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">
-                    <i data-lucide="upload-cloud"></i>
-                    Upload Model
+                    ↑ Upload model
                 </button>
             </div>
             {% endif %}
-            <details class="library-actions-more">
-                <summary class="library-icon-btn" title="More library actions" aria-label="More library actions">
-                    <i data-lucide="more-horizontal"></i>
-                </summary>
-                <div class="library-actions-more-menu">
-                    {% if not trash_view %}
-                    <a href="{{ url_for('scenes.scene_builder_page') }}" class="library-actions-more-item">
-                        <i data-lucide="boxes"></i>
-                        New Scene
-                    </a>
-                    {% endif %}
-                    <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-actions-more-item">
-                    <i data-lucide="check-square"></i>
-                    Select
-                </button>
-                {% if trash_view %}
-                <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-actions-more-item hidden">
-                    <i data-lucide="undo-2"></i>
-                    Restore Selected
-                </button>
-                <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-actions-more-item library-actions-more-item--danger hidden">
-                    <i data-lucide="x"></i>
-                    Delete Forever
-                </button>
-                {% else %}
-                <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-actions-more-item hidden">
-                    <i data-lucide="folder-input"></i>
-                    Move Selected
-                </button>
-                <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-actions-more-item hidden">
-                    <i data-lucide="eye"></i>
-                    Set Visibility
-                </button>
-                <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-actions-more-item hidden">
-                    <i data-lucide="tag"></i>
-                    Add Tag
-                </button>
-                <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-actions-more-item library-actions-more-item--danger hidden">
-                    <i data-lucide="trash-2"></i>
-                    Delete Selected
-                </button>
-                {% endif %}
-                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-actions-more-item hidden">
-                    <i data-lucide="x"></i>
-                    Cancel
-                </button>
-                </div>
-            </details>
         </div>
     </section>
 
@@ -277,6 +227,17 @@
                                 <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')">
                                     <i data-lucide="tag"></i> Edit tags
                                 </button>
+                                <label class="library-model-menu-visibility">
+                                    <span><i data-lucide="eye"></i> Visibility</span>
+                                    <select class="visibility-select" data-model-id="{{ model.id }}"
+                                            onclick="event.stopPropagation()"
+                                            onchange="event.stopPropagation(); updateModelVisibility('{{ model.id }}', this.value, this)"
+                                            title="Who can see this model. Public models can appear on the Discover page.">
+                                        <option value="private" {% if model.visibility == 'private' %}selected{% endif %}>Private</option>
+                                        <option value="unlisted" {% if model.visibility == 'unlisted' %}selected{% endif %}>Unlisted (link only)</option>
+                                        <option value="public" {% if model.visibility == 'public' %}selected{% endif %}>Public (shown on Discover)</option>
+                                    </select>
+                                </label>
                                 <button type="button" class="library-model-menu-danger" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')">
                                     <i data-lucide="trash-2"></i> Move to trash
                                 </button>
@@ -293,16 +254,6 @@
                         <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-text-action library-text-action--primary">Open Viewer <span>&rarr;</span></button>
                         {% endif %}
                     </div>
-                    {% if not trash_view %}
-                    <select class="visibility-select" data-model-id="{{ model.id }}"
-                            onclick="event.stopPropagation()"
-                            onchange="event.stopPropagation(); updateModelVisibility('{{ model.id }}', this.value, this)"
-                            title="Who can see this model. Public models can appear on the Discover page.">
-                        <option value="private" {% if model.visibility == 'private' %}selected{% endif %}>Private</option>
-                        <option value="unlisted" {% if model.visibility == 'unlisted' %}selected{% endif %}>Unlisted (link only)</option>
-                        <option value="public" {% if model.visibility == 'public' %}selected{% endif %}>Public (shown on Discover)</option>
-                    </select>
-                    {% endif %}
                     <p class="library-model-meta">
                         {% if trash_view %}
                         <span class="upload-date">Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }}</span>

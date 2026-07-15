@@ -9,7 +9,9 @@ def test_homepage_embeds_the_live_viewer_demo(client):
     assert 'data-home-viewer-demo' in body
     assert 'src="/demo/viewer"' in body
     assert 'data-home-viewer-shell' in body
-    assert 'home-viewer-bring-model.png' in body  # loading poster/fallback
+    assert 'browser-shot-loader' in body
+    assert 'Loading Viewer' in body
+    assert 'home-viewer-bring-model.png' not in body
 
 
 def test_demo_viewer_is_static_read_only_and_not_indexable(client):

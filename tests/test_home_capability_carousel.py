@@ -47,4 +47,4 @@ def test_homepage_model_experience_tabs_have_expected_content_and_routes(client)
 
     assert 'href="/demo/viewer">Open the Viewer' in body
     assert 'href="/features">Explore presentation tools' in body
-    assert 'href="/studio">Open Studio' in body
+    assert 'href="/studio">3D Studio' in body

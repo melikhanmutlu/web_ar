@@ -62,6 +62,16 @@ def test_root_view_shows_trash_folder_card_with_count(client, init_database):
     assert b"2 models" in resp.data
 
 
+def test_root_view_includes_the_site_footer(client, init_database):
+    login(client, "testuser", "testpassword")
+
+    resp = client.get("/my_models")
+
+    assert resp.status_code == 200
+    assert b"<footer>" in resp.data
+    assert b"One workspace for turning 3D files" in resp.data
+
+
 def test_restore_selected_models_requires_login(client):
     resp = client.post("/restore_selected_models", json={"model_ids": ["x"]})
     assert resp.status_code == 302

@@ -66,8 +66,8 @@
         }
     }
 
-    // Homepage Viewer demo: retain the supplied poster until the live iframe
-    // is ready, then cross-fade without shifting the browser-style frame.
+    // Homepage Viewer demo: show a compact loader until the live iframe is
+    // ready, then cross-fade without shifting the browser-style frame.
     var demoFrame = document.querySelector('[data-home-viewer-demo]');
     if (demoFrame) {
         demoFrame.addEventListener('load', function () {

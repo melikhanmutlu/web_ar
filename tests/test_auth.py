@@ -55,6 +55,7 @@ def test_profile_renders_account_overview(client, init_database):
     assert b'Current plan' in response.data
     assert b'Account information' in response.data
     assert b'Your models' in response.data
+    assert b'<footer>' in response.data
 
 
 def test_login_rate_limit_blocks_brute_force(client):

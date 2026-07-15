@@ -82,39 +82,39 @@
         <section class="flow-section workflow-section">
             <div class="shell">
                 <div class="workflow-heading reveal" data-reveal>
-                    <h2>Three steps. One continuous workspace.</h2>
-                    <p>Move from source file to an interactive experience without handing the model between disconnected tools.</p>
+                    <h2>One model. Three ways to experience it.</h2>
+                    <p>Turn a 3D asset into an experience people can inspect, understand and place in their own space.</p>
                 </div>
                 <div class="workflow-tabs reveal" data-reveal style="--delay:80ms" role="tablist">
-                    <button type="button" class="active" role="tab" aria-selected="true"><span>01</span><b>Upload</b><small>Bring your model</small></button>
-                    <button type="button" role="tab" aria-selected="false"><span>02</span><b>Refine</b><small>Polish in Studio</small></button>
-                    <button type="button" role="tab" aria-selected="false"><span>03</span><b>Publish</b><small>Share web + AR</small></button>
+                    <button type="button" class="active" role="tab" aria-selected="true"><span>01</span><b>Explore</b><small>Inspect every detail</small></button>
+                    <button type="button" role="tab" aria-selected="false"><span>02</span><b>Present</b><small>Tell its story</small></button>
+                    <button type="button" role="tab" aria-selected="false"><span>03</span><b>Place</b><small>See it in context</small></button>
                 </div>
                 <div class="workflow-detail reveal" data-reveal style="--delay:120ms">
                     <div class="workflow-icon" aria-hidden="true"><i></i><span>&uarr;</span></div>
                     <div class="workflow-copy" role="tabpanel">
                         <span class="detail-index">01</span>
-                        <h3>Start with the asset you already have.</h3>
-                        <p>Bring in GLB, STL, OBJ, FBX, STEP or ZIP. ARVision checks the file, preserves the important detail and prepares it for fast, reliable loading.</p>
-                        <a href="{{ url_for('main.workflow') }}">See the complete workflow <span>&rarr;</span></a>
+                        <h3>Give people a model they can actually inspect.</h3>
+                        <p>Let them move freely around the model, examine materials closely and take measurements in a fast browser Viewer.</p>
+                        <a href="{{ url_for('main.demo_viewer') }}">Open the Viewer <span>&rarr;</span></a>
                     </div>
                 </div>
                 <div class="workflow-detail hidden">
                     <div class="workflow-icon" aria-hidden="true"><i></i><span>&loz;</span></div>
                     <div class="workflow-copy" role="tabpanel">
                         <span class="detail-index">02</span>
-                        <h3>Make the model feel right everywhere.</h3>
-                        <p>Tune materials, lighting, scale and camera views in one focused workspace. Every change stays attached to the same model.</p>
-                        <a href="{{ url_for('main.workflow') }}">See the complete workflow <span>&rarr;</span></a>
+                        <h3>Give every object the context it deserves.</h3>
+                        <p>Use hotspots, notes, camera views and shareable presentations to tell the story around the object.</p>
+                        <a href="{{ url_for('main.features') }}">Explore presentation tools <span>&rarr;</span></a>
                     </div>
                 </div>
                 <div class="workflow-detail hidden">
                     <div class="workflow-icon" aria-hidden="true"><i></i><span>&check;</span></div>
                     <div class="workflow-copy" role="tabpanel">
                         <span class="detail-index">03</span>
-                        <h3>Ship one model to every surface.</h3>
-                        <p>Create a browser viewer, mobile AR experience, QR code or embed without rebuilding the asset for each destination.</p>
-                        <a href="{{ url_for('main.workflow') }}">See the complete workflow <span>&rarr;</span></a>
+                        <h3>Let it exist in the real world.</h3>
+                        <p>Use QR codes, mobile AR and embeds to help people see the model in their own space.</p>
+                        <a href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
                     </div>
                 </div>
             </div>

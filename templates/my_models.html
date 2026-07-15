@@ -19,6 +19,10 @@
                     <i data-lucide="check-square"></i>
                     Select
                 </button>
+                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn hidden">
+                    <i data-lucide="x"></i>
+                    Cancel
+                </button>
                 <button type="button" onclick="showCreateFolderModal()" class="library-btn library-utility-btn">
                     + New folder
                 </button>
@@ -27,10 +31,6 @@
                 </button>
             </div>
             <div class="library-actions-selection">
-                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
-                    <i data-lucide="x"></i>
-                    Cancel
-                </button>
                 <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
                     <i data-lucide="folder-input"></i>
                     Move selected

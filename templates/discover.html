@@ -3,11 +3,20 @@
 {% block title %}Discover - arvision{% endblock %}
 
 {% block content %}
-<main class="library-main">
-    <section class="library-header">
+<main class="library-main discover-main">
+    <section class="discover-hero">
         <div>
-            <p class="home-kicker">Community gallery</p>
-            <h1 class="home-title">Discover</h1>
+            <p class="discover-eyebrow">Community library</p>
+            <h1>Discover 3D models<br>made to be explored.</h1>
+            <p class="discover-intro">Browse public ARVision models, inspect every detail in the Viewer, and find a starting point for your next idea.</p>
+        </div>
+        <div class="discover-hero-summary">
+            <span class="discover-summary-icon"><i data-lucide="box"></i></span>
+            <div>
+                <strong>{{ total_count }}</strong>
+                <span>public model{{ '' if total_count == 1 else 's' }} to explore</span>
+            </div>
+            <a href="{{ url_for('main.studio') }}" class="discover-hero-link">Open Studio <span>&rarr;</span></a>
         </div>
     </section>
 
@@ -33,26 +42,35 @@
         </div>
     </section>
 
-    <section class="library-tools">
-        <form method="get" class="library-search" style="flex:1;">
-            <i data-lucide="search"></i>
-            <input type="text" name="q" value="{{ search }}" placeholder="Search public models...">
-        </form>
-        <form method="get">
-            {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
-            <select name="sort" class="av-select library-sort" onchange="this.form.submit()">
-                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest First</option>
-                <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most Liked</option>
-            </select>
-        </form>
+    <section class="discover-toolbar" aria-label="Discover controls">
+        <div class="discover-results-copy">
+            <span>Explore the library</span>
+            <strong>{{ total_count }} public model{{ '' if total_count == 1 else 's' }}</strong>
+        </div>
+        <div class="discover-controls">
+            <form method="get" class="library-search discover-search">
+                <i data-lucide="search"></i>
+                <input type="search" name="q" value="{{ search }}" placeholder="Search models, formats or tags..." aria-label="Search public models">
+            </form>
+            <form method="get" class="discover-sort-form">
+                {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+                <label for="discoverSort" class="sr-only">Sort models</label>
+                <select id="discoverSort" name="sort" class="av-select library-sort" onchange="this.form.submit()">
+                    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+                    <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most liked</option>
+                </select>
+            </form>
+        </div>
     </section>
 
     {% if models %}
-    <div class="library-model-grid">
+    <div class="library-model-grid discover-model-grid">
         {% for model in models %}
         {% set model_name = (model.display_name or model.original_filename or 'Model') %}
-        <article class="model-card library-model" data-model-id="{{ model.id }}"
-                 onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'">
+        <article class="model-card library-model discover-model" data-model-id="{{ model.id }}"
+                 role="link" tabindex="0"
+                 onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'"
+                 onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'; }">
             <div class="library-preview">
                 <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}"
                      alt="{{ model_name }} preview" loading="lazy" decoding="async"
@@ -61,18 +79,23 @@
                     <i data-lucide="box"></i>
                     <span>No screenshot yet</span>
                 </div>
+                <span class="discover-format-badge">{{ (model.file_type or '3D') | upper }}</span>
             </div>
             <div class="library-model-body">
-                <h3 class="model-name" title="{{ model_name }}">{{ model_name }}</h3>
-                <p class="library-model-meta">
-                    <span class="file-size">{{ like_counts.get(model.id, 0) }} like{{ '' if like_counts.get(model.id, 0) == 1 else 's' }}</span>
-                    <span class="file-type-badge">{{ (model.file_type or '') | upper }}</span>
+                <div class="discover-model-heading">
+                    <h2 class="model-name" title="{{ model_name }}">{{ model_name }}</h2>
+                    <i data-lucide="arrow-up-right" aria-hidden="true"></i>
+                </div>
+                <p class="library-model-meta discover-model-meta">
+                    <span><i data-lucide="heart" aria-hidden="true"></i> {{ like_counts.get(model.id, 0) }} like{{ '' if like_counts.get(model.id, 0) == 1 else 's' }}</span>
+                    <span>Public</span>
                 </p>
                 {% if model.tags %}
                 <div class="model-tags">
-                    {% for tag in model.tags.split(',') %}<span class="model-tag-chip">{{ tag }}</span>{% endfor %}
+                    {% for tag in model.tags.split(',')[:3] %}<span class="model-tag-chip">{{ tag.strip() }}</span>{% endfor %}
                 </div>
                 {% endif %}
+                <span class="discover-open-model">Open in Viewer <span>&rarr;</span></span>
             </div>
         </article>
         {% endfor %}
@@ -86,13 +109,13 @@
     </div>
     {% endif %}
     {% else %}
-    <div class="library-empty">
+    <div class="library-empty discover-empty">
         <i data-lucide="compass"></i>
         <h2>Nothing here yet</h2>
         <p>No public models {{ 'match "' + search + '"' if search else 'have been shared yet' }}.</p>
         {% if not search %}
         <p class="av-card-desc">Have a model already? Set its visibility to <strong>Public</strong> from
-            <a href="{{ url_for('models_crud.my_models') }}" style="text-decoration:underline;">My Models</a> to show it here.</p>
+            <a href="{{ url_for('models_crud.my_models') }}">My Models</a> to show it here.</p>
         {% endif %}
     </div>
     {% endif %}

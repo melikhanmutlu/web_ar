@@ -3387,8 +3387,8 @@ body {
 /* CREATE visual is now a browser-framed viewer screenshot. */
 .story-viewer img { width: 100%; height: auto; }
 .browser-shot { width: 100%; overflow: hidden; border: 1px solid #d7dbe2; border-radius: 16px; background: #eef0f3; box-shadow: 0 22px 55px rgba(28,31,42,.1); }
-.browser-shot > img { opacity: .86; filter: saturate(.84) contrast(.93); transition: .3s; }
-.browser-shot:hover > img { opacity: .91; }
+.browser-shot > img { opacity: .95; filter: saturate(.84) contrast(.93); transition: .3s; }
+.browser-shot:hover > img { opacity: .97; }
 .browser-bar { height: 44px; display: flex; align-items: center; gap: 22px; padding: 0 18px; border-bottom: 1px solid #e3e6eb; background: #f1f3f6; color: #8a919c; font-size: 11px; text-align: left; }
 .browser-bar i, .browser-bar i:before, .browser-bar i:after { width: 8px; height: 8px; border-radius: 50%; background: #c5cad2; }
 .browser-bar i { position: relative; margin-right: 20px; }

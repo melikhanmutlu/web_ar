@@ -36,7 +36,27 @@
         {% endwith %}
 
         <!-- Hero -->
-        <section class="hero">
+        <section class="hero hero--create create-section story-section" id="start">
+            <div class="shell">
+                <div class="story-copy reveal" data-reveal>
+                    <h2>Bring the model.<br>We prepare the rest.</h2>
+                    <p>Start with the 3D asset you already have. ARVision optimises geometry, preserves materials and turns it into a fast, dependable web-ready model.</p>
+                    <div class="story-links">
+                        <a class="primary-btn" href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
+                        <a class="text-btn" href="{{ url_for('main.workflow') }}">See the workflow <span>&nearr;</span></a>
+                    </div>
+                </div>
+                <div class="story-visual story-viewer reveal" data-reveal style="--delay:100ms">
+                    <div class="browser-shot">
+                        <div class="browser-bar"><i aria-hidden="true"></i><span>arvision.app/viewer</span></div>
+                        <img src="{{ url_for('static', filename='marketing/home-viewer-bring-model.png') }}" alt="ARVision viewer showing a purple 3D model and editing tools" width="1920" height="1015">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- MODEL PATH -->
+        <section class="hero hero--path">
             <div class="hero-glow" aria-hidden="true"></div>
             <div class="shell hero-grid">
                 <div class="hero-copy reveal" data-reveal>
@@ -165,24 +185,6 @@
                             </button>
                         </div>
                     </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- CREATE -->
-        <section class="section shell create-section story-section" id="start">
-            <div class="story-copy reveal" data-reveal>
-                <h2>Bring the model.<br>We prepare the rest.</h2>
-                <p>Start with the 3D asset you already have. ARVision optimises geometry, preserves materials and turns it into a fast, dependable web-ready model.</p>
-                <div class="story-links">
-                    <a class="primary-btn" href="{{ url_for('main.studio') }}">Open Studio <span>&rarr;</span></a>
-                    <a class="text-btn" href="{{ url_for('main.workflow') }}">See the workflow <span>&nearr;</span></a>
-                </div>
-            </div>
-            <div class="story-visual story-viewer reveal" data-reveal style="--delay:100ms">
-                <div class="browser-shot">
-                    <div class="browser-bar"><i aria-hidden="true"></i><span>arvision.app/viewer</span></div>
-                    <img src="{{ url_for('static', filename='marketing/home-viewer-bring-model.png') }}" alt="ARVision viewer showing a purple 3D model and editing tools" width="1920" height="1015">
                 </div>
             </div>
         </section>

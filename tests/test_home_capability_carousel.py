@@ -7,7 +7,14 @@ def test_homepage_renders_the_capability_carousel(client):
 
     assert response.status_code == 200
     assert 'data-cap-carousel' in body
-    assert body.index('workflow-section') < body.index('capability-section') < body.index('create-section')
+    assert (
+        body.index('create-section')
+        < body.index('hero--path')
+        < body.index('workflow-section')
+        < body.index('capability-section')
+        < body.index('outcome')
+        < body.index('class="cta"')
+    )
     assert body.count('<a class="capability-card') == 5
     for asset in (
         "capability-upload-convert.png",

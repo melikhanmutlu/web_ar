@@ -3397,6 +3397,15 @@ body {
 .browser-bar i:after { left: 28px; }
 .browser-bar span { flex: 1; max-width: 420px; padding: 7px 14px; border: 1px solid #dfe3e9; border-radius: 7px; background: #fff; color: #777f8b; }
 
+/* The upload introduction now leads the page. Keep it comfortably below
+   the header, then give the following model-path visual a clear lower edge. */
+.hero--create { padding-top: 180px; }
+.hero--path { padding-bottom: 96px; }
+@media (max-width: 640px) {
+    .hero--create { padding-top: 148px; }
+    .hero--path { padding-bottom: 64px; }
+}
+
 /* Taller closing CTA with a lavender bloom (status-label removed). */
 .cta { min-height: 480px; padding: 126px 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 116%, rgba(119,91,181,.68) 0, rgba(88,67,139,.3) 24%, transparent 48%), var(--dark); }
 .cta h2 { margin: 0 0 24px; }

@@ -7,8 +7,12 @@
     {% include '_security_head.html' %}
     {% set seo_title = display_name + ' — ARVision' %}
     {% set seo_description = (model.description or (display_name + ' — view this 3D model in augmented reality on ARVision.')) | truncate(160) %}
+    {% if marketing_demo|default(false) %}
+    {% set seo_canonical = SITE_URL + url_for('main.demo_viewer') %}
+    {% else %}
     {% set seo_canonical = SITE_URL + url_for('viewer.view_model', model_id=model_id) %}
     {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
+    {% endif %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>
 
@@ -821,6 +825,25 @@
             vertical-align: middle;
             animation: blink 0.7s step-end infinite;
         }
+        /* Homepage demo keeps only controls that are safe to alter locally. */
+        body.marketing-demo #rightSidebar,
+        body.marketing-demo #mobileEditFab,
+        body.marketing-demo #infoToggleBtn,
+        body.marketing-demo #modelInfoButton,
+        body.marketing-demo #measureToolButton,
+        body.marketing-demo #arButton,
+        body.marketing-demo #cameraOverlayButton,
+        body.marketing-demo #vrButton,
+        body.marketing-demo #qrButton,
+        body.marketing-demo #downloadMenu,
+        body.marketing-demo #screenshotButton,
+        body.marketing-demo #layersContainer,
+        body.marketing-demo #transformContainer,
+        body.marketing-demo #annotationsContainer,
+        body.marketing-demo #slicerContainer,
+        body.marketing-demo #historyContainer,
+        body.marketing-demo #embedContainer,
+        body.marketing-demo #analyticsContainer { display: none !important; }
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
@@ -840,13 +863,18 @@
         currentUserId: {{ (current_user.id if current_user.is_authenticated else None) | tojson }},
         cumulativeScale: {{ (model.cumulative_scale if model.cumulative_scale else None) | tojson }},
         downloadFilename: {{ (display_name ~ '.glb') | tojson }},
+        isMarketingDemo: {{ marketing_demo | default(false) | tojson }},
+        openToolsOnDesktop: {{ marketing_demo | default(false) | tojson }},
+        initialToolsSection: {{ ('materialContainer' if marketing_demo | default(false) else none) | tojson }},
       };
     </script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>
+    {% if not marketing_demo|default(false) %}
     <script src="{{ url_for('static', filename='js/viewer/ar-slicer-layers.js') }}"></script>
+    {% endif %}
 
 </head>
-<body class="bg-white dark:bg-gray-900 min-h-screen">
+<body class="bg-white dark:bg-gray-900 min-h-screen{% if marketing_demo|default(false) %} marketing-demo viewer-stage-dark{% endif %}">
     <div id="mobileArOnboarding" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.88);align-items:flex-end;">
         <div style="width:100%;background:#fff;color:#0f172a;padding:24px 20px 28px;border-radius:18px 18px 0 0;">
             <div style="font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Mobile AR</div>
@@ -855,7 +883,9 @@
             <div style="display:flex;gap:10px;margin-top:18px;"><button id="onboardingDismiss" type="button" style="flex:1;padding:12px;border:1px solid #cbd5e1;background:white;">Not now</button><button id="onboardingStartAr" type="button" style="flex:1;padding:12px;border:0;background:#0f172a;color:white;">Start AR</button></div>
         </div>
     </div>
+    {% if not marketing_demo|default(false) %}
     <script src="{{ url_for('static', filename='js/viewer/ar-onboarding.js') }}"></script>
+    {% endif %}
     <div id="mobileSidebarBackdrop" aria-hidden="true"></div>
 
     <!-- Header: same partial every other page uses, so the link set stays in
@@ -889,7 +919,11 @@
         <div class="viewer-stage absolute inset-0" style="z-index: 1;background:{{ viewer_settings.background_color }};">
             <model-viewer
                 id="modelViewer"
+                {% if marketing_demo|default(false) %}
+                src="{{ viewer_model_src }}"
+                {% else %}
                 src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+                {% endif %}
                 {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
                 shadow-intensity="{{ viewer_settings.shadow_intensity }}"
                 shadow-softness="{{ viewer_settings.shadow_softness }}"
@@ -916,7 +950,9 @@
         <div id="measureToolResult" class="measure-result-panel hidden"></div>
         <script src="{{ url_for('static', filename='js/viewer/measure-tool.js') }}"></script>
         {% endif %}
+    {% if not marketing_demo|default(false) %}
     <script src="{{ url_for('static', filename='js/viewer/camera-overlay.js') }}"></script>
+    {% endif %}
 
 
         <!-- Portfolio Tagline -->
@@ -1778,6 +1814,7 @@
     <script src="{{ url_for('static', filename='js/viewer/animation-controls.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/material-editor.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/presets.js') }}"></script>
+    {% if not marketing_demo|default(false) %}
     <script src="{{ url_for('static', filename='js/viewer/transform-editor.js') }}"></script>
     {% if can_edit %}
     <script src="{{ url_for('static', filename='js/viewer/undo-redo.js') }}"></script>
@@ -1791,6 +1828,7 @@
     {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/panel-ui.js') }}"></script>
     <script>
         // Mobile hamburger toggle (site.js isn't loaded on the viewer page).
@@ -1844,6 +1882,7 @@
             var button = document.getElementById('bgSwitcherButton');
             var panel = document.getElementById('bgSwitcherPanel');
             if (!stage || !switcher || !button || !panel) return;
+            var persistBackground = {{ (not marketing_demo|default(false)) | tojson }};
 
             var swatches = panel.querySelectorAll('.bg-swatch');
             var applyBg = function (key) {
@@ -1854,7 +1893,7 @@
                     sw.classList.toggle('is-active', sw.getAttribute('data-bg') === key);
                 });
             };
-            applyBg(localStorage.getItem(STORAGE_KEY) || 'white');
+            applyBg(persistBackground ? (localStorage.getItem(STORAGE_KEY) || 'white') : 'dark');
 
             var setPanelOpen = function (open) {
                 button.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -1868,7 +1907,7 @@
                 sw.addEventListener('click', function () {
                     var key = sw.getAttribute('data-bg');
                     applyBg(key);
-                    localStorage.setItem(STORAGE_KEY, key);
+                    if (persistBackground) localStorage.setItem(STORAGE_KEY, key);
                     setPanelOpen(false);
                 });
             });

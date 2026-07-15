@@ -66,6 +66,15 @@
         }
     }
 
+    // Homepage Viewer demo: retain the supplied poster until the live iframe
+    // is ready, then cross-fade without shifting the browser-style frame.
+    var demoFrame = document.querySelector('[data-home-viewer-demo]');
+    if (demoFrame) {
+        demoFrame.addEventListener('load', function () {
+            demoFrame.closest('[data-home-viewer-shell]')?.classList.add('is-ready');
+        });
+    }
+
     // Landing workflow section: 3-step tab switcher.
     var tabs = document.querySelectorAll('.workflow-tabs button');
     if (tabs.length) {

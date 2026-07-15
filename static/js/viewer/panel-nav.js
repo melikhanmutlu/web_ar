@@ -85,6 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
             backBtn?.addEventListener('click', showToolsMenu);
 
             window._toolsShowMenu = showToolsMenu;
+            window._toolsShowDetail = function (sectionId) {
+                showToolsDetail(document.getElementById(sectionId));
+            };
         })();
 
         // SIDEBAR TOGGLE

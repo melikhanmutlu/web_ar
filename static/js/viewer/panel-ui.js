@@ -69,6 +69,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         lucide.createIcons();
 
+        // The homepage embeds a non-persistent Viewer demo. On desktop it
+        // opens directly into Material; compact screens preserve model space
+        // and let visitors open Tools from the regular toolbar instead.
+        const demoConfig = window.VIEWER_CONFIG || {};
+        if (demoConfig.openToolsOnDesktop && window.innerWidth > 1024) {
+            openTools();
+            window._toolsShowDetail?.(demoConfig.initialToolsSection);
+        }
+
         // ── Tagline typing effect ──────────────────────────────────────
         (function() {
             const words = ['Your Portfolio', 'Education', 'Medicine', 'Architecture', 'Engineering', 'Gaming', 'E-Commerce'];

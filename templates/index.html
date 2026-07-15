@@ -47,9 +47,12 @@
                     </div>
                 </div>
                 <div class="story-visual story-viewer reveal" data-reveal style="--delay:100ms">
-                    <div class="browser-shot">
+                    <div class="browser-shot browser-shot--live" data-home-viewer-shell>
                         <div class="browser-bar"><i aria-hidden="true"></i><span>arvision.app/viewer</span></div>
-                        <img src="{{ url_for('static', filename='marketing/home-viewer-bring-model.png') }}" alt="ARVision viewer showing a purple 3D model and editing tools" width="1920" height="1015">
+                        <div class="browser-shot-viewport">
+                            <img class="browser-shot-poster" src="{{ url_for('static', filename='marketing/home-viewer-bring-model.png') }}" alt="ARVision Viewer preview showing a purple 3D model and editing tools" width="1920" height="1015">
+                            <iframe class="browser-shot-frame" data-home-viewer-demo src="{{ url_for('main.demo_viewer') }}" title="Interactive ARVision Viewer demo" allow="fullscreen" allowfullscreen></iframe>
+                        </div>
                     </div>
                 </div>
             </div>

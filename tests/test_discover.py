@@ -9,6 +9,15 @@ def _model(id_, **kwargs):
     return UserModel(id=id_, **defaults)
 
 
+def test_community_is_the_canonical_public_gallery_route(client):
+    response = client.get("/community")
+
+    assert response.status_code == 200
+    assert "<title>Community - arvision</title>" in response.get_data(as_text=True)
+    # Retain the previous public URL for existing shared links.
+    assert client.get("/discover").status_code == 200
+
+
 def test_discover_lists_only_public_models(client):
     db.session.add_all([
         _model("pub-1", visibility="public", display_name="Public Robot"),

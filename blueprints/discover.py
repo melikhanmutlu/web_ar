@@ -10,6 +10,7 @@ SORT_OPTIONS = {"newest", "popular"}
 
 
 @discover_bp.route("/discover")
+@discover_bp.route("/community")
 def discover():
     query = UserModel.query.filter(
         UserModel.visibility == "public", UserModel.deleted_at.is_(None)

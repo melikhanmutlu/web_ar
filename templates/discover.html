@@ -3,56 +3,25 @@
 {% block title %}Community - arvision{% endblock %}
 
 {% block content %}
-<main class="library-main discover-main">
-    <section class="discover-hero">
+<main class="library-main community-main">
+    <section class="library-header community-header">
         <div>
-            <p class="discover-eyebrow">Community library</p>
-            <h1>Community models<br>made to be explored.</h1>
-            <p class="discover-intro">Browse public ARVision models, inspect every detail in the Viewer, and find a starting point for your next idea.</p>
-        </div>
-        <div class="discover-hero-summary">
-            <span class="discover-summary-icon"><i data-lucide="box"></i></span>
-            <div>
-                <strong>{{ total_count }}</strong>
-                <span>public model{{ '' if total_count == 1 else 's' }} to explore</span>
-            </div>
-            <a href="{{ url_for('main.studio') }}" class="discover-hero-link">Open Studio <span>&rarr;</span></a>
+            <h1 class="home-title">Community</h1>
+            <p class="library-subtitle">Explore public ARVision models, inspect every detail in the Viewer, and find a starting point for your next idea.</p>
         </div>
     </section>
 
-    <section class="discover-flow" aria-label="How ARVision works">
-        <div class="discover-flow-step">
-            <span class="discover-flow-icon"><i data-lucide="upload-cloud"></i></span>
-            <span class="discover-flow-label">Upload a 3D file</span>
-        </div>
-        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
-        <div class="discover-flow-step">
-            <span class="discover-flow-icon"><i data-lucide="cog"></i></span>
-            <span class="discover-flow-label">Auto-converted to GLB/USDZ</span>
-        </div>
-        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
-        <div class="discover-flow-step">
-            <span class="discover-flow-icon"><i data-lucide="sliders-horizontal"></i></span>
-            <span class="discover-flow-label">Customize, annotate, measure</span>
-        </div>
-        <i data-lucide="arrow-right" class="discover-flow-arrow"></i>
-        <div class="discover-flow-step">
-            <span class="discover-flow-icon"><i data-lucide="scan"></i></span>
-            <span class="discover-flow-label">View in AR & share</span>
-        </div>
-    </section>
-
-    <section class="discover-toolbar" aria-label="Community controls">
-        <div class="discover-results-copy">
-            <span>Explore the library</span>
+    <section class="community-toolbar" aria-label="Community controls">
+        <div class="community-results-copy">
+            <span>Community library</span>
             <strong>{{ total_count }} public model{{ '' if total_count == 1 else 's' }}</strong>
         </div>
-        <div class="discover-controls">
-            <form method="get" class="library-search discover-search">
+        <div class="community-controls">
+            <form method="get" class="library-search community-search">
                 <i data-lucide="search"></i>
                 <input type="search" name="q" value="{{ search }}" placeholder="Search models, formats or tags..." aria-label="Search public models">
             </form>
-            <form method="get" class="discover-sort-form">
+            <form method="get" class="community-sort-form">
                 {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
                 <label for="discoverSort" class="sr-only">Sort models</label>
                 <select id="discoverSort" name="sort" class="av-select library-sort" onchange="this.form.submit()">

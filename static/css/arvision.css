@@ -2985,9 +2985,6 @@ body {
     object-fit: cover;
     transition: transform 0.35s ease, filter 0.35s ease;
 }
-.capability-card--upload > img,
-.capability-card--ar > img { object-fit: contain; padding: 1rem; }
-.capability-card--prepare > img { object-position: 52% center; }
 .capability-card-shade {
     position: absolute;
     inset: 0;

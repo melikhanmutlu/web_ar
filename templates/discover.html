@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Discover - arvision{% endblock %}
+{% block title %}Community - arvision{% endblock %}
 
 {% block content %}
 <main class="library-main discover-main">
     <section class="discover-hero">
         <div>
             <p class="discover-eyebrow">Community library</p>
-            <h1>Discover 3D models<br>made to be explored.</h1>
+            <h1>Community models<br>made to be explored.</h1>
             <p class="discover-intro">Browse public ARVision models, inspect every detail in the Viewer, and find a starting point for your next idea.</p>
         </div>
         <div class="discover-hero-summary">
@@ -42,7 +42,7 @@
         </div>
     </section>
 
-    <section class="discover-toolbar" aria-label="Discover controls">
+    <section class="discover-toolbar" aria-label="Community controls">
         <div class="discover-results-copy">
             <span>Explore the library</span>
             <strong>{{ total_count }} public model{{ '' if total_count == 1 else 's' }}</strong>

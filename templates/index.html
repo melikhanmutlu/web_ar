@@ -97,6 +97,78 @@
             </div>
         </section>
 
+        <!-- CAPABILITIES -->
+        <section class="capability-section" aria-labelledby="capabilityHeading">
+            <div class="shell">
+                <div class="capability-heading reveal" data-reveal>
+                    <h2 id="capabilityHeading">Everything you need,<br>in one workflow.</h2>
+                    <p>Upload, refine and publish every 3D model from a single connected workspace.</p>
+                </div>
+                <div class="capability-carousel reveal" data-cap-carousel data-reveal style="--delay:80ms">
+                    <div class="capability-viewport" id="capabilityViewport" tabindex="0" aria-label="ARVision capabilities">
+                        <div class="capability-track">
+                            <a class="capability-card capability-card--upload" href="{{ url_for('main.studio') }}">
+                                <img src="{{ url_for('static', filename='marketing/home-upload-3d.png') }}" alt="Stylised 3D model upload and conversion illustration" width="1024" height="1536">
+                                <span class="capability-card-shade" aria-hidden="true"></span>
+                                <span class="capability-card-copy">
+                                    <strong>Upload &amp; convert</strong>
+                                    <small>Bring in the 3D files you already have.</small>
+                                </span>
+                                <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
+                            </a>
+                            <a class="capability-card" href="{{ url_for('main.studio') }}">
+                                <img src="{{ url_for('static', filename='marketing/ar-studio-scene.png') }}" alt="ARVision Studio scene with a 3D lamp and mobile AR preview" width="2048" height="1152">
+                                <span class="capability-card-shade" aria-hidden="true"></span>
+                                <span class="capability-card-copy">
+                                    <strong>Build your scene</strong>
+                                    <small>Refine materials, views and the details that matter.</small>
+                                </span>
+                                <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
+                            </a>
+                            <a class="capability-card" href="{{ url_for('main.features') }}">
+                                <img src="{{ url_for('static', filename='marketing/home-viewer-workspace.png') }}" alt="ARVision Viewer workspace for reviewing a 3D model" width="1920" height="1015">
+                                <span class="capability-card-shade" aria-hidden="true"></span>
+                                <span class="capability-card-copy">
+                                    <strong>Review in the Viewer</strong>
+                                    <small>Inspect every detail in a fast, shareable 3D experience.</small>
+                                </span>
+                                <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
+                            </a>
+                            <a class="capability-card capability-card--prepare" href="{{ url_for('main.features') }}">
+                                <img src="{{ url_for('static', filename='marketing/hero-3d-maker-world.png') }}" alt="3D asset being prepared for digital publishing" width="1783" height="892">
+                                <span class="capability-card-shade" aria-hidden="true"></span>
+                                <span class="capability-card-copy">
+                                    <strong>Prepare every asset</strong>
+                                    <small>Keep your model connected from source file to publish.</small>
+                                </span>
+                                <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
+                            </a>
+                            <a class="capability-card capability-card--ar" href="{{ url_for('main.features') }}">
+                                <img src="{{ url_for('static', filename='marketing/home-mobile-ar.png') }}" alt="Phone placing a purple chair in augmented reality" width="1024" height="1536">
+                                <span class="capability-card-shade" aria-hidden="true"></span>
+                                <span class="capability-card-copy">
+                                    <strong>Place it in AR</strong>
+                                    <small>Let people see the finished model in their own space.</small>
+                                </span>
+                                <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="capability-controls">
+                        <div class="capability-pagination" aria-label="Capability carousel pages"></div>
+                        <div class="capability-arrows">
+                            <button type="button" class="capability-nav" data-cap-prev aria-label="Previous capabilities" aria-controls="capabilityViewport">
+                                <span aria-hidden="true">&larr;</span>
+                            </button>
+                            <button type="button" class="capability-nav" data-cap-next aria-label="Next capabilities" aria-controls="capabilityViewport">
+                                <span aria-hidden="true">&rarr;</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- CREATE -->
         <section class="section shell create-section story-section" id="start">
             <div class="story-copy reveal" data-reveal>

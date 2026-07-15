@@ -1,12 +1,11 @@
-"""Public gallery: browse models the community has made public."""
+"""Public gallery: browse community models that owners made public."""
 from flask import Blueprint, render_template, request
 
-from models import ModelLike, UserModel, db
+from models import UserModel, db
 
 discover_bp = Blueprint("discover", __name__)
 
 PAGE_SIZE = 24
-SORT_OPTIONS = {"newest", "popular"}
 
 
 @discover_bp.route("/discover")
@@ -24,22 +23,7 @@ def discover():
                 UserModel.tags.ilike(like_pattern),
             )
         )
-    sort = request.args.get("sort", "newest")
-    if sort not in SORT_OPTIONS:
-        sort = "newest"
-    like_counts = dict(
-        db.session.query(ModelLike.model_id, db.func.count(ModelLike.id))
-        .group_by(ModelLike.model_id).all()
-    )
-    if sort == "popular":
-        # Small public catalogs are the expected scale here; sorting by a
-        # precomputed dict in Python avoids a correlated subquery for a
-        # feature that isn't performance-critical yet.
-        models = sorted(
-            query.all(), key=lambda m: like_counts.get(m.id, 0), reverse=True
-        )
-    else:
-        models = query.order_by(UserModel.upload_date.desc()).all()
+    models = query.order_by(UserModel.upload_date.desc()).all()
 
     try:
         page = max(1, int(request.args.get("page", 1)))
@@ -50,7 +34,6 @@ def discover():
     has_more = start + PAGE_SIZE < len(models)
 
     return render_template(
-        "discover.html", models=page_models, like_counts=like_counts,
-        search=search, sort=sort, page=page, has_more=has_more,
-        total_count=len(models),
+        "discover.html", models=page_models, search=search,
+        page=page, has_more=has_more,
     )

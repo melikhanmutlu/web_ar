@@ -1,6 +1,5 @@
-"""Public discover/gallery page: lists public models, hides private/unlisted
-ones, supports search and a most-liked sort."""
-from models import ModelLike, User, UserModel, db
+"""Community gallery: lists public models and supports search/pagination."""
+from models import UserModel, db
 
 
 def _model(id_, **kwargs):
@@ -11,9 +10,12 @@ def _model(id_, **kwargs):
 
 def test_community_is_the_canonical_public_gallery_route(client):
     response = client.get("/community")
+    body = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "<title>Community - arvision</title>" in response.get_data(as_text=True)
+    assert "<title>Community - arvision</title>" in body
+    assert "Community library" not in body
+    assert "Most liked" not in body
     # Retain the previous public URL for existing shared links.
     assert client.get("/discover").status_code == 200
 
@@ -49,23 +51,6 @@ def test_discover_search_matches_name_and_tags(client):
     by_tag = client.get("/discover?q=furniture").get_data(as_text=True)
     assert "Beta Chair" in by_tag
     assert "Alpha Vase" not in by_tag
-
-
-def test_discover_popular_sort_orders_by_like_count(client):
-    db.session.add_all([
-        _model("pub-least", visibility="public", display_name="Least Liked"),
-        _model("pub-most", visibility="public", display_name="Most Liked"),
-    ])
-    db.session.commit()
-    db.session.add_all([
-        ModelLike(model_id="pub-most", session_id="s1"),
-        ModelLike(model_id="pub-most", session_id="s2"),
-        ModelLike(model_id="pub-least", session_id="s3"),
-    ])
-    db.session.commit()
-
-    page = client.get("/discover?sort=popular").get_data(as_text=True)
-    assert page.index("Most Liked") < page.index("Least Liked")
 
 
 def test_discover_pagination_has_more_flag(client, monkeypatch):

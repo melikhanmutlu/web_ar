@@ -2303,26 +2303,31 @@ footer {
 .community-header { margin-bottom: 1.75rem; }
 .community-toolbar {
     display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1.25rem;
+    justify-content: flex-end;
     margin: 0 0 1.5rem;
     padding: 1.1rem 0;
     border-top: 1px solid var(--line);
     border-bottom: 1px solid var(--line);
 }
-.community-results-copy { display: grid; gap: 0.1rem; flex: 0 0 auto; }
-.community-results-copy span { color: var(--muted); font-size: 0.72rem; font-weight: 600; }
-.community-results-copy strong { color: var(--ink); font-size: 0.92rem; }
-.community-controls { display: flex; align-items: center; justify-content: flex-end; gap: 0.65rem; width: min(100%, 43rem); }
-.community-search { flex: 1 1 auto; min-height: 2.8rem; background: var(--paper); }
-.community-sort-form { flex: 0 0 9.5rem; }
-.community-sort-form .library-sort { min-height: 2.8rem; }
-.discover-model-grid { row-gap: 1.35rem; }
-.discover-model { cursor: pointer; }
-.discover-model:focus-visible { outline: 3px solid rgba(98, 93, 245, 0.32); outline-offset: 3px; }
-.discover-model .library-preview { position: relative; aspect-ratio: 1.08 / 0.87; }
-.discover-format-badge {
+.community-controls { width: min(100%, 34rem); }
+.community-search { min-height: 2.8rem; background: var(--paper); }
+.community-model-grid { row-gap: 1.35rem; }
+.community-model {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    cursor: pointer;
+}
+.community-model:hover { border-color: var(--line); }
+.community-model:focus-visible { outline: 3px solid rgba(98, 93, 245, 0.32); outline-offset: 3px; }
+.community-model .library-preview {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    border-bottom: 1px solid var(--line);
+    background: #eef0f3;
+}
+.community-format-badge {
     position: absolute;
     top: 0.65rem;
     right: 0.65rem;
@@ -2335,17 +2340,14 @@ footer {
     font-weight: 800;
     letter-spacing: 0.06em;
 }
-.discover-model .library-model-body { min-height: 0; padding: 0.85rem 0.15rem 0; }
-.discover-model-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 0.5rem; }
-.discover-model-heading .model-name { margin: 0; font-size: 0.94rem; }
-.discover-model-heading > i { width: 1rem; height: 1rem; color: var(--muted); transition: transform 0.15s ease, color 0.15s ease; }
-.discover-model:hover .discover-model-heading > i { color: var(--accent); transform: translate(2px, -2px); }
-.discover-model-meta { margin: 0; }
-.discover-model-meta span { display: inline-flex; align-items: center; gap: 0.25rem; }
-.discover-model-meta i { width: 0.72rem; height: 0.72rem; color: var(--accent); }
-.discover-model .model-tags { max-height: 1.55rem; overflow: hidden; }
-.discover-model .model-tag-chip { padding: 0.18rem 0.42rem; font-size: 0.64rem; }
-.discover-open-model { display: inline-flex; gap: 0.3rem; margin-top: 0.15rem; color: var(--accent); font-size: 0.7rem; font-weight: 700; }
+.community-model .library-model-body { min-height: 0; padding: 0.9rem; }
+.community-model-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 0.5rem; }
+.community-model-heading .model-name { margin: 0; font-size: 0.94rem; }
+.community-model-heading > i { width: 1rem; height: 1rem; color: var(--muted); transition: transform 0.15s ease, color 0.15s ease; }
+.community-model:hover .community-model-heading > i { color: var(--accent); transform: translate(2px, -2px); }
+.community-model .model-tags { max-height: 1.55rem; overflow: hidden; }
+.community-model .model-tag-chip { padding: 0.18rem 0.42rem; font-size: 0.64rem; }
+.community-open-model { display: inline-flex; gap: 0.3rem; margin-top: 0.15rem; color: var(--accent); font-size: 0.7rem; font-weight: 700; }
 .discover-empty { border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); }
 .discover-empty .av-card-desc a { color: var(--accent); font-weight: 700; text-decoration: underline; }
 .library-storage {
@@ -2697,8 +2699,6 @@ footer {
     .community-main { width: min(100% - 32px, 1280px); padding-top: 6.75rem !important; }
     .community-toolbar { align-items: stretch; flex-direction: column; }
     .community-controls { width: 100%; }
-    .community-results-copy { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
-    .community-sort-form { flex-basis: 8.6rem; }
     .library-tools { grid-template-columns: 1fr; }
     .format-pills { grid-column: auto; }
     .library-folder-grid,

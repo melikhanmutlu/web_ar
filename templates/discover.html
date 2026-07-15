@@ -12,31 +12,19 @@
     </section>
 
     <section class="community-toolbar" aria-label="Community controls">
-        <div class="community-results-copy">
-            <span>Community library</span>
-            <strong>{{ total_count }} public model{{ '' if total_count == 1 else 's' }}</strong>
-        </div>
         <div class="community-controls">
             <form method="get" class="library-search community-search">
                 <i data-lucide="search"></i>
                 <input type="search" name="q" value="{{ search }}" placeholder="Search models, formats or tags..." aria-label="Search public models">
             </form>
-            <form method="get" class="community-sort-form">
-                {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
-                <label for="discoverSort" class="sr-only">Sort models</label>
-                <select id="discoverSort" name="sort" class="av-select library-sort" onchange="this.form.submit()">
-                    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
-                    <option value="popular" {% if sort == 'popular' %}selected{% endif %}>Most liked</option>
-                </select>
-            </form>
         </div>
     </section>
 
     {% if models %}
-    <div class="library-model-grid discover-model-grid">
+    <div class="library-model-grid community-model-grid">
         {% for model in models %}
         {% set model_name = (model.display_name or model.original_filename or 'Model') %}
-        <article class="model-card library-model discover-model" data-model-id="{{ model.id }}"
+        <article class="model-card library-model community-model" data-model-id="{{ model.id }}"
                  role="link" tabindex="0"
                  onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'"
                  onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'; }">
@@ -48,30 +36,26 @@
                     <i data-lucide="box"></i>
                     <span>No screenshot yet</span>
                 </div>
-                <span class="discover-format-badge">{{ (model.file_type or '3D') | upper }}</span>
+                <span class="community-format-badge">{{ (model.file_type or '3D') | upper }}</span>
             </div>
             <div class="library-model-body">
-                <div class="discover-model-heading">
+                <div class="community-model-heading">
                     <h2 class="model-name" title="{{ model_name }}">{{ model_name }}</h2>
                     <i data-lucide="arrow-up-right" aria-hidden="true"></i>
                 </div>
-                <p class="library-model-meta discover-model-meta">
-                    <span><i data-lucide="heart" aria-hidden="true"></i> {{ like_counts.get(model.id, 0) }} like{{ '' if like_counts.get(model.id, 0) == 1 else 's' }}</span>
-                    <span>Public</span>
-                </p>
                 {% if model.tags %}
                 <div class="model-tags">
                     {% for tag in model.tags.split(',')[:3] %}<span class="model-tag-chip">{{ tag.strip() }}</span>{% endfor %}
                 </div>
                 {% endif %}
-                <span class="discover-open-model">Open in Viewer <span>&rarr;</span></span>
+                <span class="community-open-model">Open in Viewer <span>&rarr;</span></span>
             </div>
         </article>
         {% endfor %}
     </div>
     {% if has_more %}
     <div class="library-load-more">
-        <a class="library-btn" href="{{ url_for('discover.discover', q=search, sort=sort, page=page + 1) }}">
+        <a class="library-btn" href="{{ url_for('discover.discover', q=search, page=page + 1) }}">
             <i data-lucide="chevrons-down"></i>
             Load more
         </a>

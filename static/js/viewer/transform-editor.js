@@ -149,6 +149,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 applyTransform();
             });
 
+            // Orientation presets: set the rotate sliders to a canonical angle and
+            // dispatch 'input' so the readouts + applyTransform run. Unlike the View
+            // tab's camera presets (which only move the camera), these feed the same
+            // save/bake path (save-flow.js -> /save_modifications), so hitting Save
+            // persists the rotation into the GLB and AR.
+            function setRotateSlider(slider, valueEl, value) {
+                if (!slider) return;
+                slider.value = value;
+                if (valueEl) valueEl.textContent = value + '\u00B0';
+            }
+            document.querySelectorAll('.transform-preset-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    setRotateSlider(rotateXSlider, rotateXValue, parseInt(btn.dataset.rx, 10) || 0);
+                    setRotateSlider(rotateYSlider, rotateYValue, parseInt(btn.dataset.ry, 10) || 0);
+                    setRotateSlider(rotateZSlider, rotateZValue, parseInt(btn.dataset.rz, 10) || 0);
+                    applyTransform();
+                });
+            });
+
             function resetTransformPreview() {
                 if (scaleSlider) scaleSlider.value = 1;
                 if (scaleInput) scaleInput.value = '1.0';

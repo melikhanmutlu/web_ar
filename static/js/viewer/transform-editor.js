@@ -85,9 +85,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // View-tab presets) so every orientation lands framed the same way.
         function frameModelCentered() {
             if (!modelViewer) return;
+            // Keep the user's current zoom distance (radius). Using 'auto' here
+            // would fall back to model-viewer's default framing, which sits
+            // further out and makes the model look tiny — we only want to
+            // recenter and face it front, not change how zoomed-in it is.
+            const orbit = modelViewer.getCameraOrbit?.();
+            const radius = orbit ? orbit.radius + 'm' : 'auto';
             const applyFront = () => {
                 modelViewer.cameraTarget = 'auto';
-                modelViewer.cameraOrbit = '0deg 90deg auto';
+                modelViewer.cameraOrbit = '0deg 90deg ' + radius;
                 modelViewer.jumpCameraToGoal?.();
             };
             const framed = modelViewer.updateFraming?.();

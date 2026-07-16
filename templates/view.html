@@ -209,7 +209,12 @@
             .nav nav { display: none; }
             .nav-burger { display: flex; }
             .nav-auth-link { display: none; }
-            .nav-actions { margin-left: auto; }
+            /* On desktop the (now-hidden) <nav> carries margin-left:auto to push
+               the actions right; on mobile that's gone, so push the actions
+               themselves. The .nav-viewer selector (0,2,0) is needed to beat
+               line ~173's .nav-viewer .nav-actions { margin-left: 0 }. */
+            .nav-actions,
+            .nav-viewer .nav-actions { margin-left: auto; }
         }
 
         .showcase-sidebar { position: fixed !important; top: 50% !important; right: 1rem !important; transform: translateY(-50%) !important; bottom: auto !important; width: 19rem !important; max-width: 19rem !important; max-height: calc(100vh - 4rem); z-index: 35; overflow-y: auto; transition: opacity 0.2s ease !important; }

@@ -470,6 +470,9 @@ function updateModelVisibility(modelId, visibility, selectEl) {
     .then(data => {
         if (!data.success) throw new Error(data.error || 'Failed to update visibility');
         selectEl.dataset.previousValue = visibility;
+        // Reflect the change on the card's read-only visibility pill.
+        const pill = selectEl.closest('.model-card')?.querySelector('.visibility-pill');
+        if (pill) { pill.className = 'visibility-pill ' + visibility; pill.textContent = visibility; }
         displayToast('Visibility updated', 'success');
     })
     .catch(error => {
@@ -479,6 +482,37 @@ function updateModelVisibility(modelId, visibility, selectEl) {
     })
     .finally(() => { selectEl.disabled = false; });
 }
+
+// Change visibility from the card's "..." menu: drive the hidden
+// .visibility-select so updateModelVisibility keeps a single source of truth.
+function setModelVisibility(modelId, visibility) {
+    const card = document.querySelector(`.model-card[data-model-id="${modelId}"]`);
+    const sel = card?.querySelector('.visibility-select');
+    closeAllCardMenus();
+    if (!sel || sel.value === visibility) return;
+    sel.value = visibility;
+    updateModelVisibility(modelId, visibility, sel);
+}
+
+// Card "..." overflow menu (open/close; only one open at a time).
+function closeAllCardMenus() {
+    document.querySelectorAll('.card-menu').forEach((m) => { m.hidden = true; });
+    document.querySelectorAll('.card-menu-btn[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+}
+function toggleCardMenu(event, modelId) {
+    event.stopPropagation();
+    const menu = document.getElementById('cardmenu-' + modelId);
+    if (!menu) return;
+    const willOpen = menu.hidden;
+    closeAllCardMenus();
+    menu.hidden = !willOpen;
+    const btn = menu.previousElementSibling;
+    if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+}
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.card-menu-wrap')) closeAllCardMenus();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllCardMenus(); });
 
 // Bulk visibility + tagging
 function showBulkVisibilityModal() {

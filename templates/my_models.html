@@ -6,8 +6,8 @@
 <main class="library-main">
     <section class="library-header">
         <div>
-            <p class="home-kicker">Model library</p>
-            <h1 class="home-title">My Models</h1>
+            <p class="section-tag library-kicker">MODEL LIBRARY</p>
+            <h1 class="home-title">My models</h1>
             {% if not trash_view %}
             <p class="library-subtitle">Organise, share and open all your 3D assets in Studio.</p>
             {% endif %}
@@ -244,63 +244,77 @@
                         <i data-lucide="box"></i>
                         <span>No screenshot yet</span>
                     </div>
+                    <span class="preview-badge">360&deg;</span>
                 </div>
 
-                <div class="library-model-body">
-                    <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
-                    <div class="library-card-actions">
+                <div class="library-model-body model-card-body">
+                    <div class="model-info">
+                        <div class="model-info-text">
+                            <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
+                            <small>{% if model.file_type %}{{ model.file_type | upper }} &middot; {% endif %}{{ model.file_size_formatted }}</small>
+                        </div>
+                        <div class="card-menu-wrap">
+                            <button type="button" class="card-menu-btn" onclick="toggleCardMenu(event, '{{ model.id }}')" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="More">
+                                <i data-lucide="more-horizontal"></i>
+                            </button>
+                            <div class="card-menu" id="cardmenu-{{ model.id }}" hidden>
+                                {% if trash_view %}
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')">Restore</button>
+                                <div class="card-menu-sep"></div>
+                                <button type="button" class="card-menu-item card-menu-item--danger" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')">Delete forever</button>
+                                {% else %}
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); viewModel('{{ model.id }}')">Open in Studio</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); startRenameModel('{{ model.id }}')">Rename</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}')">Copy link</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')">Move to folder</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')">Edit tags</button>
+                                <div class="card-menu-sep"></div>
+                                <span class="card-menu-label">Visibility</span>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); setModelVisibility('{{ model.id }}', 'private')">Private</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); setModelVisibility('{{ model.id }}', 'unlisted')">Unlisted (link only)</button>
+                                <button type="button" class="card-menu-item" onclick="event.stopPropagation(); setModelVisibility('{{ model.id }}', 'public')">Public (on Discover)</button>
+                                <div class="card-menu-sep"></div>
+                                <button type="button" class="card-menu-item card-menu-item--danger" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')">Move to trash</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="model-meta">
                         {% if trash_view %}
-                        <button type="button" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')" class="library-icon-btn" title="Restore" aria-label="Restore">
-                            <i data-lucide="undo-2"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Delete forever" aria-label="Delete forever">
-                            <i data-lucide="x"></i>
-                        </button>
+                        <span class="visibility-pill private">Trashed</span>
+                        <span class="meta-stat">{{ model.deleted_at.strftime('%Y-%m-%d') if model.deleted_at }}</span>
                         {% else %}
-                        <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-icon-btn" title="View" aria-label="View">
-                            <i data-lucide="eye"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); startRenameModel('{{ model.id }}')" class="library-icon-btn" title="Rename" aria-label="Rename">
-                            <i data-lucide="pencil"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}')" class="library-icon-btn" title="Copy link" aria-label="Copy link">
-                            <i data-lucide="link"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')" class="library-icon-btn" title="Move" aria-label="Move">
-                            <i data-lucide="folder-input"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')" class="library-icon-btn" title="Edit tags" aria-label="Edit tags">
-                            <i data-lucide="tag"></i>
-                        </button>
-                        <button type="button" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')" class="library-icon-btn library-danger-icon" title="Move to trash" aria-label="Move to trash">
-                            <i data-lucide="trash-2"></i>
-                        </button>
+                        <span class="visibility-pill {{ model.visibility }}">{{ model.visibility }}</span>
+                        <span class="meta-stat"><i data-lucide="eye"></i>{{ model.view_count or 0 }}</span>
+                        <span class="meta-stat"><i data-lucide="heart"></i>{{ like_counts.get(model.id, 0) }}</span>
                         {% endif %}
                     </div>
+
                     {% if not trash_view %}
-                    <select class="visibility-select" data-model-id="{{ model.id }}"
-                            onclick="event.stopPropagation()"
-                            onchange="event.stopPropagation(); updateModelVisibility('{{ model.id }}', this.value, this)"
-                            title="Who can see this model. Public models can appear on the Discover page.">
+                    <select class="visibility-select hidden" data-model-id="{{ model.id }}" data-previous-value="{{ model.visibility }}"
+                            onchange="updateModelVisibility('{{ model.id }}', this.value, this)" aria-hidden="true" tabindex="-1">
                         <option value="private" {% if model.visibility == 'private' %}selected{% endif %}>Private</option>
                         <option value="unlisted" {% if model.visibility == 'unlisted' %}selected{% endif %}>Unlisted (link only)</option>
                         <option value="public" {% if model.visibility == 'public' %}selected{% endif %}>Public (shown on Discover)</option>
                     </select>
                     {% endif %}
-                    <p class="library-model-meta">
-                        {% if trash_view %}
-                        <span class="upload-date">Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }}</span>
-                        {% else %}
-                        <span class="upload-date">{{ model.upload_date_formatted }}</span>
-                        {% endif %}
-                        <span class="file-size">{{ model.file_size_formatted }}</span>
-                        {% if model.file_type %}<span class="file-type-badge">{{ model.file_type | upper }}</span>{% endif %}
-                    </p>
+
                     {% if model.tags %}
                     <div class="model-tags" data-model-id="{{ model.id }}">
                         {% for tag in model.tags.split(',') %}<span class="model-tag-chip">{{ tag }}</span>{% endfor %}
                     </div>
                     {% endif %}
+
+                    <div class="model-actions">
+                        {% if trash_view %}
+                        <a href="#" onclick="event.stopPropagation(); restoreModel('{{ model.id }}'); return false;"><i data-lucide="undo-2"></i> Restore</a>
+                        <a href="#" onclick="event.stopPropagation(); deleteForever('{{ model.id }}'); return false;" class="model-actions--danger">Delete forever</a>
+                        {% else %}
+                        <a href="#" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}'); return false;"><i data-lucide="share-2"></i> Share</a>
+                        <a href="#" onclick="event.stopPropagation(); viewModel('{{ model.id }}'); return false;">Open in Studio <span aria-hidden="true">&rarr;</span></a>
+                        {% endif %}
+                    </div>
                 </div>
             </article>
             {% endfor %}

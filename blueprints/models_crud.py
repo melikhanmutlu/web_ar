@@ -13,7 +13,7 @@ from slugify import slugify
 from sqlalchemy.orm import Session
 
 from services.time_utils import datetime
-from models import Folder, UserModel, db
+from models import Folder, ModelLike, UserModel, db
 from model_cleanup import purge_model_completely
 from services.storage_quota import (
     TRASH_RETENTION_DAYS,
@@ -69,6 +69,15 @@ def my_models(folder_id=None):
                 UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
             ).count()
 
+        # Per-model like counts for the card meta row (mirrors discover.py).
+        model_ids = [m.id for m in models]
+        like_counts = dict(
+            db.session.query(ModelLike.model_id, db.func.count(ModelLike.id))
+            .filter(ModelLike.model_id.in_(model_ids))
+            .group_by(ModelLike.model_id)
+            .all()
+        ) if model_ids else {}
+
         from flask import render_template
         return render_template(
             "my_models.html",
@@ -82,6 +91,7 @@ def my_models(folder_id=None):
             trash_retention_days=TRASH_RETENTION_DAYS,
             storage_used=_storage_usage_for(current_user.id),
             storage_quota=_storage_quota_bytes(current_user),
+            like_counts=like_counts,
         )
     except Exception as e:
         current_app.logger.error(f"Error in my_models: {str(e)}")

@@ -59,6 +59,10 @@
 * { box-sizing: border-box; }
 
 html, body { height: 100%; }
+/* Always reserve the scrollbar gutter so short pages (e.g. Community) don't
+   center content ~half a scrollbar wider than pages that scroll — which made
+   the fixed header logo appear to shift right between pages. */
+html { scrollbar-gutter: stable; }
 
 body {
     margin: 0;

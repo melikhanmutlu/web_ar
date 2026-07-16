@@ -109,7 +109,7 @@
                 <tbody>
                     {% for payment in payments %}
                     <tr>
-                        <td>{{ payment.created_at.strftime('%d %b %Y') }}</td>
+                        <td>{{ payment.created_at | localdt('%d %b %Y') }}</td>
                         <td>{{ payment.plan | title }}</td>
                         <td>{{ '%.2f' % payment.amount }} {{ payment.currency }}</td>
                         <td><span class="profile-status-pill profile-status-pill--{{ payment.status }}">{{ payment.status | title }}</span></td>

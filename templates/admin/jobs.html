@@ -58,8 +58,8 @@
                     <a href="{{ url_for('admin.user_detail', user_id=job.user_id) }}">{{ username }}</a>
                     {% else %}<span class="muted">anonymous</span>{% endif %}
                 </td>
-                <td class="muted">{{ job.created_at.strftime('%m-%d %H:%M') if job.created_at else '—' }}</td>
-                <td class="muted">{{ job.finished_at.strftime('%m-%d %H:%M') if job.finished_at else '—' }}</td>
+                <td class="muted">{{ job.created_at | localdt('%m-%d %H:%M') if job.created_at else '—' }}</td>
+                <td class="muted">{{ job.finished_at | localdt('%m-%d %H:%M') if job.finished_at else '—' }}</td>
                 <td>
                     {% if job.error %}
                     <details class="admin-error-details">

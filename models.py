@@ -16,6 +16,10 @@ import sqlite3
 from sqlalchemy import event as _sa_event
 from sqlalchemy.engine import Engine as _SAEngine
 
+# Display offset for naive-UTC timestamp properties (GMT+3, Turkey -- fixed,
+# no DST). Mirrors app.py's DISPLAY_TZ_OFFSET.
+_DISPLAY_TZ_OFFSET = timedelta(hours=int(os.getenv("DISPLAY_TZ_OFFSET_HOURS", "3")))
+
 
 @_sa_event.listens_for(_SAEngine, "connect")
 def _sqlite_enforce_foreign_keys(dbapi_connection, connection_record):
@@ -337,7 +341,7 @@ class UserModel(db.Model):
     def upload_date_formatted(self):
         if not self.upload_date:
             return 'Unknown'
-        return self.upload_date.strftime('%Y-%m-%d %H:%M')
+        return (self.upload_date + _DISPLAY_TZ_OFFSET).strftime('%Y-%m-%d %H:%M')
 
 
 class ModelShareLink(db.Model):
@@ -518,7 +522,7 @@ class ModelVersion(db.Model):
     def created_at_formatted(self):
         if not self.created_at:
             return 'Unknown'
-        return self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        return (self.created_at + _DISPLAY_TZ_OFFSET).strftime('%Y-%m-%d %H:%M:%S')
 
 
 class ModelLOD(db.Model):

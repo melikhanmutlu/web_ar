@@ -16,7 +16,7 @@
             <div><dt>id</dt><dd>{{ user.id }}</dd></div>
             <div><dt>username</dt><dd>{{ user.username }}</dd></div>
             <div><dt>email</dt><dd>{{ user.email }}</dd></div>
-            <div><dt>joined</dt><dd>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '—' }}</dd></div>
+            <div><dt>joined</dt><dd>{{ user.created_at | localdt('%Y-%m-%d %H:%M') if user.created_at else '—' }}</dd></div>
             <div><dt>status</dt>
                 <dd>
                     {% if user.is_admin %}{{ badge('admin') }}{% endif %}
@@ -57,7 +57,7 @@
             <tbody>
                 {% for payment in payments %}
                 <tr>
-                    <td class="muted">{{ payment.created_at.strftime('%Y-%m-%d') if payment.created_at else '—' }}</td>
+                    <td class="muted">{{ payment.created_at | localdt('%Y-%m-%d') if payment.created_at else '—' }}</td>
                     <td>{{ payment.plan }}</td>
                     <td class="num">{{ payment.amount }} {{ payment.currency }}</td>
                     <td>{{ badge(payment.status) }}</td>

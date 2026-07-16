@@ -1027,7 +1027,7 @@
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--color-gray-700);">
                             <div style="background:var(--color-gray-900);padding:0.6rem 0.8rem;">
                                 <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--color-gray-500);margin-bottom:0.2rem;">Date</div>
-                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ model.upload_date.strftime('%d %b %Y') if model.upload_date else 'N/A' }}</div>
+                                <div style="font-size:0.82rem;font-weight:600;color:var(--color-gray-200);">{{ model.upload_date | localdt('%d %b %Y') if model.upload_date else 'N/A' }}</div>
                             </div>
                             <div style="background:var(--color-gray-900);padding:0.6rem 0.8rem;">
                                 <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--color-gray-500);margin-bottom:0.2rem;">Size</div>
@@ -1748,7 +1748,7 @@
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Upload Date</p>
                             <p class="mt-1 text-sm text-gray-900 dark:text-white">
                                 {% if model.upload_date %}
-                                    {{ model.upload_date.strftime('%B %d, %Y at %H:%M') }}
+                                    {{ model.upload_date | localdt('%B %d, %Y at %H:%M') }}
                                 {% else %}
                                     Unknown
                                 {% endif %}

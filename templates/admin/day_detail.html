@@ -52,7 +52,7 @@
                 <span class="title">
                     <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>
                 </span>
-                <span class="meta">{{ model.file_type }} · {{ model.upload_date.strftime('%H:%M') if model.upload_date else '' }}</span>
+                <span class="meta">{{ model.file_type }} · {{ model.upload_date | localdt('%H:%M') if model.upload_date else '' }}</span>
             </li>
             {% else %}
             <li><span class="muted">no uploads this day</span></li>
@@ -65,7 +65,7 @@
             {% for user in registrations %}
             <li>
                 <span class="title"><a href="{{ url_for('admin.user_detail', user_id=user.id) }}">{{ user.username }}</a></span>
-                <span class="meta">{{ user.created_at.strftime('%H:%M') if user.created_at else '' }}</span>
+                <span class="meta">{{ user.created_at | localdt('%H:%M') if user.created_at else '' }}</span>
             </li>
             {% else %}
             <li><span class="muted">no registrations this day</span></li>

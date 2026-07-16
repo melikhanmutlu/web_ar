@@ -300,7 +300,7 @@
                     </div>
                     <p class="library-model-meta">
                         {% if trash_view %}
-                        <span class="upload-date">Trashed {{ model.deleted_at.strftime('%Y-%m-%d %H:%M') if model.deleted_at }}</span>
+                        <span class="upload-date">Trashed {{ model.deleted_at | localdt('%Y-%m-%d %H:%M') if model.deleted_at }}</span>
                         {% else %}
                         <span class="upload-date">{{ model.upload_date_formatted }}</span>
                         {% endif %}

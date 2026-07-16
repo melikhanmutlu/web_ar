@@ -116,7 +116,7 @@
                     <a href="{{ url_for('viewer.view_model', model_id=job.model_id) }}" target="_blank" rel="noopener">view</a>
                     {% else %}<span class="muted">—</span>{% endif %}
                 </td>
-                <td class="muted">{{ job.created_at.strftime('%m-%d %H:%M') if job.created_at else '—' }}</td>
+                <td class="muted">{{ job.created_at | localdt('%m-%d %H:%M') if job.created_at else '—' }}</td>
                 <td class="actions">
                     {% if job.status not in ('ready', 'failed') %}
                     <button type="button" class="admin-icon-btn" title="mark as failed (closes it out without contacting Meshy)"

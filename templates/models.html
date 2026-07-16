@@ -15,7 +15,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">{{ model.filename }}</h5>
-                    <p class="card-text">Uploaded: {{ model.upload_date.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    <p class="card-text">Uploaded: {{ model.upload_date | localdt('%Y-%m-%d %H:%M:%S') }}</p>
                     <div class="btn-group">
                         <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" class="btn btn-primary">View</a>
                         <button class="btn btn-danger delete-model">Delete</button>

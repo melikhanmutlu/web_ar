@@ -70,7 +70,7 @@
         <tbody>
             {% for payment in page.items %}
             <tr>
-                <td class="muted">{{ payment.created_at.strftime('%Y-%m-%d') if payment.created_at else '—' }}</td>
+                <td class="muted">{{ payment.created_at | localdt('%Y-%m-%d') if payment.created_at else '—' }}</td>
                 <td>
                     {% if payment.user %}
                     <a href="{{ url_for('admin.user_detail', user_id=payment.user.id) }}">{{ payment.user.username }}</a>

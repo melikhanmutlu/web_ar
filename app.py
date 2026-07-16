@@ -238,6 +238,24 @@ def upload_capabilities():
         "upload_max_mb": app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024),
     }
 
+
+# All DB timestamps are naive UTC (see services/time_utils). Render them in the
+# app's display timezone -- default GMT+3 (Turkey / Europe/Istanbul), a fixed
+# offset with no DST. Override with DISPLAY_TZ_OFFSET_HOURS if ever needed.
+DISPLAY_TZ_OFFSET = timedelta(hours=int(os.getenv("DISPLAY_TZ_OFFSET_HOURS", "3")))
+
+
+def to_display_tz(value):
+    """Shift a naive-UTC datetime to the display timezone. None-safe."""
+    return value + DISPLAY_TZ_OFFSET if value else None
+
+
+@app.template_filter("localdt")
+def _localdt(value, fmt="%Y-%m-%d %H:%M"):
+    """Jinja filter: format a naive-UTC datetime in the display timezone."""
+    local = to_display_tz(value)
+    return local.strftime(fmt) if local else ""
+
 # Initialize extensions
 db.init_app(app)
 # CSRF protection for all state-changing requests. Token is bound to the session

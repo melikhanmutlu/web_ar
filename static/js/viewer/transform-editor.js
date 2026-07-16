@@ -77,7 +77,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        function applyTransform() {
+        // Re-center the (rotated) model in a clean front view. Rotating the
+        // model via `orientation` moves its bounding box, but model-viewer's
+        // auto camera-target isn't recomputed on its own — so the model drifts
+        // off-center and looks skewed. updateFraming() recomputes the centered
+        // target + ideal distance; then we snap the camera face-on (like the
+        // View-tab presets) so every orientation lands framed the same way.
+        function frameModelCentered() {
+            if (!modelViewer) return;
+            const applyFront = () => {
+                modelViewer.cameraTarget = 'auto';
+                modelViewer.cameraOrbit = '0deg 90deg auto';
+                modelViewer.jumpCameraToGoal?.();
+            };
+            const framed = modelViewer.updateFraming?.();
+            if (framed && typeof framed.then === 'function') {
+                framed.then(applyFront);
+            } else {
+                applyFront();
+            }
+        }
+
+        function applyTransform(reframe) {
             if (!modelViewer) return;
 
             // Query sliders dynamically (they may not exist yet)
@@ -98,10 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
             modelViewer.scale = s + ' ' + s + ' ' + s;
             modelViewer.orientation = rz + 'deg ' + rx + 'deg ' + ry + 'deg';
 
-            // model-viewer renders on demand and doesn't always flag these
-            // property changes dirty — without this nudge the change only
-            // shows up on the next user interaction (click/drag).
-            forceModelViewerRefresh();
+            if (reframe) {
+                // Preset buttons: recenter + snap to a clean framed front view.
+                frameModelCentered();
+            } else {
+                // Slider drags: just force a redraw. model-viewer renders on
+                // demand and doesn't always flag these property changes dirty —
+                // without this nudge the change only shows up on the next user
+                // interaction (click/drag). Reframing on every input is jittery.
+                forceModelViewerRefresh();
+            }
         }
 
         // Transform editor initialization (called AFTER DOM restructuring)
@@ -164,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     setRotateSlider(rotateXSlider, rotateXValue, parseInt(btn.dataset.rx, 10) || 0);
                     setRotateSlider(rotateYSlider, rotateYValue, parseInt(btn.dataset.ry, 10) || 0);
                     setRotateSlider(rotateZSlider, rotateZValue, parseInt(btn.dataset.rz, 10) || 0);
-                    applyTransform();
+                    applyTransform(true);
                 });
             });
 

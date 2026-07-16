@@ -662,6 +662,10 @@ class AIGenerationJob(db.Model):
     # Temp-file path to a user-supplied refine-stage texture reference image,
     # if any (never stored inline as base64 -- see TEMP_FOLDER convention).
     texture_ref = db.Column(db.String(255), nullable=True)
+    # Persisted on-disk path to the source image for image->3D jobs (decoded
+    # from the inline data URI; never stored as base64 in the DB). Kept for
+    # admin audit; cleaned up when the job row is deleted.
+    source_image_ref = db.Column(db.String(255), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -110,6 +110,9 @@ def generate_3d():
                                   stage="image", meshy_image_id=task_id,
                                   status="generating", progress=0, options=options,
                                   parent_job_id=parent_job_id)
+            # Persist the source image (decoded from the inline data URI) for
+            # admin audit -- see _persist_ai_source_image.
+            job.source_image_ref = app_module._persist_ai_source_image(job_id, image)
         else:
             prompt = (data.get("prompt") or "").strip()
             if not prompt and parent_job_id:

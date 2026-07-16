@@ -31,6 +31,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     url_for,
 )
 from flask_login import current_user, login_required
@@ -644,6 +645,17 @@ def _delete_user_and_content(user):
     # Job rows only soft-reference models (no FK), so plain deletes suffice.
     ModelLike.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     ModelSave.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    # Remove persisted AI source-image files before the job rows that point to
+    # them are deleted (see _persist_ai_source_image).
+    for (ref,) in db.session.query(AIGenerationJob.source_image_ref).filter(
+        AIGenerationJob.user_id == user.id,
+        AIGenerationJob.source_image_ref.isnot(None),
+    ).all():
+        try:
+            if ref and os.path.exists(ref):
+                os.remove(ref)
+        except OSError:
+            pass
     AIGenerationJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     ConversionJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     Folder.query.filter_by(user_id=user.id).delete(synchronize_session=False)
@@ -1211,9 +1223,27 @@ def export_ai_jobs_csv():
 def delete_ai_job(job_id):
     job = AIGenerationJob.query.get_or_404(job_id)
     log_action("ai_job.delete", "ai_job", job_id)
+    if job.source_image_ref and os.path.exists(job.source_image_ref):
+        try:
+            os.remove(job.source_image_ref)
+        except OSError:
+            pass
     db.session.delete(job)
     db.session.commit()
     return jsonify({"success": True})
+
+
+@admin_bp.route("/ai-jobs/<job_id>/source-image")
+@admin_required
+def ai_job_source_image(job_id):
+    """Serve the persisted source image for an image->3D job (admin audit)."""
+    job = AIGenerationJob.query.get_or_404(job_id)
+    ref = job.source_image_ref
+    if not ref or not os.path.exists(ref):
+        abort(404)
+    # ref is written only by _persist_ai_source_image (UPLOAD_FOLDER/ai_sources,
+    # UUID name, whitelisted extension), so it's a trusted server-generated path.
+    return send_file(ref, max_age=0)
 
 
 @admin_bp.route("/ai-jobs/<job_id>/mark-failed", methods=["POST"])

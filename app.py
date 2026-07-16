@@ -2,6 +2,7 @@ from datetime import timedelta
 from services.time_utils import datetime
 import os
 import json
+import base64
 from flask import (
     Flask,
     request,
@@ -2580,6 +2581,38 @@ def _load_texture_reference(path):
         return None
     with open(path, "r") as f:
         return f.read()
+
+
+_AI_SOURCE_IMAGE_EXTS = {
+    "image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp",
+}
+
+
+def _persist_ai_source_image(job_id, data_uri):
+    """Decode an image->3D source image (inline data URI) to a real file under
+    UPLOAD_FOLDER/ai_sources so it persists for admin audit. Returns the path,
+    or None if the input isn't a supported image data URI. Never stores base64
+    in the DB (mirrors _stash_texture_reference's convention). job_id is a
+    server-generated UUID and the extension is whitelisted, so the path is safe."""
+    if not isinstance(data_uri, str) or not data_uri.startswith("data:image/"):
+        return None
+    header, _, b64 = data_uri.partition(",")
+    if not b64:
+        return None
+    mime = header[len("data:"):].split(";", 1)[0].strip().lower()
+    ext = _AI_SOURCE_IMAGE_EXTS.get(mime)
+    if not ext:
+        return None
+    try:
+        raw = base64.b64decode(b64, validate=True)
+    except Exception:
+        return None
+    dest_dir = os.path.join(app.config["UPLOAD_FOLDER"], "ai_sources")
+    os.makedirs(dest_dir, exist_ok=True)
+    path = os.path.join(dest_dir, f"{job_id}.{ext}")
+    with open(path, "wb") as f:
+        f.write(raw)
+    return path
 
 
 def _ai_quota_state(user_id):

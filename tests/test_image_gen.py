@@ -3,9 +3,12 @@
 ai_generator is monkeypatched throughout — no real Meshy calls.
 """
 
+import os
+
 import pytest
 
 import ai_generator
+from app import app
 from models import AIGenerationJob, User, db
 
 TINY_PNG_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
@@ -114,6 +117,55 @@ def test_generate_3d_still_rejects_raw_urls(client, logged_in, meshy_configured)
         "image": "https://internal.host/secret.png",
     })
     assert resp.status_code == 400
+
+
+def test_image_to_3d_persists_source_image(client, logged_in, meshy_configured, monkeypatch, tmp_path):
+    """An image->3D request decodes and stores the source image to disk and
+    records its path on the job (for admin audit)."""
+    monkeypatch.setattr(ai_generator, "start_image_to_3d", lambda image_data_uri, **kw: "img3d-task-1")
+    monkeypatch.setitem(app.config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+
+    resp = client.post("/api/generate-3d", json={"mode": "image", "image": TINY_PNG_URI})
+    body = resp.get_json()
+    assert resp.status_code == 200 and body["success"], body
+
+    job = db.session.get(AIGenerationJob, body["job_id"])
+    assert job is not None and job.kind == "image"
+    assert job.source_image_ref and os.path.exists(job.source_image_ref)
+    assert job.source_image_ref.endswith(f"{job.id}.png")
+    # never persisted as base64 text -- the file holds decoded image bytes
+    with open(job.source_image_ref, "rb") as f:
+        assert f.read().startswith(b"\x89PNG")
+
+
+def test_text_to_3d_does_not_store_source_image(client, logged_in, meshy_configured, monkeypatch):
+    monkeypatch.setattr(ai_generator, "start_text_to_3d", lambda prompt, **kw: "txt3d-task-1")
+    resp = client.post("/api/generate-3d", json={"mode": "text", "prompt": "a red vase"})
+    body = resp.get_json()
+    assert resp.status_code == 200 and body["success"], body
+    job = db.session.get(AIGenerationJob, body["job_id"])
+    assert job.kind == "text" and job.source_image_ref is None
+
+
+def test_admin_can_view_ai_source_image(client, logged_in, meshy_configured, monkeypatch, tmp_path):
+    """The persisted source image is served only to admins."""
+    monkeypatch.setattr(ai_generator, "start_image_to_3d", lambda image_data_uri, **kw: "img3d-task-2")
+    monkeypatch.setitem(app.config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    job_id = client.post("/api/generate-3d", json={"mode": "image", "image": TINY_PNG_URI}).get_json()["job_id"]
+
+    # the generating (non-admin) user is denied (admin routes 404 to stay hidden)
+    denied = client.get(f"/admin/ai-jobs/{job_id}/source-image")
+    assert denied.status_code in (302, 403, 404)
+
+    client.post("/logout")
+    admin = User(username="imgadmin", email="imgadmin@test.com", is_admin=True)
+    admin.set_password("testpassword")
+    db.session.add(admin)
+    db.session.commit()
+    client.post("/login", data={"username": "imgadmin", "password": "testpassword"},
+                follow_redirects=True)
+    ok = client.get(f"/admin/ai-jobs/{job_id}/source-image")
+    assert ok.status_code == 200 and ok.data.startswith(b"\x89PNG")
 
 
 # --------------------------------------------------------------------------- #

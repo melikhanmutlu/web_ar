@@ -87,7 +87,15 @@
                     <a href="{{ url_for('admin.user_detail', user_id=job.user_id) }}">{{ username }}</a>
                     {% else %}<span class="muted">anonymous</span>{% endif %}
                 </td>
-                <td class="muted">{{ job.kind }}</td>
+                <td class="muted">
+                    {{ job.kind }}
+                    {% if job.source_image_ref %}
+                    <a href="{{ url_for('admin.ai_job_source_image', job_id=job.id) }}" target="_blank" rel="noopener" title="Source image used for this image→3D generation">
+                        <img src="{{ url_for('admin.ai_job_source_image', job_id=job.id) }}" alt="source image"
+                             style="width:28px;height:28px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-left:6px;border:1px solid rgba(128,128,128,.4);">
+                    </a>
+                    {% endif %}
+                </td>
                 <td class="admin-row-title" title="{{ job.prompt or '' }}">{{ (job.prompt or '—') | truncate(60) }}</td>
                 <td class="muted">{{ job.stage or '—' }}</td>
                 <td>

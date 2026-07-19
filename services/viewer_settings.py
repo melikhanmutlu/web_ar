@@ -5,7 +5,10 @@ DEFAULT_VIEWER_SETTINGS = {
     # Dark is the default stage; owners can still override it per model via
     # the Embed panel, while the viewer toolbar remembers a visitor choice.
     "background_color": "#111318",
-    "exposure": 0.96,
+    # Slightly above 1.0 so models (especially matte STL uploads under the
+    # neutral environment) read bright by default instead of a touch dim.
+    # Owners can still lower it per model via the Lighting panel.
+    "exposure": 1.15,
     "shadow_intensity": 1.2,
     "shadow_softness": 0.72,
     "auto_rotate": False,

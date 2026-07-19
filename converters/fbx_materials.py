@@ -149,4 +149,17 @@ def fix_material_transparency(gltf, log=None):
                     f"Clamped bogus baseColorFactor alpha {factor_alpha:.3f} → 1.0 "
                     f"on material '{mat.name}' (no texture alpha)"
                 )
+        elif mat.alphaMode == "BLEND":
+            # has_alpha is False and factor_alpha >= 1.0 here: the material is
+            # fully opaque, yet FBX2glTF left it in BLEND mode (it marks a
+            # material BLEND whenever the FBX declares any opacity handling,
+            # even at opacity 1.0). Spurious BLEND renders with pointless alpha
+            # blending, so the surface looks "not quite 100% opaque" until it's
+            # nudged. With no real transparency, force OPAQUE.
+            mat.alphaMode = "OPAQUE"
+            changed = True
+            log(
+                f"Cleared spurious BLEND → OPAQUE on opaque material '{mat.name}' "
+                "(no texture alpha, factor alpha 1.0)"
+            )
     return changed

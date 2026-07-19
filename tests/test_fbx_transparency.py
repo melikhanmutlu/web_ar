@@ -116,6 +116,21 @@ class TestFixMaterialTransparency:
         assert mat.alphaMode == "MASK"
         assert mat.alphaCutoff == 0.5
 
+    def test_spurious_blend_on_opaque_textured_material_is_cleared(self):
+        """FBX2glTF marks a fully-opaque material BLEND when the FBX declared
+        opacity handling; with an opaque texture + factor alpha 1.0 that BLEND
+        is spurious and makes the model look 'not quite 100% opaque'."""
+        gltf = _textured_gltf(OPAQUE_PNG, factor_alpha=1.0, alpha_mode="BLEND")
+        assert fix_material_transparency(gltf) is True
+        assert gltf.materials[0].alphaMode == "OPAQUE"
+
+    def test_spurious_blend_on_untextured_material_is_cleared(self):
+        """Same fix for a plain (untextured) full-alpha BLEND material."""
+        gltf = _plain_gltf()
+        gltf.materials[0].alphaMode = "BLEND"
+        assert fix_material_transparency(gltf) is True
+        assert gltf.materials[0].alphaMode == "OPAQUE"
+
     def test_unset_metallic_on_textured_material_is_zeroed(self):
         """glTF defaults metallicFactor to 1.0; textured FBX materials must not
         render fully metallic or the texture washes out into env reflection."""

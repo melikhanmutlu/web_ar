@@ -102,6 +102,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (_opacitySlider) _opacitySlider.value = alpha;
                     if (_opacityValue) _opacityValue.textContent = alpha.toFixed(2);
                 }
+
+                // Normalize fully-opaque materials to OPAQUE alpha mode on load.
+                // Some GLBs ship an untextured, full-alpha material stuck in
+                // BLEND mode, which renders with pointless transparency blending
+                // (the model looks "not quite 100%") until the user nudges the
+                // opacity slider — which is exactly what flips it to OPAQUE. Do
+                // it up front so the model is truly opaque, matching the 1.0 the
+                // slider already shows. Skip textured materials (their alpha may
+                // come from the texture) and genuinely translucent ones (a < 1)
+                // so we never make an intentionally transparent model opaque.
+                mats.forEach(mat => {
+                    const pbr = mat.pbrMetallicRoughness;
+                    if (!pbr) return;
+                    const a = pbr.baseColorFactor?.[3] ?? 1;
+                    const hasBaseTex = !!(pbr.baseColorTexture && pbr.baseColorTexture.texture);
+                    if (a >= 1 && !hasBaseTex) {
+                        try { mat.setAlphaMode('OPAQUE'); } catch (e) { /* older API */ }
+                    }
+                });
             } catch (e) { console.warn('Could not capture original materials:', e); }
         }
 

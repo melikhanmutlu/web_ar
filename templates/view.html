@@ -334,14 +334,17 @@
             pointer-events: none;
         }
         .download-fanout-btn:hover { background: var(--color-gray-700); color: var(--color-white); }
+        /* .is-open is toggled by JS (fullscreen-modal.js) with a close delay so
+           the fan-out doesn't collapse the instant the cursor crosses the gap
+           between the button and the arc; :focus-within keeps it keyboard-open. */
         @media (hover: hover) and (pointer: fine) {
-            .download-menu:hover .download-fanout-btn, .download-menu:focus-within .download-fanout-btn {
+            .download-menu.is-open .download-fanout-btn, .download-menu:focus-within .download-fanout-btn {
                 opacity: 1; pointer-events: auto;
             }
-            .download-menu:hover .format-glb, .download-menu:focus-within .format-glb { transform: translate(0, -3.4rem) scale(1); }
-            .download-menu:hover .format-stl, .download-menu:focus-within .format-stl { transform: translate(-1.7rem, -2.94rem) scale(1); }
-            .download-menu:hover .format-obj, .download-menu:focus-within .format-obj { transform: translate(-2.94rem, -1.7rem) scale(1); }
-            .download-menu:hover .format-ply, .download-menu:focus-within .format-ply { transform: translate(-3.4rem, 0) scale(1); }
+            .download-menu.is-open .format-glb, .download-menu:focus-within .format-glb { transform: translate(0, -3.4rem) scale(1); }
+            .download-menu.is-open .format-stl, .download-menu:focus-within .format-stl { transform: translate(-1.7rem, -2.94rem) scale(1); }
+            .download-menu.is-open .format-obj, .download-menu:focus-within .format-obj { transform: translate(-2.94rem, -1.7rem) scale(1); }
+            .download-menu.is-open .format-ply, .download-menu:focus-within .format-ply { transform: translate(-3.4rem, 0) scale(1); }
         }
 
         /* Always-dark, matching #toolsPanel — the app's tool surfaces read the

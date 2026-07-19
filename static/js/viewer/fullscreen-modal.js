@@ -160,6 +160,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Keep the desktop fan-out open for a moment after the cursor leaves, so
+    // moving from the Download button across the gap to a format button doesn't
+    // instantly collapse the menu (the arc buttons sit outside the trigger's
+    // box, so a pure :hover drops as soon as you cross the empty space).
+    const downloadMenu = document.querySelector('#downloadMenu');
+    if (downloadMenu && hoverCapable) {
+        let closeTimer = null;
+        const open = () => {
+            if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+            downloadMenu.classList.add('is-open');
+        };
+        const scheduleClose = () => {
+            if (closeTimer) clearTimeout(closeTimer);
+            closeTimer = setTimeout(() => downloadMenu.classList.remove('is-open'), 350);
+        };
+        downloadMenu.addEventListener('mouseenter', open);
+        downloadMenu.addEventListener('mouseleave', scheduleClose);
+    }
+
     downloadFormatModalClose?.addEventListener('click', () => {
         downloadFormatModal?.classList.add('hidden');
     });

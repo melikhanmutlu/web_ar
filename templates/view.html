@@ -877,9 +877,11 @@
       };
     </script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>
-    {% if not marketing_demo|default(false) %}
+    <!-- Layers (visibility / color / explode) + slicer. Loaded on the homepage
+         demo too so the Layers + Explode panel works there; all mutating
+         actions (save layout, apply slice) stay owner-gated, and its AR event /
+         USDZ fetches are .catch-guarded so the fake demo model id is harmless. -->
     <script src="{{ url_for('static', filename='js/viewer/ar-slicer-layers.js') }}"></script>
-    {% endif %}
 
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen{% if marketing_demo|default(false) %} marketing-demo viewer-stage-dark{% endif %}">

@@ -163,6 +163,22 @@ These reflect existing conventions — follow them, don't reinvent them:
 - **DB schema changes need an Alembic migration** in `migrations/versions/`
   (`flask db migrate`); migrations apply on deploy before traffic is served.
 
+### Growth OS
+
+For product growth, account research, and sales planning tasks:
+
+- Read `AGENTS.md`, `docs/fikir-madencisi/CLAUDE.md`,
+  `docs/fikir-madencisi/README-WEBAR.md`, and the relevant file in
+  `docs/fikir-madencisi/agents/` before starting.
+- Keep the work focused on selling and improving the existing ARVision product.
+- Use current public sources, prefer official pages, include URLs and a
+  verification date, label assumptions, and never invent people or demand.
+- Inspect the code before declaring a capability missing. Tie every proposed
+  feature to a target account, sales blocker, two-week MVP, acceptance criteria,
+  and measurable business outcome.
+- Claude may prepare drafts and repository changes. It must not send outreach or
+  publish externally unless the user explicitly authorizes that action.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer

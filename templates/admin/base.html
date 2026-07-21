@@ -24,6 +24,9 @@
                 <a href="{{ url_for('admin.dashboard') }}" class="admin-nav-link {% if request.endpoint == 'admin.dashboard' %}is-active{% endif %}">
                     <i data-lucide="layout-dashboard"></i><span>dashboard</span>
                 </a>
+                <a href="{{ url_for('admin.growth') }}" class="admin-nav-link {% if request.endpoint == 'admin.growth' %}is-active{% endif %}">
+                    growth
+                </a>
                 <a href="{{ url_for('admin.analytics') }}" class="admin-nav-link {% if request.endpoint == 'admin.analytics' %}is-active{% endif %}">
                     <i data-lucide="bar-chart-2"></i><span>analytics</span>
                 </a>

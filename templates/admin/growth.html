@@ -1,0 +1,54 @@
+{% extends "admin/base.html" %}
+
+{% block title %}growth — arvision admin{% endblock %}
+{% block page_title %}growth{% endblock %}
+
+{% block content %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ metrics.signups.d7 }}</div>
+        <div class="kpi-label">signups (7d)</div>
+        <div class="kpi-sub">{{ metrics.signups.d30 }} in 30d</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ metrics.funnel.paid }}</div>
+        <div class="kpi-label">active subscribers</div>
+        <div class="kpi-sub">
+            {% for plan, count in metrics.plan_breakdown.items() %}{{ plan }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}
+            {% if not metrics.plan_breakdown %}—{% endif %}
+        </div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ metrics.mrr }}</div>
+        <div class="kpi-label">mrr (plan currency)</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{% if metrics.renewal.rate is not none %}{{ (metrics.renewal.rate * 100) | round(1) }}%{% else %}—{% endif %}</div>
+        <div class="kpi-label">renewal rate (30d)</div>
+        <div class="kpi-sub">{{ metrics.renewal.renewed }}/{{ metrics.renewal.ended }} periods renewed</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ metrics.ai_generations_30d }}</div>
+        <div class="kpi-label">ai generations (30d)</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ metrics.credits_sold_30d }}</div>
+        <div class="kpi-label">credits sold (30d)</div>
+    </div>
+</div>
+
+<section class="admin-card" style="margin-top:1.5rem;">
+    <h2 style="margin-top:0;">Activation funnel (all-time)</h2>
+    <table class="plans-editor-table">
+        <thead><tr><th>Stage</th><th>Users</th><th>% of registered</th></tr></thead>
+        <tbody>
+            {% set reg = metrics.funnel.registered or 1 %}
+            <tr><td>Registered</td><td>{{ metrics.funnel.registered }}</td><td>100%</td></tr>
+            <tr><td>Uploaded a model</td><td>{{ metrics.funnel.uploaded }}</td><td>{{ (metrics.funnel.uploaded * 100 / reg) | round(1) }}%</td></tr>
+            <tr><td>Shared a model</td><td>{{ metrics.funnel.shared }}</td><td>{{ (metrics.funnel.shared * 100 / reg) | round(1) }}%</td></tr>
+            <tr><td>Paid</td><td>{{ metrics.funnel.paid }}</td><td>{{ (metrics.funnel.paid * 100 / reg) | round(1) }}%</td></tr>
+        </tbody>
+    </table>
+    <p class="field-help" style="margin-bottom:0;">"Shared" counts users with a share link, a public model, or a viewer share action. MRR sums the monthly price of every active paid plan (yearly plans /12).</p>
+</section>
+{% endblock %}

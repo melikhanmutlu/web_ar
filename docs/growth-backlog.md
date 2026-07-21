@@ -11,7 +11,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 ## FAZ 1 — Gelir kaçağını durdur (Hafta 1–3)
 
 ### 1.1 Yenileme hatırlatma + dunning e-postaları
-- [ ] **Kapsam:** Worker'a günlük "lifecycle sweep": T-7 ve T-1 yenileme hatırlatması
+- [x] **Kapsam:** Worker'a günlük "lifecycle sweep": T-7 ve T-1 yenileme hatırlatması
   (planı yaklaşan ücretli kullanıcı), T+3 win-back (süresi dolup Free'ye düşen ödemeli
   kullanıcı — `Payment.period_end` üzerinden). Aynı e-postanın bir dönem için yalnız
   bir kez gitmesini garanti eden `LifecycleEmail` tablosu (user_id, kind, dedupe_key
@@ -24,7 +24,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
   yenileme sonrası yeniden kurulma, SMTP başarısızsa kayıt atılmaz (retry edilebilir).
 
 ### 1.2 Kredi top-up checkout'u
-- [ ] **Kapsam:** `Payment`'a `kind` ('plan'|'topup') + `credits` kolonu; top-up paket
+- [x] **Kapsam:** `Payment`'a `kind` ('plan'|'topup') + `credits` kolonu; top-up paket
   tanımları (10/50/200 kredi — admin'den düzenlenebilir site ayarı); `/billing/topup/<paket>`
   checkout'u (mevcut provider soyutlaması üzerinden); başarılı callback'te
   `grant_ai_credits` (ledger'lı); `billing.html`'e paket kartları.
@@ -44,7 +44,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
   `[~]` canlı uçtan uca test store anahtarı gelince.
 
 ### 1.4 Growth panosu (`/admin/growth`)
-- [ ] **Kapsam:** Aktivasyon hunisi (kayıt → ilk model → ilk paylaşım → ücretli),
+- [x] **Kapsam:** Aktivasyon hunisi (kayıt → ilk model → ilk paylaşım → ücretli),
   aktif abone sayısı + plan kırılımı, MRR (aktif ücretli planların aylık fiyat toplamı),
   son 30 gün yenileme oranı (`Payment` üzerinden), kredi kullanım oranı, haftalık kayıt
   trendi. Salt-okunur SQL özetleri; grafik gerekmez, tablo/sayı yeter (v1).

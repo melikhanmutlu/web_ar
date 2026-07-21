@@ -1283,6 +1283,14 @@ def refresh_meshy_balance():
 # ---------------------------------------------------------------------------
 
 
+@admin_bp.route("/growth")
+@admin_required
+def growth():
+    from services.growth_metrics import collect_growth_metrics
+
+    return render_template("admin/growth.html", metrics=collect_growth_metrics())
+
+
 @admin_bp.route("/analytics")
 @admin_required
 def analytics():

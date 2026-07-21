@@ -2,7 +2,7 @@ from models import Folder, OrganizationMember, User, UserModel, db
 
 
 def test_team_editor_can_manage_shared_folders_and_models(client):
-    owner = User(username="folderowner", email="folderowner@example.com")
+    owner = User(username="folderowner", email="folderowner@example.com", plan="business")
     editor = User(username="foldereditor", email="foldereditor@example.com")
     owner.set_password("password"); editor.set_password("password")
     db.session.add_all([owner, editor]); db.session.commit()
@@ -42,7 +42,7 @@ def test_team_editor_can_manage_shared_folders_and_models(client):
 
 
 def test_team_viewer_cannot_create_shared_folder(client):
-    owner = User(username="sfowner", email="sfowner@example.com")
+    owner = User(username="sfowner", email="sfowner@example.com", plan="business")
     viewer = User(username="sfviewer", email="sfviewer@example.com")
     owner.set_password("password"); viewer.set_password("password")
     db.session.add_all([owner, viewer]); db.session.commit()

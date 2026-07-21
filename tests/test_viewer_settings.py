@@ -2,7 +2,8 @@ from models import User, UserModel, db
 
 
 def _viewer_owner(client):
-    owner = User(username="viewerowner", email="viewer-settings@example.com")
+    # White-label branding is a Business-plan feature.
+    owner = User(username="viewerowner", email="viewer-settings@example.com", plan="business")
     owner.set_password("password")
     db.session.add(owner)
     db.session.flush()

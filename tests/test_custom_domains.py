@@ -6,7 +6,7 @@ from models import OrganizationDomain, User, UserModel, db
 
 
 def _organization(client):
-    owner = User(username="domainowner", email="domain@example.com")
+    owner = User(username="domainowner", email="domain@example.com", plan="business")
     owner.set_password("password")
     db.session.add(owner)
     db.session.commit()

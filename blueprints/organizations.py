@@ -21,6 +21,7 @@ from models import (
 )
 from services.org_membership import _organization_membership
 from services import send_email
+from services.plans import plan_allows
 
 organizations_bp = Blueprint("organizations", __name__)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,11 @@ def organizations_api():
              "slug": item.organization.slug, "role": item.role}
             for item in memberships
         ]})
+    if not plan_allows(current_user, "organizations"):
+        return jsonify({
+            "success": False,
+            "error": "Organizations require a Business plan.",
+        }), 403
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()[:120]
     if not name:
@@ -220,6 +226,11 @@ def organization_domains_api(organization_id):
                 "value": f"arvision-verification={domain.verification_token}",
             },
         } for domain in domains]})
+    if not plan_allows(current_user, "custom_domains"):
+        return jsonify({
+            "success": False,
+            "error": "Custom domains require a Business plan.",
+        }), 403
     raw_hostname = str((request.get_json(silent=True) or {}).get("hostname", "")).strip().lower().rstrip(".")
     try:
         hostname = raw_hostname.encode("idna").decode("ascii")

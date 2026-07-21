@@ -102,7 +102,7 @@ def test_dispatch_pins_dns_against_rebinding(client, monkeypatch):
 
 
 def test_create_webhook_rejects_private_url(client, monkeypatch):
-    user = User(username="ssrf", email="ssrf@test.com")
+    user = User(username="ssrf", email="ssrf@test.com", plan="business")
     user.set_password("testpassword")
     db.session.add(user)
     db.session.commit()

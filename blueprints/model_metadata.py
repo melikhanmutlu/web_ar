@@ -6,12 +6,13 @@ import re
 from flask import Blueprint, jsonify, request, url_for
 from flask_login import current_user, login_required
 
-from models import UserModel, db
+from models import User, UserModel, db
 from services.model_permissions import (
     check_model_mutation_allowed,
     check_model_view_allowed,
     get_live_model,
 )
+from services.plans import plan_allows
 from services.viewer_settings import resolved_viewer_settings
 
 model_metadata_bp = Blueprint("model_metadata", __name__)
@@ -127,6 +128,15 @@ def model_viewer_settings(model_id):
         branding = data["branding"]
         if not isinstance(branding, dict):
             return jsonify({"success": False, "error": "Invalid branding"}), 400
+        # White-label branding (custom name/logo/color, hiding "Powered by")
+        # is a paid feature gated on the model owner's plan. Anonymous models
+        # (no owner) can't customize branding.
+        owner = db.session.get(User, model.user_id) if model.user_id else None
+        if not (owner and plan_allows(owner, "white_label")):
+            return jsonify({
+                "success": False,
+                "error": "White-label branding requires a Business plan.",
+            }), 403
         merged = dict(current["branding"])
         if "name" in branding:
             merged["name"] = str(branding["name"]).strip()[:80] or "ARVision"

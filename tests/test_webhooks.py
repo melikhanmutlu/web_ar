@@ -15,7 +15,7 @@ from services.webhooks import dispatch_webhook_event
 
 @pytest.fixture
 def logged_in(client):
-    user = User(username="hooker", email="hooker@test.com")
+    user = User(username="hooker", email="hooker@test.com", plan="business")
     user.set_password("testpassword")
     db.session.add(user)
     db.session.commit()

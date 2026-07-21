@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 
 from models import WebhookSubscription, db
 from services import WEBHOOK_EVENT_TYPES
+from services.plans import plan_allows
 from services.webhooks import is_safe_webhook_url
 
 webhooks_bp = Blueprint("webhooks", __name__)
@@ -20,6 +21,11 @@ def webhooks():
         subscriptions = WebhookSubscription.query.filter_by(user_id=current_user.id).all()
         return jsonify({"success": True, "webhooks": [s.to_dict() for s in subscriptions]})
 
+    if not plan_allows(current_user, "webhooks"):
+        return jsonify({
+            "success": False,
+            "error": "Webhooks require a Business plan.",
+        }), 403
     data = request.get_json(silent=True) or {}
     url = str(data.get("url", "")).strip()
     parsed = urlsplit(url)

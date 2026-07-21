@@ -11,6 +11,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from services.time_utils import datetime
 from models import ModelShareLink, UserModel, db
 from services import send_email
+from services.plans import plan_allows
 
 sharing_bp = Blueprint("sharing", __name__)
 
@@ -34,6 +35,13 @@ def create_model_share_link(model_id):
         return jsonify({"success": False, "error": "Expiry must be between 1 hour and 1 year"}), 400
     token = secrets.token_urlsafe(32)
     password = data.get("password")
+    # Password-protected share links are a paid feature; existing links keep
+    # working (this only gates creating a new password-protected one).
+    if password and not plan_allows(current_user, "password_protected_shares"):
+        return jsonify({
+            "success": False,
+            "error": "Password-protected share links require a Pro or Business plan.",
+        }), 403
     link = ModelShareLink(
         model_id=model_id,
         token_digest=hashlib.sha256(token.encode()).hexdigest(),

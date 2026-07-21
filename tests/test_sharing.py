@@ -5,7 +5,8 @@ from models import ModelShareLink, User, UserModel, db
 
 
 def _owner_and_model(path):
-    owner = User(username="shareowner", email="share@example.com")
+    # Business plan so the password-protected-share test can create one.
+    owner = User(username="shareowner", email="share@example.com", plan="business")
     owner.set_password("password")
     db.session.add(owner)
     db.session.flush()

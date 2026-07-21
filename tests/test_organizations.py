@@ -2,7 +2,9 @@ from models import OrganizationMember, User, UserModel, db
 
 
 def _user(username, email):
-    user = User(username=username, email=email)
+    # Organizations are a Business-plan feature; the owner needs it to create
+    # one (members added later inherit access via org role, not plan).
+    user = User(username=username, email=email, plan="business")
     user.set_password("password")
     db.session.add(user)
     db.session.commit()

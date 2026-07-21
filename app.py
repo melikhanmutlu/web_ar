@@ -496,6 +496,10 @@ app.view_functions["billing.paytr_callback"] = limiter.limit(
     "120 per minute"
 )(app.view_functions["billing.paytr_callback"])
 csrf.exempt(app.view_functions["billing.paytr_callback"])
+app.view_functions["billing.lemonsqueezy_webhook"] = limiter.limit(
+    "120 per minute"
+)(app.view_functions["billing.lemonsqueezy_webhook"])
+csrf.exempt(app.view_functions["billing.lemonsqueezy_webhook"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(

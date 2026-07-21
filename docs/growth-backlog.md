@@ -33,7 +33,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — topup callback kredisi yüklüyor, idempotent replay, plan'a dokunmuyor.
 
 ### 1.3 MoR sağlayıcısı (Lemon Squeezy) — global ödeme + recurring
-- [ ] **Kapsam:** `services/payments/lemonsqueezy.py` (hosted checkout URL üretimi +
+- [~] **Kapsam:** *(kod tamam + testli; canlı store/variant anahtarları dış bağımlılık)* `services/payments/lemonsqueezy.py` (hosted checkout URL üretimi +
   `X-Signature` HMAC doğrulamalı webhook); `subscription_payment_success` → plan uzatma,
   `order_created` (topup) → kredi; `/billing/ls/webhook` endpoint'i (CSRF-exempt,
   rate-limit'li, PayTR callback kalıbı); sağlayıcı seçimi env ile

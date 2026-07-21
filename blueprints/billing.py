@@ -199,6 +199,69 @@ def paytr_callback():
     return provider.callback_ack()
 
 
+@billing_bp.route("/billing/lemonsqueezy/webhook", methods=["POST"])
+def lemonsqueezy_webhook():
+    """Lemon Squeezy webhook (signature-verified, idempotent). Registered
+    CSRF-exempt + rate-limited in app.py (paytr_callback pattern).
+
+    Event handling, designed so the first subscription payment is never
+    granted twice (LS fires both order_created and
+    subscription_payment_success for it):
+    - order_created        -> applies the pending Payment only for one-time
+                              purchases (credit top-ups).
+    - subscription_payment_success -> applies the pending plan Payment on the
+                              first invoice; later invoices (renewals) create
+                              a fresh Payment row keyed to the LS invoice id
+                              and extend the plan for another period.
+    """
+    from services.payments.lemonsqueezy import LemonSqueezyProvider
+
+    provider = get_active_provider()
+    if not isinstance(provider, LemonSqueezyProvider) or not provider.is_configured():
+        return "NOT ACTIVE", 404
+    if not provider.verify_webhook(request.get_data(), request.headers.get("X-Signature", "")):
+        logger.warning("Rejected Lemon Squeezy webhook (bad signature)")
+        return "BAD_SIGNATURE", 400
+
+    event = request.get_json(silent=True) or {}
+    meta = event.get("meta", {}) or {}
+    event_name = meta.get("event_name")
+    ref = (meta.get("custom_data") or {}).get("payment_ref")
+    attributes = (event.get("data", {}) or {}).get("attributes", {}) or {}
+    payment = Payment.query.filter_by(provider_ref=ref).first() if ref else None
+    if payment is None:
+        logger.warning("Lemon Squeezy webhook %s for unknown ref=%s", event_name, ref)
+        return "OK"
+
+    if event_name == "order_created":
+        if payment.kind == "topup" and payment.status == "pending" \
+                and attributes.get("status") == "paid":
+            _apply_successful_payment(payment)
+    elif event_name == "subscription_payment_success":
+        if payment.status == "pending":
+            _apply_successful_payment(payment)
+        else:
+            invoice_ref = f"lsinv-{event.get('data', {}).get('id', '')}"
+            if invoice_ref != "lsinv-" and not Payment.query.filter_by(
+                provider_ref=invoice_ref
+            ).first():
+                renewal = Payment(
+                    user_id=payment.user_id,
+                    plan=payment.plan,
+                    kind="plan",
+                    amount=Decimal(attributes.get("total") or 0) / 100,
+                    currency=(attributes.get("currency") or payment.currency or "USD"),
+                    status="pending",
+                    method="lemonsqueezy",
+                    provider=provider.name,
+                    provider_ref=invoice_ref,
+                )
+                db.session.add(renewal)
+                db.session.commit()
+                _apply_successful_payment(renewal)
+    return "OK"
+
+
 def _apply_successful_payment(payment):
     """Mark a Payment paid and grant what it bought: a credit top-up loads the
     balance, a plan purchase grants the plan for one period."""

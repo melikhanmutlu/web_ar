@@ -175,6 +175,13 @@ PAYTR_MERCHANT_KEY = os.getenv('PAYTR_MERCHANT_KEY', '')
 PAYTR_MERCHANT_SALT = os.getenv('PAYTR_MERCHANT_SALT', '')
 # 1 = PayTR sandbox (test cards, no real charge); 0 = live.
 PAYTR_TEST_MODE = os.getenv('PAYTR_TEST_MODE', '1')
+# Lemon Squeezy (Merchant of Record — global cards, USD, recurring
+# subscriptions, tax handled by LS). VARIANTS maps what we sell to LS variant
+# ids as JSON, e.g. {"pro": 111, "business": 222, "topup:50": 333}.
+LEMONSQUEEZY_API_KEY = os.getenv('LEMONSQUEEZY_API_KEY', '')
+LEMONSQUEEZY_STORE_ID = os.getenv('LEMONSQUEEZY_STORE_ID', '')
+LEMONSQUEEZY_SIGNING_SECRET = os.getenv('LEMONSQUEEZY_SIGNING_SECRET', '')
+LEMONSQUEEZY_VARIANTS = os.getenv('LEMONSQUEEZY_VARIANTS', '{}')
 # Currency plans are priced/charged in (PayTR supports TL/USD/EUR/GBP).
 BILLING_CURRENCY = os.getenv('BILLING_CURRENCY', 'TRY')
 

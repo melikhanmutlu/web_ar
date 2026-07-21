@@ -4,10 +4,12 @@ adapter here -- nothing else in the billing flow needs to change."""
 
 import config
 from services.payments.base import CallbackResult, CheckoutSession, PaymentProvider
+from services.payments.lemonsqueezy import LemonSqueezyProvider
 from services.payments.paytr import PayTRProvider
 
 _PROVIDERS = {
     "paytr": PayTRProvider,
+    "lemonsqueezy": LemonSqueezyProvider,
 }
 
 

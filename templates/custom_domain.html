@@ -3,25 +3,28 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>{{ organization.name }} — 3D & AR</title>
+    <title>{{ branding.name }} — 3D & AR</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     <style>
         body{margin:0;background:#0f172a;color:#f8fafc;font-family:Inter,system-ui,sans-serif}
         .tenant{max-width:1180px;margin:auto;padding:32px 22px 64px}
-        .tenant-head{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+        .tenant-head{display:flex;align-items:center;gap:14px;margin-bottom:34px;border-bottom:2px solid var(--accent);padding-bottom:18px}
         .tenant-logo{max-height:38px;max-width:180px}
         .tenant-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px}
         .tenant-card{display:block;color:inherit;text-decoration:none;background:#1e293b;border:1px solid #334155;border-radius:12px;overflow:hidden}
+        .tenant-card:hover{border-color:var(--accent)}
         .tenant-card img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#111827}
         .tenant-card div{padding:14px;font-weight:650}
         .empty{padding:48px;border:1px dashed #475569;border-radius:12px;color:#94a3b8;text-align:center}
+        .tenant-foot{margin-top:48px;color:#64748b;font-size:13px;text-align:center}
+        .tenant-foot a{color:#94a3b8}
     </style>
 </head>
-<body>
+<body style="--accent: {{ branding.primary_color }}">
 <main class="tenant">
     <header class="tenant-head">
         {% if branding.logo_url %}<img class="tenant-logo" src="{{ branding.logo_url }}" alt="">{% endif %}
-        <h1>{{ branding.name if branding.name != 'ARVision' else organization.name }}</h1>
+        <h1>{{ branding.name }}</h1>
     </header>
     {% if models %}
     <section class="tenant-grid" aria-label="Public 3D models">
@@ -34,6 +37,9 @@
     </section>
     {% else %}
     <div class="empty">No public 3D models are available yet.</div>
+    {% endif %}
+    {% if not branding.hide_powered_by %}
+    <footer class="tenant-foot">Powered by ARVision</footer>
     {% endif %}
 </main>
 </body>

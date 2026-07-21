@@ -96,6 +96,7 @@ from services.model_permissions import (
 )
 from services.model_analytics import ANALYTICS_EVENT_TYPES, record_model_event
 from services.viewer_settings import DEFAULT_VIEWER_SETTINGS, resolved_viewer_settings
+from services.org_branding import resolved_org_branding
 from services.storage_quota import (
     TRASH_RETENTION_DAYS,
     _purge_expired_trash,
@@ -356,12 +357,9 @@ def resolve_custom_domain():
             UserModel.visibility == "public",
             UserModel.deleted_at.is_(None),
         ).order_by(UserModel.upload_date.desc()).all()
-        branding = DEFAULT_VIEWER_SETTINGS["branding"]
-        if models:
-            branding = resolved_viewer_settings(models[0])["branding"]
         return render_template(
             "custom_domain.html", organization=organization,
-            models=models, branding=branding,
+            models=models, branding=resolved_org_branding(organization),
         )
 
 

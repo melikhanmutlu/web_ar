@@ -44,6 +44,13 @@ def test_custom_domain_dns_verification_and_lifecycle(client, monkeypatch):
 
 def test_verified_custom_host_serves_branded_public_portfolio(client):
     owner, organization_id = _organization(client)
+    # Tenant branding now lives on the organization (white-label theme),
+    # not on an individual model's viewer settings.
+    updated = client.patch(
+        f"/api/organizations/{organization_id}/branding",
+        json={"name": "Acme XR", "hide_powered_by": True},
+    )
+    assert updated.status_code == 200
     domain = OrganizationDomain(
         organization_id=organization_id,
         hostname="showroom.example.com",
@@ -55,7 +62,6 @@ def test_verified_custom_host_serves_branded_public_portfolio(client):
         filename="unused.glb", user_id=owner.id,
         organization_id=organization_id, visibility="public",
         display_name="Showroom Chair",
-        viewer_settings={"branding": {"name": "Acme XR"}},
     )
     db.session.add_all([domain, model])
     db.session.commit()
@@ -64,6 +70,7 @@ def test_verified_custom_host_serves_branded_public_portfolio(client):
     html = response.get_data(as_text=True)
     assert "Acme XR" in html
     assert "Showroom Chair" in html
+    assert "Powered by ARVision" not in html  # hidden via white-label
 
 
 def test_custom_domain_rejects_local_or_invalid_hosts(client):

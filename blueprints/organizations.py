@@ -21,6 +21,7 @@ from models import (
 )
 from services.org_membership import _organization_membership
 from services import send_email
+from services.org_branding import resolved_org_branding
 from services.plans import plan_allows
 
 organizations_bp = Blueprint("organizations", __name__)
@@ -318,3 +319,45 @@ def assign_model_organization(model_id):
     model.organization_id = organization_id
     db.session.commit()
     return jsonify({"success": True, "organization_id": model.organization_id})
+
+
+@organizations_bp.route("/api/organizations/<int:organization_id>/branding", methods=["GET", "PATCH"])
+@login_required
+def organization_branding_api(organization_id):
+    """Tenant white-label theme for the org's custom-domain gallery. Any member
+    can read it; only owner/admin can change it, and only on a plan that
+    unlocks white_label."""
+    membership = _organization_membership(organization_id)
+    if not membership:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    organization = db.session.get(Organization, organization_id)
+    if request.method == "GET":
+        return jsonify({"success": True, "branding": resolved_org_branding(organization)})
+    if membership.role not in {"owner", "admin"}:
+        return jsonify({"success": False, "error": "Admin role required"}), 403
+    if not plan_allows(current_user, "white_label"):
+        return jsonify({
+            "success": False,
+            "error": "White-label branding requires a Business plan.",
+        }), 403
+    data = request.get_json(silent=True) or {}
+    branding = dict(organization.branding or {})
+    if "name" in data:
+        branding["name"] = str(data["name"]).strip()[:80] or None
+    if "logo_url" in data:
+        logo = data["logo_url"]
+        if logo and not str(logo).startswith("https://"):
+            return jsonify({"success": False, "error": "Logo URL must use HTTPS"}), 400
+        branding["logo_url"] = str(logo)[:500] if logo else None
+    if "primary_color" in data:
+        color = str(data["primary_color"])
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+            return jsonify({"success": False, "error": "Invalid primary color"}), 400
+        branding["primary_color"] = color
+    if "hide_powered_by" in data:
+        if not isinstance(data["hide_powered_by"], bool):
+            return jsonify({"success": False, "error": "hide_powered_by must be a boolean"}), 400
+        branding["hide_powered_by"] = data["hide_powered_by"]
+    organization.branding = branding
+    db.session.commit()
+    return jsonify({"success": True, "branding": resolved_org_branding(organization)})

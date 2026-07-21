@@ -142,6 +142,10 @@ class Organization(db.Model):
     slug = db.Column(db.String(140), unique=True, nullable=False, index=True)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Tenant-level white-label theme (logo/name/color, hide "Powered by")
+    # applied to the org's custom-domain gallery. None -> default ARVision
+    # look. See services/org_branding.py.
+    branding = db.Column(db.JSON, nullable=True)
     members = db.relationship('OrganizationMember', backref='organization', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
     models = db.relationship('UserModel', backref='organization', lazy=True)
 

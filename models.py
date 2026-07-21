@@ -811,6 +811,25 @@ class Payment(db.Model):
         return f'<Payment {self.id} user={self.user_id} plan={self.plan} amount={self.amount}>'
 
 
+class LifecycleEmail(db.Model):
+    """Dedupe ledger for worker-sent lifecycle emails (renewal reminders,
+    win-back). One row per email actually delivered; the (user_id, kind,
+    dedupe_key) uniqueness makes every sweep idempotent, and a changed
+    dedupe_key (e.g. a renewed plan's new expiry) re-arms the same kind."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind = db.Column(db.String(40), nullable=False)
+    dedupe_key = db.Column(db.String(64), nullable=False)
+    sent_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'kind', 'dedupe_key', name='uq_lifecycle_email_once'),
+    )
+
+    def __repr__(self):
+        return f'<LifecycleEmail {self.id} user={self.user_id} kind={self.kind}>'
+
+
 class ConversionJob(db.Model):
     """DB-backed conversion job queue (academic_ar pattern).
 

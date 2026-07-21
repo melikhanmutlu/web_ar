@@ -8,6 +8,7 @@
             <a href="{{ url_for('discover.discover') }}" class="{% if request.endpoint == 'discover.discover' %}is-active{% endif %}">Community</a>
             <a href="{{ url_for('main.features') }}" class="{% if request.endpoint == 'main.features' %}is-active{% endif %}">Features</a>
             <a href="{{ url_for('main.pricing') }}" class="{% if request.endpoint == 'main.pricing' %}is-active{% endif %}">Pricing</a>
+            <a href="{{ url_for('main.developers') }}" class="{% if request.endpoint == 'main.developers' %}is-active{% endif %}">Developers</a>
             {% endif %}
         </nav>
         <div class="nav-actions">
@@ -23,6 +24,8 @@
                     </div>
                     <a href="{{ url_for('models_crud.my_models') }}" class="user-menu-item {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">Library</a>
                     <a href="{{ url_for('auth.profile') }}" class="user-menu-item {% if request.endpoint == 'auth.profile' %}is-active{% endif %}">Profile settings</a>
+                    <a href="{{ url_for('main.developer_settings') }}" class="user-menu-item {% if request.endpoint == 'main.developer_settings' %}is-active{% endif %}">API &amp; webhooks</a>
+                    <a href="{{ url_for('billing.billing_home') }}" class="user-menu-item {% if request.endpoint == 'billing.billing_home' %}is-active{% endif %}">Billing</a>
                     {% if current_user.is_admin %}
                     <a href="{{ url_for('admin.dashboard') }}" class="user-menu-item {% if request.endpoint and request.endpoint.startswith('admin.') %}is-active{% endif %}">Admin</a>
                     {% endif %}
@@ -50,6 +53,7 @@
         <a href="{{ url_for('discover.discover') }}">Community</a>
         <a href="{{ url_for('main.features') }}">Features</a>
         <a href="{{ url_for('main.pricing') }}">Pricing</a>
+        <a href="{{ url_for('main.developers') }}">Developers</a>
         {% else %}
         <a href="{{ url_for('main.studio') }}">3D Studio</a>
         <a href="{{ url_for('main.features') }}">Features</a>
@@ -59,6 +63,8 @@
             {% if current_user.is_authenticated %}
             <a href="{{ url_for('models_crud.my_models') }}">Library</a>
             <a href="{{ url_for('auth.profile') }}">Profile</a>
+            <a href="{{ url_for('main.developer_settings') }}">API &amp; webhooks</a>
+            <a href="{{ url_for('billing.billing_home') }}">Billing</a>
             <a href="{{ url_for('main.studio') }}">3D Studio</a>
             <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

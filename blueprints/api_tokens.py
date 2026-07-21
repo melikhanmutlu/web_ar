@@ -123,6 +123,62 @@ def _token_model_query(token):
     return query.filter(UserModel.user_id == token.user_id)
 
 
+def _openapi_spec():
+    from config import SITE_URL
+    bearer = [{"bearerAuth": []}]
+    return {
+        "openapi": "3.0.3",
+        "info": {
+            "title": "ARVision API",
+            "version": "1.0.0",
+            "description": "Upload/convert 3D models, read analytics, and manage models programmatically.",
+        },
+        "servers": [{"url": f"{SITE_URL}/api/v1"}],
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "arv_ token"}
+            }
+        },
+        "security": bearer,
+        "paths": {
+            "/models": {
+                "get": {
+                    "summary": "List models",
+                    "security": bearer,
+                    "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}],
+                    "responses": {"200": {"description": "A list of models"}},
+                },
+                "post": {
+                    "summary": "Upload and convert a model",
+                    "security": bearer,
+                    "requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object", "properties": {
+                        "file": {"type": "string", "format": "binary"},
+                        "name": {"type": "string"},
+                    }, "required": ["file"]}}}},
+                    "responses": {"202": {"description": "Conversion job accepted"}},
+                },
+            },
+            "/models/{id}": {
+                "get": {"summary": "Get a model", "security": bearer, "responses": {"200": {"description": "Model detail"}}},
+                "patch": {"summary": "Update a model", "security": bearer, "responses": {"200": {"description": "Updated"}}},
+                "delete": {"summary": "Soft-delete a model", "security": bearer, "responses": {"200": {"description": "Deleted"}}},
+            },
+            "/models/{id}/analytics": {
+                "get": {"summary": "Model analytics totals", "security": bearer, "responses": {"200": {"description": "Totals by event type"}}},
+            },
+            "/jobs/{id}": {
+                "get": {"summary": "Poll a conversion job", "security": bearer, "responses": {"200": {"description": "Job status"}}},
+            },
+        },
+    }
+
+
+@api_tokens_bp.route("/api/v1/openapi.json", methods=["GET"])
+def api_v1_openapi():
+    """Public, machine-readable OpenAPI 3 description of the API."""
+    return jsonify(_openapi_spec())
+
+
 @api_tokens_bp.route("/api/v1/models", methods=["GET"])
 def api_v1_models():
     token, error = _bearer_token("models:read")

@@ -98,6 +98,27 @@ def workflow():
     return render_template("workflow.html")
 
 
+@main_bp.route("/developers", methods=["GET"])
+def developers():
+    """Public API/integration documentation (sidebar + content)."""
+    from config import SITE_URL
+    return render_template("developers.html", site_url=SITE_URL)
+
+
+@main_bp.route("/settings/developer", methods=["GET"])
+def developer_settings():
+    """Self-serve panel to create/revoke API tokens and manage webhooks."""
+    from flask import redirect, url_for
+    from services.plans import plan_allows
+    if not current_user.is_authenticated:
+        return redirect(url_for("auth.login", next=url_for("main.developer_settings")))
+    return render_template(
+        "developer_settings.html",
+        api_enabled=plan_allows(current_user, "api_access"),
+        webhooks_enabled=plan_allows(current_user, "webhooks"),
+    )
+
+
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
     from services.plans import public_plan_slugs, plan_name, all_plan_configs

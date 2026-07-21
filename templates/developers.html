@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = "Developer API & webhooks — ARVision" %}
+    {% set seo_description = "Integrate ARVision's 3D/AR platform: authenticate with API tokens, upload and convert models, poll jobs, read analytics, and receive signed webhook events. curl, JavaScript and Python examples." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <style>
+        .docs-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;align-items:start;padding-top:24px;padding-bottom:80px;}
+        .docs-nav{position:sticky;top:98px;font-size:.92rem;}
+        .docs-nav strong{display:block;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;opacity:.55;margin:1.1rem 0 .4rem;}
+        .docs-nav a{display:block;padding:.28rem 0;color:inherit;text-decoration:none;opacity:.8;border-left:2px solid transparent;padding-left:.6rem;}
+        .docs-nav a:hover{opacity:1;border-left-color:currentColor;}
+        .docs-content h2{margin-top:2.4rem;scroll-margin-top:98px;}
+        .docs-content h3{margin-top:1.6rem;}
+        .docs-content p, .docs-content li{line-height:1.6;}
+        .docs-content pre{position:relative;background:#0f172a;color:#e2e8f0;padding:1rem 1.1rem;border-radius:10px;overflow-x:auto;font-size:.86rem;}
+        .docs-content pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+        .docs-content code:not(pre code){background:#eef2f7;padding:.1rem .35rem;border-radius:5px;font-size:.9em;}
+        .docs-copy{position:absolute;top:.5rem;right:.5rem;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;font-size:.72rem;padding:.2rem .5rem;cursor:pointer;}
+        .docs-table{width:100%;border-collapse:collapse;font-size:.9rem;margin:.5rem 0;}
+        .docs-table th,.docs-table td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top;}
+        .docs-endpoint{display:inline-block;background:#eef2f7;border-radius:6px;padding:.15rem .5rem;font-family:ui-monospace,monospace;font-size:.85rem;}
+        .docs-method{font-weight:700;}
+        @media (max-width:860px){.docs-shell{grid-template-columns:1fr;}.docs-nav{position:static;}}
+    </style>
+</head>
+<body class="av-home">
+    {% include "_site_header.html" %}
+
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> Developer platform</span>
+                    <h1>ARVision REST API</h1>
+                    <p>Upload and convert 3D models, read analytics, and receive signed events — programmatically. Base URL <code>{{ site_url }}/api/v1</code>.</p>
+                </div>
+            </div>
+        </section>
+
+        <div class="shell docs-shell">
+            <aside class="docs-nav" aria-label="API reference">
+                <strong>Getting started</strong>
+                <a href="#overview">Overview</a>
+                <a href="#auth">Authentication</a>
+                <a href="#tokens">Create a token</a>
+                <a href="#rate-limits">Rate limits</a>
+                <strong>Models</strong>
+                <a href="#list-models">List models</a>
+                <a href="#get-model">Get a model</a>
+                <a href="#upload">Upload &amp; convert</a>
+                <a href="#jobs">Poll a job</a>
+                <a href="#update-delete">Update / delete</a>
+                <a href="#analytics">Analytics</a>
+                <strong>Events</strong>
+                <a href="#webhooks">Webhooks</a>
+                <a href="#verify">Verify signatures</a>
+                <strong>Reference</strong>
+                <a href="#errors">Errors</a>
+                <a href="#openapi">OpenAPI spec</a>
+            </aside>
+
+            <article class="docs-content">
+                <h2 id="overview">Overview</h2>
+                <p>The ARVision API is a small REST API over HTTPS. Requests and responses are JSON, except uploads (multipart) and the CSV analytics export. Successful responses wrap data in a <code>{"data": …}</code> envelope; errors return <code>{"error": "message"}</code> with a 4xx/5xx status.</p>
+                <p>API access requires a <strong>Pro</strong> or <strong>Business</strong> plan; webhooks require <strong>Business</strong>. Manage your plan on the <a href="{{ url_for('main.pricing') }}">pricing page</a>.</p>
+
+                <h2 id="auth">Authentication</h2>
+                <p>Authenticate every request with a bearer token in the <code>Authorization</code> header. Tokens start with <code>arv_</code> and carry scopes: <code>models:read</code>, <code>analytics:read</code>, <code>models:write</code>.</p>
+                <pre><code>curl {{ site_url }}/api/v1/models \
+  -H "Authorization: Bearer arv_XXXXXXXXXXXXXXXXXXXX"</code></pre>
+
+                <h2 id="tokens">Create a token</h2>
+                <p>Create and revoke tokens from your <a href="{{ url_for('main.developer_settings') }}">API &amp; webhooks settings</a>. The full token is shown once at creation — store it securely. Pick only the scopes the integration needs.</p>
+
+                <h2 id="rate-limits">Rate limits</h2>
+                <p>Limits are per token: <strong>30 requests/minute</strong> for uploads (<code>POST /models</code>) and <strong>120 requests/minute</strong> for the other endpoints. Responses include <code>X-RateLimit-Limit</code>, <code>X-RateLimit-Remaining</code> and <code>X-RateLimit-Reset</code>; a <code>429</code> means you should back off.</p>
+
+                <h2 id="list-models">List models <span class="docs-endpoint"><span class="docs-method">GET</span> /models</span></h2>
+                <p>Returns your models (or the organization's, for an org-scoped token). Scope <code>models:read</code>. Query <code>limit</code> (1–100, default 50).</p>
+                <pre><code>curl "{{ site_url }}/api/v1/models?limit=20" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+                <pre><code>{
+  "data": [
+    {
+      "id": "6f1c…",
+      "name": "Office Chair",
+      "file_type": "glb",
+      "file_size": 482113,
+      "visibility": "unlisted",
+      "organization_id": null,
+      "viewer_url": "{{ site_url }}/view/6f1c…",
+      "validation": { "…": "…" }
+    }
+  ]
+}</code></pre>
+
+                <h2 id="get-model">Get a model <span class="docs-endpoint"><span class="docs-method">GET</span> /models/{id}</span></h2>
+                <p>Full detail for one model, including <code>viewer_url</code> and <code>embed_url</code>. Scope <code>models:read</code>.</p>
+                <pre><code>curl {{ site_url }}/api/v1/models/6f1c… \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+
+                <h2 id="upload">Upload &amp; convert <span class="docs-endpoint"><span class="docs-method">POST</span> /models</span></h2>
+                <p>Upload a model file (STL, OBJ, FBX, GLB/glTF, or a ZIP) as multipart <code>file</code>, with an optional <code>name</code>. Scope <code>models:write</code>. Conversion runs in the background — you get a job to poll. Returns <code>202</code>.</p>
+                <pre><code>curl -X POST {{ site_url }}/api/v1/models \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@chair.stl" \
+  -F "name=Office Chair"</code></pre>
+                <pre><code>{
+  "data": {
+    "job_id": "b2a9…",
+    "model_id": "b2a9…",
+    "status": "pending",
+    "status_url": "{{ site_url }}/api/v1/jobs/b2a9…"
+  }
+}</code></pre>
+                <h3>JavaScript</h3>
+                <pre><code>const form = new FormData();
+form.append("file", fileInput.files[0]);
+form.append("name", "Office Chair");
+const res = await fetch("{{ site_url }}/api/v1/models", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${token}` },
+  body: form,
+});
+const { data } = await res.json();</code></pre>
+                <h3>Python</h3>
+                <pre><code>import requests
+r = requests.post(
+    "{{ site_url }}/api/v1/models",
+    headers={"Authorization": f"Bearer {token}"},
+    files={"file": open("chair.stl", "rb")},
+    data={"name": "Office Chair"},
+)
+job = r.json()["data"]</code></pre>
+
+                <h2 id="jobs">Poll a job <span class="docs-endpoint"><span class="docs-method">GET</span> /jobs/{id}</span></h2>
+                <p>Check conversion progress. Scope <code>models:read</code>. When <code>status</code> is <code>completed</code>, the response adds <code>viewer_url</code> and <code>embed_url</code>. Poll every few seconds, or subscribe to the <a href="#webhooks">conversion.completed</a> webhook instead.</p>
+                <pre><code>{
+  "data": {
+    "job_id": "b2a9…",
+    "status": "completed",
+    "model_id": "b2a9…",
+    "error": null,
+    "progress": 100,
+    "viewer_url": "{{ site_url }}/view/b2a9…",
+    "embed_url": "{{ site_url }}/embed/b2a9…"
+  }
+}</code></pre>
+
+                <h2 id="update-delete">Update / delete <span class="docs-endpoint"><span class="docs-method">PATCH</span> /models/{id}</span> <span class="docs-endpoint"><span class="docs-method">DELETE</span> /models/{id}</span></h2>
+                <p>Scope <code>models:write</code>. PATCH accepts <code>name</code>, <code>description</code>, and <code>visibility</code> (<code>private</code> / <code>unlisted</code> / <code>public</code>). DELETE soft-deletes (moves to trash).</p>
+                <pre><code>curl -X PATCH {{ site_url }}/api/v1/models/b2a9… \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"visibility": "public", "name": "Office Chair v2"}'</code></pre>
+
+                <h2 id="analytics">Analytics <span class="docs-endpoint"><span class="docs-method">GET</span> /models/{id}/analytics</span></h2>
+                <p>Event totals for a model. Scope <code>analytics:read</code>.</p>
+                <pre><code>{ "data": { "model_id": "b2a9…", "totals": { "view": 128, "ar_launch": 22 } } }</code></pre>
+
+                <h2 id="webhooks">Webhooks</h2>
+                <p>Subscribe an HTTPS endpoint to events from your <a href="{{ url_for('main.developer_settings') }}">settings</a> (Business plan). Events:</p>
+                <table class="docs-table">
+                    <tr><th>Event</th><th>Fires when</th></tr>
+                    <tr><td><code>conversion.completed</code></td><td>An uploaded model finished converting</td></tr>
+                    <tr><td><code>conversion.failed</code></td><td>A conversion gave up after retries</td></tr>
+                    <tr><td><code>ai_generation.completed</code></td><td>An AI text/image→3D generation finished</td></tr>
+                    <tr><td><code>ai_generation.failed</code></td><td>An AI generation failed</td></tr>
+                </table>
+                <p>Deliveries are <code>POST</code>s with a JSON body <code>{"event": "&lt;type&gt;", "data": {…}}</code> and headers <code>X-ARVision-Event</code> and <code>X-ARVision-Signature: sha256=&lt;hmac&gt;</code>.</p>
+
+                <h2 id="verify">Verify signatures</h2>
+                <p>Compute HMAC-SHA256 over the <em>raw</em> request body using your webhook's signing secret, and compare against the <code>X-ARVision-Signature</code> header.</p>
+                <pre><code>import hmac, hashlib
+
+def verify(raw_body: bytes, header: str, secret: str) -> bool:
+    expected = "sha256=" + hmac.new(
+        secret.encode(), raw_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header)</code></pre>
+
+                <h2 id="errors">Errors</h2>
+                <table class="docs-table">
+                    <tr><th>Status</th><th>Meaning</th></tr>
+                    <tr><td>400</td><td>Bad request (invalid file type, bad JSON)</td></tr>
+                    <tr><td>401</td><td>Missing or invalid token</td></tr>
+                    <tr><td>403</td><td>Token lacks the required scope</td></tr>
+                    <tr><td>404</td><td>Model or job not found (or not yours)</td></tr>
+                    <tr><td>413</td><td>File too large or quota exceeded</td></tr>
+                    <tr><td>429</td><td>Rate limit exceeded — back off</td></tr>
+                </table>
+
+                <h2 id="openapi">OpenAPI spec</h2>
+                <p>A machine-readable OpenAPI 3 description is available at <a href="{{ site_url }}/api/v1/openapi.json"><code>/api/v1/openapi.json</code></a> — import it into Postman, Insomnia, or a codegen tool.</p>
+            </article>
+        </div>
+    </main>
+
+    {% include "_site_footer.html" %}
+
+    <script>
+    (function () {
+        document.querySelectorAll(".docs-content pre").forEach(function (pre) {
+            var btn = document.createElement("button");
+            btn.className = "docs-copy";
+            btn.type = "button";
+            btn.textContent = "Copy";
+            btn.addEventListener("click", function () {
+                var code = pre.querySelector("code");
+                navigator.clipboard.writeText(code ? code.innerText : pre.innerText).then(function () {
+                    btn.textContent = "Copied";
+                    setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+                });
+            });
+            pre.appendChild(btn);
+        });
+    })();
+    </script>
+</body>
+</html>

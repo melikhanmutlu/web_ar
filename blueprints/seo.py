@@ -7,7 +7,7 @@ from config import SITE_URL
 seo_bp = Blueprint("seo", __name__)
 
 # Endpoints listed in the sitemap.
-SITEMAP_STATIC_ENDPOINTS = ["main.index"]
+SITEMAP_STATIC_ENDPOINTS = ["main.index", "main.features", "main.pricing", "main.developers"]
 
 
 @seo_bp.route("/robots.txt")

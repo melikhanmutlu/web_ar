@@ -65,3 +65,16 @@ def delete_webhook(webhook_id):
     db.session.delete(subscription)
     db.session.commit()
     return jsonify({"success": True})
+
+
+@webhooks_bp.route("/api/webhooks/<int:webhook_id>/rotate-secret", methods=["POST"])
+@login_required
+def rotate_webhook_secret(webhook_id):
+    """Issue a fresh signing secret for a webhook. The new secret is returned
+    once (like at creation); the old one stops validating immediately."""
+    subscription = WebhookSubscription.query.filter_by(
+        id=webhook_id, user_id=current_user.id
+    ).first_or_404()
+    subscription.secret = secrets.token_urlsafe(32)
+    db.session.commit()
+    return jsonify({"success": True, "secret": subscription.secret})

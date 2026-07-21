@@ -302,6 +302,9 @@ limiter = Limiter(
     app=app,
     default_limits=[],
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    # Emit X-RateLimit-Limit/Remaining/Reset on limited endpoints so API
+    # integrators can self-throttle instead of hitting 429s blind.
+    headers_enabled=True,
 )
 
 storage = StorageService(CONVERTED_FOLDER, UPLOAD_FOLDER, TEMP_FOLDER)

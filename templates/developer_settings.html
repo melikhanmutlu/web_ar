@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}API &amp; webhooks - ARVision{% endblock %}
+
+{% block content %}
+<main>
+    <section class="page-hero">
+        <div class="shell">
+            <div class="reveal" data-reveal>
+                <span class="status-label"><i></i> Developers</span>
+                <h1>API tokens &amp; webhooks</h1>
+                <p>Create tokens to call the ARVision REST API and subscribe endpoints to signed events. New to the API? Read the <a href="{{ url_for('main.developers') }}">integration guide</a>.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="shell dev-settings" style="padding-bottom:64px;">
+        <article class="admin-card" style="margin-bottom:1.5rem;">
+            <h2 style="margin-top:0;">API tokens</h2>
+            {% if api_enabled %}
+            <form id="tokenForm" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
+                <div class="admin-field" style="flex:1;min-width:200px;">
+                    <label class="field-label" for="tokenName">Token name</label>
+                    <input id="tokenName" class="av-input" maxlength="120" placeholder="e.g. Store sync" required>
+                </div>
+                <div class="admin-field">
+                    <label class="field-label">Scopes</label>
+                    <label class="dev-check"><input type="checkbox" value="models:read" checked> models:read</label>
+                    <label class="dev-check"><input type="checkbox" value="analytics:read"> analytics:read</label>
+                    <label class="dev-check"><input type="checkbox" value="models:write"> models:write</label>
+                </div>
+                <button type="submit" class="primary-btn mini">Create token</button>
+            </form>
+            <p id="tokenReveal" class="dev-reveal" hidden></p>
+            <div id="tokenList" class="dev-list" style="margin-top:1rem;"></div>
+            {% else %}
+            <p class="field-help">API access is a Pro/Business feature. <a href="{{ url_for('main.pricing') }}">Upgrade your plan</a> to create tokens.</p>
+            {% endif %}
+        </article>
+
+        <article class="admin-card">
+            <h2 style="margin-top:0;">Webhooks</h2>
+            {% if webhooks_enabled %}
+            <form id="webhookForm" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
+                <div class="admin-field" style="flex:1;min-width:220px;">
+                    <label class="field-label" for="webhookUrl">HTTPS endpoint</label>
+                    <input id="webhookUrl" class="av-input" type="url" placeholder="https://example.com/hooks/arvision" required>
+                </div>
+                <div class="admin-field">
+                    <label class="field-label">Events</label>
+                    <label class="dev-check"><input type="checkbox" value="conversion.completed" checked> conversion.completed</label>
+                    <label class="dev-check"><input type="checkbox" value="conversion.failed"> conversion.failed</label>
+                    <label class="dev-check"><input type="checkbox" value="ai_generation.completed"> ai_generation.completed</label>
+                    <label class="dev-check"><input type="checkbox" value="ai_generation.failed"> ai_generation.failed</label>
+                </div>
+                <button type="submit" class="primary-btn mini">Add webhook</button>
+            </form>
+            <p id="webhookReveal" class="dev-reveal" hidden></p>
+            <div id="webhookList" class="dev-list" style="margin-top:1rem;"></div>
+            {% else %}
+            <p class="field-help">Webhooks are a Business feature. <a href="{{ url_for('main.pricing') }}">Upgrade your plan</a> to subscribe endpoints to events.</p>
+            {% endif %}
+        </article>
+    </section>
+</main>
+{% include "_site_footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+    .dev-check{display:block;font-size:.9rem;margin:.15rem 0;}
+    .dev-reveal{margin-top:1rem;padding:.75rem 1rem;border:1px solid #b7e0c2;background:#eefbf1;border-radius:8px;font-family:monospace;word-break:break-all;}
+    .dev-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.6rem 0;border-top:1px solid #e5e7eb;flex-wrap:wrap;}
+    .dev-row-main code{opacity:.7;}
+    .dev-actions{display:flex;gap:.5rem;}
+</style>
+<script>
+(function () {
+    "use strict";
+    var esc = window.escapeHtml || function (s) { return String(s); };
+
+    function reveal(el, label, value) {
+        el.hidden = false;
+        el.innerHTML = esc(label) + " <strong>" + esc(value) + "</strong> — copy it now, it won't be shown again.";
+    }
+
+    function jsonFetch(url, options) {
+        return fetch(url, options).then(function (r) {
+            return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+        });
+    }
+
+    // ---- Tokens ----
+    var tokenForm = document.getElementById("tokenForm");
+    var tokenList = document.getElementById("tokenList");
+
+    function renderTokens(tokens) {
+        if (!tokenList) return;
+        if (!tokens.length) { tokenList.innerHTML = '<p class="field-help">No tokens yet.</p>'; return; }
+        tokenList.innerHTML = tokens.map(function (t) {
+            var meta = t.scopes.join(", ") + (t.revoked ? " · revoked" : "");
+            var btn = t.revoked ? "" : '<button class="secondary-btn mini" data-revoke="' + t.id + '">Revoke</button>';
+            return '<div class="dev-row"><div class="dev-row-main"><strong>' + esc(t.name) +
+                '</strong> <code>' + esc(t.prefix) + '…</code><br><span class="field-help">' + esc(meta) +
+                '</span></div><div class="dev-actions">' + btn + '</div></div>';
+        }).join("");
+    }
+
+    function loadTokens() {
+        jsonFetch("/api/tokens", {}).then(function (r) {
+            if (r.ok) renderTokens(r.body.tokens || []);
+        });
+    }
+
+    if (tokenForm) {
+        tokenForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var name = document.getElementById("tokenName").value.trim();
+            var scopes = [].slice.call(tokenForm.querySelectorAll('input[type=checkbox]:checked')).map(function (c) { return c.value; });
+            if (!name || !scopes.length) return;
+            jsonFetch("/api/tokens", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name, scopes: scopes })
+            }).then(function (r) {
+                if (r.ok && r.body.token) {
+                    reveal(document.getElementById("tokenReveal"), "New token:", r.body.token);
+                    document.getElementById("tokenName").value = "";
+                    loadTokens();
+                } else {
+                    alert(r.body.error || "Could not create token.");
+                }
+            });
+        });
+        tokenList.addEventListener("click", function (e) {
+            var id = e.target.getAttribute("data-revoke");
+            if (!id) return;
+            if (!confirm("Revoke this token? Apps using it will stop working.")) return;
+            jsonFetch("/api/tokens/" + id, { method: "DELETE" }).then(loadTokens);
+        });
+        loadTokens();
+    }
+
+    // ---- Webhooks ----
+    var webhookForm = document.getElementById("webhookForm");
+    var webhookList = document.getElementById("webhookList");
+
+    function renderWebhooks(hooks) {
+        if (!webhookList) return;
+        if (!hooks.length) { webhookList.innerHTML = '<p class="field-help">No webhooks yet.</p>'; return; }
+        webhookList.innerHTML = hooks.map(function (h) {
+            return '<div class="dev-row"><div class="dev-row-main"><strong>' + esc(h.url) +
+                '</strong><br><span class="field-help">' + esc(h.event_types.join(", ")) +
+                '</span></div><div class="dev-actions">' +
+                '<button class="secondary-btn mini" data-rotate="' + h.id + '">Rotate secret</button>' +
+                '<button class="secondary-btn mini" data-delhook="' + h.id + '">Delete</button></div></div>';
+        }).join("");
+    }
+
+    function loadWebhooks() {
+        jsonFetch("/api/webhooks", {}).then(function (r) {
+            if (r.ok) renderWebhooks(r.body.webhooks || []);
+        });
+    }
+
+    if (webhookForm) {
+        webhookForm.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var url = document.getElementById("webhookUrl").value.trim();
+            var events = [].slice.call(webhookForm.querySelectorAll('input[type=checkbox]:checked')).map(function (c) { return c.value; });
+            if (!url || !events.length) return;
+            jsonFetch("/api/webhooks", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: url, event_types: events })
+            }).then(function (r) {
+                if (r.ok && r.body.webhook) {
+                    reveal(document.getElementById("webhookReveal"), "Signing secret:", r.body.webhook.secret);
+                    document.getElementById("webhookUrl").value = "";
+                    loadWebhooks();
+                } else {
+                    alert(r.body.error || "Could not add webhook.");
+                }
+            });
+        });
+        webhookList.addEventListener("click", function (e) {
+            var del = e.target.getAttribute("data-delhook");
+            var rot = e.target.getAttribute("data-rotate");
+            if (del) {
+                if (!confirm("Delete this webhook?")) return;
+                jsonFetch("/api/webhooks/" + del, { method: "DELETE" }).then(loadWebhooks);
+            } else if (rot) {
+                jsonFetch("/api/webhooks/" + rot + "/rotate-secret", { method: "POST" }).then(function (r) {
+                    if (r.ok && r.body.secret) {
+                        reveal(document.getElementById("webhookReveal"), "New signing secret:", r.body.secret);
+                    }
+                });
+            }
+        });
+        loadWebhooks();
+    }
+})();
+</script>
+{% endblock %}

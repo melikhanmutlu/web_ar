@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}Secure checkout - ARVision{% endblock %}
+
+{% block content %}
+<main>
+    <section class="page-hero">
+        <div class="shell">
+            <div class="reveal" data-reveal>
+                <span class="status-label"><i></i> Secure payment</span>
+                <h1>Complete your {{ plan_name }} subscription</h1>
+                <p>Payment is processed securely by PayTR. Your card details never touch our servers.</p>
+            </div>
+        </div>
+    </section>
+    <section class="shell" style="padding-bottom:64px;">
+        {% if iframe_url %}
+        <iframe src="{{ iframe_url }}" title="Secure payment"
+                style="width:100%;min-height:720px;border:0;border-radius:12px;"
+                allow="payment"></iframe>
+        {% elif redirect_url %}
+        <p>Continue to the secure payment page: <a class="primary-btn" href="{{ redirect_url }}">Pay now &rarr;</a></p>
+        {% else %}
+        <p>We couldn't start the payment. <a href="{{ url_for('billing.billing_home') }}">Back to billing</a>.</p>
+        {% endif %}
+    </section>
+</main>
+{% include "_site_footer.html" %}
+{% endblock %}

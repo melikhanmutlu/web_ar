@@ -58,6 +58,7 @@ from blueprints.ai_image import ai_image_bp
 from blueprints.webhooks import webhooks_bp
 from blueprints.discover import discover_bp
 from blueprints.scenes import scenes_bp
+from blueprints.billing import billing_bp
 from model_cleanup import purge_model_completely
 from site_settings import get_setting, setting_bool, setting_int
 import re
@@ -388,6 +389,7 @@ app.register_blueprint(ai_image_bp)
 app.register_blueprint(webhooks_bp)
 app.register_blueprint(discover_bp)
 app.register_blueprint(scenes_bp)
+app.register_blueprint(billing_bp)
 limiter.limit("120 per minute")(admin_bp)
 
 # auth.py can't import `limiter` itself (it's imported before `limiter` exists
@@ -484,6 +486,13 @@ for _endpoint in (
     "api_tokens.api_v1_delete_model",
 ):
     csrf.exempt(app.view_functions[_endpoint])
+
+# PayTR server-to-server callback: authenticated by the gateway's hash (not a
+# session), so CSRF-exempt, and rate-limited like the Meshy webhook.
+app.view_functions["billing.paytr_callback"] = limiter.limit(
+    "120 per minute"
+)(app.view_functions["billing.paytr_callback"])
+csrf.exempt(app.view_functions["billing.paytr_callback"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(

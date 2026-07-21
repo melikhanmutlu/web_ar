@@ -29,7 +29,9 @@ from app import (
     _claim_ai_stage,
 )
 from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
-from models import AIGenerationJob, ConversionJob, WorkerHeartbeat
+from models import AIGenerationJob, ConversionJob, User, WorkerHeartbeat
+from services.plans import DEFAULT_PLAN
+from services import send_email
 from site_settings import set_setting
 
 logging.basicConfig(
@@ -139,6 +141,37 @@ def prune_stale_heartbeats(max_age_hours=24):
     if deleted:
         db.session.commit()
         logger.info(f"Pruned {deleted} stale worker heartbeat row(s)")
+
+
+def expire_stale_plans():
+    """Downgrade users whose paid plan has run out (plan_expires_at < now) back
+    to Free, and email them once. Idempotent: after the reset plan_expires_at is
+    NULL, so a user is only swept (and notified) a single time. _plan_name in
+    services/plans.py already treats an expired plan as Free at enforcement
+    time, so this sweep just makes the stored state catch up."""
+    now = datetime.utcnow()
+    expired = User.query.filter(
+        User.plan_expires_at.isnot(None),
+        User.plan_expires_at < now,
+        User.plan != DEFAULT_PLAN,
+    ).all()
+    for user in expired:
+        logger.info(f"Plan expired for user {user.id}: {user.plan} -> {DEFAULT_PLAN}")
+        previous = user.plan
+        user.plan = DEFAULT_PLAN
+        user.plan_expires_at = None
+        if user.email:
+            try:
+                send_email(
+                    user.email, "Your ARVision plan has ended",
+                    f"Your {previous} plan has expired and your account is back on the "
+                    f"Free plan. Renew any time from your billing page to restore your "
+                    f"paid features.",
+                )
+            except Exception as exc:
+                logger.warning(f"Plan-expiry email failed for user {user.id}: {exc}")
+    if expired:
+        db.session.commit()
 
 
 def requeue_stale_jobs():
@@ -280,6 +313,7 @@ def main():
             if time.monotonic() - last_heartbeat_prune > 3600:
                 prune_stale_heartbeats()
                 prune_stale_chunk_sessions()
+                expire_stale_plans()
                 last_heartbeat_prune = time.monotonic()
 
             job = claim_next_job()

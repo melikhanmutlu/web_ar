@@ -36,7 +36,7 @@
                 <article class="{% if plan == 'pro' %}popular{% endif %}">
                     {% if plan == 'pro' %}<em>MOST POPULAR</em>{% endif %}
                     <span>{{ cfg.display_name }}</span>
-                    <strong>${{ cfg.price }}<small>/month</small></strong>
+                    <strong>{{ cfg.price }} {{ cfg.currency }}<small>/{{ 'mo' if cfg.billing_period == 'monthly' else 'yr' }}</small></strong>
                     <p>
                         {% if plan == 'free' %}For publishing your first interactive models.
                         {% elif plan == 'pro' %}For independent creators and professionals.
@@ -44,10 +44,15 @@
                     </p>
                     {% if is_current %}
                         <button type="button" class="secondary-btn wide" disabled>Current plan</button>
-                    {% elif plan == 'free' %}
-                        <a href="{{ url_for('auth.register') }}" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Start free &rarr;</a>
+                    {% elif not cfg.price %}
+                        <a href="{{ url_for('auth.register') }}" class="secondary-btn wide">Start free &rarr;</a>
+                    {% elif current_user.is_authenticated %}
+                        <form method="POST" action="{{ url_for('billing.checkout', plan_slug=plan) }}" style="margin:0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Choose plan &rarr;</button>
+                        </form>
                     {% else %}
-                        <a href="mailto:sales@arvision.app?subject=Upgrade%20to%20{{ cfg.display_name }}" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Choose plan &rarr;</a>
+                        <a href="{{ url_for('auth.login') }}" class="{% if plan == 'pro' %}primary-btn{% else %}secondary-btn{% endif %} wide">Choose plan &rarr;</a>
                     {% endif %}
                     <div>
                         <p>&#10003; {{ (limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB') }} storage</p>

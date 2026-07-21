@@ -164,6 +164,20 @@ MESHY_IMAGE_MODEL = os.getenv('MESHY_IMAGE_MODEL', 'nano-banana-pro')
 AI_GEN_MONTHLY_LIMIT = int(os.getenv('AI_GEN_MONTHLY_LIMIT', 0))
 METRICS_TOKEN = os.getenv('METRICS_TOKEN', '')
 
+# Billing / payments. PAYMENT_PROVIDER selects the active gateway adapter
+# (services/payments/); "paytr" is the only one wired today. Provider secrets
+# are server-side only — never expose the merchant key/salt to clients. When
+# unset the billing pages still render but checkout is disabled (is_configured
+# returns False), so the app runs fine without a gateway configured.
+PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'paytr')
+PAYTR_MERCHANT_ID = os.getenv('PAYTR_MERCHANT_ID', '')
+PAYTR_MERCHANT_KEY = os.getenv('PAYTR_MERCHANT_KEY', '')
+PAYTR_MERCHANT_SALT = os.getenv('PAYTR_MERCHANT_SALT', '')
+# 1 = PayTR sandbox (test cards, no real charge); 0 = live.
+PAYTR_TEST_MODE = os.getenv('PAYTR_TEST_MODE', '1')
+# Currency plans are priced/charged in (PayTR supports TL/USD/EUR/GBP).
+BILLING_CURRENCY = os.getenv('BILLING_CURRENCY', 'TRY')
+
 # SEO / canonical site config. SITE_URL is env-var-driven (never derived from
 # the request Host header) because the production domain is expected to move
 # off the current Railway subdomain to a custom domain later — canonical

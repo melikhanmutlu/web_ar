@@ -54,6 +54,27 @@
         </div>
     </section>
 
+    <section class="shell" style="padding-top:0;padding-bottom:32px;">
+        <h2>AI credits</h2>
+        <p class="field-help" style="margin-top:.35rem;">1 credit = 1 AI generation, used after your plan's monthly quota. Your balance: <strong>{{ credit_balance }}</strong> credit{{ '' if credit_balance == 1 else 's' }}.</p>
+        <div class="pricing-grid" style="margin-top:1rem;">
+        {% for pack_id, pack in credit_packs.items() %}
+            <article>
+                <span>{{ pack.credits }} credits</span>
+                <strong>{{ pack.price }} {{ (public_plans.values() | first).currency if public_plans else '' }}</strong>
+                {% if checkout_enabled %}
+                    <form method="POST" action="{{ url_for('billing.topup', pack=pack_id) }}" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="primary-btn wide">Buy &rarr;</button>
+                    </form>
+                {% else %}
+                    <span class="field-help">Online payment unavailable</span>
+                {% endif %}
+            </article>
+        {% endfor %}
+        </div>
+    </section>
+
     <section class="shell" style="padding-top:0;padding-bottom:64px;">
         <h2>Payment history</h2>
         {% if payments %}
@@ -63,7 +84,7 @@
             {% for p in payments %}
                 <tr>
                     <td>{{ p.created_at.strftime('%Y-%m-%d') }}</td>
-                    <td>{{ p.plan }}</td>
+                    <td>{% if p.kind == 'topup' %}{{ p.credits }} AI credits{% else %}{{ p.plan }}{% endif %}</td>
                     <td>{{ p.amount }} {{ p.currency }}</td>
                     <td>{{ p.status }}</td>
                 </tr>

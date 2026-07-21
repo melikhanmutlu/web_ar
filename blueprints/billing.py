@@ -17,8 +17,9 @@ from flask_login import current_user, login_required
 from services.time_utils import datetime
 from models import Payment, User, db
 from services import send_email
+from services.credits import CREDIT_PACKS, grant_ai_credits
 from services.payments import get_active_provider
-from services.plans import get_plan_config, plan_name, public_plan_slugs
+from services.plans import DEFAULT_CURRENCY, get_plan_config, plan_name, public_plan_slugs
 
 billing_bp = Blueprint("billing", __name__)
 logger = logging.getLogger(__name__)
@@ -50,6 +51,8 @@ def billing_home():
         plan_expires_at=current_user.plan_expires_at,
         public_plans={slug: get_plan_config(slug) for slug in public_plan_slugs()},
         payments=payments,
+        credit_packs=CREDIT_PACKS,
+        credit_balance=current_user.ai_credit_balance or 0,
         checkout_enabled=bool(provider and provider.is_configured()),
         paid=request.args.get("paid") == "1",
         failed=request.args.get("failed") == "1",
@@ -111,6 +114,62 @@ def checkout(plan_slug):
     )
 
 
+@billing_bp.route("/billing/topup/<pack>", methods=["POST"])
+@login_required
+def topup(pack):
+    """Buy a prepaid AI-credit pack through the same hosted-checkout flow as a
+    plan. The verified callback grants the credits (_apply_successful_payment);
+    the plan itself is never touched."""
+    pack_cfg = CREDIT_PACKS.get(pack)
+    if pack_cfg is None:
+        flash("Unknown credit pack.", "error")
+        return redirect(url_for("billing.billing_home"))
+    provider = get_active_provider()
+    if not provider or not provider.is_configured():
+        flash("Online payment isn't available right now. Please contact us.", "error")
+        return redirect(url_for("billing.billing_home"))
+
+    merchant_oid = "arv" + secrets.token_hex(12)
+    payment = Payment(
+        user_id=current_user.id,
+        plan="credits",
+        kind="topup",
+        credits=pack_cfg["credits"],
+        amount=Decimal(str(pack_cfg["price"])),
+        currency=DEFAULT_CURRENCY,
+        status="pending",
+        method="paytr",
+        provider=provider.name,
+        provider_ref=merchant_oid,
+    )
+    db.session.add(payment)
+    db.session.commit()
+
+    try:
+        session = provider.create_checkout(
+            payment, current_user,
+            ok_url=url_for("billing.billing_home", paid=1, _external=True),
+            fail_url=url_for("billing.billing_home", failed=1, _external=True),
+            client_ip=_client_ip(),
+            email=current_user.email,
+            item_name=f"ARVision {pack_cfg['credits']} AI credits",
+        )
+    except RuntimeError as exc:
+        payment.status = "failed"
+        payment.note = str(exc)[:500]
+        db.session.commit()
+        logger.warning("Top-up checkout failed for %s: %s", pack, exc)
+        flash("We couldn't start the payment. Please try again.", "error")
+        return redirect(url_for("billing.billing_home"))
+
+    return render_template(
+        "billing_checkout.html",
+        iframe_url=session.iframe_url,
+        redirect_url=session.redirect_url,
+        plan_name=f"{pack_cfg['credits']} AI credits",
+    )
+
+
 @billing_bp.route("/billing/paytr/callback", methods=["POST"])
 def paytr_callback():
     """PayTR server-to-server notification. Hash-verified, idempotent, and
@@ -141,7 +200,23 @@ def paytr_callback():
 
 
 def _apply_successful_payment(payment):
-    """Mark a Payment paid and grant its plan to the user for one period."""
+    """Mark a Payment paid and grant what it bought: a credit top-up loads the
+    balance, a plan purchase grants the plan for one period."""
+    if payment.kind == "topup":
+        payment.status = "paid"
+        user = db.session.get(User, payment.user_id)
+        if user is not None:
+            grant_ai_credits(user, payment.credits or 0)
+        db.session.commit()
+        if user and user.email:
+            send_email(
+                user.email, "Your ARVision AI credits are ready",
+                f"Thanks! {payment.credits} AI credits were added to your "
+                f"account — your balance is now {user.ai_credit_balance}.\n\n"
+                f"Amount: {payment.amount} {payment.currency}",
+            )
+        return
+
     cfg = get_plan_config(payment.plan)
     period_days = _PERIOD_DAYS.get(cfg.get("billing_period", "monthly"), 30)
     now = datetime.utcnow()

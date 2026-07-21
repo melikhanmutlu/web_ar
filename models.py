@@ -789,6 +789,10 @@ class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
     plan = db.Column(db.String(20), nullable=False)
+    # What was bought: 'plan' (a subscription period) or 'topup' (prepaid AI
+    # credits — `credits` holds how many, `plan` is the literal 'credits').
+    kind = db.Column(db.String(10), nullable=False, default='plan', server_default='plan')
+    credits = db.Column(db.Integer, nullable=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default='USD', server_default='USD')
     status = db.Column(db.String(20), nullable=False, default='paid', server_default='paid', index=True)

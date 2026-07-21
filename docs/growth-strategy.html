@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARVision — Hızlandırılmış Büyüme Planı</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --ink: #1a2233;
+    --ink-soft: #4b5568;
+    --ink-faint: #8a93a6;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --accent-ink: #3730a3;
+    --green: #047857;
+    --green-soft: #ecfdf5;
+    --amber: #b45309;
+    --amber-soft: #fffbeb;
+    --red: #b91c1c;
+    --red-soft: #fef2f2;
+    --border: #e4e8f0;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(20,30,60,.05), 0 8px 24px rgba(20,30,60,.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    background: linear-gradient(135deg, #1e1b4b 0%, #312e81 45%, #4f46e5 100%);
+    color: #fff;
+    border-radius: 0 0 28px 28px;
+    padding: 64px 24px 56px;
+    margin-bottom: 40px;
+  }
+  .hero-inner { max-width: 980px; margin: 0 auto; }
+  .hero .kicker {
+    display: inline-block; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25);
+    padding: 5px 14px; border-radius: 999px; margin-bottom: 20px; font-weight: 600;
+  }
+  .hero h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.15; font-weight: 800; letter-spacing: -.02em; }
+  .hero .sub { margin-top: 14px; font-size: 18px; color: rgba(255,255,255,.85); max-width: 720px; }
+  .hero .meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .hero .meta span {
+    font-size: 13px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+    padding: 4px 12px; border-radius: 999px;
+  }
+
+  /* ---------- TOC ---------- */
+  nav.toc {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 22px 26px; margin-bottom: 40px;
+  }
+  nav.toc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); margin-bottom: 12px; }
+  nav.toc ol { list-style: none; columns: 2; column-gap: 32px; }
+  nav.toc li { margin: 5px 0; break-inside: avoid; }
+  nav.toc a { color: var(--accent-ink); text-decoration: none; font-weight: 500; font-size: 15px; }
+  nav.toc a:hover { text-decoration: underline; }
+  nav.toc .num { color: var(--ink-faint); font-variant-numeric: tabular-nums; margin-right: 8px; font-weight: 600; }
+
+  /* ---------- Sections ---------- */
+  section { margin-bottom: 52px; }
+  h2.sec {
+    font-size: 26px; font-weight: 800; letter-spacing: -.01em; margin-bottom: 6px;
+    display: flex; align-items: baseline; gap: 12px;
+  }
+  h2.sec .n {
+    font-size: 15px; font-weight: 700; color: var(--accent); background: var(--accent-soft);
+    border-radius: 8px; padding: 2px 10px; transform: translateY(-3px);
+  }
+  .sec-sub { color: var(--ink-soft); margin-bottom: 20px; font-size: 15.5px; }
+  h3 { font-size: 18.5px; font-weight: 700; margin: 26px 0 10px; }
+  h4 { font-size: 16px; font-weight: 700; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; color: var(--ink-soft); }
+  p strong, li strong { color: var(--ink); }
+  ul.plain, ol.plain { margin: 0 0 14px 22px; color: var(--ink-soft); }
+  ul.plain li, ol.plain li { margin-bottom: 7px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .86em; background: #eef1f7; border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 6px; color: #3b4360;
+  }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 26px 28px; margin-bottom: 20px;
+  }
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--accent-soft);
+    border-radius: 10px; padding: 16px 20px; margin: 16px 0; color: var(--accent-ink);
+  }
+  .callout.green { border-color: var(--green); background: var(--green-soft); color: var(--green); }
+  .callout.amber { border-color: var(--amber); background: var(--amber-soft); color: var(--amber); }
+  .callout p { color: inherit; margin: 0; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } nav.toc ol { columns: 1; } }
+
+  /* ---------- Gap list (exec summary) ---------- */
+  .gap { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+  .gap:last-child { border-bottom: none; }
+  .gap .rank {
+    flex: 0 0 38px; height: 38px; border-radius: 10px; background: var(--red-soft); color: var(--red);
+    display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px;
+  }
+  .gap .body b { display: block; color: var(--ink); margin-bottom: 3px; }
+  .gap .body { color: var(--ink-soft); font-size: 15px; }
+
+  /* ---------- Badges ---------- */
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px;
+    border-radius: 999px; letter-spacing: .02em; vertical-align: middle;
+  }
+  .badge.done { background: var(--green-soft); color: var(--green); }
+  .badge.gap { background: var(--red-soft); color: var(--red); }
+  .badge.p1 { background: var(--red-soft); color: var(--red); }
+  .badge.p2 { background: var(--amber-soft); color: var(--amber); }
+  .badge.p3 { background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* ---------- Tables ---------- */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); margin: 14px 0 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 11px 16px; vertical-align: top; }
+  thead th {
+    background: #f2f4fa; color: var(--ink-soft); font-size: 12.5px; text-transform: uppercase;
+    letter-spacing: .06em; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody tr:not(:last-child) td { border-bottom: 1px solid var(--border); }
+  tbody tr:hover td { background: #fafbfe; }
+  td b { color: var(--ink); }
+
+  /* ---------- Timeline ---------- */
+  .timeline { position: relative; margin: 20px 0 6px; padding-left: 30px; }
+  .timeline::before { content: ""; position: absolute; left: 9px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+  .tl-item { position: relative; padding-bottom: 22px; }
+  .tl-item::before {
+    content: ""; position: absolute; left: -27px; top: 6px; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--surface); border: 3px solid var(--accent);
+  }
+  .tl-item .when { font-size: 13px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; }
+  .tl-item .what { color: var(--ink-soft); font-size: 15px; margin-top: 3px; }
+
+  /* ---------- KPI tiles ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 18px 0; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+  .kpi .v { font-size: 24px; font-weight: 800; color: var(--accent-ink); letter-spacing: -.01em; }
+  .kpi .l { font-size: 13px; color: var(--ink-faint); margin-top: 2px; }
+
+  footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--ink-faint); font-size: 13.5px; }
+
+  @media print {
+    body { background: #fff; }
+    .hero { border-radius: 0; }
+    .card, .tbl-wrap, .kpi, nav.toc { box-shadow: none; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-inner">
+    <span class="kicker">Strateji Raporu · Gizli</span>
+    <h1>ARVision — Hızlandırılmış Büyüme Planı</h1>
+    <p class="sub">B2B + B2C tek üründe: teknik yol haritası, ticari plan, otomasyon sistemleri ve araştırma ritmi. Tempolu büyüme için 90 günlük uygulama takvimiyle.</p>
+    <div class="meta">
+      <span>📅 21 Temmuz 2026</span>
+      <span>🧑‍💻 Senior Full-Stack + Growth/Sales perspektifi</span>
+      <span>📎 business-plan.md · COMPETITOR-REPORT.md · MARKETING-AUDIT.md ile uyumlu</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<nav class="toc">
+  <h2>İçindekiler</h2>
+  <ol>
+    <li><span class="num">0</span><a href="#ozet">Yönetici Özeti</a></li>
+    <li><span class="num">1</span><a href="#durum">Mevcut Durum</a></li>
+    <li><span class="num">2</span><a href="#segment">Konumlandırma &amp; Segmentler</a></li>
+    <li><span class="num">3</span><a href="#ticari">Ticari Plan</a></li>
+    <li><span class="num">4</span><a href="#teknik">Teknik Yol Haritası</a></li>
+    <li><span class="num">5</span><a href="#otomasyon">Otomasyon Sistemleri</a></li>
+    <li><span class="num">6</span><a href="#arastirma">Araştırma Ritmi</a></li>
+    <li><span class="num">7</span><a href="#kpi">KPI'lar &amp; Hedefler</a></li>
+    <li><span class="num">8</span><a href="#takvim">90 Günlük Takvim</a></li>
+    <li><span class="num">9</span><a href="#risk">Riskler &amp; Önlemler</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 0. YÖNETİCİ ÖZETİ ============ -->
+<section id="ozet">
+  <h2 class="sec"><span class="n">0</span>Yönetici Özeti</h2>
+
+  <div class="card">
+    <p><strong>Durum:</strong> ARVision teknik olarak satışa hazır bir üründür. Haziran denetiminde eksik görünen temellerin çoğu bu arada kapatıldı: SEO/OG altyapısı, şeffaf fiyatlandırma sayfası, herkese açık galeri (<code>/discover</code>), PayTR ödeme entegrasyonu, DB-tabanlı ve admin'den yönetilebilir planlar, self-serve API/developer paneli, organizasyon analitiği ve white-label. Ürün artık <em>"pazarlama yüzeyi eksik"</em> fazından çıkıp <strong>"dağıtım ve gelir motoru eksik"</strong> fazına geçti.</p>
+    <div class="callout">
+      <p><strong>Tek cümlelik strateji:</strong> B2C tarafında self-serve PLG (product-led growth) döngüsünü otomatikleştirerek düşük maliyetli hacim üret; bu hacimden çıkan sinyallerle (org kullanımı, embed hacmi, API kullanımı) B2B hesaplarını tespit edip <b>satış-destekli Business/Enterprise anlaşmalarına</b> çevir. Aynı ürün, iki motor.</p>
+    </div>
+  </div>
+
+  <h3>En kritik 5 boşluk <span class="badge gap">gelir kaybettiren sırayla</span></h3>
+  <div class="card">
+    <div class="gap"><div class="rank">1</div><div class="body"><b>Yinelenen abonelik yok</b> Mevcut PayTR akışı tek dönemlik ödeme + <code>plan_expires_at</code> ile çalışıyor; süre dolunca kullanıcı sessizce Free'ye düşüyor. Bu, SaaS'ın en pahalı hatası: pasif churn. → Yenileme hatırlatma otomasyonu (hemen) + kayıtlı kart/recurring — PayTR tekrarlayan ödeme veya global sağlayıcı (30 gün içinde).</div></div>
+    <div class="gap"><div class="rank">2</div><div class="body"><b>Global ödeme yok</b> PayTR TRY-odaklı; rakip fiyat noktaları USD. Lemon Squeezy / Paddle (Merchant of Record) adaptörü <code>services/payments/base.py</code> soyutlamasına eklenerek global satış açılmalı. Vergi/KDV yükünü MoR taşır.</div></div>
+    <div class="gap"><div class="rank">3</div><div class="body"><b>B2B satış yüzeyi yok</b> "Talk to sales / demo iste" akışı, segment landing sayfaları (/for-ecommerce, /for-architecture), güvenlik/veri sayfası ve vaka çalışmaları yok. B2B alıcısı bunlar olmadan Business planına kendi kendine gelmez.</div></div>
+    <div class="gap"><div class="rank">4</div><div class="body"><b>Yaşam döngüsü otomasyonu yok</b> E-posta altyapısı (SMTP) var ama onboarding / aktivasyon / kota-doldu / kredi-bitti / yenileme / win-back dizileri yok. Dönüşüm tetikleyicileri ürün içinde üretiliyor ama hiçbiri gelire bağlanmıyor.</div></div>
+    <div class="gap"><div class="rank">5</div><div class="body"><b>Metrik görünürlüğü yok</b> Model-bazlı analitik var; <b>iş metrikleri</b> (kayıt→aktivasyon→ücretli dönüşüm hunisi, MRR, churn, kredi kullanım oranı) tek bir yerde izlenmiyor. Ölçmeden tempolu büyüme yönetilemez.</div></div>
+  </div>
+
+  <h3>90 günlük hedefler (öneri)</h3>
+  <div class="kpis">
+    <div class="kpi"><div class="v">&gt;%70</div><div class="l">Yenileme oranı</div></div>
+    <div class="kpi"><div class="v">%3+</div><div class="l">Kayıt → ücretli dönüşüm</div></div>
+    <div class="kpi"><div class="v">20+</div><div class="l">Ücretli abone (başabaş ~5 Pro)</div></div>
+    <div class="kpi"><div class="v">2</div><div class="l">B2B pilot (logo + vaka çalışması)</div></div>
+    <div class="kpi"><div class="v">+%30/ay</div><div class="l">Organik trafik (bileşik)</div></div>
+  </div>
+
+  <div class="callout green">
+    <p><strong>Yatırım gerektirmeyen kaldıraç:</strong> Ürünün ürettiği her AR linki ve her embed bir edinim kanalıdır. Bu döngü artık teknik olarak çalışıyor (OG önizleme + galeri + embed); planın büyük kısmı bu döngüyü <b>otomasyonla beslemek</b> ve <b>ölçmek</b> üzerine kuruludur.</p>
+  </div>
+</section>
+
+<!-- ============ 1. MEVCUT DURUM ============ -->
+<section id="durum">
+  <h2 class="sec"><span class="n">1</span>Mevcut Durum Özeti <span style="font-size:15px;color:var(--ink-faint);font-weight:500;">(Temmuz 2026)</span></h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="margin-top:0;">Gemide olanlar <span class="badge done">satış argümanı</span></h3>
+      <ul class="plain">
+        <li><b>Uçtan uca dönüşüm:</b> STL/FBX/OBJ/STEP → GLB/USDZ, iOS Quick Look + Android Scene Viewer, QR, embed.</li>
+        <li><b>AI text/image → 3D</b> (Meshy) + ledger'lı kredi sistemi (<code>services/credits.py</code>).</li>
+        <li><b>Fiyatlandırma:</b> Free / Pro (19) / Business (99); DB-tabanlı, admin CRUD'lu (<code>services/plans.py</code>).</li>
+        <li><b>Ödeme:</b> PayTR (tek dönemlik), <code>Payment</code> kaydı, hash-doğrulamalı callback.</li>
+        <li><b>B2B temelleri:</b> Organizasyonlar + roller, org analitiği + CSV export, white-label tema, custom domain, webhooks, API token'ları + <code>/api/v1</code> + OpenAPI + developers paneli.</li>
+        <li><b>Büyüme yüzeyi:</b> OG/Twitter kartları, robots/sitemap, <code>/discover</code> galerisi, pricing sayfası.</li>
+        <li><b>Operasyon:</b> worker kuyruğu, Alembic, CI (pytest + pip-audit + bandit + Playwright), JSON loglama, <code>/metrics</code>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Eksikler <span class="badge gap">bu planın konusu</span></h3>
+      <ul class="plain">
+        <li>Recurring billing + dunning, global ödeme (MoR), fatura/e-arşiv entegrasyonu.</li>
+        <li>Yaşam döngüsü e-postaları, ürün-içi upgrade tetikleyicileri (paywall anları).</li>
+        <li>B2B: segment sayfaları, demo/satış akışı, güvenlik-güven sayfası, vaka çalışmaları, Shopify/WooCommerce entegrasyonu, koltuk-bazlı org faturalama.</li>
+        <li>İş metrikleri panosu (aktivasyon hunisi, MRR, churn, kredi kullanımı, CAC).</li>
+        <li>Referans/davet programı, içerik-SEO üretim hattı.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. SEGMENTLER ============ -->
+<section id="segment">
+  <h2 class="sec"><span class="n">2</span>Konumlandırma ve Hedef Segmentler</h2>
+
+  <div class="callout">
+    <p><strong>Kategori:</strong> "Herhangi bir 3D dosyasını — ya da bir AI promptunu — saniyeler içinde telefonda çalışan, paylaşılabilir bir AR linkine çeviren <b>en hızlı yol</b>." Tüm mesajlaşma tek bu cümleden türetilir; converter/AI/host kimlikleri "nasıl"dır, "ne" değildir.</p>
+  </div>
+
+  <h3>B2C — self-serve, hacim motoru</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Segment</th><th>Acı</th><th>Kanca</th><th>Plan</th></tr></thead>
+    <tbody>
+      <tr><td><b>Maker / 3D-print hobisti</b></td><td>STL'i telefonda gösterememek</td><td>"STL'ini at, AR linkini WhatsApp'tan yolla"</td><td>Free→Pro</td></tr>
+      <tr><td><b>Freelance 3D sanatçı / portfolyo</b></td><td>Müşteriye iş teslimi/onayı</td><td>Versiyonlu, parola korumalı paylaşım</td><td>Pro</td></tr>
+      <tr><td><b>Etsy / küçük e-ticaret satıcısı</b></td><td>Ürünü "evinde gör" deneyimi</td><td>Embed + QR, kod yok</td><td>Pro</td></tr>
+      <tr><td><b>AI-meraklısı üretici</b></td><td>Meshy çıktısını paylaşamamak</td><td>"Üret → anında AR linki"</td><td>Free→Pro (kredi top-up)</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>B2B — satış-destekli, gelir motoru</h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Segment</th><th>Acı</th><th>Kanca</th><th>Plan</th></tr></thead>
+    <tbody>
+      <tr><td><b>Mobilya / dekorasyon e-ticareti</b></td><td>İade oranı, "yerinde nasıl durur"</td><td>Ürün sayfasına AR embed (Shopify)</td><td>Business</td></tr>
+      <tr><td><b>Mimarlık / iç mimarlık ofisi</b></td><td>Müşteri sunumu, revizyon turları</td><td>Org + versiyon + hotspot + white-label</td><td>Business</td></tr>
+      <tr><td><b>Ajanslar (3D içerik üreten)</b></td><td>Müşteri başına teslim altyapısı</td><td>Custom domain + white-label + API</td><td>Business/Enterprise</td></tr>
+      <tr><td><b>Eğitim kurumları</b></td><td>Etkileşimli materyal</td><td>Toplu yükleme + org + embed</td><td>Business (eğitim indirimi)</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout amber">
+    <p><strong>B2C→B2B köprüsü (planın kalbi):</strong> Free/Pro kullanıcı davranışından B2B sinyali çıkar: aynı domain'den 3+ kayıt, org oluşturma, embed'in bir e-ticaret sitesinde görünmesi, API kullanımı, yüksek AR görüntülenme. Bu sinyaller otomatik olarak bir "sales-ready lead" listesine düşmeli (Bölüm 5, otomasyon #4).</p>
+  </div>
+</section>
+
+<!-- ============ 3. TİCARİ PLAN ============ -->
+<section id="ticari">
+  <h2 class="sec"><span class="n">3</span>Ticari Plan</h2>
+
+  <h3>3.1 Fiyatlandırma aksiyonları</h3>
+  <div class="card">
+    <ol class="plain">
+      <li><b>Yıllık plan ekle</b> (2 ay bedava = ~%17 indirim). <code>billing_period="yearly"</code> altyapısı zaten var; pricing sayfasına aylık/yıllık anahtarı eklenecek. Yıllık peşin tahsilat, erken evrede nakit akışının en ucuz finansmanıdır.</li>
+      <li><b>Kredi top-up paketlerini satışa aç</b> (business-plan §3'teki 10/50/200'lük paketler). Ledger hazır; sadece checkout'a "credit_topup" ürün tipi eklenecek. AI kullanan kullanıcıda ARPU'yu abonelik dışına genişletir.</li>
+      <li><b>USD fiyat listesi</b> — MoR sağlayıcısı devreye girince: Pro $12–15, Business $79–99 (rakip bandı: Sketchfab ≈$15–60, Vectary ≈$12–40 — canlı doğrula). TRY fiyatları yerel pazar için korunur (bölgesel fiyatlandırma avantajı).</li>
+      <li><b>Enterprise "bizimle konuş" katmanı</b> pricing'e eklenir: SSO, SLA, özel limitler, fatura ile ödeme. Fiyatı sabitleme; teklif bazlı başla (ilk 3-5 anlaşmada fiyat keşfi).</li>
+      <li><b>Free planı aktivasyona göre ayarla:</b> e-posta doğrulaması olmadan AI kredisi yok (kötüye kullanım + liste kalitesi); buna karşılık "ilk modelini yükle → +2 kredi" gibi aktivasyon ödülleri.</li>
+    </ol>
+  </div>
+
+  <h3>3.2 Satış kanalları ve GTM</h3>
+  <div class="grid2">
+    <div class="card">
+      <h4 style="margin-top:0;">B2C — PLG, tamamı otomatik</h4>
+      <ul class="plain">
+        <li><b>Viral döngü:</b> paylaşılan link → OG önizleme → görüntüleyen kayıt olur → kendi linkini paylaşır. Embed'de "Powered by ARVision" atfı (Free/Pro'da; Business'ta kaldırılabilir — white-label zaten bunun için var). Atıf tıklanabilir + UTM'li olmalı.</li>
+        <li><b>SEO içerik hattı:</b> format-acısı sayfaları ("FBX to GLB", "STL'i AR'da görüntüle", "USDZ nedir") + <code>/vs/sketchfab</code>, <code>/vs/meshy</code> karşılaştırma sayfaları + <code>/discover</code> galerisinin indekslenen model sayfaları. Hedef: ayda 4-8 sayfa, şablonlaştırılmış üretim.</li>
+        <li><b>Topluluk:</b> r/3Dprinting, r/Blender, Printables/Thingiverse toplulukları, X/LinkedIn'de "önce/sonra AR" videoları. Haftada 2-3 organik gönderi; ürün içi "paylaş" anına hazır-metin/video ekle.</li>
+        <li><b>Launch anları:</b> Product Hunt lansmanı (tek seferlik, hazır olunca), Hacker News "Show HN" (developers paneli + API hikâyesiyle).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 style="margin-top:0;">B2B — sales-assist, insan + otomasyon</h4>
+      <ul class="plain">
+        <li><b>Inbound:</b> Segment landing sayfaları + "demo iste" formu → takvim (Cal.com) → CRM'e düşer. Business denemesi: 14 gün, kredi kartı istemeden, satış onaylı.</li>
+        <li><b>Outbound (hedefli, spam değil):</b> Haftada 20-30 hesaplık liste — AR kullanmayan ama 3D varlığı olan mobilya/dekor e-ticaret siteleri, mimarlık ofisleri. Kanca kişisel: <em>"Sitenizdeki X ürününü AR'a çevirdim, linki: …"</em> — ürünün kendisi demo üretir; outbound e-postanın eki bizzat çalışan AR linki. Bu, ARVision'ın haksız avantajı.</li>
+        <li><b>Entegrasyon kanalı:</b> Shopify App Store'a basit bir "AR viewer" uygulaması (embed + ürün eşleme). App Store'un kendisi bir edinim kanalıdır; e-ticaret ICP'sine en kısa yol.</li>
+        <li><b>Ortaklıklar:</b> 3D tarama servisleri, ürün fotoğrafçıları, e-ticaret ajansları — %20-25 tekrarlayan komisyonlu referans programı.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>3.3 Satış süreci (B2B, hafif tutulmuş)</h3>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item"><div class="when">Adım 1</div><div class="what">Sinyal / başvuru (inbound form veya sinyal madenciliği listesi)</div></div>
+      <div class="tl-item"><div class="when">Adım 2</div><div class="what">25 dk demo — müşterinin <b>kendi ürünüyle</b> canlı dönüşüm</div></div>
+      <div class="tl-item"><div class="when">Adım 3</div><div class="what">14 gün pilot; başarı kriteri baştan yazılır ("ürün sayfasında AR, X görüntülenme")</div></div>
+      <div class="tl-item"><div class="when">Adım 4</div><div class="what">Business abonelik veya yıllık teklif</div></div>
+      <div class="tl-item"><div class="when">Adım 5</div><div class="what">30. günde vaka çalışması izni iste</div></div>
+    </div>
+    <p style="margin-top:10px;">İlk 10 anlaşmada <b>kurucu-satışı</b>; script ve itiraz bankası bu görüşmelerden yazılır.</p>
+  </div>
+</section>
+
+<!-- ============ 4. TEKNİK YOL HARİTASI ============ -->
+<section id="teknik">
+  <h2 class="sec"><span class="n">4</span>Teknik Yol Haritası</h2>
+  <p class="sec-sub">Satışı hızlandıran işler, öncelik sıralı. Her madde mevcut mimariye (blueprint + services) oturur; hiçbiri büyük refactor değildir.</p>
+
+  <h3>Faz 1 — Gelir kaçağını durdur <span class="badge p1">Hafta 1–3</span></h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>İş</th><th>Kapsam</th><th>Neden</th></tr></thead>
+    <tbody>
+      <tr><td><b>Yenileme hatırlatma + dunning e-postaları</b></td><td>Worker sweep'ine T-7 / T-1 / T+3 e-postaları (<code>expire_stale_plans</code> yanına); <code>send_email</code> mevcut</td><td>Pasif churn'ü durdurur — <b>en yüksek ROI'li iş</b></td></tr>
+      <tr><td><b>Lemon Squeezy / Paddle sağlayıcısı</b></td><td><code>services/payments/</code> altına ikinci provider (base.py soyutlaması hazır); webhook → plan grant</td><td>Global satış + gerçek recurring + vergi yükü MoR'da</td></tr>
+      <tr><td><b>Kredi top-up checkout'u</b></td><td><code>Payment</code>'a <code>kind=topup</code>; başarılı callback → <code>credits.grant</code></td><td>Hazır talebi paraya çevirir</td></tr>
+      <tr><td><b>İş metrikleri panosu (admin)</b></td><td><code>/admin/growth</code>: kayıt→doğrulama→ilk model→ilk paylaşım→ücretli hunisi, MRR, aktif abone, kredi kullanım %, yenileme %</td><td>Ölçüm olmadan tempo yönetilemez</td></tr>
+      <tr><td><b>Upgrade tetikleyicileri</b></td><td>Kota/limit'e çarpan her yerde (upload, AI, depolama, batch) bağlama duyarlı "Pro'ya geç" modali + <code>?upgrade_reason=</code> UTM'i</td><td>Paywall anları = dönüşümün %80'i</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Faz 2 — B2B satış yüzeyi <span class="badge p2">Hafta 3–6</span></h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>İş</th><th>Kapsam</th></tr></thead>
+    <tbody>
+      <tr><td><b>Segment landing sayfaları</b></td><td><code>/for/ecommerce</code>, <code>/for/architecture</code>, <code>/for/agencies</code> — aynı Jinja şablonu, segment verisiyle; sitemap'e ekle</td></tr>
+      <tr><td><b>Demo/satış akışı</b></td><td>"Talk to sales" formu → e-posta + admin bildirimi; Cal.com linki</td></tr>
+      <tr><td><b>Güven sayfası</b></td><td><code>/security</code>: veri saklama, gizlilik, altyapı, yedekleme; B2B'nin ön koşulu</td></tr>
+      <tr><td><b>Business trial</b></td><td>Admin'den süreli plan atama zaten var (<code>plan_expires_at</code>); self-serve "14 gün dene" butonuna bağla</td></tr>
+      <tr><td><b>Koltuk-bazlı org faturalama (v1)</b></td><td>Business planına "N koltuk dahil, koltuk başı $X" — org üye sayısı zaten modelde</td></tr>
+      <tr><td><b>Shopify uygulaması (MVP)</b></td><td>Embed snippet + ürün eşleme; App Store girişi ayrı sprint</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Faz 3 — PLG derinleştirme <span class="badge p3">Hafta 6–12</span></h3>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>İş</th><th>Kapsam</th></tr></thead>
+    <tbody>
+      <tr><td><b>Referans programı</b></td><td>Davet linki → her iki tarafa AI kredisi; ledger hazır olduğundan ucuz iş</td></tr>
+      <tr><td><b>Karşılaştırma + format SEO sayfaları</b></td><td><code>/vs/*</code> ve <code>/convert/*</code> şablon sayfaları (statik içerik + canlı demo bileşeni)</td></tr>
+      <tr><td><b>Onboarding checklist'i (ürün içi)</b></td><td>"Model yükle → AR'da aç → linki paylaş → AI dene" 4 adımlı ilerleme çubuğu; aktivasyonu tanımlar</td></tr>
+      <tr><td><b>Public API hikâyesi</b></td><td>Developers paneli mevcut; rate-limit'li ücretsiz tier + docs'a örnek reçeteler ("CI'da otomatik AR linki")</td></tr>
+      <tr><td><b>E-arşiv/fatura entegrasyonu (TR)</b></td><td>Paraşüt/BizimHesap API — TR kurumsal satış için fatura şart</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout amber">
+    <p><strong>Teknik borç bekçileri (büyürken batmamak için):</strong> R2/S3 depolama göçü 50GB eşiğinde (business-plan §4C) · Redis rate-limit çoklu instance'ta · <code>/metrics</code>'e iş metrikleri (kayıt, dönüşüm, ödeme) sayaçları · Sentry (veya eşleniği) hata izleme.</p>
+  </div>
+</section>
+
+<!-- ============ 5. OTOMASYON ============ -->
+<section id="otomasyon">
+  <h2 class="sec"><span class="n">5</span>Otomatikleştirilecek Sistemler</h2>
+  <p class="sec-sub">Amaç: kurucu zamanının satış görüşmeleri + ürün dışında hiçbir rutine gitmemesi.</p>
+
+  <div class="card">
+    <h4 style="margin-top:0;">1 · Yaşam döngüsü e-postaları <span class="badge p1">worker-tabanlı, mevcut SMTP ile</span></h4>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Tetikleyici</th><th>E-posta</th><th>Zamanlama</th></tr></thead>
+      <tbody>
+        <tr><td>Kayıt</td><td>Hoş geldin + ilk model rehberi</td><td>Gün 0</td></tr>
+        <tr><td>Model yükledi, paylaşmadı</td><td>"Linkini gönder"</td><td>Gün 1</td></tr>
+        <tr><td>Hiç model yüklemedi</td><td>Örnek galeri + 1 tık şablon</td><td>Gün 2</td></tr>
+        <tr><td>AI kredisi bitti</td><td>Top-up teklifi</td><td>Anlık</td></tr>
+        <tr><td>Depolama/kota %80</td><td>Upgrade</td><td>Anlık</td></tr>
+        <tr><td>Yenileme yaklaşyor/geçti</td><td>Dunning dizisi</td><td>T-7 / T-1 / T+3</td></tr>
+        <tr><td>30 gün inaktif ücretli</td><td>Win-back</td><td>Gün 30</td></tr>
+      </tbody>
+    </table></div>
+    <p>Uygulama: <code>worker.py</code>'ye günlük "lifecycle sweep" + <code>EmailLog</code> tablosu (aynı e-posta iki kez gitmesin). Üçüncü parti araç gerekmez; ölçek büyüyünce Loops/Customer.io'ya taşınır.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0;">2 · Dunning + abonelik durumu</h4><p>MoR webhook'ları (ödeme başarısız → yeniden dene bildirimi → 7 gün ödemesiz → downgrade) tamamen otomatik; admin sadece istisna görür.</p></div>
+    <div class="card"><h4 style="margin-top:0;">3 · Haftalık iş raporu</h4><p>Otomatik e-posta, pazartesi 08:00: kayıt, aktivasyon %, yeni MRR, churn, kredi kullanımı, en çok görüntülenen 5 model, en aktif 5 org. Worker'da tek fonksiyon; kurucunun haftalık karar toplantısının gündemi budur.</p></div>
+    <div class="card"><h4 style="margin-top:0;">4 · B2B sinyal madenciliği</h4><p>Günlük sweep — aynı şirket domain'inden ≥3 kullanıcı, org kurulumu, embed referer'ında ticari domain, API kullanımı, tek modelde ≥100 AR görüntülenme → admin'e "bugün aranacaklar" e-postası. CRM'e (başta basit tablo/Notion, sonra HubSpot Free) otomatik satır.</p></div>
+    <div class="card"><h4 style="margin-top:0;">5 · İçerik/SEO hattı</h4><p>Ayda bir sitemap fark raporu + Search Console API'den pozisyon/klik çekimi → hangi format sayfası yazılacak listesi. İçerik taslakları AI-destekli üretilir, <b>insan onayıyla</b> yayınlanır (kalite kontrolsüz AI içeriği yayınlama).</p></div>
+    <div class="card"><h4 style="margin-top:0;">6 · Rakip izleme</h4><p>COMPETITOR-REPORT izleme planının otomasyonu — aylık cron: rakip pricing sayfalarını çek, diff varsa e-posta; Meshy/Tripo changelog RSS takibi ("AR paylaşım özelliği eklediler mi" tehdidi). Google Alerts kurulumları (manuel, 1 kez).</p></div>
+    <div class="card"><h4 style="margin-top:0;">7 · Operasyon nöbetçileri</h4><p>Conversion job hata oranı &gt; eşik → uyarı; depolama büyüme trendi → R2 göç hatırlatması; <code>pip-audit</code>/<code>bandit</code> zaten CI'da — haftalık zamanlanmış CI çalıştırması eklenir (bağımlılık CVE'leri PR beklemeden yakalansın).</p></div>
+    <div class="card"><h4 style="margin-top:0;">8 · Sosyal kanıt toplama</h4><p>Ödeme sonrası 30. günde otomatik "deneyimini paylaş" e-postası (yorum/tweet isteği); NPS mini anketi (1 soru) 14. günde ürün içinde.</p></div>
+  </div>
+</section>
+
+<!-- ============ 6. ARAŞTIRMA RİTMİ ============ -->
+<section id="arastirma">
+  <h2 class="sec"><span class="n">6</span>Düzenli Araştırma Ritmi</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Sıklık</th><th>Araştırma</th><th>Kaynak / Araç</th><th>Çıktı</th></tr></thead>
+    <tbody>
+      <tr><td><b>Haftalık</b> (30 dk)</td><td>Huni metrikleri + kayıt kaynakları incelemesi</td><td><code>/admin/growth</code> + haftalık otomatik rapor</td><td>1 deney kararı</td></tr>
+      <tr><td><b>Haftalık</b> (30 dk)</td><td>Kullanıcı geri bildirimi taraması</td><td>Destek e-postaları, iptal nedenleri, NPS yorumları</td><td>Yol haritası girdisi</td></tr>
+      <tr><td><b>2 haftada bir</b></td><td>3-5 kullanıcı görüşmesi (özellikle: yeni ücretli + yeni churn eden)</td><td>15 dk görüşme; iptal akışına "neden?" zorunlu tek soru</td><td>ICP/mesaj güncellemesi</td></tr>
+      <tr><td><b>Aylık</b></td><td>Rakip fiyat/özellik diff'i</td><td>Otomatik scraper raporu + manuel doğrulama</td><td>Fiyat/konum kararı</td></tr>
+      <tr><td><b>Aylık</b></td><td>SEO/anahtar kelime performansı</td><td>Search Console + hedef sorgu listesi</td><td>Sonraki 4-8 içerik konusu</td></tr>
+      <tr><td><b>Aylık</b></td><td>Birim ekonomi güncellemesi</td><td>Meshy faturası / Railway kullanımı vs. business-plan varsayımları</td><td>Marj sapması varsa fiyat/limit aksiyonu</td></tr>
+      <tr><td><b>Çeyreklik</b></td><td>Pazar taraması: yeni AI-3D sağlayıcıları (Tripo, Hyper3D, …), WebXR/Quick Look platform değişiklikleri</td><td>Sağlayıcı docs, WWDC / Google I/O notları</td><td>Tedarikçi çeşitlendirme + özellik fırsatı</td></tr>
+      <tr><td><b>Çeyreklik</b></td><td>G2/Capterra/Trustpilot kategori taraması + kendi listelenme durumun</td><td>Canlı tarama</td><td>Review-toplama kampanyası</td></tr>
+      <tr><td><b>Çeyreklik</b></td><td>Fiyatlandırma araştırması (kullanım verisiyle)</td><td>Kredi kullanım dağılımı, plan geçiş matrisi</td><td>Plan/limit revizyonu</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">
+    <p><strong>Kural:</strong> Her araştırma çıktısı ya bir <b>deneye</b> ya bir <b>yol haritası maddesine</b> bağlanır; bağlanmıyorsa o araştırma takvimden çıkarılır.</p>
+  </div>
+</section>
+
+<!-- ============ 7. KPI ============ -->
+<section id="kpi">
+  <h2 class="sec"><span class="n">7</span>KPI'lar ve Hedefler</h2>
+  <div class="callout green">
+    <p><strong>Kuzey Yıldızı metriği:</strong> Haftalık <b>paylaşılan-ve-görüntülenen AR linki</b> sayısı — ürün değerinin gerçekleşme anı (business-plan §9 ile uyumlu).</p>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Metrik</th><th>Şimdi</th><th>30 gün</th><th>90 gün</th></tr></thead>
+    <tbody>
+      <tr><td><b>Kayıt → aktivasyon</b> (ilk paylaşım)</td><td>ölçülmüyor</td><td>ölçülüyor + taban</td><td>%40</td></tr>
+      <tr><td><b>Kayıt → ücretli</b></td><td>ölçülmüyor</td><td>%1-2</td><td>%3-5</td></tr>
+      <tr><td><b>Ücretli abone</b></td><td>~0</td><td>8-10</td><td>20+ (2'si Business)</td></tr>
+      <tr><td><b>Yenileme oranı</b></td><td>takipsiz (pasif churn)</td><td>&gt;%50</td><td>&gt;%70</td></tr>
+      <tr><td><b>MRR</b></td><td>~0</td><td>$150-250</td><td>$600-1.000</td></tr>
+      <tr><td><b>Organik oturum/ay</b></td><td>düşük</td><td>+%30</td><td>3x taban</td></tr>
+      <tr><td><b>B2B pilot</b></td><td>0</td><td>1</td><td>2 (vaka çalışmalı)</td></tr>
+      <tr><td><b>Kredi kullanım oranı</b></td><td>—</td><td>%40-60 bandında izleniyor</td><td>bandın içinde (marj koruması)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 8. TAKVİM ============ -->
+<section id="takvim">
+  <h2 class="sec"><span class="n">8</span>90 Günlük Sprint Takvimi</h2>
+  <div class="card">
+    <div class="timeline">
+      <div class="tl-item"><div class="when">Hafta 1–2</div><div class="what">Dunning/yenileme e-postaları · growth panosu · upgrade tetikleyicileri · ilk 10 outbound "ürününüzü AR'a çevirdim" e-postası (manuel, öğrenme amaçlı).</div></div>
+      <div class="tl-item"><div class="when">Hafta 3–4</div><div class="what">MoR sağlayıcı entegrasyonu (USD + recurring) · yıllık planlar · kredi top-up satışı · <code>/security</code> + demo formu.</div></div>
+      <div class="tl-item"><div class="when">Hafta 5–6</div><div class="what">Segment landing sayfaları · lifecycle e-posta dizileri (hoş geldin / aktivasyon) · B2B sinyal sweep'i · ilk 2 <code>/vs</code> sayfası.</div></div>
+      <div class="tl-item"><div class="when">Hafta 7–9</div><div class="what">Shopify MVP · referans programı · onboarding checklist'i · Product Hunt hazırlığı · ilk B2B pilotun kapanışı.</div></div>
+      <div class="tl-item"><div class="when">Hafta 10–12</div><div class="what">Product Hunt lansmanı · vaka çalışması yayını · format-SEO sayfa serisi · koltuk-bazlı Business faturalama · çeyreklik fiyat revizyonu (veriyle).</div></div>
+    </div>
+    <div class="callout" style="margin-bottom:0;">
+      <p><strong>Ritim:</strong> Haftalık tek öncelik ("bu hafta gemiye ne biniyor?") · pazartesi otomatik rapor + 30 dk karar · cuma gemiye binenin duyurusu (changelog + sosyal gönderi — changelog'un kendisi pazarlama içeriğidir).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 9. RİSKLER ============ -->
+<section id="risk">
+  <h2 class="sec"><span class="n">9</span>Riskler ve Önlemler</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Risk</th><th>Önlem</th></tr></thead>
+    <tbody>
+      <tr><td><b>Meshy'nin AR-paylaşım katmanı eklemesi</b> (en büyük stratejik tehdit)</td><td>"Üret→AR→paylaş" mesajını derinleştir; dönüşüm+hosting+org+analytics paketinin AI'dan bağımsız değerini büyüt; Tripo/Hyper3D adaptörüyle tedarikçi bağımlılığını kır</td></tr>
+      <tr><td><b>Tek dönemlik ödemeyle pasif churn</b></td><td>Faz 1 dunning + MoR recurring (bu planın 1 numarası)</td></tr>
+      <tr><td><b>Kredi marjı varsayımının şaşması</b></td><td>Aylık birim-ekonomi kontrolü (Bölüm 6); devretme sınırı + günlük limitler mevcut</td></tr>
+      <tr><td><b>Tek geliştirici dar boğazı</b></td><td>Otomasyon-öncelikli plan; her manuel rutin 2. tekrarında otomatikleştirilir; CI/testler mevcut disiplinle korunur</td></tr>
+      <tr><td><b>Depolama/egress maliyeti</b></td><td>50GB eşiğinde R2 göçü (hazırlığı Faz 3'te başlat)</td></tr>
+      <tr><td><b>B2B satış döngüsünün uzaması</b></td><td>Pilotlar süreli ve başarı-kriterli; self-serve Business her zaman açık kalır</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<footer>
+  <p>Bu plan; <code>docs/business-plan.md</code>'nin birim ekonomisini, <code>COMPETITOR-REPORT.md</code>'nin konumlandırmasını ve <code>MARKETING-AUDIT.md</code>'nin (büyük ölçüde kapatılmış) denetim bulgularını tek bir uygulanabilir yol haritasında birleştirir.</p>
+  <p style="margin-top:6px;">Revizyon ritmi: 30 günde bir, gerçekleşen metriklerle. · Kaynak: <code>docs/growth-strategy.md</code> · 21 Temmuz 2026</p>
+</footer>
+
+</div>
+</body>
+</html>

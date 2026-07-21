@@ -22,19 +22,30 @@
     'webhooks': 'Webhooks',
 } %}
 
+{% macro source_chip(key) -%}
+<span class="setting-source {% if overridden[key] %}setting-source--override{% endif %}">{{ 'override' if overridden[key] else 'default' }}</span>
+{%- endmacro %}
+
+<div class="av-tabs settings-tabs">
+    {% for t in tabs %}
+    <a href="{{ url_for('admin.settings', tab=t) }}" class="av-tab {% if tab == t %}is-active{% endif %}" style="text-decoration:none;text-align:center;">{{ t }}</a>
+    {% endfor %}
+</div>
+
+{# ======================= PLANS ======================= #}
 {% if tab == 'plans' %}
 {% macro plan_card(p, prefix, deletable) %}
-<form method="POST" action="{{ url_for('admin.settings', tab='plans') }}" class="admin-card" style="margin-bottom:1rem;">
+<form method="POST" action="{{ url_for('admin.settings', tab='plans') }}" class="admin-card">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="plan_action" value="save">
     {% if p %}<input type="hidden" name="plan_slug" value="{{ p.slug }}">{% endif %}
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
-        <h3 style="margin:0;">{{ p.display_name if p else 'New plan' }}
-            {% if p and p.slug %}<code style="font-weight:normal;opacity:.6;">{{ p.slug }}</code>{% endif %}
+    <div class="plans-card-head">
+        <h3>{{ p.display_name if p else 'New plan' }}
+            {% if p and p.slug %}<code>{{ p.slug }}</code>{% endif %}
             {% if p and p.is_system %}<span class="field-help" style="display:inline;">(system — can't delete)</span>{% endif %}
         </h3>
         {% if deletable %}
-        <button type="submit" form="del-{{ p.slug }}" class="admin-btn"
+        <button type="submit" form="del-{{ p.slug }}" class="admin-btn admin-btn--danger"
                 onclick="return confirm('Delete plan {{ p.slug }}? Users on it are not changed automatically.');">delete</button>
         {% endif %}
     </div>
@@ -44,7 +55,7 @@
         <input type="text" id="new__slug" name="new__slug" class="av-input" maxlength="30" placeholder="e.g. studio">
     </div>
     {% endif %}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+    <div class="plans-grid">
         <div class="admin-field"><label class="field-label">name</label>
             <input type="text" name="{{ prefix }}__display_name" class="av-input" maxlength="60" value="{{ p.display_name if p else '' }}"></div>
         <div class="admin-field"><label class="field-label">price ({{ p.currency if p else 'TRY' }}/period)</label>
@@ -58,40 +69,34 @@
             </select></div>
         <div class="admin-field"><label class="field-label">sort order</label>
             <input type="number" name="{{ prefix }}__sort_order" class="av-input" step="1" value="{{ p.sort_order if p else 0 }}"></div>
-        <div class="admin-field"><label class="av-switch-label" style="margin-top:1.6rem;">
+        <div class="admin-field"><label class="av-switch-label">
             <span class="av-switch"><input type="checkbox" name="{{ prefix }}__is_public" {% if not p or p.is_public %}checked{% endif %}><span class="track"></span><span class="knob"></span></span>
             <span class="av-switch-text">show on /pricing</span></label></div>
     </div>
-    <p class="plans-editor-section" style="margin:.75rem 0 .35rem;">limits <span class="field-help" style="display:inline;font-weight:normal;">(blank = inherit global default)</span></p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;">
+    <p class="plans-section-label">limits <span class="field-help" style="display:inline;font-weight:normal;text-transform:none;letter-spacing:0;">(blank = inherit global default)</span></p>
+    <div class="plans-grid">
         {% for key in limit_keys %}
         <div class="admin-field"><label class="field-label">{{ limit_labels[key] }}</label>
             <input type="number" name="{{ prefix }}__{{ key }}" class="av-input" min="0" step="1"
                    value="{{ p.limits[key] if p and p.limits[key] is not none else '' }}"></div>
         {% endfor %}
     </div>
-    <p class="plans-editor-section" style="margin:.75rem 0 .35rem;">features</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.5rem;">
+    <p class="plans-section-label">features</p>
+    <div class="plans-features">
         {% for key in feature_keys %}
         <label class="av-switch-label">
             <span class="av-switch"><input type="checkbox" name="{{ prefix }}__{{ key }}" {% if p and p.features[key] %}checked{% endif %}><span class="track"></span><span class="knob"></span></span>
             <span class="av-switch-text">{{ feature_labels[key] }}</span></label>
         {% endfor %}
     </div>
-    <button type="submit" class="admin-btn admin-btn--primary" style="margin-top:1rem;">{{ 'create plan' if not p else 'save' }}</button>
+    <button type="submit" class="admin-btn admin-btn--primary plans-save-btn">{{ 'create plan' if not p else 'save' }}</button>
 </form>
 {% endmacro %}
 
-<div class="av-tabs" style="max-width:34rem;margin-bottom:1rem;">
-    {% for t in tabs %}
-    <a href="{{ url_for('admin.settings', tab=t) }}" class="av-tab {% if tab == t %}is-active{% endif %}" style="text-decoration:none;text-align:center;">{{ t }}</a>
-    {% endfor %}
-</div>
-<p class="field-help" style="margin-bottom:1rem;">
+<p class="field-help">
     Create as many plans as you like and toggle each feature/limit per plan.
     Changes apply everywhere within about a minute (/pricing, profile, billing,
-    and all enforcement). The Free and Unlimited plans are system plans and
-    can't be deleted.
+    and all enforcement). Free and Unlimited are system plans and can't be deleted.
 </p>
 {% for p in plans_editor %}{{ plan_card(p, p.slug, not p.is_system) }}{% endfor %}
 {{ plan_card(none, 'new', false) }}
@@ -102,73 +107,227 @@
     <input type="hidden" name="plan_slug" value="{{ p.slug }}">
 </form>
 {% endfor %}
-{% else %}
-<div class="av-tabs" style="max-width:34rem;">
-    {% for t in tabs %}
-    <a href="{{ url_for('admin.settings', tab=t) }}" class="av-tab {% if tab == t %}is-active{% endif %}" style="text-decoration:none;text-align:center;">{{ t }}</a>
-    {% endfor %}
+
+{# ======================= SYSTEM (read-only) ======================= #}
+{% elif tab == 'system' %}
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-value">{{ system.workers | selectattr('stale', 'equalto', False) | list | length }}</div>
+        <div class="kpi-label">live workers</div>
+        <div class="kpi-sub">{{ system.workers | length }} seen recently</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ system.queue_counts.get('pending', 0) + system.queue_counts.get('processing', 0) }}</div>
+        <div class="kpi-label">jobs in queue</div>
+        <div class="kpi-sub">{{ system.queue_counts.get('dead_letter', 0) }} dead-letter · {{ system.queue_counts.get('failed', 0) }} failed</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ system.disk.used_pct ~ '%' if system.disk else '—' }}</div>
+        <div class="kpi-label">disk used</div>
+        <div class="kpi-sub">{{ system.disk.free_gb ~ ' GB free of ' ~ system.disk.total_gb ~ ' GB' if system.disk else 'unavailable' }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-value">{{ system.data_counts.analytics_events }}</div>
+        <div class="kpi-label">analytics events</div>
+        <div class="kpi-sub">{{ system.data_counts.share_links }} share links</div>
+    </div>
 </div>
 
-<form method="POST" action="{{ url_for('admin.settings', tab=tab) }}" class="admin-card admin-settings-form">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="admin-grid-2">
+    <section class="admin-card">
+        <h2 class="admin-card-title">integrations</h2>
+        <dl class="admin-dl">
+            {% for name, status in system.integrations.items() %}
+            <div><dt>{{ name.replace('_', ' ') }}</dt><dd class="settings-mono">{{ status }}</dd></div>
+            {% endfor %}
+        </dl>
+    </section>
+    <section class="admin-card">
+        <h2 class="admin-card-title">runtime config</h2>
+        <dl class="admin-dl">
+            <div><dt>site url</dt><dd class="settings-mono">{{ system.config_summary.site_url }}</dd></div>
+            <div><dt>payment provider</dt><dd>{{ system.config_summary.payment_provider }}{% if system.config_summary.paytr_test_mode %} <span class="status-badge status-badge--processing">test mode</span>{% endif %}</dd></div>
+            <div><dt>billing currency</dt><dd>{{ system.config_summary.billing_currency }}</dd></div>
+            <div><dt>upload hard ceiling</dt><dd>{{ system.config_summary.upload_hard_ceiling_mb }} MB</dd></div>
+            <div><dt>seo index env default</dt><dd>{{ 'on' if system.config_summary.seo_index_model_pages_env else 'off' }}</dd></div>
+        </dl>
+    </section>
+</div>
 
-    {% if tab == 'general' %}
-    <div class="admin-field">
-        <label class="av-switch-label">
-            <span class="av-switch">
-                <input type="checkbox" name="maintenance_mode" {% if values.maintenance_mode %}checked{% endif %}>
-                <span class="track"></span>
-                <span class="knob"></span>
-            </span>
-            <span class="av-switch-text">maintenance mode</span>
-        </label>
-        <p class="field-help">When on, visitors get a 503 maintenance page. Admins and the login page stay reachable.</p>
-    </div>
-    <div class="admin-field">
-        <label class="field-label" for="announcement_text">announcement banner</label>
-        <textarea id="announcement_text" name="announcement_text" class="av-input" rows="2"
-                  placeholder="Shown at the bottom of every public page. Leave empty to hide.">{{ values.announcement_text }}</textarea>
-    </div>
+<div class="admin-grid-2">
+    <section class="admin-card">
+        <h2 class="admin-card-title">conversion queue</h2>
+        <dl class="admin-dl">
+            {% for status in ('pending', 'processing', 'completed', 'failed', 'dead_letter') %}
+            <div><dt>{{ status.replace('_', ' ') }}</dt><dd>{{ system.queue_counts.get(status, 0) }}</dd></div>
+            {% endfor %}
+        </dl>
+    </section>
+    <section class="admin-card">
+        <h2 class="admin-card-title">ai generations</h2>
+        <dl class="admin-dl">
+            {% for status in ('generating', 'ready', 'failed') %}
+            <div><dt>{{ status }}</dt><dd>{{ system.ai_counts.get(status, 0) }}</dd></div>
+            {% endfor %}
+            <div><dt>organizations</dt><dd>{{ system.data_counts.organizations }}</dd></div>
+            <div><dt>active api tokens</dt><dd>{{ system.data_counts.api_tokens_active }}</dd></div>
+            <div><dt>webhook subscriptions</dt><dd>{{ system.data_counts.webhooks }}</dd></div>
+        </dl>
+    </section>
+</div>
 
-    {% elif tab == 'users' %}
-    <div class="admin-field">
-        <label class="av-switch-label">
-            <span class="av-switch">
-                <input type="checkbox" name="registration_enabled" {% if values.registration_enabled %}checked{% endif %}>
-                <span class="track"></span>
-                <span class="knob"></span>
-            </span>
-            <span class="av-switch-text">registration enabled</span>
-        </label>
-        <p class="field-help">When off, the register page redirects to login and no new accounts can be created.</p>
+<section class="admin-card">
+    <h2 class="admin-card-title">workers</h2>
+    {% if system.workers %}
+    <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead><tr><th>worker</th><th>host</th><th>current job</th><th class="num">last seen</th><th>status</th></tr></thead>
+            <tbody>
+            {% for w in system.workers %}
+                <tr>
+                    <td class="settings-mono">{{ w.worker_id }}</td>
+                    <td>{{ w.hostname or '—' }}</td>
+                    <td class="settings-mono">{{ w.current_job_id or 'idle' }}</td>
+                    <td class="num">{{ w.seconds_ago ~ 's ago' if w.seconds_ago is not none else '—' }}</td>
+                    <td>{% if w.stale %}<span class="status-badge status-badge--failed">stale</span>{% else %}<span class="status-badge status-badge--ready">live</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     </div>
-
-    {% elif tab == 'ai' %}
-    <div class="admin-field">
-        <label class="field-label" for="ai_monthly_limit">monthly generation limit per user</label>
-        <input type="number" id="ai_monthly_limit" name="ai_monthly_limit" class="av-input" min="0" max="100000"
-               value="{{ values.ai_monthly_limit }}">
-        <p class="field-help">Rolling 30-day window; the fallback for users whose plan doesn't set its own monthly allowance (e.g. Free). Each generation costs Meshy credits. 0 disables AI generation entirely.</p>
-    </div>
-
-    {% elif tab == 'uploads' %}
-    <div class="admin-field">
-        <label class="field-label" for="max_upload_mb">max upload size (MB)</label>
-        <input type="number" id="max_upload_mb" name="max_upload_mb" class="av-input" min="1" max="{{ ceiling }}"
-               value="{{ values.max_upload_mb }}">
-        <p class="field-help">The server-wide hard ceiling is {{ ceiling }} MB (MAX_CONTENT_LENGTH); this setting can only lower it.</p>
-    </div>
-    <div class="admin-field">
-        <label class="field-label" for="storage_quota_mb">per-user storage quota (MB)</label>
-        <input type="number" id="storage_quota_mb" name="storage_quota_mb" class="av-input" min="0" max="1000000"
-               value="{{ values.storage_quota_mb }}">
-        <p class="field-help">Enforced at upload time for logged-in users (anonymous uploads aren't tracked to a quota). 0 = unlimited.</p>
-    </div>
-
+    {% else %}
+    <p class="field-help">No worker heartbeats recorded — either JOB_QUEUE is off (conversions run inline) or no worker has started yet.</p>
     {% endif %}
+</section>
 
-    <button type="submit" class="admin-btn admin-btn--primary">save settings</button>
-    <p class="field-help" style="margin-top:0.75rem;">Changes take effect within a minute (settings are cached briefly per worker).</p>
-</form>
+<section class="admin-card">
+    <h2 class="admin-card-title">raw site settings</h2>
+    <p class="field-help">Every stored override (the source of truth behind the tabs above). Values not listed here fall back to their env/code defaults.</p>
+    {% if system.settings_rows %}
+    <div class="admin-table-wrap">
+        <table class="admin-table">
+            <thead><tr><th>key</th><th>value</th><th class="num">updated</th></tr></thead>
+            <tbody>
+            {% for row in system.settings_rows %}
+                <tr>
+                    <td class="settings-mono">{{ row.key }}</td>
+                    <td class="settings-mono">{{ (row.value or '')[:120] }}</td>
+                    <td class="num muted">{{ row.updated_at.strftime('%Y-%m-%d %H:%M') if row.updated_at else '—' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="field-help">No overrides saved yet — everything is running on defaults.</p>
+    {% endif %}
+</section>
+
+{# ======================= EDITABLE TABS ======================= #}
+{% else %}
+<div class="settings-grid">
+    <form method="POST" action="{{ url_for('admin.settings', tab=tab) }}" class="admin-card admin-settings-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {% if tab == 'general' %}
+        <div class="admin-field">
+            <label class="av-switch-label">
+                <span class="av-switch">
+                    <input type="checkbox" name="maintenance_mode" {% if values.maintenance_mode %}checked{% endif %}>
+                    <span class="track"></span>
+                    <span class="knob"></span>
+                </span>
+                <span class="av-switch-text">maintenance mode {{ source_chip('maintenance_mode') }}</span>
+            </label>
+            <p class="field-help">When on, visitors get a 503 maintenance page. Admins and the login page stay reachable.</p>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="announcement_text">announcement banner {{ source_chip('announcement_text') }}</label>
+            <textarea id="announcement_text" name="announcement_text" class="av-input" rows="2"
+                      placeholder="Shown at the bottom of every public page. Leave empty to hide.">{{ values.announcement_text }}</textarea>
+        </div>
+        <div class="admin-field">
+            <label class="av-switch-label">
+                <span class="av-switch">
+                    <input type="checkbox" name="seo_index_model_pages" {% if values.seo_index_model_pages %}checked{% endif %}>
+                    <span class="track"></span>
+                    <span class="knob"></span>
+                </span>
+                <span class="av-switch-text">index model pages in search engines {{ source_chip('seo_index_model_pages') }}</span>
+            </label>
+            <p class="field-help">When on, every canonical /view/&lt;id&gt; page becomes indexable ("index, follow"). Embed and VR pages always stay noindex. Env default: {{ 'on' if defaults.seo_index_model_pages else 'off' }}.</p>
+        </div>
+
+        {% elif tab == 'users' %}
+        <div class="admin-field">
+            <label class="av-switch-label">
+                <span class="av-switch">
+                    <input type="checkbox" name="registration_enabled" {% if values.registration_enabled %}checked{% endif %}>
+                    <span class="track"></span>
+                    <span class="knob"></span>
+                </span>
+                <span class="av-switch-text">registration enabled {{ source_chip('registration_enabled') }}</span>
+            </label>
+            <p class="field-help">When off, the register page redirects to login and no new accounts can be created.</p>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="default_new_user_plan">default plan for new accounts {{ source_chip('default_new_user_plan') }}</label>
+            <select id="default_new_user_plan" name="default_new_user_plan" class="av-input">
+                {% for slug in plan_slugs %}
+                <option value="{{ slug }}" {% if values.default_new_user_plan == slug %}selected{% endif %}>{{ slug }}</option>
+                {% endfor %}
+            </select>
+            <p class="field-help">Applied at registration time. Use a paid plan here for e.g. an open-beta promotion; existing accounts are not changed.</p>
+        </div>
+
+        {% elif tab == 'ai' %}
+        <div class="admin-field">
+            <label class="field-label" for="ai_monthly_limit">monthly generation limit per user {{ source_chip('ai_monthly_limit') }}</label>
+            <input type="number" id="ai_monthly_limit" name="ai_monthly_limit" class="av-input" min="0" max="100000"
+                   value="{{ values.ai_monthly_limit }}">
+            <p class="field-help">Rolling 30-day window; the fallback for users whose plan doesn't set its own monthly allowance (e.g. Free). Each generation costs Meshy credits. 0 disables AI generation entirely. Env default: {{ defaults.ai_monthly_limit }}.</p>
+        </div>
+
+        {% elif tab == 'uploads' %}
+        <div class="admin-field">
+            <label class="field-label" for="max_upload_mb">max upload size (MB) {{ source_chip('max_upload_mb') }}</label>
+            <input type="number" id="max_upload_mb" name="max_upload_mb" class="av-input" min="1" max="{{ ceiling }}"
+                   value="{{ values.max_upload_mb }}">
+            <p class="field-help">The server-wide hard ceiling is {{ ceiling }} MB (MAX_CONTENT_LENGTH); this setting can only lower it. Per-plan caps apply on top.</p>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="storage_quota_mb">per-user storage quota (MB) {{ source_chip('storage_quota_mb') }}</label>
+            <input type="number" id="storage_quota_mb" name="storage_quota_mb" class="av-input" min="0" max="1000000"
+                   value="{{ values.storage_quota_mb }}">
+            <p class="field-help">Enforced at upload time for logged-in users (anonymous uploads aren't tracked to a quota). 0 = unlimited. Env default: {{ defaults.storage_quota_mb }} MB. Per-plan quotas override this.</p>
+        </div>
+        {% endif %}
+
+        <button type="submit" class="admin-btn admin-btn--primary">save settings</button>
+        <p class="field-help" style="margin-top:0.75rem;">Changes take effect within a minute (settings are cached briefly per worker).</p>
+    </form>
+
+    <aside class="admin-card">
+        <h2 class="admin-card-title">effective values</h2>
+        <dl class="admin-dl">
+            {% if tab == 'general' %}
+            <div><dt>maintenance mode</dt><dd>{{ 'ON' if values.maintenance_mode else 'off' }}</dd></div>
+            <div><dt>announcement</dt><dd>{{ 'set' if values.announcement_text else 'empty' }}</dd></div>
+            <div><dt>model pages in search</dt><dd>{{ 'indexed' if values.seo_index_model_pages else 'noindex' }}</dd></div>
+            {% elif tab == 'users' %}
+            <div><dt>registration</dt><dd>{{ 'open' if values.registration_enabled else 'CLOSED' }}</dd></div>
+            <div><dt>new accounts start on</dt><dd>{{ values.default_new_user_plan }}</dd></div>
+            {% elif tab == 'ai' %}
+            <div><dt>global monthly limit</dt><dd>{{ values.ai_monthly_limit }}</dd></div>
+            <div><dt>env default</dt><dd>{{ defaults.ai_monthly_limit }}</dd></div>
+            {% elif tab == 'uploads' %}
+            <div><dt>effective upload cap</dt><dd>{{ values.max_upload_mb }} MB</dd></div>
+            <div><dt>hard ceiling</dt><dd>{{ ceiling }} MB</dd></div>
+            <div><dt>storage quota</dt><dd>{{ values.storage_quota_mb or 'unlimited' }}{{ ' MB' if values.storage_quota_mb }}</dd></div>
+            {% endif %}
+        </dl>
+        <p class="field-help" style="margin-top:0.75rem;">Per-plan limits and features are managed on the <a href="{{ url_for('admin.settings', tab='plans') }}">plans</a> tab; live system state is on the <a href="{{ url_for('admin.settings', tab='system') }}">system</a> tab.</p>
+    </aside>
+</div>
 {% endif %}
 {% endblock %}

@@ -101,7 +101,14 @@ def register():
 
     form = RegistrationForm(request.form)
     if request.method == 'POST' and form.validate():
-        user = User(username=form.username.data, email=form.email.data)
+        # Admin-configurable starting plan for new accounts (settings > users).
+        # Validated against the live plan list; anything unknown -> "free".
+        from services.plans import assignable_plan_slugs
+        from site_settings import get_setting
+        default_plan = get_setting('default_new_user_plan', 'free')
+        if default_plan not in assignable_plan_slugs():
+            default_plan = 'free'
+        user = User(username=form.username.data, email=form.email.data, plan=default_plan)
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()

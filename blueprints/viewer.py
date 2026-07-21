@@ -11,22 +11,24 @@ from models import ModelLike, ModelSave, UserModel, db
 from services.model_analytics import record_model_event
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from services.viewer_settings import resolved_viewer_settings
+from site_settings import setting_bool
 
 viewer_bp = Blueprint("viewer", __name__)
 
 
 def _seo_robots_for_model_page(is_canonical=False):
     """Single source of truth for whether a model page (/view, /embed, /vr)
-    is indexable. Flip config.SEO_INDEX_MODEL_PAGES to change it for every
-    model's canonical /view/<id> page at once — that's the only call site
-    that can ever return "index, follow". /embed/<id> and /vr/<id> are
-    alternate renderings of the same content (an iframe-embed viewer and a
-    VR viewer) and always stay noindex, always deferring to /view/<id> via
-    their <link rel="canonical">, independent of this flag — mirrors how
-    YouTube's /embed/<id> stays noindex while /watch?v=<id> is indexed, and
-    avoids sending mixed index+cross-canonical signals on the same page.
+    is indexable. The admin "seo_index_model_pages" setting (falling back to
+    config.SEO_INDEX_MODEL_PAGES) changes it for every model's canonical
+    /view/<id> page at once — that's the only call site that can ever return
+    "index, follow". /embed/<id> and /vr/<id> are alternate renderings of the
+    same content (an iframe-embed viewer and a VR viewer) and always stay
+    noindex, always deferring to /view/<id> via their <link rel="canonical">,
+    independent of this flag — mirrors how YouTube's /embed/<id> stays noindex
+    while /watch?v=<id> is indexed, and avoids sending mixed
+    index+cross-canonical signals on the same page.
     """
-    if is_canonical and SEO_INDEX_MODEL_PAGES:
+    if is_canonical and setting_bool("seo_index_model_pages", SEO_INDEX_MODEL_PAGES):
         return "index, follow"
     return "noindex, follow"
 

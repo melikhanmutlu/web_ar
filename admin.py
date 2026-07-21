@@ -41,16 +41,23 @@ from model_cleanup import purge_model_completely
 from models import (
     AdminAuditLog,
     AIGenerationJob,
+    ApiToken,
     CameraView,
     ConversionJob,
     Folder,
+    ModelAnalyticsEvent,
     ModelHotspot,
     ModelLike,
     ModelSave,
+    ModelShareLink,
     ModelVersion,
+    Organization,
     Payment,
+    SiteSetting,
     User,
     UserModel,
+    WebhookSubscription,
+    WorkerHeartbeat,
     db,
 )
 from site_settings import get_setting, set_setting, setting_bool, setting_int
@@ -1497,7 +1504,116 @@ def set_payment_status(payment_id):
 # Settings
 # ---------------------------------------------------------------------------
 
-SETTINGS_TABS = ("general", "users", "ai", "uploads", "plans")
+SETTINGS_TABS = ("general", "users", "ai", "uploads", "plans", "system")
+
+
+def _system_status():
+    """Read-only operational snapshot for the settings > system tab: live
+    workers, job-queue health, disk, integration/config status, data-volume
+    counts, and the raw SiteSetting rows. Everything is defensive — a missing
+    table or unreachable path must never break the settings page."""
+    import shutil as _shutil
+    import config as _config
+
+    now = datetime.utcnow()
+
+    # Live workers from the real WorkerHeartbeat rows (the dashboard's
+    # _worker_health only reads the SiteSetting timestamp proxy).
+    workers = []
+    try:
+        for hb in WorkerHeartbeat.query.order_by(WorkerHeartbeat.last_seen_at.desc()).limit(20).all():
+            age = (now - hb.last_seen_at).total_seconds() if hb.last_seen_at else None
+            workers.append({
+                "worker_id": hb.worker_id, "hostname": hb.hostname,
+                "current_job_id": hb.current_job_id,
+                "started_at": hb.started_at, "last_seen_at": hb.last_seen_at,
+                "seconds_ago": int(age) if age is not None else None,
+                "stale": age is None or age > WORKER_HEARTBEAT_STALE_SECONDS,
+            })
+    except Exception as exc:
+        logger.warning(f"settings/system: worker heartbeat read failed: {exc}")
+
+    def _counts(column):
+        try:
+            return dict(db.session.query(column, func.count()).group_by(column).all())
+        except Exception:
+            return {}
+
+    queue_counts = _counts(ConversionJob.status)
+    ai_counts = _counts(AIGenerationJob.status)
+
+    disk = None
+    try:
+        usage = _shutil.disk_usage(current_app.config["CONVERTED_FOLDER"])
+        disk = {
+            "total_gb": round(usage.total / 1024**3, 1),
+            "free_gb": round(usage.free / 1024**3, 1),
+            "used_pct": round((usage.total - usage.free) / usage.total * 100) if usage.total else 0,
+        }
+    except OSError as exc:
+        logger.warning(f"settings/system: disk usage failed: {exc}")
+
+    try:
+        from services.payments import get_active_provider
+        provider = get_active_provider()
+        payments_status = f"{provider.name} (configured)" if provider and provider.is_configured() else (
+            f"{provider.name} (NOT configured)" if provider else "no provider"
+        )
+    except Exception:
+        payments_status = "unavailable"
+    import ai_generator as _ai
+    import app as _app_module
+    observability = getattr(_app_module, "OBSERVABILITY_STATUS", None) or {}
+    integrations = {
+        "payments": payments_status,
+        "email_smtp": f"{_config.SMTP_HOST or 'not set'} ({'enabled' if _config.EMAIL_NOTIFICATIONS_ENABLED else 'disabled'})",
+        "meshy_ai": "configured" if _ai.is_configured() else "not configured",
+        "sentry": "on" if observability.get("sentry") else "off",
+        "opentelemetry": "on" if observability.get("opentelemetry") else "off",
+        "job_queue": "worker process (JOB_QUEUE=true)" if os.environ.get("JOB_QUEUE", "false").lower() in ("true", "1", "yes") else "inline threads",
+        "rate_limit_storage": os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    }
+
+    config_summary = {
+        "site_url": _config.SITE_URL,
+        "payment_provider": _config.PAYMENT_PROVIDER,
+        "billing_currency": _config.BILLING_CURRENCY,
+        "paytr_test_mode": str(_config.PAYTR_TEST_MODE) == "1",
+        "upload_hard_ceiling_mb": _max_upload_ceiling_mb(),
+        "seo_index_model_pages_env": _config.SEO_INDEX_MODEL_PAGES,
+    }
+
+    def _safe_count(query):
+        try:
+            return query.scalar() or 0
+        except Exception:
+            return 0
+
+    data_counts = {
+        "organizations": _safe_count(db.session.query(func.count(Organization.id))),
+        "api_tokens_active": _safe_count(
+            db.session.query(func.count(ApiToken.id)).filter(ApiToken.revoked_at.is_(None))
+        ),
+        "webhooks": _safe_count(db.session.query(func.count(WebhookSubscription.id))),
+        "share_links": _safe_count(db.session.query(func.count(ModelShareLink.id))),
+        "analytics_events": _safe_count(db.session.query(func.count(ModelAnalyticsEvent.id))),
+    }
+
+    try:
+        settings_rows = SiteSetting.query.order_by(SiteSetting.key).all()
+    except Exception:
+        settings_rows = []
+
+    return {
+        "workers": workers,
+        "queue_counts": queue_counts,
+        "ai_counts": ai_counts,
+        "disk": disk,
+        "integrations": integrations,
+        "config_summary": config_summary,
+        "data_counts": data_counts,
+        "settings_rows": settings_rows,
+    }
 
 _PLAN_SLUG_RE = re.compile(r"[a-z][a-z0-9_-]{1,29}")
 
@@ -1598,6 +1714,9 @@ def settings():
         tab = "general"
 
     if request.method == "POST":
+        if tab == "system":
+            # Read-only tab: nothing to save.
+            return redirect(url_for("admin.settings", tab=tab))
         if tab == "general":
             set_setting(
                 "maintenance_mode",
@@ -1606,11 +1725,21 @@ def settings():
             set_setting(
                 "announcement_text", (request.form.get("announcement_text") or "").strip()
             )
+            set_setting(
+                "seo_index_model_pages",
+                "true" if "seo_index_model_pages" in request.form else "false",
+            )
         elif tab == "users":
             set_setting(
                 "registration_enabled",
                 "true" if "registration_enabled" in request.form else "false",
             )
+            from services.plans import assignable_plan_slugs
+            default_plan = (request.form.get("default_new_user_plan") or "free").strip()
+            if default_plan not in assignable_plan_slugs():
+                flash("Unknown default plan.", "error")
+                return redirect(url_for("admin.settings", tab=tab))
+            set_setting("default_new_user_plan", default_plan)
         elif tab == "ai":
             try:
                 limit = int(request.form.get("ai_monthly_limit", ""))
@@ -1655,18 +1784,35 @@ def settings():
         flash("Settings saved. Changes take effect within a minute.", "success")
         return redirect(url_for("admin.settings", tab=tab))
 
+    import config as _config
+    from services.plans import assignable_plan_slugs, get_plan_config, LIMIT_KEYS, FEATURE_KEYS
+    from models import Plan
+
     ceiling = _max_upload_ceiling_mb()
     values = {
         "maintenance_mode": setting_bool("maintenance_mode", False),
         "announcement_text": get_setting("announcement_text", "") or "",
+        "seo_index_model_pages": setting_bool("seo_index_model_pages", _config.SEO_INDEX_MODEL_PAGES),
         "registration_enabled": setting_bool("registration_enabled", True),
+        "default_new_user_plan": get_setting("default_new_user_plan", "free") or "free",
         "ai_monthly_limit": _effective_ai_monthly_limit(),
         "max_upload_mb": setting_int("max_upload_mb", ceiling),
         "storage_quota_mb": _effective_storage_quota_mb(),
     }
-
-    from services.plans import assignable_plan_slugs, get_plan_config, LIMIT_KEYS, FEATURE_KEYS
-    from models import Plan
+    # What each value falls back to when no admin override is saved — shown
+    # next to the field so the admin can tell override vs default at a glance.
+    defaults = {
+        "seo_index_model_pages": _config.SEO_INDEX_MODEL_PAGES,
+        "ai_monthly_limit": current_app.config.get("AI_GEN_MONTHLY_LIMIT", 0),
+        "max_upload_mb": ceiling,
+        "storage_quota_mb": int(os.environ.get("STORAGE_QUOTA_MB", 1024)),
+    }
+    overridden = {
+        key: get_setting(key) is not None
+        for key in ("maintenance_mode", "announcement_text", "seo_index_model_pages",
+                    "registration_enabled", "default_new_user_plan",
+                    "ai_monthly_limit", "max_upload_mb", "storage_quota_mb")
+    }
 
     plan_rows = {p.slug: p for p in Plan.query.order_by(Plan.sort_order, Plan.id).all()}
     plans_editor = []
@@ -1686,9 +1832,14 @@ def settings():
             "features": {key: bool(cfg.get("features", {}).get(key)) for key in FEATURE_KEYS},
         })
 
+    plan_slugs = assignable_plan_slugs()
+    system = _system_status() if tab == "system" else None
+
     return render_template(
         "admin/settings.html", tab=tab, tabs=SETTINGS_TABS, values=values, ceiling=ceiling,
+        defaults=defaults, overridden=overridden, plan_slugs=plan_slugs,
         plans_editor=plans_editor, limit_keys=LIMIT_KEYS, feature_keys=FEATURE_KEYS,
+        system=system,
     )
 
 

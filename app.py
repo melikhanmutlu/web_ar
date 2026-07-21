@@ -39,7 +39,7 @@ from admin import admin_bp
 from blueprints.health import health_bp
 from blueprints.seo import seo_bp
 from blueprints.material_presets import material_presets_bp, _resolve_prompt_preset
-from blueprints.api_tokens import api_tokens_bp
+from blueprints.api_tokens import api_tokens_bp, api_token_rate_limit_key
 from blueprints.organizations import organizations_bp
 from blueprints.model_files import model_files_bp
 from blueprints.models_crud import models_crud_bp
@@ -459,6 +459,31 @@ csrf.exempt(app.view_functions["upload.convert"])  # 410 stub
 csrf.exempt(app.view_functions["upload.retry_upload_job"])  # capability-token auth
 csrf.exempt(app.view_functions["engagement.track_download"])  # anonymous beacon
 csrf.exempt(app.view_functions["engagement.create_model_analytics_event"])  # embed beacon
+
+# Programmatic write API (/api/v1): authenticated by Bearer API token, not a
+# session, so it can't carry a CSRF token. Rate-limit each endpoint per token
+# (api_token_rate_limit_key) so one integration can't exhaust another's budget;
+# the upload endpoint gets a tighter limit than the metadata reads/writes.
+app.view_functions["api_tokens.api_v1_create_model"] = limiter.limit(
+    "30 per minute", key_func=api_token_rate_limit_key
+)(app.view_functions["api_tokens.api_v1_create_model"])
+for _endpoint in (
+    "api_tokens.api_v1_models",
+    "api_tokens.api_v1_model",
+    "api_tokens.api_v1_model_analytics",
+    "api_tokens.api_v1_job_status",
+    "api_tokens.api_v1_update_model",
+    "api_tokens.api_v1_delete_model",
+):
+    app.view_functions[_endpoint] = limiter.limit(
+        "120 per minute", key_func=api_token_rate_limit_key
+    )(app.view_functions[_endpoint])
+for _endpoint in (
+    "api_tokens.api_v1_create_model",
+    "api_tokens.api_v1_update_model",
+    "api_tokens.api_v1_delete_model",
+):
+    csrf.exempt(app.view_functions[_endpoint])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(
@@ -1854,6 +1879,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
     max_dimension = payload.get("max_dimension")
     source_unit = payload.get("source_unit")
     user_id = payload.get("user_id")
+    # Set by the programmatic write API (POST /api/v1/models): an org-scoped
+    # token files the model under its org, and an optional caller-supplied name
+    # overrides the filename-derived display name.
+    organization_id = payload.get("organization_id")
+    display_name_override = payload.get("display_name")
 
     # Idempotency guard: if a prior attempt already completed the UserModel
     # insert (below) but the job was retried anyway -- e.g. it failed/crashed
@@ -2291,9 +2321,10 @@ def _run_upload_pipeline(payload, progress_callback=None):
             file_type=os.path.splitext(original_filename)[1][1:],  # Original extension
             upload_date=datetime.utcnow(),
             color=color if use_color else None,
-            display_name=os.path.splitext(
+            organization_id=organization_id,
+            display_name=(display_name_override or os.path.splitext(
                 payload.get("client_filename", original_filename)
-            )[0][:255],
+            )[0])[:255],
             bounds=model_bounds,  # Store dimensions
             original_dimensions=original_dims,  # Store original dimensions
             cumulative_scale=1.0,  # Initial scale is 1.0

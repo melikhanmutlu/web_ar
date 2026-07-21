@@ -11,10 +11,10 @@ model_cleanup.py / site_settings.py.
 
 import csv
 import io
-import json
 import logging
 import math
 import os
+import re
 import secrets
 import shutil
 from datetime import datetime, timedelta
@@ -459,7 +459,7 @@ def user_detail(user_id):
     ).count()
     ai_total = AIGenerationJob.query.filter_by(user_id=user.id).count()
 
-    from services.plans import PLANS, effective_ai_monthly_limit
+    from services.plans import assignable_plan_slugs, effective_ai_monthly_limit
 
     payments = (
         Payment.query.filter_by(user_id=user.id)
@@ -477,7 +477,7 @@ def user_detail(user_id):
         ai_used_month=ai_used_month,
         ai_total=ai_total,
         ai_limit=effective_ai_monthly_limit(user, _effective_ai_monthly_limit()),
-        plans=PLANS,
+        plans=assignable_plan_slugs(),
         payment_statuses=PAYMENT_STATUSES,
         payments=payments,
         likes=ModelLike.query.filter_by(user_id=user.id).count(),
@@ -525,12 +525,13 @@ def set_plan(user_id):
     """Faz 5 plan/billing foundation: which tier's storage/AI limits apply
     to this user (services/plans.py). No payment processing here -- an
     admin sets this directly until a real billing provider is wired in."""
-    from services.plans import PLANS
+    from services.plans import assignable_plan_slugs
 
     user = User.query.get_or_404(user_id)
     plan = (request.get_json(silent=True) or {}).get("plan")
-    if plan not in PLANS:
-        return jsonify({"success": False, "error": f"Invalid plan; must be one of {sorted(PLANS)}"}), 400
+    allowed = assignable_plan_slugs()
+    if plan not in allowed:
+        return jsonify({"success": False, "error": f"Invalid plan; must be one of {sorted(allowed)}"}), 400
     user.plan = plan
     log_action("user.set_plan", "user", user.id, {"plan": plan})
     db.session.commit()
@@ -565,12 +566,12 @@ def record_payment(user_id):
     foundation -- no payment provider is integrated, an admin enters what was
     paid after the fact). A classic form POST (not JSON) since it has several
     fields; optionally also syncs the user's plan in the same submit."""
-    from services.plans import PLANS
+    from services.plans import assignable_plan_slugs
 
     user = User.query.get_or_404(user_id)
 
     plan = request.form.get("plan", "").strip()
-    if plan not in PLANS:
+    if plan not in assignable_plan_slugs():
         flash("Invalid plan for payment record.", "error")
         return redirect(url_for("admin.user_detail", user_id=user.id))
 
@@ -1409,7 +1410,8 @@ def _billing_query():
 @admin_bp.route("/billing")
 @admin_required
 def billing():
-    from services.plans import PLANS, get_plan_config
+    from services.plans import assignable_plan_slugs, get_plan_config
+    plan_slugs = assignable_plan_slugs()
 
     query, status, plan, q = _billing_query()
     page = paginate(query, _page_arg())
@@ -1432,7 +1434,7 @@ def billing():
         .group_by(User.plan)
         .all()
     )
-    mrr = sum(plan_counts.get(p, 0) * (get_plan_config(p).get("price") or 0) for p in PLANS)
+    mrr = sum(plan_counts.get(p, 0) * (get_plan_config(p).get("price") or 0) for p in plan_slugs)
     outstanding_credits = db.session.query(
         func.coalesce(func.sum(User.ai_credit_balance), 0)
     ).scalar()
@@ -1441,7 +1443,7 @@ def billing():
         "revenue_month": revenue_month,
         "revenue_total": revenue_total,
         "mrr": mrr,
-        "plan_counts": {p: plan_counts.get(p, 0) for p in PLANS},
+        "plan_counts": {p: plan_counts.get(p, 0) for p in plan_slugs},
         "admin_count": User.query.filter(User.is_admin.is_(True)).count(),
         "outstanding_credits": outstanding_credits,
     }
@@ -1449,7 +1451,7 @@ def billing():
     return render_template(
         "admin/billing.html",
         page=page, status=status, plan=plan, q=q,
-        plans=PLANS, statuses=PAYMENT_STATUSES, stats=stats,
+        plans=plan_slugs, statuses=PAYMENT_STATUSES, stats=stats,
     )
 
 
@@ -1496,6 +1498,96 @@ def set_payment_status(payment_id):
 # ---------------------------------------------------------------------------
 
 SETTINGS_TABS = ("general", "users", "ai", "uploads", "plans")
+
+_PLAN_SLUG_RE = re.compile(r"[a-z][a-z0-9_-]{1,29}")
+
+
+def _parse_plan_fields(prefix, slug):
+    """Parse one plan's form fields (prefixed <prefix>__). Returns a kwargs dict
+    for services.plans.save_plan, or raises ValueError with a user-facing
+    message on a bad number."""
+    from services.plans import LIMIT_KEYS, FEATURE_KEYS
+
+    display_name = (request.form.get(f"{prefix}__display_name") or "").strip()[:60] or slug.title()
+    price = None
+    price_raw = (request.form.get(f"{prefix}__price") or "").strip()
+    if price_raw:
+        try:
+            price = int(price_raw)
+            if price < 0:
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"{display_name}: price must be a non-negative whole number.")
+    currency = ((request.form.get(f"{prefix}__currency") or "TRY").strip().upper() or "TRY")[:3]
+    billing_period = request.form.get(f"{prefix}__billing_period", "monthly")
+    is_public = request.form.get(f"{prefix}__is_public") == "on"
+    try:
+        sort_order = int(request.form.get(f"{prefix}__sort_order") or 0)
+    except ValueError:
+        sort_order = 0
+    limits = {}
+    for key in LIMIT_KEYS:
+        raw = (request.form.get(f"{prefix}__{key}") or "").strip()
+        if not raw:
+            continue  # blank = inherit the global default (no plan-imposed limit)
+        try:
+            val = int(raw)
+            if val < 0:
+                raise ValueError
+        except ValueError:
+            raise ValueError(f"{display_name}: {key.replace('_', ' ')} must be a non-negative whole number.")
+        limits[key] = val
+    features = {key: request.form.get(f"{prefix}__{key}") == "on" for key in FEATURE_KEYS}
+    return dict(
+        display_name=display_name, price=price, currency=currency,
+        billing_period=billing_period, is_public=is_public, sort_order=sort_order,
+        limits=limits, features=features,
+    )
+
+
+def _handle_plans_post():
+    """Handle the admin Plans tab POST. Each plan card is its own form, so a
+    submit creates/updates exactly one plan (identified by new__slug for a new
+    plan, else plan_slug) or deletes one. Always returns a redirect Response."""
+    from services.plans import assignable_plan_slugs, save_plan, delete_plan, ADMIN_PLAN
+
+    action = request.form.get("plan_action", "save")
+    if action == "delete":
+        slug = (request.form.get("plan_slug") or "").strip()
+        try:
+            if delete_plan(slug):
+                log_action("plan.delete", "plan", slug, {})
+                flash(f"Plan '{slug}' deleted.", "success")
+            else:
+                flash(f"Plan '{slug}' not found.", "error")
+        except ValueError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("admin.settings", tab="plans"))
+
+    new_slug = (request.form.get("new__slug") or "").strip().lower()
+    if new_slug:
+        if not _PLAN_SLUG_RE.fullmatch(new_slug):
+            flash("New plan slug must be lowercase letters/numbers/-/_ (2-30 chars).", "error")
+            return redirect(url_for("admin.settings", tab="plans"))
+        if new_slug in assignable_plan_slugs() or new_slug == ADMIN_PLAN:
+            flash("A plan with that slug already exists.", "error")
+            return redirect(url_for("admin.settings", tab="plans"))
+        slug, prefix = new_slug, "new"
+    else:
+        slug = (request.form.get("plan_slug") or "").strip()
+        if slug not in assignable_plan_slugs():
+            flash("Unknown plan.", "error")
+            return redirect(url_for("admin.settings", tab="plans"))
+        prefix = slug
+
+    try:
+        save_plan(slug, **_parse_plan_fields(prefix, slug))
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.settings", tab="plans"))
+    log_action("plan.save", "plan", slug, {})
+    flash(f"Plan '{slug}' saved.", "success")
+    return redirect(url_for("admin.settings", tab="plans"))
 
 
 @admin_bp.route("/settings", methods=["GET", "POST"])
@@ -1551,52 +1643,9 @@ def settings():
                 return redirect(url_for("admin.settings", tab=tab))
             set_setting("storage_quota_mb", str(quota_mb))
         elif tab == "plans":
-            from services.plans import PLANS, LIMIT_KEYS, FEATURE_KEYS
-
-            for plan in PLANS:
-                override = {}
-
-                price_raw = (request.form.get(f"{plan}__price") or "").strip()
-                if price_raw:
-                    try:
-                        price_val = int(price_raw)
-                        if price_val < 0:
-                            raise ValueError
-                    except ValueError:
-                        flash(f"{plan.title()} price must be a non-negative whole number.", "error")
-                        return redirect(url_for("admin.settings", tab=tab))
-                    override["price"] = price_val
-
-                limits = {}
-                for key in LIMIT_KEYS:
-                    raw = (request.form.get(f"{plan}__{key}") or "").strip()
-                    if not raw:
-                        continue  # blank = no override, keep falling back to the code default
-                    try:
-                        val = int(raw)
-                        if val < 0:
-                            raise ValueError
-                    except ValueError:
-                        flash(f"{plan.title()} {key.replace('_', ' ')} must be a non-negative whole number.", "error")
-                        return redirect(url_for("admin.settings", tab=tab))
-                    limits[key] = val
-                if limits:
-                    override["limits"] = limits
-
-                # Feature selects are 3-state ("" = inherit code default, "on"/"off"
-                # = explicit override) -- a plain checkbox can't represent "inherit"
-                # vs. "explicitly off" since an unchecked box submits nothing either way.
-                features = {}
-                for key in FEATURE_KEYS:
-                    raw = request.form.get(f"{plan}__{key}", "")
-                    if raw == "on":
-                        features[key] = True
-                    elif raw == "off":
-                        features[key] = False
-                if features:
-                    override["features"] = features
-
-                set_setting(f"plan_override.{plan}", json.dumps(override) if override else None)
+            result = _handle_plans_post()
+            if result is not None:
+                return result
 
         # set_setting() commits per-key already; the log entry needs its own
         # commit since nothing else in this branch does one.
@@ -1616,23 +1665,30 @@ def settings():
         "storage_quota_mb": _effective_storage_quota_mb(),
     }
 
-    from services.plans import PLANS, PLAN_CONFIG, LIMIT_KEYS, FEATURE_KEYS, plan_override_raw
+    from services.plans import assignable_plan_slugs, get_plan_config, LIMIT_KEYS, FEATURE_KEYS
+    from models import Plan
 
-    plans_editor = {}
-    for plan in PLANS:
-        raw = plan_override_raw(plan)
-        plans_editor[plan] = {
-            "price": raw.get("price"),
-            "price_default": PLAN_CONFIG[plan]["price"],
-            "limits": {key: raw.get("limits", {}).get(key) for key in LIMIT_KEYS},
-            "limits_default": {key: PLAN_CONFIG[plan]["limits"].get(key) for key in LIMIT_KEYS},
-            "features": {key: raw.get("features", {}).get(key) for key in FEATURE_KEYS},
-            "features_default": {key: PLAN_CONFIG[plan]["features"].get(key) for key in FEATURE_KEYS},
-        }
+    plan_rows = {p.slug: p for p in Plan.query.order_by(Plan.sort_order, Plan.id).all()}
+    plans_editor = []
+    for slug in assignable_plan_slugs():
+        row = plan_rows.get(slug)
+        cfg = get_plan_config(slug)
+        plans_editor.append({
+            "slug": slug,
+            "display_name": row.display_name if row else cfg.get("display_name", slug.title()),
+            "price": row.price if row else cfg.get("price"),
+            "currency": row.currency if row else cfg.get("currency", "TRY"),
+            "billing_period": row.billing_period if row else cfg.get("billing_period", "monthly"),
+            "is_public": row.is_public if row else True,
+            "is_system": row.is_system if row else False,
+            "sort_order": row.sort_order if row else 0,
+            "limits": {key: cfg.get("limits", {}).get(key) for key in LIMIT_KEYS},
+            "features": {key: bool(cfg.get("features", {}).get(key)) for key in FEATURE_KEYS},
+        })
 
     return render_template(
         "admin/settings.html", tab=tab, tabs=SETTINGS_TABS, values=values, ceiling=ceiling,
-        plans=PLANS, plans_editor=plans_editor, limit_keys=LIMIT_KEYS, feature_keys=FEATURE_KEYS,
+        plans_editor=plans_editor, limit_keys=LIMIT_KEYS, feature_keys=FEATURE_KEYS,
     )
 
 

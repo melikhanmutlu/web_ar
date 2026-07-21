@@ -49,6 +49,11 @@ class User(UserMixin, db.Model):
     # (services/credits.py::grant_ai_credits); a payment provider will call the
     # same seam later. No expiry -- purchased credits don't reset monthly.
     ai_credit_balance = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # When a paid plan is bought it's granted until this instant; past it the
+    # effective plan falls back to Free (services/plans.py::_plan_name) and the
+    # worker's expire_stale_plans() sweep resets the stored plan. NULL = no
+    # expiry (Free, or an admin-granted plan with no time box).
+    plan_expires_at = db.Column(db.DateTime, nullable=True, index=True)
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
@@ -746,12 +751,41 @@ class AdminAuditLog(db.Model):
         return f'<AdminAuditLog {self.action} by {self.actor_id}>'
 
 
+class Plan(db.Model):
+    """A billing tier. Seeded from services/plans.py::PLAN_CONFIG on first boot,
+    then fully admin-editable (create/edit/delete/reorder + per-limit/feature
+    toggles). `limits`/`features` hold the FULL effective config (not a partial
+    override). PLAN_CONFIG stays as the seed and the no-app-context fallback for
+    pure-function callers. System plans (free, unlimited) can't be deleted."""
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(30), unique=True, nullable=False, index=True)
+    display_name = db.Column(db.String(60), nullable=False)
+    price = db.Column(db.Integer, nullable=True)          # per period; NULL for the unlimited/admin tier
+    currency = db.Column(db.String(3), nullable=False, default='TRY', server_default='TRY')
+    billing_period = db.Column(db.String(10), nullable=False, default='monthly', server_default='monthly')
+    is_public = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
+    is_system = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    sort_order = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    limits = db.Column(db.JSON, nullable=True)
+    features = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_config(self):
+        return {
+            "display_name": self.display_name,
+            "price": self.price,
+            "currency": self.currency,
+            "billing_period": self.billing_period,
+            "limits": dict(self.limits or {}),
+            "features": dict(self.features or {}),
+        }
+
+
 class Payment(db.Model):
-    """Manually-recorded payment (Faz 5 billing foundation): no payment
-    provider is integrated, so an admin logs "user X paid Y for plan Z on
-    this date" here. `plan` is a snapshot of what was paid for at the time --
-    it doesn't have to match the user's current plan later. A future payment
-    provider's webhook would insert rows here the same way."""
+    """A payment record. An admin can log one manually, or a payment provider's
+    verified callback inserts one (blueprints/billing.py). `plan` is a snapshot
+    of what was paid for. `provider`/`provider_ref` tie the row to the gateway
+    transaction (unique ref → idempotent callbacks)."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
     plan = db.Column(db.String(20), nullable=False)
@@ -759,6 +793,11 @@ class Payment(db.Model):
     currency = db.Column(db.String(3), nullable=False, default='USD', server_default='USD')
     status = db.Column(db.String(20), nullable=False, default='paid', server_default='paid', index=True)
     method = db.Column(db.String(40), nullable=True)
+    # Which gateway this came through ('paytr', …) and its transaction id
+    # (PayTR merchant_oid). provider_ref is unique so a replayed provider
+    # callback maps to the same row instead of creating a duplicate.
+    provider = db.Column(db.String(40), nullable=True)
+    provider_ref = db.Column(db.String(120), nullable=True, unique=True, index=True)
     period_start = db.Column(db.Date, nullable=True)
     period_end = db.Column(db.Date, nullable=True)
     note = db.Column(db.Text, nullable=True)

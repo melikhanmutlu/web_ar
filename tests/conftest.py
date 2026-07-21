@@ -53,6 +53,11 @@ def client():
         with app.app_context():
             db.drop_all()
             db.create_all()
+            # Seed the Plan table like production boot does, so DB-backed plan
+            # lookups behave the same in tests (an empty table falls back to
+            # PLAN_CONFIG, which pure-function/no-context tests still exercise).
+            from services.plans import seed_plans_if_empty
+            seed_plans_if_empty()
             yield client
             db.session.remove()
             db.drop_all()

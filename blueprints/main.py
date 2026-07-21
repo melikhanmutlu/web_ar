@@ -100,17 +100,17 @@ def workflow():
 
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
-    from services.plans import PLANS, plan_name, all_plan_configs
+    from services.plans import public_plan_slugs, plan_name, all_plan_configs
 
     from services.credits import CREDIT_PACKS
 
-    # Admins resolve to the internal "unlimited" plan (not in PLANS), so it
+    # Admins resolve to the internal "unlimited" plan (not public), so it
     # highlights nothing on the tier grid -- the template shows a note instead.
     current_plan = plan_name(current_user) if current_user.is_authenticated else None
 
     return render_template(
         "pricing.html",
-        plans=PLANS,
+        plans=public_plan_slugs(),
         plan_config=all_plan_configs(),
         credit_packs=CREDIT_PACKS,
         current_plan=current_plan,

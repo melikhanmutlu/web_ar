@@ -608,6 +608,20 @@ if _admin_emails and os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
             db.session.rollback()
             logger.warning(f"ADMIN_EMAILS promotion skipped: {e}")
 
+# Seed the Plan table from PLAN_CONFIG on first boot so admins have editable
+# Free/Pro/Business/Unlimited rows. Idempotent (no-op once any plan exists) and
+# defensive: on a fresh DB before `flask db upgrade` the table may not exist yet
+# -- the plan helpers fall back to PLAN_CONFIG until it does. Wrapped in
+# SKIP_DB_BOOTSTRAP like the blocks above.
+if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in ("1", "true", "yes"):
+    with app.app_context():
+        try:
+            from services.plans import seed_plans_if_empty
+            seed_plans_if_empty()
+        except Exception as e:
+            db.session.rollback()
+            logger.warning(f"Plan seeding skipped: {e}")
+
 
 def allowed_file(filename):
     return (

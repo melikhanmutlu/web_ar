@@ -32,7 +32,7 @@ from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES a
 from models import AIGenerationJob, ConversionJob, User, WorkerHeartbeat
 from services.plans import DEFAULT_PLAN
 from services import send_email
-from services.lifecycle_emails import run_renewal_sweep
+from services.lifecycle_emails import run_onboarding_sweep, run_renewal_sweep
 from site_settings import set_setting
 
 logging.basicConfig(
@@ -316,6 +316,7 @@ def main():
                 prune_stale_chunk_sessions()
                 expire_stale_plans()
                 run_renewal_sweep()
+                run_onboarding_sweep()
                 last_heartbeat_prune = time.monotonic()
 
             job = claim_next_job()

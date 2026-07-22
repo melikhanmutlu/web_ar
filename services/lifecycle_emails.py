@@ -23,8 +23,10 @@ from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
 
+from sqlalchemy import or_
+
 from config import SITE_URL
-from models import LifecycleEmail, Payment, User, db
+from models import LifecycleEmail, ModelShareLink, Payment, User, UserModel, db
 from services import send_email
 from services.plans import DEFAULT_PLAN, get_plan_config
 from services.time_utils import datetime
@@ -147,4 +149,110 @@ def run_renewal_sweep(now=None):
     sent = _remind_expiring_plans(now) + _winback_lapsed_payers(now)
     if sent:
         logger.info(f"Lifecycle sweep sent {sent} email(s)")
+    return sent
+
+
+# ---------------------------------------------------------------------------
+# Onboarding / activation sequence (F3.1)
+# ---------------------------------------------------------------------------
+# Disjoint created_at cohorts so a user matches at most one onboarding kind per
+# sweep. Each is one-time (dedupe_key "once"), gated by a one-lifecycle-email-
+# per-user-per-day cap so a burst never stacks on a single account.
+ONBOARD_WELCOME = "onboard_welcome"
+ONBOARD_SHARE = "onboard_share"
+ONBOARD_UPLOAD = "onboard_upload"
+
+_STUDIO_URL = f"{SITE_URL}/studio"
+
+
+def _sent_lifecycle_today(user_id, now):
+    day_start = datetime(now.year, now.month, now.day)
+    return LifecycleEmail.query.filter(
+        LifecycleEmail.user_id == user_id,
+        LifecycleEmail.sent_at >= day_start,
+    ).first() is not None
+
+
+def _has_uploaded(user_id):
+    return db.session.query(
+        UserModel.query.filter(
+            UserModel.user_id == user_id, UserModel.deleted_at.is_(None)
+        ).exists()
+    ).scalar()
+
+
+def _has_shared(user_id):
+    return db.session.query(
+        UserModel.query.outerjoin(
+            ModelShareLink, ModelShareLink.model_id == UserModel.id
+        ).filter(
+            UserModel.user_id == user_id,
+            UserModel.deleted_at.is_(None),
+            or_(
+                UserModel.share_count > 0,
+                UserModel.visibility == "public",
+                ModelShareLink.id.isnot(None),
+            ),
+        ).exists()
+    ).scalar()
+
+
+def _cohort(now, older_than_days, younger_than_days):
+    """Users created in [now-younger, now-older) — a one-day age band."""
+    return User.query.filter(
+        User.created_at > now - timedelta(days=younger_than_days),
+        User.created_at <= now - timedelta(days=older_than_days),
+    ).all()
+
+
+def run_onboarding_sweep(now=None):
+    """Welcome (day 0), share-nudge (day 1, uploaded but never shared) and
+    upload-nudge (day 2, never uploaded). One-time per user, and never more
+    than one lifecycle email per user per day. Returns emails sent."""
+    now = now or datetime.utcnow()
+    sent = 0
+
+    def deliver(user, kind, subject, body):
+        nonlocal sent
+        if not user.email or _sent_lifecycle_today(user.id, now):
+            return
+        if _send_once(user, kind, "once", subject, body):
+            sent += 1
+
+    # Day 0: welcome everyone who signed up in the last 24h.
+    for user in _cohort(now, 0, 1):
+        deliver(
+            user, ONBOARD_WELCOME,
+            "Welcome to ARVision — turn a 3D file into an AR link",
+            f"Hi {user.username},\n\nWelcome! ARVision turns any 3D file (or an "
+            f"AI prompt) into a shareable AR link that works on iPhone and "
+            f"Android — no app needed.\n\nUpload your first model here:\n"
+            f"{_STUDIO_URL}\n",
+        )
+
+    # Day 1: uploaded something but never shared it.
+    for user in _cohort(now, 1, 2):
+        if _has_uploaded(user.id) and not _has_shared(user.id):
+            deliver(
+                user, ONBOARD_SHARE,
+                "Your model is ready — send the AR link",
+                f"Hi {user.username},\n\nYou've got a model in ARVision. The "
+                f"magic is in sharing it: open it, hit share, and send the link "
+                f"so anyone can view it in AR on their phone.\n\n{_STUDIO_URL}\n",
+            )
+
+    # Day 2: signed up but never uploaded anything.
+    for user in _cohort(now, 2, 3):
+        if not _has_uploaded(user.id):
+            deliver(
+                user, ONBOARD_UPLOAD,
+                "Put your first model in AR in under a minute",
+                f"Hi {user.username},\n\nHaven't uploaded a model yet? Drop an "
+                f"STL/OBJ/FBX/GLB in and we'll hand you an AR-ready link and QR "
+                f"code automatically. No model handy? Try the AI generator.\n\n"
+                f"{_STUDIO_URL}\n",
+            )
+
+    if sent:
+        logger.info(f"Onboarding sweep sent {sent} email(s)")
     return sent

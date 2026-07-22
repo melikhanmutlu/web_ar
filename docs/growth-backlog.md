@@ -106,7 +106,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 ## FAZ 3 — PLG derinleştirme (Hafta 6–12)
 
 ### 3.1 Hoş geldin / aktivasyon e-posta dizisi
-- [ ] 1.1 altyapısını genişlet: D0 hoş geldin, D1 "modelini paylaş" (yükledi ama
+- [x] 1.1 altyapısını genişlet: D0 hoş geldin, D1 "modelini paylaş" (yükledi ama
   paylaşmadı), D2 "ilk modelini yükle" (hiç yüklemedi). Aynı `LifecycleEmail`
   tekilleştirmesi; kullanıcı başına gün başına en fazla 1 lifecycle e-postası kuralı.
 - **Doğrulama:** pytest — segment seçimi + tekilleştirme + günlük tavan.

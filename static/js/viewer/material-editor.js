@@ -328,6 +328,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // left to persist, so a later save must not send a material block.
                 clearMaterialDirty();
                 window._reapplyClipping?.();
+                // Reset sets slider/input values directly without dispatching
+                // change, so undo-redo.js's change-based capture never sees it
+                // as a step — Ctrl+Z would otherwise skip past the reset to a
+                // stale pre-reset snapshot instead of landing here.
+                metalnessSlider?.dispatchEvent(new Event('change', { bubbles: true }));
             });
 
             materialEditorInitialized = true;
@@ -372,7 +377,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (matColor) matColor.value = snap.color;
             if (matColorHex) matColorHex.value = snap.color.toUpperCase();
-            applyMaterialColor(snap.color);
+            // Undo/redo has no concept of texture state — a texture upload
+            // is never captured in a snapshot (see textureUpload's own
+            // change handler). While a texture is bound, baseColorFactor RGB
+            // is deliberately held at white so the texture shows its true
+            // colors; writing an older snapshot's arbitrary RGB here would
+            // silently re-tint that texture with an unrelated color picked
+            // before it was ever applied. Skip the live RGB write in that
+            // case — the color picker UI above still reflects the snapshot.
+            const hasTexture = getMaterials().some(m => !!(m.pbrMetallicRoughness?.baseColorTexture?.texture));
+            if (!hasTexture) applyMaterialColor(snap.color);
 
             if (metalnessSlider) metalnessSlider.value = snap.metalness;
             if (metalnessValue) metalnessValue.textContent = snap.metalness.toFixed(2);

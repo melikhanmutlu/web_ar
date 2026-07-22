@@ -103,4 +103,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Never leave the camera running when the page goes away.
     window.addEventListener('pagehide', () => { if (active) exit(); });
+
+    // Launching real AR (WebXR/Scene Viewer/Quick Look via the toolbar's AR
+    // button) takes over the camera/canvas the same way fullscreen does, but
+    // it's a sibling toolbar button — not a page navigation — so `pagehide`
+    // never fires for it, and unlike fullscreen it isn't behind a click this
+    // file's own code intercepts. Without this, starting AR while Camera
+    // Overlay is active leaves its getUserMedia stream running (and the
+    // camera hardware indicator lit) behind/alongside the AR session.
+    modelViewer.addEventListener('ar-status', (event) => {
+        if (active && event.detail?.status === 'session-started') exit();
+    });
 });

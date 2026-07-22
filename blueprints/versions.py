@@ -164,9 +164,13 @@ def download_version(model_id, version_number):
     import app as app_module
 
     try:
-        guard = check_model_mutation_allowed(model_id)
-        if guard is not None:
-            return guard
+        # This endpoint backs both the History tab's "Preview" (loaded
+        # straight into modelViewer.src) and "Download" buttons, which are
+        # shown to any viewer — same access tier as listing/comparing
+        # versions above, not the mutation-only actions (Restore/Delete).
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()

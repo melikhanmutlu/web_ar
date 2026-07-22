@@ -1,13 +1,21 @@
 document.addEventListener('DOMContentLoaded', () => {
     const modelViewer = document.querySelector('model-viewer');
+        // The template renders camera-orbit/field-of-view from this model's
+        // actual persisted viewer_settings (services/viewer_settings.py),
+        // which isn't a fixed value — owners can override it per model.
+        // Capture it now, before any preset/drag can change the live
+        // attributes, so "Reset Camera" returns to THIS model's real saved
+        // default instead of a hardcoded angle that could disagree with it.
+        const DEFAULT_CAMERA_ORBIT = modelViewer?.getAttribute('camera-orbit') || '30deg 70deg auto';
+        const DEFAULT_FIELD_OF_VIEW = modelViewer?.getAttribute('field-of-view') || '24deg';
 
         // ===================================================================
         // RESET CAMERA
         // ===================================================================
         document.getElementById('resetCamera')?.addEventListener('click', () => {
             if (!modelViewer) return;
-            modelViewer.cameraOrbit = '36deg 70deg auto';
-            modelViewer.fieldOfView = '24deg';
+            modelViewer.cameraOrbit = DEFAULT_CAMERA_ORBIT;
+            modelViewer.fieldOfView = DEFAULT_FIELD_OF_VIEW;
             modelViewer.cameraTarget = 'auto auto auto';
         });
 

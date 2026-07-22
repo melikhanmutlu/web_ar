@@ -42,21 +42,32 @@ document.addEventListener('DOMContentLoaded', () => {
         slider.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    // Guards the highlight-clearing listener below against clearing the
+    // preset's OWN highlight: applyMaterialPreset dispatches synthetic
+    // 'input' events on the sliders it sets, which would otherwise
+    // immediately un-highlight the button just clicked.
+    let _applyingMaterialPreset = false;
+
     function applyMaterialPreset(name) {
         const preset = MATERIAL_PRESETS[name];
         if (!preset) return;
-        if (preset.color) {
-            const hexInput = document.getElementById('materialColorHex');
-            const colorInput = document.getElementById('materialColor');
-            if (colorInput) colorInput.value = preset.color;
-            if (hexInput) {
-                hexInput.value = preset.color.toUpperCase();
-                hexInput.dispatchEvent(new Event('input', { bubbles: true }));
+        _applyingMaterialPreset = true;
+        try {
+            if (preset.color) {
+                const hexInput = document.getElementById('materialColorHex');
+                const colorInput = document.getElementById('materialColor');
+                if (colorInput) colorInput.value = preset.color;
+                if (hexInput) {
+                    hexInput.value = preset.color.toUpperCase();
+                    hexInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
             }
+            setSliderValue('metalnessSlider', preset.metalness);
+            setSliderValue('roughnessSlider', preset.roughness);
+            setSliderValue('opacitySlider', preset.opacity);
+        } finally {
+            _applyingMaterialPreset = false;
         }
-        setSliderValue('metalnessSlider', preset.metalness);
-        setSliderValue('roughnessSlider', preset.roughness);
-        setSliderValue('opacitySlider', preset.opacity);
     }
 
     document.querySelectorAll('.material-preset-btn').forEach(btn => {
@@ -67,9 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     // A manual material tweak means the model no longer matches any preset.
+    // Checked against `_applyingMaterialPreset`, not `e.isTrusted` — value-
+    // edit.js's number-entry inputs also dispatch synthetic (untrusted)
+    // 'input' events, and those are genuine user edits that should clear the
+    // highlight too; only the preset's own self-dispatch should be ignored.
     ['metalnessSlider', 'roughnessSlider', 'opacitySlider', 'materialColorHex', 'materialColor'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', (e) => {
-            if (e.isTrusted) {
+        document.getElementById(id)?.addEventListener('input', () => {
+            if (!_applyingMaterialPreset) {
                 document.querySelectorAll('.material-preset-btn.is-active').forEach(b => b.classList.remove('is-active'));
             }
         });
@@ -145,24 +160,34 @@ document.addEventListener('DOMContentLoaded', () => {
     shadowSoftnessSlider?.addEventListener('input', applyShadowSoftness);
     environmentSelect?.addEventListener('change', applyEnvironment);
 
-    // Clear the active preset highlight once the user adjusts anything by hand.
+    // Clear the active preset highlight once the user adjusts anything by
+    // hand. Checked against `_applyingLightingPreset`, not `e.isTrusted` —
+    // value-edit.js's number-entry inputs dispatch synthetic (untrusted)
+    // 'input' events too, and those are genuine user edits that should also
+    // clear the highlight.
+    let _applyingLightingPreset = false;
     [exposureSlider, shadowIntensitySlider, shadowSoftnessSlider, environmentSelect].forEach(el => {
-        el?.addEventListener('input', (e) => {
-            if (e.isTrusted) document.querySelectorAll('.lighting-preset-btn.is-active').forEach(b => b.classList.remove('is-active'));
+        el?.addEventListener('input', () => {
+            if (!_applyingLightingPreset) document.querySelectorAll('.lighting-preset-btn.is-active').forEach(b => b.classList.remove('is-active'));
         });
     });
 
     function applyLightingPreset(name) {
         const preset = LIGHTING_PRESETS[name];
         if (!preset) return;
-        if (exposureSlider) exposureSlider.value = preset.exposure;
-        if (shadowIntensitySlider) shadowIntensitySlider.value = preset.shadow;
-        if (shadowSoftnessSlider) shadowSoftnessSlider.value = preset.softness;
-        if (environmentSelect) environmentSelect.value = preset.environment;
-        applyExposure();
-        applyShadowIntensity();
-        applyShadowSoftness();
-        applyEnvironment();
+        _applyingLightingPreset = true;
+        try {
+            if (exposureSlider) exposureSlider.value = preset.exposure;
+            if (shadowIntensitySlider) shadowIntensitySlider.value = preset.shadow;
+            if (shadowSoftnessSlider) shadowSoftnessSlider.value = preset.softness;
+            if (environmentSelect) environmentSelect.value = preset.environment;
+            applyExposure();
+            applyShadowIntensity();
+            applyShadowSoftness();
+            applyEnvironment();
+        } finally {
+            _applyingLightingPreset = false;
+        }
     }
 
     document.querySelectorAll('.lighting-preset-btn').forEach(btn => {

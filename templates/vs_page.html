@@ -1,59 +1,50 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% include '_security_head.html' %}
-    {% set seo_title = page.headline ~ " — ARVision" %}
-    {% set seo_description = page.subhead %}
-    {% set seo_robots = "index, follow" %}
-    {% include '_seo_head.html' %}
-    <title>{{ seo_title }}</title>
+    {% set seo_title = page.headline ~ " — ARVision" %}{% set seo_description = page.subhead %}{% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}<title>{{ seo_title }}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
-<body class="av-home">
+<body class="av-home marketing-detail marketing-detail--compare">
     {% include "_site_header.html" %}
     <main>
-        <section class="page-hero">
-            <div class="shell">
+        <section class="detail-hero detail-hero--compare">
+            <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+            <div class="shell compare-hero">
                 <div class="reveal" data-reveal>
-                    <span class="status-label"><i></i> Comparison</span>
-                    <h1>{{ page.headline }}</h1>
-                    <p>{{ page.subhead }}</p>
-                    <div style="margin-top:1.5rem;"><a class="primary-btn" href="{{ url_for('main.studio') }}">Try ARVision free &rarr;</a></div>
+                    <span class="status-label"><i></i> Honest comparison</span>
+                    <h1>{{ page.headline }}</h1><p>{{ page.subhead }}</p>
+                    <div class="detail-actions detail-actions--center"><a class="primary-btn" href="{{ url_for('main.studio') }}">Try ARVision free <span>&rarr;</span></a><a class="text-btn" href="#comparison">See the difference <span>&darr;</span></a></div>
+                </div>
+                <div class="compare-lockup reveal" data-reveal style="--delay:120ms" aria-label="ARVision compared with {{ page.competitor }}">
+                    <div class="compare-brand compare-brand--active"><small>BUILT FOR DELIVERY</small><b>arvision</b><span>3D → Web → AR</span></div>
+                    <em>VS</em>
+                    <div class="compare-brand"><small>ALTERNATIVE</small><b>{{ page.competitor }}</b><span>Different strengths</span></div>
                 </div>
             </div>
         </section>
 
-        <section class="shell" style="padding-bottom:48px;">
-            <div class="feature-grid">
-                <article class="feature-card">
-                    <h3>Where ARVision wins</h3>
-                    <ul style="line-height:1.9;margin-top:.5rem;">
-                        {% for point in page.we_win %}<li>{{ point }}</li>{% endfor %}
-                    </ul>
-                </article>
-                <article class="feature-card">
-                    <h3>Where {{ page.competitor }} wins</h3>
-                    <ul style="line-height:1.9;margin-top:.5rem;">
-                        {% for point in page.they_win %}<li>{{ point }}</li>{% endfor %}
-                    </ul>
-                </article>
+        <section class="detail-section" id="comparison">
+            <div class="shell">
+                <div class="detail-heading detail-heading--row reveal" data-reveal><div><span class="section-tag">SIDE BY SIDE</span><h2>Choose for the workflow you need.</h2></div><p>A straightforward view of where each product is strongest, without pretending one tool fits every team.</p></div>
+                <div class="comparison-grid">
+                    <article class="comparison-card comparison-card--accent reveal" data-reveal>
+                        <div class="comparison-card-head"><span>OUR STRENGTHS</span><h3>Where ARVision wins</h3></div>
+                        <ul>{% for point in page.we_win %}<li><i>✓</i><span>{{ point }}</span></li>{% endfor %}</ul>
+                    </article>
+                    <article class="comparison-card reveal" data-reveal style="--delay:80ms">
+                        <div class="comparison-card-head"><span>THEIR STRENGTHS</span><h3>Where {{ page.competitor }} wins</h3></div>
+                        <ul>{% for point in page.they_win %}<li><i>+</i><span>{{ point }}</span></li>{% endfor %}</ul>
+                    </article>
+                </div>
+                {% if page.note %}<aside class="comparison-note reveal" data-reveal><b>Good to know</b><p>{{ page.note }}</p></aside>{% endif %}
             </div>
-            {% if page.note %}
-            <p class="field-help" style="margin-top:1.25rem;">{{ page.note }}</p>
-            {% endif %}
         </section>
-
-        <section class="shell" style="padding-top:0;padding-bottom:64px;">
-            <article class="admin-card" style="max-width:640px;text-align:center;">
-                <h2 style="margin-top:0;">Try it with your own model</h2>
-                <p>Upload a file and get a working AR link in seconds — free.</p>
-                <a class="primary-btn" href="{{ url_for('main.studio') }}">Start free</a>
-            </article>
-        </section>
+        <section class="detail-cta"><div class="shell reveal" data-reveal><span class="status-label dark"><i></i> Test the difference</span><h2>Try it with your own model.</h2><p>Upload a file and get a working AR link in seconds. No credit card required.</p><a class="light-btn" href="{{ url_for('main.studio') }}">Start free <span>&rarr;</span></a></div></section>
     </main>
-    {% include "_site_footer.html" %}
+    {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>
 </html>

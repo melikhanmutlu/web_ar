@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = "Security & data practices — ARVision" %}
+    {% set seo_description = "How ARVision handles your 3D assets: access control, data storage, privacy of uploads, infrastructure and account security." %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body class="av-home">
+    {% include "_site_header.html" %}
+
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> Trust</span>
+                    <h1>Security &amp; data practices</h1>
+                    <p>You're uploading work that matters. Here's how ARVision keeps it private and under your control.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="shell" style="padding-bottom:48px;">
+            <div class="feature-grid">
+                <article class="feature-card">
+                    <h3>Your models are private by default</h3>
+                    <p>New uploads are unlisted or private — never publicly listed unless you explicitly choose to. Access to a model is governed by a single policy layer: ownership, organization membership, or an active (non-revoked, non-expired) share link.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>Access control</h3>
+                    <p>Organizations use owner / admin / editor / viewer roles. Share links can be password-protected and time-limited, and revoked at any time. Embeds can be restricted to an allowlist of domains.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>Account security</h3>
+                    <p>Passwords are stored only as salted hashes, never in plain text. Repeated failed logins lock an account temporarily to blunt brute-force attempts. All state-changing requests are CSRF-protected, and sensitive endpoints are rate-limited.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>Data storage</h3>
+                    <p>Your files are stored on persistent, access-controlled storage and served over HTTPS. Deleting a model moves it to a recoverable trash and then purges the underlying files from disk on cleanup.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>Uploads are handled safely</h3>
+                    <p>Converters treat every uploaded file as untrusted: file references inside a model are sanitized, and absolute or parent-directory paths are never honored. Conversion runs in isolated background workers, not in the request path.</p>
+                </article>
+                <article class="feature-card">
+                    <h3>Payments</h3>
+                    <p>Card data never touches our servers. Checkout runs on the payment provider's hosted page (PayTR, or Lemon Squeezy as Merchant of Record for global cards), and provider callbacks are cryptographically signature-verified.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="shell" style="padding-top:0;padding-bottom:64px;">
+            <article class="admin-card" style="max-width:680px;">
+                <h2 style="margin-top:0;">Questions from your security team?</h2>
+                <p>For data-processing details, deletion requests or a security review ahead of a Business/Enterprise rollout, get in touch.</p>
+                <a class="primary-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Contact us</a>
+            </article>
+        </section>
+    </main>
+    {% include "_site_footer.html" %}
+</body>
+</html>

@@ -53,6 +53,7 @@ from models import (
     ModelVersion,
     Organization,
     Payment,
+    SalesLead,
     SiteSetting,
     User,
     UserModel,
@@ -1289,6 +1290,40 @@ def growth():
     from services.growth_metrics import collect_growth_metrics
 
     return render_template("admin/growth.html", metrics=collect_growth_metrics())
+
+
+_LEAD_STATUSES = ("new", "contacted", "won", "lost")
+
+
+@admin_bp.route("/leads")
+@admin_required
+def leads():
+    status = request.args.get("status")
+    query = SalesLead.query
+    if status in _LEAD_STATUSES:
+        query = query.filter(SalesLead.status == status)
+    query = query.order_by(SalesLead.created_at.desc())
+    page = paginate(query, _page_arg())
+    return render_template(
+        "admin/leads.html", page=page, status=status, statuses=_LEAD_STATUSES
+    )
+
+
+@admin_bp.route("/leads/<int:lead_id>/status", methods=["POST"])
+@admin_required
+def set_lead_status(lead_id):
+    lead = db.session.get(SalesLead, lead_id)
+    if lead is None:
+        abort(404)
+    new_status = request.form.get("status")
+    if new_status not in _LEAD_STATUSES:
+        flash("Unknown status.", "error")
+        return redirect(url_for("admin.leads"))
+    lead.status = new_status
+    log_action("lead_status", target_type="sales_lead", target_id=lead.id, detail=new_status)
+    db.session.commit()
+    flash("Lead updated.", "success")
+    return redirect(request.referrer or url_for("admin.leads"))
 
 
 @admin_bp.route("/analytics")

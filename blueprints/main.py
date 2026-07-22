@@ -3,12 +3,76 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from flask import Blueprint, render_template, url_for
+import re
+
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
 from config import WORKER_POLL_INTERVAL
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 main_bp = Blueprint("main", __name__)
+
+# Segment landing pages (F2.1): one template, per-segment copy. Slugs are the
+# URL (/for/<slug>) and feed the sitemap (SEGMENT_SLUGS below).
+SEGMENT_PAGES = {
+    "ecommerce": {
+        "eyebrow": "For e-commerce",
+        "headline": "Let shoppers place your product in their room",
+        "subhead": "Turn any 3D file into an AR-ready link and an embeddable viewer "
+                   "for your product pages — no app, no code, works on iPhone and Android.",
+        "pains": [
+            "High return rates because customers can't judge size or fit online.",
+            "\"View in your space\" needs USDZ, GLB, hosting and a viewer you don't want to build.",
+            "Marketplace product photos don't convey scale or material.",
+        ],
+        "benefits": [
+            ("In-page AR viewer", "Drop a copy-paste embed on any product page — Shopify, WooCommerce or custom."),
+            ("iOS + Android AR", "Quick Look on iPhone, Scene Viewer on Android, generated automatically."),
+            ("QR for print & store", "Put a code on packaging or a shelf; customers open AR instantly."),
+            ("Analytics", "See views, unique visitors and AR opens per product."),
+        ],
+        "cta_reason": "ecommerce",
+    },
+    "architecture": {
+        "eyebrow": "For architecture & interior design",
+        "headline": "Walk clients through the design before it's built",
+        "subhead": "Share models as private, versioned AR links your clients open on their "
+                   "phone — with annotations, review rounds and your own branding.",
+        "pains": [
+            "Clients struggle to read plans and renders; sign-off drags.",
+            "Revision rounds get lost across email attachments.",
+            "You want client-facing links under your studio's brand, not a generic tool's.",
+        ],
+        "benefits": [
+            ("Private, versioned links", "Every revision is a version; compare and restore any of them."),
+            ("Annotations & hotspots", "Pin notes to exact points for structured review rounds."),
+            ("White-label", "Custom domain and your branding on client-facing galleries."),
+            ("Organizations & roles", "Owner/admin/editor/viewer so the whole studio works safely."),
+        ],
+        "cta_reason": "architecture",
+    },
+    "agencies": {
+        "eyebrow": "For agencies & 3D studios",
+        "headline": "The delivery layer for every 3D asset you produce",
+        "subhead": "Convert, host, brand and hand off client 3D/AR under your own domain — "
+                   "and automate it all through the API.",
+        "pains": [
+            "You rebuild the same hosting/AR delivery for every client project.",
+            "Clients want a branded experience, not a link to someone else's product.",
+            "Manual conversion and USDZ export eats billable hours.",
+        ],
+        "benefits": [
+            ("White-label + custom domains", "Every client gallery on your brand and your domain."),
+            ("Full REST API + webhooks", "Automate ingestion, conversion and publishing in your pipeline."),
+            ("Organizations", "Separate client workspaces with per-seat roles."),
+            ("Batch conversion", "Push many assets through at once instead of one by one."),
+        ],
+        "cta_reason": "agencies",
+    },
+}
+SEGMENT_SLUGS = tuple(SEGMENT_PAGES)
 
 
 @main_bp.route("/", methods=["GET"])
@@ -91,6 +155,80 @@ def studio():
 @main_bp.route("/features", methods=["GET"])
 def features():
     return render_template("features.html")
+
+
+@main_bp.route("/for/<segment>", methods=["GET"])
+def segment_landing(segment):
+    page = SEGMENT_PAGES.get(segment)
+    if page is None:
+        abort(404)
+    return render_template("segment_landing.html", slug=segment, page=page)
+
+
+@main_bp.route("/security", methods=["GET"])
+def security():
+    return render_template("security.html")
+
+
+@main_bp.route("/contact-sales", methods=["GET", "POST"])
+def contact_sales():
+    """B2B enquiry form. GET renders it (with an optional ?reason= tag from a
+    segment/pricing CTA); POST validates, records a SalesLead and pings the
+    admins. A hidden honeypot field kills the simplest bots."""
+    from site_settings import get_setting
+
+    reason = (request.values.get("reason") or "general")[:40]
+    calcom_url = get_setting("calcom_url")
+
+    if request.method == "POST":
+        # Bots fill every field, including the hidden one; humans leave it blank.
+        if (request.form.get("website") or "").strip():
+            flash("Thanks — we'll be in touch.", "success")
+            return redirect(url_for("main.contact_sales"))
+
+        email = (request.form.get("email") or "").strip()[:255]
+        if not _EMAIL_RE.match(email):
+            flash("Please enter a valid email address.", "error")
+            return render_template("contact_sales.html", reason=reason,
+                                   calcom_url=calcom_url, form=request.form)
+
+        from models import SalesLead, db
+        lead = SalesLead(
+            name=(request.form.get("name") or "").strip()[:120] or None,
+            email=email,
+            company=(request.form.get("company") or "").strip()[:160] or None,
+            message=(request.form.get("message") or "").strip()[:4000] or None,
+            source=reason,
+            user_id=current_user.id if current_user.is_authenticated else None,
+        )
+        db.session.add(lead)
+        db.session.commit()
+        _notify_admins_of_lead(lead)
+        flash("Thanks — we'll be in touch shortly.", "success")
+        return redirect(url_for("main.contact_sales"))
+
+    return render_template("contact_sales.html", reason=reason,
+                           calcom_url=calcom_url, form={})
+
+
+def _notify_admins_of_lead(lead):
+    """Best-effort admin notification for a new sales lead (never raises)."""
+    try:
+        from models import User
+        from services import send_email
+        admins = User.query.filter_by(is_admin=True).all()
+        body = (
+            f"New sales lead ({lead.source}):\n\n"
+            f"Name: {lead.name or '—'}\n"
+            f"Email: {lead.email}\n"
+            f"Company: {lead.company or '—'}\n\n"
+            f"{lead.message or '(no message)'}"
+        )
+        for admin in admins:
+            if admin.email:
+                send_email(admin.email, f"New sales lead: {lead.email}", body)
+    except Exception:
+        pass
 
 
 @main_bp.route("/workflow", methods=["GET"])

@@ -815,6 +815,24 @@ class Payment(db.Model):
         return f'<Payment {self.id} user={self.user_id} plan={self.plan} amount={self.amount}>'
 
 
+class SalesLead(db.Model):
+    """A B2B inbound enquiry from the /contact-sales form (or, later, the
+    signal-mining sweep). `source` records where it came from (a segment slug,
+    'security', or 'signal'); `status` tracks the admin's follow-up."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=True)
+    email = db.Column(db.String(255), nullable=False, index=True)
+    company = db.Column(db.String(160), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    source = db.Column(db.String(40), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='new', server_default='new', index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f'<SalesLead {self.id} {self.email} status={self.status}>'
+
+
 class LifecycleEmail(db.Model):
     """Dedupe ledger for worker-sent lifecycle emails (renewal reminders,
     win-back). One row per email actually delivered; the (user_id, kind,

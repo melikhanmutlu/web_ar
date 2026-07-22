@@ -67,19 +67,19 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 ## FAZ 2 — B2B satış yüzeyi (Hafta 3–6)
 
 ### 2.1 Segment landing sayfaları
-- [ ] `/for/ecommerce`, `/for/architecture`, `/for/agencies` — tek Jinja şablonu +
+- [x] `/for/ecommerce`, `/for/architecture`, `/for/agencies` — tek Jinja şablonu +
   segment veri sözlüğü (başlık, acılar, özellik eşlemesi, CTA); `_seo_head` meta;
   sitemap'e ekleme (`blueprints/seo.py::SITEMAP_STATIC_ENDPOINTS`).
 - **Doğrulama:** pytest — 200 + segment içeriği; sitemap'te URL'ler.
 
 ### 2.2 Demo / satış akışı ("Talk to sales")
-- [ ] `SalesLead` tablosu (isim, e-posta, şirket, mesaj, kaynak, durum); `/contact-sales`
+- [x] `SalesLead` tablosu (isim, e-posta, şirket, mesaj, kaynak, durum); `/contact-sales`
   formu (CSRF + rate limit + honeypot); admin'e bildirim e-postası; `/admin`'de lead
   listesi + durum güncelleme. Cal.com linki site ayarı olarak (`SiteSetting`).
 - **Doğrulama:** pytest — form kaydı, rate limit, admin listesi.
 
 ### 2.3 `/security` güven sayfası
-- [ ] Veri saklama/gizlilik/altyapı/yedekleme/şifreleme özeti; footer + pricing'den link;
+- [x] Veri saklama/gizlilik/altyapı/yedekleme/şifreleme özeti; footer + pricing'den link;
   sitemap'e ekleme. İçerik mevcut mimariden türetilir (gerçek olmayan iddia yazılmaz).
 - **Doğrulama:** sayfa 200, lint.
 

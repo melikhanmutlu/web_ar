@@ -6,8 +6,11 @@ from config import SITE_URL
 
 seo_bp = Blueprint("seo", __name__)
 
-# Endpoints listed in the sitemap.
-SITEMAP_STATIC_ENDPOINTS = ["main.index", "main.features", "main.pricing", "main.developers"]
+# Endpoints listed in the sitemap. Segment landing pages are added below.
+SITEMAP_STATIC_ENDPOINTS = [
+    "main.index", "main.features", "main.pricing", "main.developers",
+    "main.security", "main.contact_sales",
+]
 
 
 @seo_bp.route("/robots.txt")
@@ -36,9 +39,12 @@ def sitemap_xml():
     handful of URLs). Lists SITEMAP_STATIC_ENDPOINTS only."""
     from xml.sax.saxutils import escape as xml_escape
 
+    from blueprints.main import SEGMENT_SLUGS
+
+    locs = [SITE_URL + url_for(endpoint) for endpoint in SITEMAP_STATIC_ENDPOINTS]
+    locs += [SITE_URL + url_for("main.segment_landing", segment=slug) for slug in SEGMENT_SLUGS]
     entries = [
-        f"  <url>\n    <loc>{xml_escape(SITE_URL + url_for(endpoint))}</loc>\n  </url>"
-        for endpoint in SITEMAP_STATIC_ENDPOINTS
+        f"  <url>\n    <loc>{xml_escape(loc)}</loc>\n  </url>" for loc in locs
     ]
     body = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'

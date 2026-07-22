@@ -500,6 +500,10 @@ app.view_functions["billing.lemonsqueezy_webhook"] = limiter.limit(
     "120 per minute"
 )(app.view_functions["billing.lemonsqueezy_webhook"])
 csrf.exempt(app.view_functions["billing.lemonsqueezy_webhook"])
+# Public sales-enquiry form: throttle POST submissions to blunt spam/abuse.
+app.view_functions["main.contact_sales"] = limiter.limit(
+    "10 per hour", methods=["POST"]
+)(app.view_functions["main.contact_sales"])
 
 # Configure logging FIRST (before database operations)
 logging.basicConfig(

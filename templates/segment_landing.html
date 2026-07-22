@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% set seo_title = page.headline ~ " — ARVision" %}
+    {% set seo_description = page.subhead %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body class="av-home">
+    {% include "_site_header.html" %}
+
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> {{ page.eyebrow }}</span>
+                    <h1>{{ page.headline }}</h1>
+                    <p>{{ page.subhead }}</p>
+                    <div class="hero-cta" style="margin-top:1.5rem;display:flex;gap:.75rem;flex-wrap:wrap;">
+                        <a class="primary-btn" href="{{ url_for('main.studio') }}">Try it free &rarr;</a>
+                        <a class="secondary-btn" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Talk to sales</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="shell" style="padding-bottom:24px;">
+            <h2>Sound familiar?</h2>
+            <ul class="segment-pains" style="margin-top:1rem;line-height:1.9;">
+                {% for pain in page.pains %}<li>{{ pain }}</li>{% endfor %}
+            </ul>
+        </section>
+
+        <section class="feature-grid shell">
+            {% for title, copy in page.benefits %}
+            <article class="feature-card">
+                <h3>{{ title }}</h3>
+                <p>{{ copy }}</p>
+            </article>
+            {% endfor %}
+        </section>
+
+        <section class="shell" style="padding-top:8px;padding-bottom:64px;">
+            <article class="admin-card" style="max-width:680px;text-align:center;">
+                <h2 style="margin-top:0;">See it with your own product</h2>
+                <p>Start free in minutes, or book a 25-minute demo where we convert one of your models live.</p>
+                <div style="margin-top:1rem;display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;">
+                    <a class="primary-btn" href="{{ url_for('main.studio') }}">Start free</a>
+                    <a class="secondary-btn" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Book a demo</a>
+                </div>
+            </article>
+        </section>
+    </main>
+    {% include "_site_footer.html" %}
+</body>
+</html>

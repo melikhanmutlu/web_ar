@@ -1,0 +1,44 @@
+{% extends "admin/base.html" %}
+{% from "admin/_pagination.html" import pager %}
+
+{% block title %}leads — arvision admin{% endblock %}
+{% block page_title %}sales leads{% endblock %}
+
+{% block content %}
+<div class="admin-filter-bar" style="margin-bottom:1rem;">
+    <a href="{{ url_for('admin.leads') }}" class="admin-btn {% if not status %}is-active{% endif %}">all</a>
+    {% for s in statuses %}
+    <a href="{{ url_for('admin.leads', status=s) }}" class="admin-btn {% if status == s %}is-active{% endif %}">{{ s }}</a>
+    {% endfor %}
+</div>
+
+{% if page.items %}
+<table class="plans-editor-table">
+    <thead><tr><th>Date</th><th>Email</th><th>Company</th><th>Source</th><th>Message</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for lead in page.items %}
+        <tr>
+            <td>{{ lead.created_at.strftime('%Y-%m-%d') }}</td>
+            <td>{{ lead.name or '' }}<br><a href="mailto:{{ lead.email }}">{{ lead.email }}</a></td>
+            <td>{{ lead.company or '—' }}</td>
+            <td>{{ lead.source or '—' }}</td>
+            <td style="max-width:280px;">{{ (lead.message or '')[:200] }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('admin.set_lead_status', lead_id=lead.id) }}" style="margin:0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="status" onchange="this.form.submit()">
+                        {% for s in statuses %}
+                        <option value="{{ s }}" {% if lead.status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{{ pager(page, 'admin.leads') }}
+{% else %}
+<p class="field-help">No leads yet.</p>
+{% endif %}
+{% endblock %}

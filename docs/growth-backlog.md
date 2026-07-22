@@ -125,7 +125,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — 200 + sitemap; lint.
 
 ### 3.4 Onboarding checklist'i (ürün içi)
-- [ ] Dashboard'da 4 adım: model yükle → AR'da aç → linki paylaş → AI dene. İlerleme
+- [x] Dashboard'da 4 adım: model yükle → AR'da aç → linki paylaş → AI dene. İlerleme
   mevcut verilerden türetilir (yeni tablo yok); tamamlanınca kaybolur.
 - **Doğrulama:** Playwright smoke + pytest (adım hesaplama).
 

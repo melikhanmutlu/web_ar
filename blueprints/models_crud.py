@@ -69,12 +69,19 @@ def my_models(folder_id=None):
                 UserModel.user_id == current_user.id, UserModel.deleted_at.isnot(None)
             ).count()
 
+        # Onboarding checklist only on the library root, and only until done.
+        onboarding_steps = None
+        if not folder_id:
+            from services.onboarding import checklist_state
+            onboarding_steps = checklist_state(current_user.id)
+
         from flask import render_template
         return render_template(
             "my_models.html",
             folders=folders,
             models=models,
             current_folder=current_folder,
+            onboarding_steps=onboarding_steps,
             folder_model_counts=folder_model_counts,
             folder_previews=folder_previews,
             trash_view=False,

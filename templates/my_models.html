@@ -70,6 +70,26 @@
         </div>
     </section>
 
+    {% if onboarding_steps %}
+    {% set done_count = onboarding_steps | selectattr('done') | list | length %}
+    <section class="onboarding-checklist admin-card" style="margin:0 0 1.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+            <h2 style="margin:0;font-size:1.05rem;">Get started ({{ done_count }}/4)</h2>
+            <div style="flex:1;min-width:120px;max-width:320px;height:8px;background:#e4e8f0;border-radius:999px;overflow:hidden;">
+                <div style="height:100%;width:{{ (done_count * 25) }}%;background:#4f46e5;"></div>
+            </div>
+        </div>
+        <ul style="list-style:none;margin:.75rem 0 0;padding:0;display:grid;gap:.4rem;">
+            {% for step in onboarding_steps %}
+            <li style="display:flex;align-items:center;gap:.6rem;{% if step.done %}opacity:.6;{% endif %}">
+                <span aria-hidden="true" style="flex:0 0 20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;{% if step.done %}background:#047857;color:#fff;{% else %}border:2px solid #c3c9d6;color:transparent;{% endif %}">✓</span>
+                <span>{{ step.label }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
     {% if storage_quota %}
     {% set used_bytes = storage_used or 0 %}
     {% set used_pct = (used_bytes / storage_quota * 100) %}

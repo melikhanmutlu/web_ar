@@ -108,6 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const result = await response.json();
                 if (result.success) {
+                    // A transform preset ("hazır görünüm") re-frames the live
+                    // preview to a canonical camera angle that isn't part of
+                    // the GLB bake — persist it now so the view the user
+                    // prepared is what they see after the reload below.
+                    if (modifications.transform && window._pendingPresetCamera) {
+                        try {
+                            await fetch(`/api/models/${modelId}/viewer-settings`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(window._pendingPresetCamera)
+                            });
+                        } catch (e) { /* best effort — don't block the save */ }
+                        window._pendingPresetCamera = null;
+                    }
                     window.location.reload();
                 } else {
                     alert('Save failed: ' + (result.error || 'Unknown error'));

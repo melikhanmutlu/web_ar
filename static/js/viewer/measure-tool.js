@@ -83,7 +83,19 @@ document.addEventListener('DOMContentLoaded', () => {
     window._disableMeasureMode = () => setActive(false);
 
     button?.addEventListener('click', () => {
-        if (!active) window._disableHotspotMode?.();
+        if (!active) {
+            // Shader clipping only HIDES geometry — raycasts (which
+            // positionAndNormalFromPoint below relies on) still hit the
+            // clipped-away surfaces, so a measurement placed while a slice
+            // preview is active can silently land on an invisible face. The
+            // slicer already blocks hotspot mode the same way (see
+            // annotations.js); measure mode needs the identical guard.
+            if (window._slicerClippingActive?.()) {
+                alert('Measurements can\'t be placed while a slice preview is active — reset the slicer first.');
+                return;
+            }
+            window._disableHotspotMode?.();
+        }
         setActive(!active);
     });
 

@@ -136,6 +136,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // without this nudge the change only shows up on the next user
                 // interaction (click/drag). Reframing on every input is jittery.
                 forceModelViewerRefresh();
+                // Any non-preset path (manual slider drag, Reset, or an
+                // undo/redo restore — all call applyTransform() with no
+                // `reframe`) means the rotation no longer necessarily matches
+                // the last preset that was clicked. A stale
+                // `_pendingPresetCamera` here would make the next Save patch
+                // in a camera framing that doesn't correspond to what's
+                // actually being baked. Preset clicks call
+                // applyTransform(true) BEFORE setting the flag, so this never
+                // clobbers a preset's own camera.
+                window._pendingPresetCamera = null;
             }
         }
 
@@ -210,6 +220,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // & Apply AR carries this along so the saved view is the
                     // one the user actually prepared.
                     window._pendingPresetCamera = { camera_orbit: '0deg 90deg auto', field_of_view: '24deg' };
+                    // setRotateSlider() above sets slider.value directly
+                    // without dispatching input/change, so undo-redo.js's
+                    // change-based history capture never sees a preset click
+                    // — Ctrl+Z would silently skip past it to an older manual
+                    // drag. Dispatch a real change event on a watched slider
+                    // so the preset becomes its own undo step.
+                    rotateXSlider?.dispatchEvent(new Event('change', { bubbles: true }));
                 });
             });
 
@@ -223,9 +240,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (rotateYValue) rotateYValue.textContent = '0\u00B0';
                 if (rotateZValue) rotateZValue.textContent = '0\u00B0';
                 // Apply the reset values to the actual THREE.js scene (applyTransform
-                // reads the sliders and calls forceModelViewerRefresh internally).
+                // reads the sliders and calls forceModelViewerRefresh internally;
+                // its non-preset path also clears window._pendingPresetCamera).
                 applyTransform();
-                window._pendingPresetCamera = null;
+                // Same reasoning as the preset buttons: this sets slider values
+                // directly, so undo-redo.js never sees the reset as a step
+                // unless we dispatch one ourselves.
+                scaleSlider?.dispatchEvent(new Event('change', { bubbles: true }));
             }
 
             resetTransform?.addEventListener('click', resetTransformPreview);

@@ -10,7 +10,7 @@ import trimesh
 from flask import Blueprint, jsonify, request, send_from_directory
 
 from glb_modifier import modify_glb
-from models import UserModel, db
+from models import ModelHotspot, UserModel, db
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from version_manager import create_version
 
@@ -314,8 +314,10 @@ def save_modifications():
         app_module.logger.info(f"[save_modifications] Input: {current_model_path}")
         app_module.logger.info(f"[save_modifications] Temp output: {temp_output}")
 
-        # Apply modifications to current model
-        success = modify_glb(current_model_path, temp_output, modifications)
+        # Apply modifications to current model. transform_info is populated
+        # with the actual world-space matrix baked, if any -- see below.
+        transform_info = {}
+        success = modify_glb(current_model_path, temp_output, modifications, transform_info=transform_info)
 
         if success and os.path.exists(temp_output):
             # Replace current model.glb with modified version (atomic on same volume)
@@ -327,6 +329,47 @@ def save_modifications():
             # Keep iOS AR in sync: Quick Look uses the USDZ, so it must be
             # rebuilt from the freshly modified GLB.
             app_module.refresh_usdz_after_edit(model_id, current_model_path)
+
+            # Hotspots store world-space position/normal captured from
+            # model-viewer's positionAndNormalFromPoint -- the same
+            # world-space frame apply_transform_modifications computes its
+            # pivot in. Without this, a saved rotation/scale left every
+            # existing hotspot pointing at the model's old, now-wrong
+            # orientation (silently, with no way for a user to notice short
+            # of comparing before/after).
+            transform_matrix = transform_info.get("matrix")
+            if transform_matrix is not None:
+                try:
+                    import numpy as np
+
+                    linear = transform_matrix[:3, :3]
+                    translation = transform_matrix[:3, 3]
+                    normal_matrix = np.linalg.inv(linear).T
+                    hotspots = ModelHotspot.query.filter_by(model_id=model_id).all()
+                    for hotspot in hotspots:
+                        pos = np.array([hotspot.position_x, hotspot.position_y, hotspot.position_z])
+                        new_pos = linear @ pos + translation
+                        hotspot.position_x, hotspot.position_y, hotspot.position_z = (
+                            float(new_pos[0]), float(new_pos[1]), float(new_pos[2]),
+                        )
+                        if hotspot.normal_x is not None:
+                            normal = np.array([hotspot.normal_x, hotspot.normal_y, hotspot.normal_z])
+                            new_normal = normal_matrix @ normal
+                            norm = np.linalg.norm(new_normal)
+                            if norm > 1e-12:
+                                new_normal = new_normal / norm
+                            hotspot.normal_x, hotspot.normal_y, hotspot.normal_z = (
+                                float(new_normal[0]), float(new_normal[1]), float(new_normal[2]),
+                            )
+                    if hotspots:
+                        db.session.commit()
+                        app_module.logger.info(
+                            f"[save_modifications] Reconciled {len(hotspots)} hotspot(s) with the baked transform"
+                        )
+                except Exception as hotspot_error:
+                    app_module.logger.error(
+                        f"[save_modifications] Failed to reconcile hotspots with transform: {hotspot_error}"
+                    )
 
             # Update database dimensions after modifications
             try:
@@ -386,11 +429,20 @@ def save_modifications():
 
             # Create version entry
             try:
-                operation_type = (
-                    "transform" if "transform" in modifications else "material"
-                )
-                if "material" in modifications and "transform" in modifications:
-                    operation_type = "transform+material"
+                # One label per kind present, joined — a layers-only or
+                # explode-only save (no material/transform edit at all) used
+                # to fall through to "material" by default, mislabeling it in
+                # the History tab.
+                kinds = [
+                    kind for kind, key in (
+                        ("transform", "transform"),
+                        ("material", "material"),
+                        ("layers", "layers"),
+                        ("explode", "explode"),
+                    )
+                    if key in modifications
+                ]
+                operation_type = "+".join(kinds) or "material"
 
                 create_version(
                     model_id=model_id,

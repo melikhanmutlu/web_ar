@@ -986,6 +986,37 @@ void main() {
                 forceModelViewerRender();
             }
 
+            // The History tab can swap the live model out from under this
+            // tab via modelViewer.setAttribute('src', ...) (preview/exit an
+            // older version) WITHOUT a full page reload. discoverInternals()
+            // and buildLayersList() both permanently short-circuit once
+            // they've succeeded once (_internalsReady / layersBuiltForModel
+            // are never reset elsewhere), so without this they'd keep
+            // pointing at the THREE.js scene graph of the model that was
+            // just replaced — clip toggles and layer edits would silently
+            // act on a detached, no-longer-rendered scene while the UI shows
+            // a different model. Every model-viewer 'load' after the first
+            // means the underlying model actually changed, so re-arm
+            // discovery and drop any clip/layer state computed from the old
+            // scene's bounds.
+            let _slicerLayersModelLoaded = false;
+            modelViewer?.addEventListener('load', () => {
+                if (_slicerLayersModelLoaded) {
+                    document.getElementById('slicerReset')?.click();
+                    _internalsReady = false;
+                    _mvScene = null;
+                    _mvRenderer = null;
+                    _mvCamera = null;
+                    _discoveryAttempts = 0;
+                    meshBounds = null;
+                    layersBuiltForModel = false;
+                    modelLayers = [];
+                    const layersList = document.getElementById('layersList');
+                    if (layersList) layersList.innerHTML = '';
+                }
+                _slicerLayersModelLoaded = true;
+            });
+
             // Load mesh bounds and initialize slider UI for all axes
             async function loadMeshBounds() {
                 if (meshBounds) return true;
@@ -1080,9 +1111,11 @@ void main() {
                         window._resetTransformPreview?.();
 
                         // Shader clipping only HIDES geometry — raycasts still hit
-                        // the clipped-away surfaces, so hotspot placement while a
+                        // the clipped-away surfaces, so hotspot placement (and
+                        // point measurement, same raycast-based hazard) while a
                         // slice preview is active lands pins on invisible faces.
                         window._disableHotspotMode?.();
+                        window._disableMeasureMode?.();
                     }
 
                     updateAxisPlane(axis);

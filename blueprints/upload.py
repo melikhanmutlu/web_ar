@@ -31,6 +31,7 @@ from models import ConversionJob, UserModel, db
 from services import UploadStagingError
 from services.model_permissions import check_model_mutation_allowed, get_live_model
 from services.plans import effective_storage_quota_mb, plan_limit
+from services.upgrade import upgrade_hint
 from services.time_utils import datetime
 from site_settings import setting_int
 
@@ -55,7 +56,8 @@ def _check_upload_size_limit():
     response tuple or None."""
     max_mb = _effective_max_upload_mb()
     if max_mb and request.content_length and request.content_length > max_mb * 1024 * 1024:
-        return jsonify({"error": f"File exceeds the {max_mb} MB upload limit"}), 413
+        return jsonify({"error": f"File exceeds the {max_mb} MB upload limit",
+                        "upgrade": upgrade_hint("upload_size")}), 413
     return None
 
 
@@ -80,7 +82,8 @@ def _check_model_count_limit():
     )
     if count >= cap:
         return jsonify(
-            {"error": f"Model limit reached ({cap}). Delete some models or upgrade your plan."}
+            {"error": f"Model limit reached ({cap}). Delete some models or upgrade your plan.",
+             "upgrade": upgrade_hint("model_limit")}
         ), 413
     return None
 
@@ -108,7 +111,8 @@ def _check_storage_quota():
     incoming = request.content_length or 0
     if used + incoming > quota_mb * 1024 * 1024:
         return jsonify(
-            {"error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin."}
+            {"error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin.",
+             "upgrade": upgrade_hint("storage_quota")}
         ), 413
     return None
 
@@ -676,7 +680,8 @@ def init_chunked_upload():
 
     max_mb = _effective_max_upload_mb()
     if max_mb and total_size > max_mb * 1024 * 1024:
-        return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
+        return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit",
+                        "upgrade": upgrade_hint("upload_size")}), 413
 
     if current_user.is_authenticated:
         global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
@@ -688,7 +693,8 @@ def init_chunked_upload():
                 .scalar()
             )
             if used + total_size > quota_mb * 1024 * 1024:
-                return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
+                return jsonify({"success": False, "error": "Storage quota exceeded",
+                                "upgrade": upgrade_hint("storage_quota")}), 413
     count_guard = _check_model_count_limit()
     if count_guard is not None:
         return count_guard
@@ -841,7 +847,8 @@ def complete_chunked_upload(upload_id):
         assembled_size = os.path.getsize(assembled_path)
         max_mb = _effective_max_upload_mb()
         if max_mb and assembled_size > max_mb * 1024 * 1024:
-            return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit"}), 413
+            return jsonify({"success": False, "error": f"File exceeds the {max_mb} MB upload limit",
+                            "upgrade": upgrade_hint("upload_size")}), 413
         if current_user.is_authenticated:
             global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
             quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
@@ -852,7 +859,8 @@ def complete_chunked_upload(upload_id):
                     .scalar()
                 )
                 if used + assembled_size > quota_mb * 1024 * 1024:
-                    return jsonify({"success": False, "error": "Storage quota exceeded"}), 413
+                    return jsonify({"success": False, "error": "Storage quota exceeded",
+                                    "upgrade": upgrade_hint("storage_quota")}), 413
         count_guard = _check_model_count_limit()
         if count_guard is not None:
             return count_guard

@@ -70,9 +70,11 @@ def generate_3d():
     user = db.session.query(User).filter_by(id=current_user.id).with_for_update().one()
     allowed, count, limit = app_module._consume_ai_allowance(user)
     if not allowed:
+        from services.upgrade import upgrade_hint
         return jsonify({"success": False,
                         "error": f"Monthly generation limit reached ({limit}) and no AI credits left. "
-                                 "Buy a credit pack or upgrade your plan."}), 429
+                                 "Buy a credit pack or upgrade your plan.",
+                        "upgrade": upgrade_hint("ai_credits")}), 429
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()

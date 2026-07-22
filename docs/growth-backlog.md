@@ -52,7 +52,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — sayılar bilinen fixture verisiyle doğru; admin-olmayan 403.
 
 ### 1.5 Upgrade tetikleyicileri (paywall anları)
-- [ ] **Kapsam:** Limit/kota reddi dönen uçlara standart `upgrade` alanı
+- [x] **Kapsam:** Limit/kota reddi dönen uçlara standart `upgrade` alanı
   (`{"reason": "storage_quota", "plan": "pro"}`); frontend'de tek paylaşımlı modal
   ("Pro'ya geç" + `?upgrade_reason=` UTM'li pricing linki); kapsanan noktalar: upload
   kotası, model sayısı, AI kredi/limit, depolama, batch, plan-gated özellikler

@@ -23,6 +23,7 @@ from services.org_membership import _organization_membership
 from services import send_email
 from services.org_branding import resolved_org_branding
 from services.plans import plan_allows
+from services.upgrade import upgrade_hint
 
 organizations_bp = Blueprint("organizations", __name__)
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ def organizations_api():
         return jsonify({
             "success": False,
             "error": "Organizations require a Business plan.",
+            "upgrade": upgrade_hint("organizations"),
         }), 403
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "")).strip()[:120]
@@ -231,6 +233,7 @@ def organization_domains_api(organization_id):
         return jsonify({
             "success": False,
             "error": "Custom domains require a Business plan.",
+            "upgrade": upgrade_hint("custom_domains"),
         }), 403
     raw_hostname = str((request.get_json(silent=True) or {}).get("hostname", "")).strip().lower().rstrip(".")
     try:
@@ -339,6 +342,7 @@ def organization_branding_api(organization_id):
         return jsonify({
             "success": False,
             "error": "White-label branding requires a Business plan.",
+            "upgrade": upgrade_hint("white_label"),
         }), 403
     data = request.get_json(silent=True) or {}
     branding = dict(organization.branding or {})

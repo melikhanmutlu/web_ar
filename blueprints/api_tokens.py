@@ -66,9 +66,11 @@ def api_tokens():
             "revoked": token.revoked_at is not None,
         } for token in tokens]})
     if not plan_allows(current_user, "api_access"):
+        from services.upgrade import upgrade_hint
         return jsonify({
             "success": False,
             "error": "API access requires a Pro or Business plan.",
+            "upgrade": upgrade_hint("api_access"),
         }), 403
     data = request.get_json(silent=True) or {}
     name = str(data.get("name", "API token")).strip()[:120]

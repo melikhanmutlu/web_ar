@@ -22,9 +22,11 @@ def webhooks():
         return jsonify({"success": True, "webhooks": [s.to_dict() for s in subscriptions]})
 
     if not plan_allows(current_user, "webhooks"):
+        from services.upgrade import upgrade_hint
         return jsonify({
             "success": False,
             "error": "Webhooks require a Business plan.",
+            "upgrade": upgrade_hint("webhooks"),
         }), 403
     data = request.get_json(silent=True) or {}
     url = str(data.get("url", "")).strip()

@@ -38,9 +38,11 @@ def create_model_share_link(model_id):
     # Password-protected share links are a paid feature; existing links keep
     # working (this only gates creating a new password-protected one).
     if password and not plan_allows(current_user, "password_protected_shares"):
+        from services.upgrade import upgrade_hint
         return jsonify({
             "success": False,
             "error": "Password-protected share links require a Pro or Business plan.",
+            "upgrade": upgrade_hint("password_protected_shares"),
         }), 403
     link = ModelShareLink(
         model_id=model_id,

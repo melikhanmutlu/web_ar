@@ -932,9 +932,9 @@
                 {% if marketing_demo|default(false) %}
                 src="{{ viewer_model_src }}"
                 {% else %}
-                src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename) }}"
+                src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.updated_at.timestamp()|int if model.updated_at else 0)) }}"
                 {% endif %}
-                {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename) }}"{% endif %}
+                {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename, v=(model.updated_at.timestamp()|int if model.updated_at else 0)) }}"{% endif %}
                 shadow-intensity="{{ viewer_settings.shadow_intensity }}"
                 shadow-softness="{{ viewer_settings.shadow_softness }}"
                 exposure="{{ viewer_settings.exposure }}"

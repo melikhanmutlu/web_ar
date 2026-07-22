@@ -74,6 +74,72 @@ SEGMENT_PAGES = {
 }
 SEGMENT_SLUGS = tuple(SEGMENT_PAGES)
 
+# Comparison pages (F3.3). Honest framing per COMPETITOR-REPORT: state where we
+# win *and* where the competitor wins.
+VS_PAGES = {
+    "sketchfab": {
+        "competitor": "Sketchfab",
+        "headline": "ARVision vs Sketchfab",
+        "subhead": "Looking for the fastest way to turn a file into a working AR link — "
+                   "not a community to publish into? Here's how the two compare.",
+        "we_win": [
+            "Upload-to-AR-link in seconds — no publishing workflow to learn.",
+            "Built-in AI text/image → 3D generation.",
+            "Automatic USDZ + Scene Viewer + QR from any STL/OBJ/FBX/STEP.",
+            "Frictionless free tier aimed at getting one model live fast.",
+        ],
+        "they_win": [
+            "A massive public community and model marketplace.",
+            "Discovery and social reach from millions of indexed models.",
+        ],
+    },
+    "meshy": {
+        "competitor": "Meshy",
+        "headline": "ARVision vs Meshy",
+        "subhead": "Generated a model with AI — now what? ARVision turns it into an "
+                   "AR-ready, shareable link that works on any phone.",
+        "we_win": [
+            "Generate → instant AR link → share, in one flow.",
+            "Automatic USDZ for iOS Quick Look and Android Scene Viewer.",
+            "Hosting, QR, embeds, versioning and analytics around the model.",
+            "Convert your own uploads too — not only AI output.",
+        ],
+        "they_win": [
+            "Deeper, dedicated AI generation controls and model variety.",
+        ],
+        "note": "ARVision's AI generation is powered by providers like Meshy — the "
+                "difference is everything that happens after the model exists.",
+    },
+    "model-viewer": {
+        "competitor": "Google model-viewer",
+        "headline": "ARVision vs building on model-viewer yourself",
+        "subhead": "model-viewer is a great web component — but you still have to host, "
+                   "convert and wire up AR. ARVision hands you all of that.",
+        "we_win": [
+            "Conversion (FBX/OBJ/STL/STEP → GLB/USDZ) done for you.",
+            "Hosting, share links, QR and embeds out of the box.",
+            "No code required; a link instead of a build step.",
+            "Analytics, versioning, org roles and white-label on top.",
+        ],
+        "they_win": [
+            "Full control if you want to build and host everything yourself.",
+            "Free and open-source as a raw rendering component.",
+        ],
+    },
+}
+VS_SLUGS = tuple(VS_PAGES)
+
+# Format-conversion landing pages (F3.3). High-intent, low-competition queries
+# matching exactly what ARVision does.
+CONVERT_PAGES = {
+    "fbx-to-glb": {"src": "FBX", "dst": "GLB"},
+    "obj-to-glb": {"src": "OBJ", "dst": "GLB"},
+    "stl-to-glb": {"src": "STL", "dst": "GLB"},
+    "stl-to-ar": {"src": "STL", "dst": "AR", "ar": True},
+    "step-to-glb": {"src": "STEP", "dst": "GLB"},
+}
+CONVERT_SLUGS = tuple(CONVERT_PAGES)
+
 
 @main_bp.route("/", methods=["GET"])
 def index():
@@ -168,6 +234,22 @@ def segment_landing(segment):
 @main_bp.route("/security", methods=["GET"])
 def security():
     return render_template("security.html")
+
+
+@main_bp.route("/vs/<competitor>", methods=["GET"])
+def vs_page(competitor):
+    page = VS_PAGES.get(competitor)
+    if page is None:
+        abort(404)
+    return render_template("vs_page.html", slug=competitor, page=page)
+
+
+@main_bp.route("/convert/<pair>", methods=["GET"])
+def convert_page(pair):
+    page = CONVERT_PAGES.get(pair)
+    if page is None:
+        abort(404)
+    return render_template("convert_page.html", slug=pair, page=page)
 
 
 @main_bp.route("/contact-sales", methods=["GET", "POST"])

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}
+    {% if page.ar %}
+      {% set seo_title = "View " ~ page.src ~ " in AR — convert " ~ page.src ~ " to an AR link — ARVision" %}
+      {% set seo_description = "Upload a " ~ page.src ~ " file and get a working AR link for iPhone and Android in seconds. No app, no code." %}
+    {% else %}
+      {% set seo_title = "Convert " ~ page.src ~ " to " ~ page.dst ~ " online — ARVision" %}
+      {% set seo_description = "Convert " ~ page.src ~ " to " ~ page.dst ~ " in the browser, then get an AR-ready, shareable link automatically. Free to start." %}
+    {% endif %}
+    {% set seo_robots = "index, follow" %}
+    {% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body class="av-home">
+    {% include "_site_header.html" %}
+    <main>
+        <section class="page-hero">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span class="status-label"><i></i> {{ page.src }} → {{ page.dst }}</span>
+                    {% if page.ar %}
+                    <h1>View a {{ page.src }} file in AR</h1>
+                    <p>Upload your {{ page.src }}, and ARVision converts it and hands you an AR-ready link that opens in AR on iPhone (Quick Look) and Android (Scene Viewer) — plus a QR code. No app, no code.</p>
+                    {% else %}
+                    <h1>Convert {{ page.src }} to {{ page.dst }}</h1>
+                    <p>Turn a {{ page.src }} file into an optimized {{ page.dst }} in your browser — and get a shareable, AR-ready link automatically. No installs, free to start.</p>
+                    {% endif %}
+                    <div style="margin-top:1.5rem;"><a class="primary-btn" href="{{ url_for('main.studio') }}">Upload your {{ page.src }} &rarr;</a></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="shell" style="padding-bottom:48px;">
+            <div class="feature-grid">
+                <article class="feature-card"><h3>1. Upload</h3><p>Drop your {{ page.src }} file into the studio — up to your plan's size limit.</p></article>
+                <article class="feature-card"><h3>2. Convert</h3><p>ARVision produces an optimized {{ 'GLB + USDZ' if page.ar else page.dst }}, ready for the web and mobile AR.</p></article>
+                <article class="feature-card"><h3>3. Share</h3><p>Get a link, QR code and embeddable viewer — send it anywhere and it just works.</p></article>
+            </div>
+        </section>
+
+        <section class="shell" style="padding-top:0;padding-bottom:64px;">
+            <article class="admin-card" style="max-width:640px;text-align:center;">
+                <h2 style="margin-top:0;">{{ 'See your ' ~ page.src ~ ' in AR now' if page.ar else 'Convert your ' ~ page.src ~ ' now' }}</h2>
+                <p>Free to start — no credit card.</p>
+                <a class="primary-btn" href="{{ url_for('main.studio') }}">Open the studio</a>
+            </article>
+        </section>
+    </main>
+    {% include "_site_footer.html" %}
+</body>
+</html>

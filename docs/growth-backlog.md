@@ -118,7 +118,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — çift taraflı kredi, self-referral reddi, tavan.
 
 ### 3.3 `/vs/*` ve `/convert/*` SEO sayfaları
-- [ ] Şablonlaştırılmış karşılaştırma (`/vs/sketchfab`, `/vs/meshy`) ve format
+- [x] Şablonlaştırılmış karşılaştırma (`/vs/sketchfab`, `/vs/meshy`) ve format
   (`/convert/fbx-to-glb`, `/convert/obj-to-glb`, `/convert/stl-to-ar`) sayfaları;
   içerik veri dosyasından; sitemap + iç linkler. COMPETITOR-REPORT'taki dürüst
   karşılaştırma ilkesi (kaybedilen yerler de yazılır).

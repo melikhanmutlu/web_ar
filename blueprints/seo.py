@@ -39,10 +39,12 @@ def sitemap_xml():
     handful of URLs). Lists SITEMAP_STATIC_ENDPOINTS only."""
     from xml.sax.saxutils import escape as xml_escape
 
-    from blueprints.main import SEGMENT_SLUGS
+    from blueprints.main import CONVERT_SLUGS, SEGMENT_SLUGS, VS_SLUGS
 
     locs = [SITE_URL + url_for(endpoint) for endpoint in SITEMAP_STATIC_ENDPOINTS]
     locs += [SITE_URL + url_for("main.segment_landing", segment=slug) for slug in SEGMENT_SLUGS]
+    locs += [SITE_URL + url_for("main.vs_page", competitor=slug) for slug in VS_SLUGS]
+    locs += [SITE_URL + url_for("main.convert_page", pair=slug) for slug in CONVERT_SLUGS]
     entries = [
         f"  <url>\n    <loc>{xml_escape(loc)}</loc>\n  </url>" for loc in locs
     ]

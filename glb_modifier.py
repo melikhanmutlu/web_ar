@@ -913,7 +913,7 @@ def _mesh_world_matrices(gltf):
     return world
 
 
-def apply_transform_modifications(gltf, transform_mods):
+def apply_transform_modifications(gltf, transform_mods, transform_info=None):
     """
     Apply transform modifications with the model's world-space center as
     pivot, baked into vertex data. Node transforms are respected: for a mesh
@@ -925,6 +925,16 @@ def apply_transform_modifications(gltf, transform_mods):
     Args:
         gltf: GLTF2 object
         transform_mods: dict with 'scale' and 'rotation' (x, y, z in degrees)
+        transform_info: optional dict; if a transform is actually baked, this
+            is populated with {'matrix': <4x4 numpy world-space change>}
+            (T(center)·R·S·T(-center)) so the caller can keep anything else
+            stored in that same world-space frame in sync (e.g. hotspot
+            positions/normals, which are captured from model-viewer's
+            positionAndNormalFromPoint — the same frame this pivot is
+            computed in). Left untouched if nothing was baked.
+
+    Returns:
+        gltf
     """
     logger.info(f"Applying transform modifications: {transform_mods}")
 
@@ -1055,7 +1065,18 @@ def apply_transform_modifications(gltf, transform_mods):
         for mesh_idx in range(len(gltf.meshes)):
             entries = mesh_world.get(mesh_idx)
             if not entries:
-                mesh_w[mesh_idx] = identity
+                # Not reachable from any scene node — e.g. a layer the user
+                # just hid in the same save (apply_layer_modifications
+                # detaches the node from scene.nodes/children but leaves the
+                # mesh's vertex data in place). Guessing an identity world
+                # transform here corrupted two things at once: the pivot
+                # below skewed toward that mesh's raw local coordinates as
+                # if they were already world-space, throwing off the
+                # rotation/scale of the still-visible parts, and the hidden
+                # mesh's own vertices got baked against a transform that
+                # doesn't match its real (untouched) node transform — so if
+                # it's ever unhidden again its geometry renders wrong. Skip
+                # it entirely; only bake what's actually reachable/rendered.
                 continue
             mesh_w[mesh_idx] = entries[0][1]
             for node_idx, w in entries[1:]:
@@ -1095,6 +1116,8 @@ def apply_transform_modifications(gltf, transform_mods):
             return _duplicate_accessor(acc_idx, N_FLOATS[attr_name]), True
 
         for mesh_idx in range(len(gltf.meshes)):
+            if mesh_idx not in mesh_w:
+                continue  # unreachable/hidden — see the skip above
             for primitive in (gltf.meshes[mesh_idx].primitives or []):
                 if primitive.attributes is None:
                     continue
@@ -1142,6 +1165,8 @@ def apply_transform_modifications(gltf, transform_mods):
         M = np.eye(4)
         M[:3, :3] = linear
         M[:3, 3] = center - linear @ center
+        if transform_info is not None:
+            transform_info['matrix'] = M
 
         def _local_change(mesh_idx):
             w = mesh_w[mesh_idx]
@@ -1243,16 +1268,22 @@ def euler_to_quaternion(rx, ry, rz):
     return [x, y, z, w]
 
 
-def modify_glb(input_path, output_path, modifications):
+def modify_glb(input_path, output_path, modifications, transform_info=None):
     """
     Main function to modify a GLB file
     Preserves all GLB features including animations, skins, morphs, etc.
-    
+
     Args:
         input_path: Path to input GLB file
         output_path: Path to output GLB file
         modifications: dict with 'material' and 'transform' keys
-    
+        transform_info: optional dict; if a transform was baked, this is
+            populated with {'matrix': <4x4 numpy world-space change>} so the
+            caller can keep anything else stored in that same world-space
+            frame (e.g. hotspot positions) in sync. Left untouched if there
+            was no 'transform' in modifications, or if apply_transform_
+            modifications baked nothing (e.g. no readable vertices).
+
     Returns:
         bool: True if successful, False otherwise
     """
@@ -1293,7 +1324,7 @@ def modify_glb(input_path, output_path, modifications):
 
         # Apply transform modifications
         if 'transform' in modifications:
-            gltf = apply_transform_modifications(gltf, modifications['transform'])
+            gltf = apply_transform_modifications(gltf, modifications['transform'], transform_info=transform_info)
 
         # Bake exploded layer positions (only present when the user explicitly
         # pressed "Save Exploded Layout" — never part of a regular save)

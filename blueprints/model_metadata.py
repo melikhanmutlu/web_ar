@@ -84,6 +84,14 @@ def model_viewer_settings(model_id):
     if guard:
         return guard
     data = request.get_json(silent=True) or {}
+    # Read-modify-write on a JSON column: two PATCHes issued close together
+    # from the same session (e.g. the View tab's AR-placement select and a
+    # Transform-preset save's camera-orbit patch) would otherwise each read
+    # `current` before either commits, and the second commit silently drops
+    # whatever field the first one had just written. with_for_update() locks
+    # the row for the rest of this transaction so the second request's read
+    # blocks until the first commits and sees its write.
+    model = UserModel.query.filter_by(id=model_id).with_for_update().first()
     current = resolved_viewer_settings(model)
     if "environment" in data:
         if data["environment"] not in {"neutral", "legacy"}:

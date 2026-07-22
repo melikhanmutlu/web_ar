@@ -130,7 +130,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** Playwright smoke + pytest (adım hesaplama).
 
 ### 3.5 Haftalık otomatik iş raporu
-- [ ] Worker'da pazartesi sweep'i: kayıt, aktivasyon %, yeni MRR, churn, kredi
+- [x] Worker'da pazartesi sweep'i: kayıt, aktivasyon %, yeni MRR, churn, kredi
   kullanımı, top 5 model / org → admin e-postası. 1.4 panosuyla aynı sorgu katmanını
   paylaşır (`services/growth_metrics.py`).
 - **Doğrulama:** pytest — rapor içeriği fixture veriyle; haftada bir tekilleştirme.

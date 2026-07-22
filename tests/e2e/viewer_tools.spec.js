@@ -165,6 +165,45 @@ test('undo back to baseline, then a transform-only save sends no material block'
   expect(payload.modifications.material).toBeUndefined();
 });
 
+test('Front transform preset persists its camera view even with zero rotation', async ({ page }) => {
+  // The redesigned landing page no longer contains the uploader; enter via
+  // Studio directly so this regression remains independent of that page.
+  await page.goto('/studio');
+  await page.locator('#file-upload').setInputFiles(
+    require('path').join(__dirname, 'fixtures', 'cube.glb')
+  );
+  await page.getByRole('button', { name: /upload and convert/i }).click();
+  await page.waitForURL(/\/view\//, { timeout: 30_000 });
+  const onboardingDismiss = page.locator('#onboardingDismiss');
+  if (await onboardingDismiss.isVisible()) await onboardingDismiss.click();
+  await page.locator('#toolsPanelToggle').click();
+  await page.locator('#transformContainer .tp-section-header').click();
+
+  // Front intentionally maps to 0/0/0, so it produces no GLB transform.
+  // It is still a real view change and Save & Apply must persist its camera.
+  await page.locator('.transform-preset-btn', { hasText: 'Front' }).evaluate((button) => button.click());
+  await expect.poll(() => page.evaluate(() => window._pendingPresetCamera)).toEqual({
+    camera_orbit: '0deg 90deg auto',
+    field_of_view: '24deg',
+  });
+
+  let modelSaveRequests = 0;
+  page.on('request', (request) => {
+    if (request.url().endsWith('/save_modifications')) modelSaveRequests += 1;
+  });
+  const cameraRequestPromise = page.waitForRequest((request) =>
+    request.url().includes('/viewer-settings') && request.method() === 'PATCH'
+  );
+  await page.locator('#saveChanges').evaluate((button) => button.click());
+  const cameraRequest = await cameraRequestPromise;
+
+  expect(cameraRequest.postDataJSON()).toEqual({
+    camera_orbit: '0deg 90deg auto',
+    field_of_view: '24deg',
+  });
+  expect(modelSaveRequests).toBe(0);
+});
+
 test('roughness-only edit saves a material block without color', async ({ page }) => {
   // Regression: the save payload used to always carry `color` when any
   // material control was touched, wiping previously saved per-layer colors.

@@ -10,6 +10,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // after a failed save until the tools panel was reopened re-ran lucide.
         const defaultSaveButtonMarkup = saveChangesBtn ? saveChangesBtn.innerHTML : '';
 
+        async function persistPendingPresetCamera() {
+            const camera = window._pendingPresetCamera;
+            if (!camera) return;
+
+            const response = await fetch(`/api/models/${modelId}/viewer-settings`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(camera)
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to save the prepared camera view.');
+            }
+            window._pendingPresetCamera = null;
+        }
+
         function gatherModifications() {
             const mods = {};
 
@@ -79,7 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         saveChangesBtn?.addEventListener('click', async () => {
             const modifications = gatherModifications();
-            if (Object.keys(modifications).length === 0) {
+            const hasModelChanges = Object.keys(modifications).length > 0;
+            const hasPresetCameraChange = Boolean(window._pendingPresetCamera);
+            if (!hasModelChanges && !hasPresetCameraChange) {
                 alert('No changes to save.');
                 return;
             }
@@ -88,6 +106,15 @@ document.addEventListener('DOMContentLoaded', () => {
             saveChangesBtn.innerHTML = '<i data-lucide="circle"></i> Saving...';
 
             try {
+                // Front is a valid preset even though its model rotation is
+                // 0/0/0. In that case there is no GLB transform to bake, but
+                // the face-on camera framing still has to be persisted.
+                if (!hasModelChanges) {
+                    await persistPendingPresetCamera();
+                    window.location.reload();
+                    return;
+                }
+
                 // Convert pending texture file to base64 if present
                 if (modifications.material?._pendingTextureFile) {
                     const file = modifications.material._pendingTextureFile;
@@ -112,23 +139,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     // preview to a canonical camera angle that isn't part of
                     // the GLB bake — persist it now so the view the user
                     // prepared is what they see after the reload below.
-                    if (modifications.transform && window._pendingPresetCamera) {
-                        try {
-                            await fetch(`/api/models/${modelId}/viewer-settings`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(window._pendingPresetCamera)
-                            });
-                        } catch (e) { /* best effort — don't block the save */ }
-                        window._pendingPresetCamera = null;
-                    }
+                    await persistPendingPresetCamera();
                     window.location.reload();
                 } else {
                     alert('Save failed: ' + (result.error || 'Unknown error'));
                 }
             } catch (err) {
                 console.error('Save error:', err);
-                alert('Failed to save changes.');
+                alert(err.message || 'Failed to save changes.');
             } finally {
                 saveChangesBtn.disabled = false;
                 saveChangesBtn.innerHTML = defaultSaveButtonMarkup;

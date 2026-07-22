@@ -182,6 +182,14 @@ LEMONSQUEEZY_API_KEY = os.getenv('LEMONSQUEEZY_API_KEY', '')
 LEMONSQUEEZY_STORE_ID = os.getenv('LEMONSQUEEZY_STORE_ID', '')
 LEMONSQUEEZY_SIGNING_SECRET = os.getenv('LEMONSQUEEZY_SIGNING_SECRET', '')
 LEMONSQUEEZY_VARIANTS = os.getenv('LEMONSQUEEZY_VARIANTS', '{}')
+# E-invoice / e-Arşiv (TR B2B). INVOICING_PROVIDER selects the adapter
+# (services/invoicing.py); unset = no invoicing. Parasut credentials:
+INVOICING_PROVIDER = os.getenv('INVOICING_PROVIDER', '')
+PARASUT_CLIENT_ID = os.getenv('PARASUT_CLIENT_ID', '')
+PARASUT_CLIENT_SECRET = os.getenv('PARASUT_CLIENT_SECRET', '')
+PARASUT_USERNAME = os.getenv('PARASUT_USERNAME', '')
+PARASUT_PASSWORD = os.getenv('PARASUT_PASSWORD', '')
+PARASUT_COMPANY_ID = os.getenv('PARASUT_COMPANY_ID', '')
 # Currency plans are priced/charged in (PayTR supports TL/USD/EUR/GBP).
 BILLING_CURRENCY = os.getenv('BILLING_CURRENCY', 'TRY')
 

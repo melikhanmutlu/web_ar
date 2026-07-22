@@ -148,7 +148,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — diff mantığı sahte HTML'le.
 
 ### 3.8 E-arşiv/fatura adaptör iskeleti (TR kurumsal)
-- [ ] `services/invoicing.py` arayüzü + Paraşüt adaptör iskeleti; ödeme sonrası
+- [x] `services/invoicing.py` arayüzü + Paraşüt adaptör iskeleti; ödeme sonrası
   fatura kaydı kuyruğu. `[~]` API anahtarı dış bağımlılık.
 
 ---

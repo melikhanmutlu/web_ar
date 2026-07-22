@@ -338,3 +338,9 @@ def _apply_successful_payment(payment):
             f"until {payment.period_end.isoformat()}.\n\n"
             f"Amount: {payment.amount} {payment.currency}",
         )
+
+    # Best-effort e-invoice (F3.8). No-op unless a provider is configured;
+    # never raises, so it can't affect the payment confirmation.
+    if user is not None:
+        from services.invoicing import issue_invoice
+        issue_invoice(payment, user)

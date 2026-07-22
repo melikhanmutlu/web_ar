@@ -200,6 +200,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     setRotateSlider(rotateYSlider, rotateYValue, parseInt(btn.dataset.ry, 10) || 0);
                     setRotateSlider(rotateZSlider, rotateZValue, parseInt(btn.dataset.rz, 10) || 0);
                     applyTransform(true);
+                    // frameModelCentered() just snapped the live preview to a
+                    // canonical face-on camera (see its comment above), but
+                    // that camera state is never persisted — a save only
+                    // bakes the rotation into the GLB, so a subsequent page
+                    // reload falls back to the model's stored default
+                    // camera-orbit (or Reset View's own hardcoded one),
+                    // which doesn't match what the preset just showed. Save
+                    // & Apply AR carries this along so the saved view is the
+                    // one the user actually prepared.
+                    window._pendingPresetCamera = { camera_orbit: '0deg 90deg auto', field_of_view: '24deg' };
                 });
             });
 
@@ -215,6 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Apply the reset values to the actual THREE.js scene (applyTransform
                 // reads the sliders and calls forceModelViewerRefresh internally).
                 applyTransform();
+                window._pendingPresetCamera = null;
             }
 
             resetTransform?.addEventListener('click', resetTransformPreview);

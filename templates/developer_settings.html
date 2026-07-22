@@ -3,62 +3,65 @@
 {% block title %}API &amp; webhooks - ARVision{% endblock %}
 
 {% block content %}
-<main>
-    <section class="page-hero">
-        <div class="shell">
+<main class="account-surface dev-settings-page">
+    <section class="account-hero">
+        <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+        <div class="shell account-hero-grid">
             <div class="reveal" data-reveal>
-                <span class="status-label"><i></i> Developers</span>
-                <h1>API tokens &amp; webhooks</h1>
-                <p>Create tokens to call the ARVision REST API and subscribe endpoints to signed events. New to the API? Read the <a href="{{ url_for('main.developers') }}">integration guide</a>.</p>
+                <span class="status-label"><i></i> Developer settings</span>
+                <h1>Connect ARVision<br>to your stack.</h1>
+                <p>Create scoped API tokens and subscribe HTTPS endpoints to signed events. Your integrations stay visible and under your control.</p>
+                <div class="detail-actions"><a class="primary-btn" href="#tokens">Manage credentials <span>&darr;</span></a><a class="text-btn" href="{{ url_for('main.developers') }}">Read API docs <span>&nearr;</span></a></div>
+            </div>
+            <div class="account-status-card reveal" data-reveal style="--delay:100ms">
+                <span>INTEGRATION STATUS</span>
+                <div><i class="{{ 'is-on' if api_enabled else '' }}"></i><p><b>REST API</b><small>{{ 'Ready to configure' if api_enabled else 'Upgrade required' }}</small></p><em>{{ 'PRO' if api_enabled else 'LOCKED' }}</em></div>
+                <div><i class="{{ 'is-on' if webhooks_enabled else '' }}"></i><p><b>Webhooks</b><small>{{ 'Signed delivery enabled' if webhooks_enabled else 'Business plan required' }}</small></p><em>{{ 'BUSINESS' if webhooks_enabled else 'LOCKED' }}</em></div>
+                <div class="account-status-foot"><span>Secure by design</span><b>Scoped tokens · HMAC signatures</b></div>
             </div>
         </div>
     </section>
 
-    <section class="shell dev-settings" style="padding-bottom:64px;">
-        <article class="admin-card" style="margin-bottom:1.5rem;">
-            <h2 style="margin-top:0;">API tokens</h2>
+    <section class="shell account-panels" id="tokens">
+        <article class="account-panel">
+            <header><div><span>01 · AUTHENTICATION</span><h2>API tokens</h2><p>Create a separate, least-privilege token for every integration.</p></div><div class="panel-icon">{ }</div></header>
             {% if api_enabled %}
-            <form id="tokenForm" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
-                <div class="admin-field" style="flex:1;min-width:200px;">
+            <form id="tokenForm" class="credential-form">
+                <div class="admin-field credential-name">
                     <label class="field-label" for="tokenName">Token name</label>
                     <input id="tokenName" class="av-input" maxlength="120" placeholder="e.g. Store sync" required>
                 </div>
-                <div class="admin-field">
-                    <label class="field-label">Scopes</label>
-                    <label class="dev-check"><input type="checkbox" value="models:read" checked> models:read</label>
-                    <label class="dev-check"><input type="checkbox" value="analytics:read"> analytics:read</label>
-                    <label class="dev-check"><input type="checkbox" value="models:write"> models:write</label>
+                <div class="admin-field credential-scopes">
+                    <label class="field-label">Permission scopes</label>
+                    <div><label class="dev-check"><input type="checkbox" value="models:read" checked><span><b>models:read</b><small>List and inspect models</small></span></label><label class="dev-check"><input type="checkbox" value="analytics:read"><span><b>analytics:read</b><small>Read usage analytics</small></span></label><label class="dev-check"><input type="checkbox" value="models:write"><span><b>models:write</b><small>Upload and update models</small></span></label></div>
                 </div>
-                <button type="submit" class="primary-btn mini">Create token</button>
+                <button type="submit" class="primary-btn">Create token <span>&rarr;</span></button>
             </form>
             <p id="tokenReveal" class="dev-reveal" hidden></p>
-            <div id="tokenList" class="dev-list" style="margin-top:1rem;"></div>
+            <div id="tokenList" class="dev-list"></div>
             {% else %}
-            <p class="field-help">API access is a Pro/Business feature. <a href="{{ url_for('main.pricing') }}">Upgrade your plan</a> to create tokens.</p>
+            <div class="account-locked"><span>PRO FEATURE</span><h3>Unlock programmatic access.</h3><p>API access is available on Pro and Business plans.</p><a class="primary-btn" href="{{ url_for('main.pricing') }}">Explore plans <span>&rarr;</span></a></div>
             {% endif %}
         </article>
 
-        <article class="admin-card">
-            <h2 style="margin-top:0;">Webhooks</h2>
+        <article class="account-panel" id="webhooks">
+            <header><div><span>02 · EVENT DELIVERY</span><h2>Webhooks</h2><p>Send signed lifecycle events to your own HTTPS endpoint.</p></div><div class="panel-icon">↗</div></header>
             {% if webhooks_enabled %}
-            <form id="webhookForm" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:flex-end;">
-                <div class="admin-field" style="flex:1;min-width:220px;">
+            <form id="webhookForm" class="credential-form">
+                <div class="admin-field credential-name">
                     <label class="field-label" for="webhookUrl">HTTPS endpoint</label>
                     <input id="webhookUrl" class="av-input" type="url" placeholder="https://example.com/hooks/arvision" required>
                 </div>
-                <div class="admin-field">
+                <div class="admin-field credential-scopes">
                     <label class="field-label">Events</label>
-                    <label class="dev-check"><input type="checkbox" value="conversion.completed" checked> conversion.completed</label>
-                    <label class="dev-check"><input type="checkbox" value="conversion.failed"> conversion.failed</label>
-                    <label class="dev-check"><input type="checkbox" value="ai_generation.completed"> ai_generation.completed</label>
-                    <label class="dev-check"><input type="checkbox" value="ai_generation.failed"> ai_generation.failed</label>
+                    <div><label class="dev-check"><input type="checkbox" value="conversion.completed" checked><span><b>conversion.completed</b><small>Conversion succeeded</small></span></label><label class="dev-check"><input type="checkbox" value="conversion.failed"><span><b>conversion.failed</b><small>Conversion stopped</small></span></label><label class="dev-check"><input type="checkbox" value="ai_generation.completed"><span><b>ai_generation.completed</b><small>AI model is ready</small></span></label><label class="dev-check"><input type="checkbox" value="ai_generation.failed"><span><b>ai_generation.failed</b><small>AI generation stopped</small></span></label></div>
                 </div>
-                <button type="submit" class="primary-btn mini">Add webhook</button>
+                <button type="submit" class="primary-btn">Add webhook <span>&rarr;</span></button>
             </form>
             <p id="webhookReveal" class="dev-reveal" hidden></p>
-            <div id="webhookList" class="dev-list" style="margin-top:1rem;"></div>
+            <div id="webhookList" class="dev-list"></div>
             {% else %}
-            <p class="field-help">Webhooks are a Business feature. <a href="{{ url_for('main.pricing') }}">Upgrade your plan</a> to subscribe endpoints to events.</p>
+            <div class="account-locked"><span>BUSINESS FEATURE</span><h3>React to every completed job.</h3><p>Signed webhook delivery is available on the Business plan.</p><a class="primary-btn" href="{{ url_for('main.pricing') }}">Explore plans <span>&rarr;</span></a></div>
             {% endif %}
         </article>
     </section>
@@ -67,13 +70,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<style>
-    .dev-check{display:block;font-size:.9rem;margin:.15rem 0;}
-    .dev-reveal{margin-top:1rem;padding:.75rem 1rem;border:1px solid #b7e0c2;background:#eefbf1;border-radius:8px;font-family:monospace;word-break:break-all;}
-    .dev-row{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.6rem 0;border-top:1px solid #e5e7eb;flex-wrap:wrap;}
-    .dev-row-main code{opacity:.7;}
-    .dev-actions{display:flex;gap:.5rem;}
-</style>
 <script>
 (function () {
     "use strict";

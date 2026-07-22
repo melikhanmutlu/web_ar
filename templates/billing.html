@@ -26,6 +26,14 @@
             {% else %}
             <p class="field-help">The Free plan has no expiry.</p>
             {% endif %}
+
+            {% if trial_available %}
+            <form method="POST" action="{{ url_for('billing.start_trial') }}" style="margin:1rem 0 0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="primary-btn">Start your {{ trial_days }}-day Business trial &rarr;</button>
+                <span class="field-help" style="display:block;margin-top:.35rem;">No card required. Full Business features for {{ trial_days }} days.</span>
+            </form>
+            {% endif %}
         </article>
     </section>
 

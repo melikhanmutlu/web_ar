@@ -84,7 +84,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** sayfa 200, lint.
 
 ### 2.4 Business self-serve 14 gün trial
-- [ ] `User.business_trial_used_at` kolonu; `/billing/trial` POST → `plan=business`,
+- [x] `User.business_trial_used_at` kolonu; `/billing/trial` POST → `plan=business`,
   `plan_expires_at=+14g` (tek sefer); pricing + billing'de "14 gün dene" butonu;
   1.1'deki T-7/T-1 hatırlatmaları trial bitişini de kapsar (aynı mekanizma).
 - **Doğrulama:** pytest — tek kullanımlık, süre sonunda mevcut sweep'le Free'ye iner.

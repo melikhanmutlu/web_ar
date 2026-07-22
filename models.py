@@ -54,6 +54,10 @@ class User(UserMixin, db.Model):
     # worker's expire_stale_plans() sweep resets the stored plan. NULL = no
     # expiry (Free, or an admin-granted plan with no time box).
     plan_expires_at = db.Column(db.DateTime, nullable=True, index=True)
+    # When the user redeemed their one-and-only self-serve Business trial
+    # (F2.4). NULL = never taken; set once, so the trial can't be re-taken even
+    # after it lapses back to Free.
+    business_trial_used_at = db.Column(db.DateTime, nullable=True)
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())

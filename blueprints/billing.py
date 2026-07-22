@@ -53,6 +53,12 @@ def billing_home():
         payments=payments,
         credit_packs=CREDIT_PACKS,
         credit_balance=current_user.ai_credit_balance or 0,
+        trial_available=(
+            not getattr(current_user, "is_admin", False)
+            and current_user.business_trial_used_at is None
+            and plan_name(current_user) == "free"
+        ),
+        trial_days=TRIAL_DAYS,
         checkout_enabled=bool(provider and provider.is_configured()),
         paid=request.args.get("paid") == "1",
         failed=request.args.get("failed") == "1",
@@ -112,6 +118,36 @@ def checkout(plan_slug):
         redirect_url=session.redirect_url,
         plan_name=cfg.get("display_name", plan_slug),
     )
+
+
+TRIAL_PLAN = "business"
+TRIAL_DAYS = 14
+
+
+@billing_bp.route("/billing/trial", methods=["POST"])
+@login_required
+def start_trial():
+    """Grant a one-time 14-day Business trial. Refused if the user already
+    used it, is already on a paid plan, or is an admin. The plan lapses back
+    to Free via the worker's expire_stale_plans() sweep like any paid period."""
+    user = current_user
+    if getattr(user, "is_admin", False):
+        flash("Admin accounts already have full access.", "error")
+        return redirect(url_for("billing.billing_home"))
+    if user.business_trial_used_at is not None:
+        flash("You've already used your free Business trial.", "error")
+        return redirect(url_for("billing.billing_home"))
+    if plan_name(user) != "free":
+        flash("Trials are only available on the Free plan.", "error")
+        return redirect(url_for("billing.billing_home"))
+
+    now = datetime.utcnow()
+    user.plan = TRIAL_PLAN
+    user.plan_expires_at = now + timedelta(days=TRIAL_DAYS)
+    user.business_trial_used_at = now
+    db.session.commit()
+    flash(f"Your {TRIAL_DAYS}-day Business trial is active. Enjoy!", "success")
+    return redirect(url_for("billing.billing_home"))
 
 
 @billing_bp.route("/billing/topup/<pack>", methods=["POST"])

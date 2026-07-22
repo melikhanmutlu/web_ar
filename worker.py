@@ -34,6 +34,7 @@ from services.plans import DEFAULT_PLAN
 from services import send_email
 from services.lifecycle_emails import run_onboarding_sweep, run_renewal_sweep
 from services.weekly_report import send_weekly_report
+from services.signal_mining import run_signal_mining
 from site_settings import set_setting
 
 logging.basicConfig(
@@ -319,6 +320,7 @@ def main():
                 run_renewal_sweep()
                 run_onboarding_sweep()
                 send_weekly_report()
+                run_signal_mining()
                 last_heartbeat_prune = time.monotonic()
 
             job = claim_next_job()

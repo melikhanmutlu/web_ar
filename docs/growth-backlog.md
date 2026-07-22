@@ -136,7 +136,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — rapor içeriği fixture veriyle; haftada bir tekilleştirme.
 
 ### 3.6 B2B sinyal madenciliği
-- [ ] Günlük sweep: aynı e-posta domain'inden ≥3 kullanıcı, org kurulumu, yüksek AR
+- [x] Günlük sweep: aynı e-posta domain'inden ≥3 kullanıcı, org kurulumu, yüksek AR
   görüntülenme (≥100/model), API kullanımı → `SalesLead(source='signal')` + admin
   e-postası. Ücretsiz e-posta domain'leri (gmail vb.) hariç tutulur.
 - **Doğrulama:** pytest — sinyal kuralları + tekilleştirme.

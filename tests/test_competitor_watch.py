@@ -69,5 +69,35 @@ def test_run_persists_and_notifies_only_on_change(tmp_path):
 def test_build_snapshot_survives_fetch_failure():
     def boom(url):
         raise RuntimeError("network down")
+    # No previous entry -> marked fetch_failed (so the diff skips it).
     snap = cw.build_snapshot(fetcher=boom, competitors={"x": "http://x"})
-    assert snap == {"x": {"prices": []}}
+    assert snap == {"x": {"prices": [], "fetch_failed": True}}
+
+
+def test_fetch_failure_carries_forward_and_does_not_false_alert(tmp_path):
+    path = str(tmp_path / "snap.json")
+    pages = {"x": "<b>$15/mo</b>"}
+    notified = []
+    # Seed a good snapshot.
+    cw.run(fetcher=lambda u: pages["x"], competitors={"x": "http://x"},
+           notify=notified.append, path=path)
+    notified.clear()
+
+    # A transient fetch failure must NOT report "removed $15/mo".
+    def boom(url):
+        raise RuntimeError("timeout")
+    changes = cw.run(fetcher=boom, competitors={"x": "http://x"},
+                     notify=notified.append, path=path)
+    assert changes == []
+    assert notified == []
+
+    # And the next successful run must NOT report "added $15/mo" (carried fwd).
+    changes2 = cw.run(fetcher=lambda u: pages["x"], competitors={"x": "http://x"},
+                      notify=notified.append, path=path)
+    assert changes2 == []
+
+
+def test_reorder_is_not_reported_as_change():
+    old = {"x": {"prices": ["$15/mo", "$40/mo"]}}
+    new = {"x": {"prices": ["$40/mo", "$15/mo"]}}
+    assert cw.diff_snapshot(old, new) == []

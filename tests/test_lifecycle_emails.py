@@ -122,6 +122,19 @@ def test_winback_emails_lapsed_payer_once(client, monkeypatch):
     assert kinds == ["winback_t3"]
 
 
+def test_winback_uses_absolute_latest_period_not_windowed(client, monkeypatch):
+    # Regression: a user with an OLD period_end inside the window AND a very
+    # recent period_end (too recent to win-back) must not be win-backed on the
+    # superseded old period.
+    _capture_sends(monkeypatch)
+    user = _user("lc_wb_resub", plan="free")
+    _paid_payment(user, period_end_days_ago=10)  # older, inside window
+    _paid_payment(user, period_end_days_ago=1)   # latest, too recent
+
+    assert lifecycle.run_renewal_sweep() == 0  # latest period is too recent
+    assert LifecycleEmail.query.filter_by(user_id=user.id, kind="winback_t3").count() == 0
+
+
 def test_winback_skips_renewed_and_too_recent_or_ancient(client, monkeypatch):
     _capture_sends(monkeypatch)
     renewed = _user("lc_wb_renewed", plan="pro", expires_in_days=25)

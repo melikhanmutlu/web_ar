@@ -23,7 +23,7 @@ from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 from config import SITE_URL
 from models import LifecycleEmail, ModelShareLink, Payment, User, UserModel, db
@@ -104,22 +104,28 @@ def _winback_lapsed_payers(now):
     only durable record of when the paid period actually ended."""
     newest_end = (now - timedelta(days=WINBACK_AFTER_DAYS)).date()
     oldest_end = (now - timedelta(days=WINBACK_MAX_AGE_DAYS)).date()
-    payments = Payment.query.filter(
-        Payment.status == "paid",
-        Payment.user_id.isnot(None),
-        Payment.period_end.isnot(None),
-        Payment.period_end <= newest_end,
-        Payment.period_end > oldest_end,
-    ).all()
 
-    latest_by_user = {}
-    for payment in payments:
-        best = latest_by_user.get(payment.user_id)
-        if best is None or payment.period_end > best.period_end:
-            latest_by_user[payment.user_id] = payment
+    # Each user's ABSOLUTE latest paid plan period_end (not windowed). Keying on
+    # the true latest means a re-subscribe-then-churn user is win-backed once,
+    # on the right period, instead of on a superseded older one (or twice).
+    rows = (
+        db.session.query(Payment.user_id, func.max(Payment.period_end))
+        .filter(
+            Payment.status == "paid",
+            Payment.kind == "plan",
+            Payment.user_id.isnot(None),
+            Payment.period_end.isnot(None),
+        )
+        .group_by(Payment.user_id)
+        .all()
+    )
 
     sent = 0
-    for user_id, payment in latest_by_user.items():
+    for user_id, latest_end in rows:
+        # Only win-back when the user's most recent paid period ended inside the
+        # (too-recent, too-old) window.
+        if not (oldest_end < latest_end <= newest_end):
+            continue
         user = db.session.get(User, user_id)
         # Skip anyone who renewed (back on a paid plan) or was re-granted.
         if (
@@ -129,11 +135,18 @@ def _winback_lapsed_payers(now):
             or user.plan_expires_at is not None
         ):
             continue
-        display = get_plan_config(payment.plan).get("display_name", payment.plan)
+        # The plan name for the message: pull it from the latest-ending payment.
+        latest_payment = (
+            Payment.query.filter_by(
+                user_id=user_id, status="paid", kind="plan", period_end=latest_end
+            ).first()
+        )
+        plan_slug = latest_payment.plan if latest_payment else "your"
+        display = get_plan_config(plan_slug).get("display_name", plan_slug)
         if _send_once(
-            user, WINBACK_KIND, payment.period_end.isoformat(),
+            user, WINBACK_KIND, latest_end.isoformat(),
             f"Your ARVision {display} features are one click away",
-            f"Your {display} plan ended on {payment.period_end.isoformat()} and "
+            f"Your {display} plan ended on {latest_end.isoformat()} and "
             f"your account is on the Free plan now. Everything you built is "
             f"still here — renew any time to pick up where you left off:"
             f"\n\n{_BILLING_URL}",

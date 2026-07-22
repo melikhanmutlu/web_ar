@@ -110,6 +110,24 @@ def test_first_subscription_payment_applies_pending_plan(client, monkeypatch):
     assert refreshed.plan_expires_at > datetime.utcnow() + timedelta(days=25)
 
 
+def test_first_invoice_duplicate_delivery_does_not_double_grant(client, monkeypatch):
+    # Regression: a duplicate delivery of the FIRST subscription invoice must
+    # not be misread as a renewal and grant a second free period.
+    _configure_ls(monkeypatch)
+    user = _user("ls_dupfirst")
+    _pending(user, "arvLS0100", plan="pro")
+    event = _event("subscription_payment_success", "arvLS0100", data_id="55")
+
+    _post_webhook(client, event)
+    first_expiry = db.session.get(User, user.id).plan_expires_at
+
+    _post_webhook(client, event)  # exact same first invoice again
+    assert db.session.get(User, user.id).plan_expires_at == first_expiry  # no 2nd period
+    # No stray renewal Payment row was created for the first invoice.
+    assert Payment.query.filter_by(provider_ref="lsinv-55").first() is None
+    assert Payment.query.filter_by(user_id=user.id, status="paid").count() == 1
+
+
 def test_renewal_invoice_extends_plan_idempotently(client, monkeypatch):
     _configure_ls(monkeypatch)
     user = _user("ls_renew")

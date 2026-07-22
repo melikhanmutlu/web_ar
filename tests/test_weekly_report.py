@@ -58,7 +58,9 @@ def test_report_is_deduped_within_the_week(client, monkeypatch):
     assert weekly_report.send_weekly_report(now=monday) is False  # same week
     assert len(sent) == 1
     year, week, _ = monday.isocalendar()
-    assert get_setting(weekly_report.LAST_SENT_SETTING) == f"{year}-W{week:02d}"
+    stored = get_setting(weekly_report.LAST_SENT_SETTING)
+    assert stored.startswith(f"{year}-W{week:02d}|")  # "<week>|<delivered emails>"
+    assert "wr_dedupe@test.com" in stored
 
 
 def test_no_send_on_non_report_weekday(client, monkeypatch):
@@ -69,6 +71,32 @@ def test_no_send_on_non_report_weekday(client, monkeypatch):
     assert weekly_report.send_weekly_report(now=tuesday) is False
     # force overrides the weekday guard
     assert weekly_report.send_weekly_report(now=tuesday, force=True) is True
+
+
+def test_partial_delivery_retries_only_the_failed_admin(client, monkeypatch):
+    # Regression: a transient failure to one admin must not mark the week done
+    # for everyone; the failed admin is retried, the delivered one is not.
+    _admin("wr_ok")
+    _admin("wr_broken")
+    monday = _a_monday()
+
+    attempts = []
+    def flaky_send(to, subj, body):
+        attempts.append(to)
+        return to != "wr_broken@test.com"  # broken admin's SMTP fails
+    monkeypatch.setattr(weekly_report, "send_email", flaky_send)
+
+    assert weekly_report.send_weekly_report(now=monday) is True
+    # Second run retries only the broken one (now succeeding).
+    attempts.clear()
+    monkeypatch.setattr(weekly_report, "send_email",
+                        lambda to, subj, body: attempts.append(to) or True)
+    weekly_report.send_weekly_report(now=monday)
+    assert attempts == ["wr_broken@test.com"]  # ok admin not re-spammed
+    # Now everyone delivered -> fully deduped.
+    attempts.clear()
+    assert weekly_report.send_weekly_report(now=monday) is False
+    assert attempts == []
 
 
 def test_no_admins_means_no_send(client, monkeypatch):

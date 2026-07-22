@@ -314,13 +314,22 @@ def main():
                 last_ai_reconcile = time.monotonic()
 
             if time.monotonic() - last_heartbeat_prune > 3600:
-                prune_stale_heartbeats()
-                prune_stale_chunk_sessions()
-                expire_stale_plans()
-                run_renewal_sweep()
-                run_onboarding_sweep()
-                send_weekly_report()
-                run_signal_mining()
+                # Run each maintenance sweep independently: one failing sweep
+                # must not skip the others OR prevent the timer below from
+                # advancing (which would hot-loop the whole block every poll).
+                for _sweep in (
+                    prune_stale_heartbeats, prune_stale_chunk_sessions,
+                    expire_stale_plans, run_renewal_sweep, run_onboarding_sweep,
+                    send_weekly_report, run_signal_mining,
+                ):
+                    try:
+                        _sweep()
+                    except Exception as _sweep_err:
+                        logger.error(
+                            "Maintenance sweep %s failed: %s",
+                            _sweep.__name__, _sweep_err, exc_info=True,
+                        )
+                        db.session.rollback()
                 last_heartbeat_prune = time.monotonic()
 
             job = claim_next_job()

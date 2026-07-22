@@ -57,31 +57,28 @@ def _create_lead(email, source, company=None, message=None, user_id=None):
 
 
 def _domain_cluster_leads():
-    rows = (
-        db.session.query(
-            func.lower(func.substr(User.email, func.instr(User.email, "@") + 1)),
-            func.count(User.id),
-        )
-        .filter(User.email.isnot(None), User.is_admin.is_(False))
-        .group_by(func.lower(func.substr(User.email, func.instr(User.email, "@") + 1)))
-        .having(func.count(User.id) >= DOMAIN_CLUSTER_MIN)
-        .all()
-    )
+    # Group by email domain in Python rather than SQL: substring/index SQL
+    # functions differ across engines (SQLite instr vs Postgres strpos), and
+    # getting that wrong silently breaks the whole worker maintenance sweep in
+    # production. The user set is small enough for a growth-stage app to scan.
+    clusters = defaultdict(list)
+    users = User.query.filter(
+        User.email.isnot(None), User.is_admin.is_(False)
+    ).all()
+    for user in users:
+        domain = _domain(user.email)
+        if domain and domain not in FREE_EMAIL_DOMAINS:
+            clusters[domain].append(user)
+
     leads = []
-    for domain, count in rows:
-        if not domain or domain in FREE_EMAIL_DOMAINS:
+    for domain, members in clusters.items():
+        if len(members) < DOMAIN_CLUSTER_MIN:
             continue
         # Represent the cluster by its earliest-registered member.
-        rep = (
-            User.query.filter(func.lower(User.email).like(f"%@{domain}"))
-            .order_by(User.created_at.asc())
-            .first()
-        )
-        if rep is None:
-            continue
+        rep = min(members, key=lambda u: u.created_at or datetime.utcnow())
         lead = _create_lead(
             rep.email, "signal:domain_cluster", company=domain,
-            message=f"{count} users share the domain {domain}.", user_id=rep.id,
+            message=f"{len(members)} users share the domain {domain}.", user_id=rep.id,
         )
         if lead:
             leads.append(lead)

@@ -122,6 +122,8 @@ def test_share_link_creation_emails_owner(client, logged_in, email_enabled):
 
 
 def test_org_member_invite_emails_the_invited_user(client, logged_in, email_enabled):
+    # Managing a team (adding members with seats) requires a Business plan.
+    logged_in.plan = "business"
     org = Organization(name="Acme", slug="acme-mail", created_by=logged_in.id)
     db.session.add(org)
     db.session.flush()

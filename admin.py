@@ -1323,7 +1323,9 @@ def set_lead_status(lead_id):
     log_action("lead_status", target_type="sales_lead", target_id=lead.id, detail=new_status)
     db.session.commit()
     flash("Lead updated.", "success")
-    return redirect(request.referrer or url_for("admin.leads"))
+    # Redirect to a fixed internal URL (not request.referrer, which is
+    # client-supplied and would be an unvalidated open-redirect target).
+    return redirect(url_for("admin.leads", status=request.args.get("status")))
 
 
 @admin_bp.route("/analytics")

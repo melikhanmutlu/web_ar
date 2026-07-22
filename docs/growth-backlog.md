@@ -159,3 +159,34 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - Her şema değişikliği: Alembic migration.
 - Her UI değişikliği: `npm run lint` + gerekiyorsa Playwright smoke.
 - Cuma: changelog güncellemesi (gemiye binenler) — pazarlama içeriği olarak da kullanılır.
+
+---
+
+## Bug-hunt turu (3 paralel inceleme + migration doğrulaması)
+
+Faz 1-3 kodu adversaryal olarak tarandı; doğrulanan gerçek buglar düzeltildi ve
+her biri için regresyon testi eklendi:
+
+- **[HIGH]** Lemon Squeezy ilk-fatura webhook tekrarı tam bir abonelik dönemini
+  çift-veriyordu (para sızıntısı) → per-fatura idempotency (`billing.py`).
+- **[HIGH]** `signal_mining` `func.instr` kullanıyordu (SQLite-only); Postgres'te
+  her sweep patlar ve worker maintenance bloğunu hot-loop'a sokardı → Python-tarafı
+  domain gruplama + her sweep'i izole `try/except`'e alan worker (`signal_mining.py`, `worker.py`).
+- **[MED]** Growth MRR/abone sayısı trial + comp hesapları ücretli sayıyordu →
+  yalnız gerçek ödemesi olanlar (`growth_metrics.py`).
+- **[MED]** Seat limiti Free/lapsed org sahibinde `None→sınırsız` fallthrough ile
+  kayboluyordu → 0'a floor (`organizations.py`).
+- **[MED]** Rakip izleme geçici fetch hatasında sahte fiyat-değişim alarmı üretiyordu
+  → önceki snapshot'ı taşıma (`competitor_watch.py`).
+- **[MED-LOW]** Win-back yanlış/eski dönemi seçip ikinci kez gönderebiliyordu →
+  mutlak en-son dönem (`lifecycle_emails.py`).
+- **[LOW]** `set_lead_status` `request.referrer`'a açık yönlendirme → sabit iç URL (`admin.py`).
+- **[LOW]** Rakip izleme yalnız sıralama değişince boş alarm üretiyordu → yalnız
+  gerçek add/remove (`competitor_watch.py`).
+- **[LOW]** Haftalık rapor kısmi teslimde tüm haftayı "gönderildi" işaretliyordu →
+  alıcı-bazlı takip (`weekly_report.py`).
+- **[düzeltildi]** Referral migration'ı SQLite'ta `flask db upgrade`'i kırıyordu →
+  batch mode (`c83a5e7f2b91`).
+
+Temiz onaylananlar: referrals, onboarding e-postaları (saatlik sweep semantiği),
+onboarding checklist, invoicing seam, migration zinciri.

@@ -76,9 +76,10 @@ def _check_org_seat_limit(organization_id):
     if organization is None:
         return None
     owner = db.session.get(User, organization.created_by)
-    cap = plan_limit(owner, "max_org_members")
-    if not cap:
-        return None
+    # Floor to 0 (not None): a plan with no seat entitlement — Free, or a
+    # Business owner who lapsed/downgraded — must NOT fall through to "unlimited".
+    # 0 means no new members may be added; existing members stay.
+    cap = plan_limit(owner, "max_org_members", 0)
     current = OrganizationMember.query.filter_by(organization_id=organization_id).count()
     if current >= cap:
         return jsonify({

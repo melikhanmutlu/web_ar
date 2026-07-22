@@ -55,15 +55,19 @@ def diff_snapshot(old, new):
     human-readable change strings (empty when nothing changed)."""
     changes = []
     for name, new_entry in new.items():
+        # A failed fetch is not a pricing change — never alert on it.
+        if new_entry.get("fetch_failed"):
+            continue
         old_entry = (old or {}).get(name)
         new_prices = new_entry.get("prices", [])
-        if old_entry is None:
+        if old_entry is None or old_entry.get("fetch_failed"):
             changes.append(f"{name}: first snapshot ({', '.join(new_prices) or 'no prices found'})")
             continue
         old_prices = old_entry.get("prices", [])
-        if old_prices != new_prices:
-            added = [p for p in new_prices if p not in old_prices]
-            removed = [p for p in old_prices if p not in new_prices]
+        added = [p for p in new_prices if p not in old_prices]
+        removed = [p for p in old_prices if p not in new_prices]
+        # Only report a real add/remove — a pure reorder is not a change.
+        if added or removed:
             parts = []
             if added:
                 parts.append("added " + ", ".join(added))
@@ -98,16 +102,20 @@ def _http_fetch(url):
     return resp.text
 
 
-def build_snapshot(fetcher=_http_fetch, competitors=None):
+def build_snapshot(fetcher=_http_fetch, competitors=None, previous=None):
     """Fetch every competitor page and reduce it to {name: {"prices": [...]}}.
-    A fetch failure records an empty entry rather than aborting the sweep."""
+    On a fetch failure, carry forward the previous entry (so a transient blip
+    doesn't read as "all prices removed" now and "all prices added back" next
+    run); if there's no previous entry, mark it fetch_failed so the diff skips
+    it instead of alerting."""
+    previous = previous or {}
     snapshot = {}
     for name, url in (competitors or COMPETITORS).items():
         try:
-            prices = extract_prices(normalize(fetcher(url)))
+            snapshot[name] = {"prices": extract_prices(normalize(fetcher(url)))}
         except Exception:
-            prices = []
-        snapshot[name] = {"prices": prices}
+            prior = previous.get(name)
+            snapshot[name] = dict(prior) if prior else {"prices": [], "fetch_failed": True}
     return snapshot
 
 
@@ -116,7 +124,7 @@ def run(fetcher=_http_fetch, competitors=None, notify=None, path=None):
     persist, and hand any changes to `notify`. Returns the change list."""
     path = path or _snapshot_path()
     old = _load(path)
-    new = build_snapshot(fetcher, competitors)
+    new = build_snapshot(fetcher, competitors, previous=old)
     changes = diff_snapshot(old, new)
     _save(path, new)
     if changes and notify:

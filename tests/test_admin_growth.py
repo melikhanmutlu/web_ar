@@ -36,6 +36,13 @@ def test_funnel_breakdown_and_mrr(client):
     _model(uploader)                                   # uploaded, never shared
     payer = _user("gm_payer", plan="pro", expires_in_days=20)
     _model(payer, share_count=1)                       # shared + paid
+    db.session.add(Payment(                            # a real paid subscription
+        user_id=payer.id, plan="pro", kind="plan", amount=Decimal("19"),
+        status="paid", period_end=datetime.utcnow().date(),
+    ))
+    # A user on Business via trial/comp (plan set, but NO Payment) must NOT
+    # count toward MRR/subscribers.
+    _user("gm_trial", plan="business", expires_in_days=10)
     _user("gm_expired", plan="pro", expires_in_days=None).plan_expires_at = (
         datetime.utcnow() - timedelta(days=1)          # lapsed -> not "paid"
     )
@@ -43,12 +50,12 @@ def test_funnel_breakdown_and_mrr(client):
     db.session.commit()
 
     metrics = collect_growth_metrics()
-    assert metrics["funnel"]["registered"] == 5
+    assert metrics["funnel"]["registered"] == 6
     assert metrics["funnel"]["uploaded"] == 2
     assert metrics["funnel"]["shared"] == 1
-    assert metrics["funnel"]["paid"] == 1
-    assert metrics["plan_breakdown"] == {"pro": 1}
-    assert metrics["mrr"] == 19  # seeded Pro monthly price
+    assert metrics["funnel"]["paid"] == 1               # only the real payer
+    assert metrics["plan_breakdown"] == {"pro": 1}      # trial Business excluded
+    assert metrics["mrr"] == 19  # seeded Pro monthly price, trial not added
 
 
 def test_renewal_rate_counts_only_ended_plan_periods(client):

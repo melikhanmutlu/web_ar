@@ -101,20 +101,29 @@ def send_weekly_report(now=None, force=False):
     if not force and now.weekday() != REPORT_WEEKDAY:
         return False
     week_key = _week_key(now)
-    if get_setting(LAST_SENT_SETTING) == week_key:
-        return False
+
+    # Per-recipient dedupe: the stored value is "<week>|<email1>,<email2>". Each
+    # run only mails admins who haven't already received THIS week's report, so
+    # a transient SMTP failure to one admin is retried next run without
+    # re-spamming the admins who already got it.
+    stored = get_setting(LAST_SENT_SETTING) or ""
+    stored_week, _, stored_emails = stored.partition("|")
+    already = set(filter(None, stored_emails.split(","))) if stored_week == week_key else set()
 
     admins = User.query.filter_by(is_admin=True).all()
     recipients = [a.email for a in admins if a.email]
-    if not recipients:
+    pending = [e for e in recipients if e not in already]
+    if not pending:
         return False
 
     body = _build_body(collect_growth_metrics(now), now)
-    delivered = False
-    for email in recipients:
+    delivered = set(already)
+    sent_any = False
+    for email in pending:
         if send_email(email, "ARVision — your weekly growth report", body):
-            delivered = True
+            delivered.add(email)
+            sent_any = True
 
-    if delivered:
-        set_setting(LAST_SENT_SETTING, week_key)
-    return delivered
+    if sent_any:
+        set_setting(LAST_SENT_SETTING, f"{week_key}|{','.join(sorted(delivered))}")
+    return sent_any

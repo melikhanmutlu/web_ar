@@ -59,6 +59,24 @@ def test_member_added_below_cap(client):
     assert OrganizationMember.query.filter_by(user_id=invitee.id, organization_id=org.id).count() == 1
 
 
+def test_downgraded_owner_cannot_add_members(client):
+    # Regression: seat enforcement must not vanish when the org owner is on a
+    # plan with no seat entitlement (Free / lapsed Business). max_org_members is
+    # None for Free -> must floor to 0, not fall through to "unlimited".
+    owner = _user("seat_free_owner", plan="business")
+    org = _org_with_owner(owner)          # created while Business
+    owner.plan = "free"                   # ...then lapsed/downgraded to Free
+    db.session.commit()
+    invitee = _user("seat_free_invitee", plan="free")
+    client.post("/login", data={"username": "seat_free_owner", "password": "testpassword123"})
+
+    resp = client.post(f"/api/organizations/{org.id}/members",
+                       json={"email": invitee.email, "role": "viewer"})
+    assert resp.status_code == 403
+    assert resp.get_json()["upgrade"]["reason"] == "org_seats"
+    assert OrganizationMember.query.filter_by(user_id=invitee.id).count() == 0
+
+
 def test_role_change_of_existing_member_is_not_seat_gated(client):
     owner = _user("seat_owner3", plan="business")
     org = _org_with_owner(owner)

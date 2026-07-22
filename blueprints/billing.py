@@ -274,27 +274,37 @@ def lemonsqueezy_webhook():
                 and attributes.get("status") == "paid":
             _apply_successful_payment(payment)
     elif event_name == "subscription_payment_success":
+        invoice_id = str((event.get("data") or {}).get("id") or "")
+        invoice_tag = f"lsinv:{invoice_id}" if invoice_id else None
+        invoice_ref = f"lsinv-{invoice_id}" if invoice_id else None
         if payment.status == "pending":
+            # First paid invoice: grant the first period against the checkout
+            # row, stamping this invoice's id so a DUPLICATE delivery of the
+            # same first invoice dedupes instead of granting a second period.
+            if invoice_tag:
+                payment.note = invoice_tag
             _apply_successful_payment(payment)
-        else:
-            invoice_ref = f"lsinv-{event.get('data', {}).get('id', '')}"
-            if invoice_ref != "lsinv-" and not Payment.query.filter_by(
-                provider_ref=invoice_ref
-            ).first():
-                renewal = Payment(
-                    user_id=payment.user_id,
-                    plan=payment.plan,
-                    kind="plan",
-                    amount=Decimal(attributes.get("total") or 0) / 100,
-                    currency=(attributes.get("currency") or payment.currency or "USD"),
-                    status="pending",
-                    method="lemonsqueezy",
-                    provider=provider.name,
-                    provider_ref=invoice_ref,
-                )
-                db.session.add(renewal)
-                db.session.commit()
-                _apply_successful_payment(renewal)
+        elif invoice_tag and payment.note == invoice_tag:
+            # Duplicate delivery of the already-applied first invoice.
+            return "OK"
+        elif invoice_ref and not Payment.query.filter_by(
+            provider_ref=invoice_ref
+        ).first():
+            # A renewal invoice: fresh period, deduped on its own invoice id.
+            renewal = Payment(
+                user_id=payment.user_id,
+                plan=payment.plan,
+                kind="plan",
+                amount=Decimal(attributes.get("total") or 0) / 100,
+                currency=(attributes.get("currency") or payment.currency or "USD"),
+                status="pending",
+                method="lemonsqueezy",
+                provider=provider.name,
+                provider_ref=invoice_ref,
+            )
+            db.session.add(renewal)
+            db.session.commit()
+            _apply_successful_payment(renewal)
     return "OK"
 
 

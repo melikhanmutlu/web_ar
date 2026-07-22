@@ -22,14 +22,34 @@ def _monthly_price(plan):
     return price / 12 if cfg.get("billing_period") == "yearly" else price
 
 
+def _paying_user_ids():
+    """Ids of users with at least one paid subscription Payment. Excludes free
+    trials and admin-comped grants (which have no Payment) so they don't inflate
+    revenue metrics."""
+    rows = (
+        db.session.query(Payment.user_id)
+        .filter(
+            Payment.status == "paid",
+            Payment.kind == "plan",
+            Payment.user_id.isnot(None),
+        )
+        .distinct()
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
 def _active_paid_users(now):
-    """Non-admin users currently on a paid plan (unexpired or admin-granted
-    with no expiry)."""
-    return User.query.filter(
+    """Non-admin users currently on a paid plan who have actually paid for it
+    (a paid subscription Payment on record). Trials (plan set, no Payment) and
+    comped accounts are deliberately excluded from MRR/subscriber counts."""
+    paying = _paying_user_ids()
+    users = User.query.filter(
         User.plan != DEFAULT_PLAN,
         User.is_admin.is_(False),
         or_(User.plan_expires_at.is_(None), User.plan_expires_at > now),
     ).all()
+    return [u for u in users if u.id in paying]
 
 
 def collect_growth_metrics(now=None):

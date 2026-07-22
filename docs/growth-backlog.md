@@ -90,7 +90,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — tek kullanımlık, süre sonunda mevcut sweep'le Free'ye iner.
 
 ### 2.5 Koltuk-bazlı org sınırı (v1)
-- [ ] Plan limitlerine `max_org_members` (Business seed değeriyle); org üye davetinde
+- [x] Plan limitlerine `max_org_members` (Business seed değeriyle); org üye davetinde
   enforcement (`services/org_membership.py`); admin plan editörüne alan
   (`LIMIT_KEYS`'e ekleme). Gerçek koltuk-başı faturalama MoR sonrası (Faz 3+).
 - **Doğrulama:** pytest — limit üstü davet reddi + upgrade alanı (1.5 kalıbı).

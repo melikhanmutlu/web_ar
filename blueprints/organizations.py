@@ -66,6 +66,29 @@ def organizations_api():
     }}), 201
 
 
+def _check_org_seat_limit(organization_id):
+    """Block a new member when the org is at its owner's plan seat cap
+    (max_org_members). Governed by the org creator's plan — they're who pays.
+    Returns a response tuple or None."""
+    from services.plans import plan_limit
+
+    organization = db.session.get(Organization, organization_id)
+    if organization is None:
+        return None
+    owner = db.session.get(User, organization.created_by)
+    cap = plan_limit(owner, "max_org_members")
+    if not cap:
+        return None
+    current = OrganizationMember.query.filter_by(organization_id=organization_id).count()
+    if current >= cap:
+        return jsonify({
+            "success": False,
+            "error": f"Seat limit reached ({cap}). Upgrade the plan to add more members.",
+            "upgrade": upgrade_hint("org_seats"),
+        }), 403
+    return None
+
+
 @organizations_bp.route("/api/organizations/<int:organization_id>/members", methods=["GET", "POST"])
 @login_required
 def organization_members_api(organization_id):
@@ -97,6 +120,9 @@ def organization_members_api(organization_id):
             return jsonify({"success": False, "error": "Owner membership cannot be changed"}), 409
         existing.role = role
     else:
+        seat_guard = _check_org_seat_limit(organization_id)
+        if seat_guard is not None:
+            return seat_guard
         db.session.add(OrganizationMember(
             organization_id=organization_id, user_id=user.id, role=role
         ))

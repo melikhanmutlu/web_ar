@@ -33,7 +33,7 @@ DEFAULT_CURRENCY = os.getenv("BILLING_CURRENCY", "TRY")
 # the admin Plans editor (parsing + rendering) so the field list lives once.
 LIMIT_KEYS = (
     "storage_mb", "ai_monthly", "max_models", "max_upload_mb",
-    "batch_size", "analytics_retention_days",
+    "batch_size", "analytics_retention_days", "max_org_members",
 )
 FEATURE_KEYS = (
     "api_access", "advanced_ai_options", "password_protected_shares",
@@ -56,6 +56,7 @@ PLAN_CONFIG = {
             "max_upload_mb": 50,
             "batch_size": 3,
             "analytics_retention_days": 7,
+            "max_org_members": None,
         },
         "features": {
             "api_access": False,
@@ -77,6 +78,7 @@ PLAN_CONFIG = {
             "max_upload_mb": 100,
             "batch_size": 10,
             "analytics_retention_days": 90,
+            "max_org_members": 3,
         },
         "features": {
             "api_access": True,
@@ -98,6 +100,7 @@ PLAN_CONFIG = {
             "max_upload_mb": 100,
             "batch_size": 25,
             "analytics_retention_days": 365,
+            "max_org_members": 10,
         },
         "features": {
             "api_access": True,
@@ -119,6 +122,7 @@ PLAN_CONFIG = {
             "max_upload_mb": _UNLIMITED,
             "batch_size": _UNLIMITED,
             "analytics_retention_days": _UNLIMITED,
+            "max_org_members": _UNLIMITED,
         },
         "features": {
             "api_access": True,

@@ -142,7 +142,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — sinyal kuralları + tekilleştirme.
 
 ### 3.7 Rakip izleme otomasyonu
-- [ ] `scripts/competitor_watch.py`: rakip pricing URL listesini çek, normalize et,
+- [x] `scripts/competitor_watch.py`: rakip pricing URL listesini çek, normalize et,
   önceki snapshot ile diff → değişiklikte admin e-postası. Zamanlama: worker aylık
   sweep veya CI cron. `[~]` egress politikasına bağlı.
 - **Doğrulama:** pytest — diff mantığı sahte HTML'le.

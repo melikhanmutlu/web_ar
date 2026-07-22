@@ -12,51 +12,82 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
-<body class="av-home">
+<body class="av-home marketing-detail marketing-detail--{{ slug }}">
     {% include "_site_header.html" %}
 
     <main>
-        <section class="page-hero">
-            <div class="shell">
-                <div class="reveal" data-reveal>
+        <section class="detail-hero">
+            <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+            <div class="detail-orb detail-orb--two" aria-hidden="true"></div>
+            <div class="shell detail-hero-grid">
+                <div class="detail-hero-copy reveal" data-reveal>
                     <span class="status-label"><i></i> {{ page.eyebrow }}</span>
                     <h1>{{ page.headline }}</h1>
                     <p>{{ page.subhead }}</p>
-                    <div class="hero-cta" style="margin-top:1.5rem;display:flex;gap:.75rem;flex-wrap:wrap;">
-                        <a class="primary-btn" href="{{ url_for('main.studio') }}">Try it free &rarr;</a>
-                        <a class="secondary-btn" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Talk to sales</a>
+                    <div class="detail-actions">
+                        <a class="primary-btn" href="{{ url_for('main.studio') }}">Start creating <span>&rarr;</span></a>
+                        <a class="text-btn" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Talk to sales <span>&nearr;</span></a>
+                    </div>
+                    <div class="detail-proof" aria-label="Product benefits">
+                        <span>No app required</span><span>iOS + Android</span><span>Free to start</span>
+                    </div>
+                </div>
+                <div class="detail-hero-visual reveal" data-reveal style="--delay:120ms">
+                    <div class="solution-stage">
+                        <div class="solution-stage-top"><span>arvision / {{ slug }}</span><i></i><i></i><i></i></div>
+                        <div class="solution-object" aria-hidden="true"><span></span></div>
+                        <div class="solution-float solution-float--top">Web-ready <b>GLB</b></div>
+                        <div class="solution-float solution-float--bottom">Mobile AR <b>Ready</b></div>
+                        <div class="solution-stage-meta"><span>01</span><b>{{ page.eyebrow }}</b><em>Interactive delivery</em></div>
                     </div>
                 </div>
             </div>
         </section>
 
-        <section class="shell" style="padding-bottom:24px;">
-            <h2>Sound familiar?</h2>
-            <ul class="segment-pains" style="margin-top:1rem;line-height:1.9;">
-                {% for pain in page.pains %}<li>{{ pain }}</li>{% endfor %}
-            </ul>
-        </section>
-
-        <section class="feature-grid shell">
-            {% for title, copy in page.benefits %}
-            <article class="feature-card">
-                <h3>{{ title }}</h3>
-                <p>{{ copy }}</p>
-            </article>
-            {% endfor %}
-        </section>
-
-        <section class="shell" style="padding-top:8px;padding-bottom:64px;">
-            <article class="admin-card" style="max-width:680px;text-align:center;">
-                <h2 style="margin-top:0;">See it with your own product</h2>
-                <p>Start free in minutes, or book a 25-minute demo where we convert one of your models live.</p>
-                <div style="margin-top:1rem;display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap;">
-                    <a class="primary-btn" href="{{ url_for('main.studio') }}">Start free</a>
-                    <a class="secondary-btn" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Book a demo</a>
+        <section class="detail-section detail-section--soft">
+            <div class="shell detail-split">
+                <div class="detail-heading reveal" data-reveal>
+                    <span class="section-tag">THE CHALLENGE</span>
+                    <h2>Your 3D workflow should move as fast as your ideas.</h2>
                 </div>
-            </article>
+                <ol class="pain-list reveal" data-reveal style="--delay:80ms">
+                    {% for pain in page.pains %}
+                    <li><span>0{{ loop.index }}</span><p>{{ pain }}</p></li>
+                    {% endfor %}
+                </ol>
+            </div>
+        </section>
+
+        <section class="detail-section">
+            <div class="shell">
+                <div class="detail-heading detail-heading--row reveal" data-reveal>
+                    <div><span class="section-tag">BUILT FOR YOUR WORKFLOW</span><h2>From file to finished experience.</h2></div>
+                    <p>Everything needed to prepare, publish and manage immersive product experiences—inside one focused workspace.</p>
+                </div>
+                <div class="benefit-grid">
+                    {% for title, copy in page.benefits %}
+                    <article class="benefit-card reveal" data-reveal style="--delay:{{ (loop.index0 % 4) * 60 }}ms">
+                        <span>0{{ loop.index }}</span><div class="benefit-mark" aria-hidden="true">{{ ['◇','⌁','◎','↗'][loop.index0] }}</div>
+                        <h3>{{ title }}</h3><p>{{ copy }}</p>
+                    </article>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="detail-cta">
+            <div class="shell reveal" data-reveal>
+                <span class="status-label dark"><i></i> Your model, live</span>
+                <h2>See it with your own product.</h2>
+                <p>Start free in minutes, or book a focused demo and we will convert one of your models live.</p>
+                <div class="detail-actions detail-actions--center">
+                    <a class="light-btn" href="{{ url_for('main.studio') }}">Open 3D Studio <span>&rarr;</span></a>
+                    <a class="detail-dark-link" href="{{ url_for('main.contact_sales', reason=page.cta_reason) }}">Book a demo <span>&nearr;</span></a>
+                </div>
+            </div>
         </section>
     </main>
     {% include "_site_footer.html" %}
+    <script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>
 </html>

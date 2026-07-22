@@ -1,68 +1,37 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {% include '_security_head.html' %}
-    {% set seo_title = "Security & data practices — ARVision" %}
-    {% set seo_description = "How ARVision handles your 3D assets: access control, data storage, privacy of uploads, infrastructure and account security." %}
-    {% set seo_robots = "index, follow" %}
-    {% include '_seo_head.html' %}
-    <title>{{ seo_title }}</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}{% set seo_title = "Security & data practices — ARVision" %}{% set seo_description = "How ARVision handles your 3D assets: access control, data storage, privacy of uploads, infrastructure and account security." %}{% set seo_robots = "index, follow" %}{% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title><link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
-<body class="av-home">
+<body class="av-home marketing-detail marketing-detail--security">
     {% include "_site_header.html" %}
-
     <main>
-        <section class="page-hero">
+        <section class="detail-hero security-hero">
+            <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+            <div class="shell detail-hero-grid">
+                <div class="detail-hero-copy reveal" data-reveal><span class="status-label"><i></i> Security &amp; trust</span><h1>Your work stays yours.</h1><p>You are uploading assets that matter. ARVision is designed to keep them private, controlled and protected from upload to delivery.</p><div class="detail-actions"><a class="primary-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Start a security review <span>&rarr;</span></a><a class="text-btn" href="#practices">Explore our practices <span>&darr;</span></a></div></div>
+                <div class="security-shield reveal" data-reveal style="--delay:120ms" aria-hidden="true"><div class="shield-core"><span></span><i></i></div><div class="shield-ring shield-ring--one"></div><div class="shield-ring shield-ring--two"></div><span class="shield-label shield-label--a">Private by default</span><span class="shield-label shield-label--b">Encrypted transit</span><span class="shield-label shield-label--c">Controlled access</span></div>
+            </div>
+        </section>
+        <section class="trust-strip"><div class="shell"><span>SECURITY FOUNDATIONS</span><div><b>HTTPS delivery</b><b>CSRF protection</b><b>Role-based access</b><b>Signed callbacks</b></div></div></section>
+        <section class="detail-section" id="practices">
             <div class="shell">
-                <div class="reveal" data-reveal>
-                    <span class="status-label"><i></i> Trust</span>
-                    <h1>Security &amp; data practices</h1>
-                    <p>You're uploading work that matters. Here's how ARVision keeps it private and under your control.</p>
-                </div>
+                <div class="detail-heading detail-heading--row reveal" data-reveal><div><span class="section-tag">OUR PRACTICES</span><h2>Protection at every layer.</h2></div><p>Clear controls for the account, asset, infrastructure and payment surfaces around your 3D workflow.</p></div>
+                {% set practices = [
+                    ('Private by default', 'New uploads are never publicly listed unless you explicitly choose to. Access follows ownership, organization membership or a valid share link.', '01', '◎'),
+                    ('Precise access control', 'Owner, admin, editor and viewer roles keep teams structured. Share links can be password protected, time limited and revoked.', '02', '⌁'),
+                    ('Account safeguards', 'Passwords are salted and hashed. Login lockouts, rate limits and app-wide CSRF protection defend sensitive actions.', '03', '◇'),
+                    ('Durable data storage', 'Files live on persistent, access-controlled storage and are delivered over HTTPS. Deletion follows a recoverable trash workflow.', '04', '▦'),
+                    ('Safe file processing', 'Every upload is treated as untrusted. Internal paths are sanitized and conversion runs through background workers.', '05', '↻'),
+                    ('Protected payments', 'Card data never reaches ARVision servers. Hosted payment callbacks are cryptographically signature verified.', '06', '✓')
+                ] %}
+                <div class="security-grid">{% for title, copy, number, icon in practices %}<article class="security-card reveal" data-reveal style="--delay:{{ (loop.index0 % 3) * 60 }}ms"><div><span>{{ number }}</span><i>{{ icon }}</i></div><h3>{{ title }}</h3><p>{{ copy }}</p></article>{% endfor %}</div>
             </div>
         </section>
-
-        <section class="shell" style="padding-bottom:48px;">
-            <div class="feature-grid">
-                <article class="feature-card">
-                    <h3>Your models are private by default</h3>
-                    <p>New uploads are unlisted or private — never publicly listed unless you explicitly choose to. Access to a model is governed by a single policy layer: ownership, organization membership, or an active (non-revoked, non-expired) share link.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Access control</h3>
-                    <p>Organizations use owner / admin / editor / viewer roles. Share links can be password-protected and time-limited, and revoked at any time. Embeds can be restricted to an allowlist of domains.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Account security</h3>
-                    <p>Passwords are stored only as salted hashes, never in plain text. Repeated failed logins lock an account temporarily to blunt brute-force attempts. All state-changing requests are CSRF-protected, and sensitive endpoints are rate-limited.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Data storage</h3>
-                    <p>Your files are stored on persistent, access-controlled storage and served over HTTPS. Deleting a model moves it to a recoverable trash and then purges the underlying files from disk on cleanup.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Uploads are handled safely</h3>
-                    <p>Converters treat every uploaded file as untrusted: file references inside a model are sanitized, and absolute or parent-directory paths are never honored. Conversion runs in isolated background workers, not in the request path.</p>
-                </article>
-                <article class="feature-card">
-                    <h3>Payments</h3>
-                    <p>Card data never touches our servers. Checkout runs on the payment provider's hosted page (PayTR, or Lemon Squeezy as Merchant of Record for global cards), and provider callbacks are cryptographically signature-verified.</p>
-                </article>
-            </div>
-        </section>
-
-        <section class="shell" style="padding-top:0;padding-bottom:64px;">
-            <article class="admin-card" style="max-width:680px;">
-                <h2 style="margin-top:0;">Questions from your security team?</h2>
-                <p>For data-processing details, deletion requests or a security review ahead of a Business/Enterprise rollout, get in touch.</p>
-                <a class="primary-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Contact us</a>
-            </article>
-        </section>
+        <section class="detail-cta"><div class="shell reveal" data-reveal><span class="status-label dark"><i></i> Security review</span><h2>Bring your security team.</h2><p>For data-processing details, deletion requests or a review before rollout, we are ready to help.</p><a class="light-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Contact us <span>&rarr;</span></a></div></section>
     </main>
-    {% include "_site_footer.html" %}
+    {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>
 </html>

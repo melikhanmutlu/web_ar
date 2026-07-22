@@ -112,10 +112,17 @@ def register():
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
+        # Referral (F3.2): reward both sides if a valid ?ref= code came through.
+        ref_code = (request.form.get('ref') or request.args.get('ref') or '').strip()[:16]
+        if ref_code:
+            from services.referrals import apply_referral
+            apply_referral(user, ref_code)
+            db.session.commit()
         flash('Registration successful! You can now log in.', 'success')
         return redirect(url_for('auth.login'))
-    
-    return render_template('register.html', form=form)
+
+    ref_code = (request.args.get('ref') or '').strip()[:16]
+    return render_template('register.html', form=form, ref_code=ref_code)
 
 @auth.route('/logout', methods=['POST'])
 @login_required
@@ -196,6 +203,7 @@ def _render_profile(profile_form, password_form):
         .order_by(Payment.created_at.desc())
         .all()
     )
+    from services.referrals import referral_link, referred_count, INVITEE_CREDITS, REFERRER_CREDITS
     return render_template(
         'profile.html',
         user=current_user,
@@ -205,4 +213,8 @@ def _render_profile(profile_form, password_form):
         payments=payments,
         profile_form=profile_form,
         password_form=password_form,
+        referral_link=referral_link(current_user),
+        referred_count=referred_count(current_user),
+        referral_referrer_credits=REFERRER_CREDITS,
+        referral_invitee_credits=INVITEE_CREDITS,
     )

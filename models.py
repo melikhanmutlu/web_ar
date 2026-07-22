@@ -58,6 +58,10 @@ class User(UserMixin, db.Model):
     # (F2.4). NULL = never taken; set once, so the trial can't be re-taken even
     # after it lapses back to Free.
     business_trial_used_at = db.Column(db.DateTime, nullable=True)
+    # Referral program (F3.2): this user's own share code, and who referred
+    # them (set once, at registration, from a valid ?ref= code).
+    referral_code = db.Column(db.String(16), unique=True, nullable=True, index=True)
+    referred_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     # Column stays named is_active in the DB; the attribute is renamed so the
     # is_active property below can satisfy Flask-Login's interface.
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())

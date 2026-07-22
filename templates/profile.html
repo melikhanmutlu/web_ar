@@ -97,6 +97,16 @@
         </section>
     </div>
 
+    <section class="profile-panel">
+        <h2 class="av-card-title">Refer a friend</h2>
+        <p class="av-card-desc">Share your link. When someone signs up with it, they get {{ referral_invitee_credits }} AI credits and you get {{ referral_referrer_credits }}.</p>
+        <div class="profile-form av-stack">
+            <input type="text" class="av-input auth-input" id="referralLink" value="{{ referral_link }}" readonly onclick="this.select()">
+            <button type="button" class="btn-primary profile-submit" onclick="navigator.clipboard.writeText(document.getElementById('referralLink').value); this.textContent='Copied!';">Copy link</button>
+            <p class="av-card-desc" style="margin:0;">You've referred <strong>{{ referred_count }}</strong> {{ 'person' if referred_count == 1 else 'people' }} so far.</p>
+        </div>
+    </section>
+
     <section class="profile-panel profile-billing">
         <h2 class="av-card-title">Billing history</h2>
         <p class="av-card-desc">Payments recorded against your account.</p>

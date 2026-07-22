@@ -112,7 +112,7 @@ Search Console) kod tarafı bitirilip `[~]` bırakılır; anahtar gelince açıl
 - **Doğrulama:** pytest — segment seçimi + tekilleştirme + günlük tavan.
 
 ### 3.2 Referans programı
-- [ ] `User.referral_code` (+ `referred_by_id`); kayıt akışında `?ref=` yakalama;
+- [x] `User.referral_code` (+ `referred_by_id`); kayıt akışında `?ref=` yakalama;
   davet eden + edilen tarafa AI kredisi (ledger `reason=referral`); kötüye kullanım
   tavanı (aylık N ödül); profil sayfasında davet linki + sayaç.
 - **Doğrulama:** pytest — çift taraflı kredi, self-referral reddi, tavan.

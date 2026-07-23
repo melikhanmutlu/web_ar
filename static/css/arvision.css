@@ -1520,26 +1520,6 @@ body > .av-flash { margin-top: 5.5rem; }
     color:var(--ink);
     border-radius:10px
 }
-.status-label {
-    display:inline-flex;
-    align-items:center;
-    gap:9px;
-    color:#555e6c;
-    font-size:12px;
-    font-weight:700;
-    letter-spacing:.08em;
-    text-transform:uppercase
-}
-.status-label i {
-    width:8px;
-    height:8px;
-    border-radius:50%;
-    background:#41b96d;
-    box-shadow:0 0 0 5px rgba(65,185,109,.11)
-}
-.status-label.dark {
-    color:#c4c8d2
-}
 .hero {
     position:relative;
     overflow:hidden;
@@ -2050,7 +2030,10 @@ footer {
     border-radius:14px
 }
 .home-panel {
-    min-height:850px
+    /* Was 850px — the Upload panel's real content only runs ~600px, so the
+       card's border trailed ~250px of empty space below the submit button.
+       Sized to the Upload tab (the taller of the two at rest) instead. */
+    min-height:620px
 }
 .studio-uploader-head {
     display:flex;

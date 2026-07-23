@@ -14,7 +14,6 @@
             <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
             <div class="shell detail-hero-grid">
                 <div class="detail-hero-copy reveal" data-reveal>
-                    <span class="status-label"><i></i> Online 3D converter</span>
                     {% if page.ar %}<h1>View a {{ page.src }} file in AR.</h1><p>Upload your {{ page.src }} and get an AR-ready link for iPhone and Android—plus a QR code. No app, no code.</p>{% else %}<h1>Convert {{ page.src }} to {{ page.dst }}.</h1><p>Turn a {{ page.src }} file into an optimized {{ page.dst }} in your browser—and get a shareable, AR-ready link automatically.</p>{% endif %}
                     <div class="detail-actions"><a class="primary-btn" href="{{ url_for('main.studio') }}">Upload your {{ page.src }} <span>&rarr;</span></a><span class="detail-microcopy">Free to start · No credit card</span></div>
                 </div>
@@ -35,7 +34,7 @@
                 </div>
             </div>
         </section>
-        <section class="detail-cta"><div class="shell reveal" data-reveal><span class="status-label dark"><i></i> Ready when you are</span><h2>{{ 'See your ' ~ page.src ~ ' in AR now.' if page.ar else 'Convert your ' ~ page.src ~ ' now.' }}</h2><p>Bring the file. ARVision prepares the rest.</p><a class="light-btn" href="{{ url_for('main.studio') }}">Open 3D Studio <span>&rarr;</span></a></div></section>
+        <section class="detail-cta"><div class="shell reveal" data-reveal><h2>{{ 'See your ' ~ page.src ~ ' in AR now.' if page.ar else 'Convert your ' ~ page.src ~ ' now.' }}</h2><p>Bring the file. ARVision prepares the rest.</p><a class="light-btn" href="{{ url_for('main.studio') }}">Open 3D Studio <span>&rarr;</span></a></div></section>
     </main>
     {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>

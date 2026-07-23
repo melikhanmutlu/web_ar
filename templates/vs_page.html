@@ -15,7 +15,6 @@
             <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
             <div class="shell compare-hero">
                 <div class="reveal" data-reveal>
-                    <span class="status-label"><i></i> Honest comparison</span>
                     <h1>{{ page.headline }}</h1><p>{{ page.subhead }}</p>
                     <div class="detail-actions detail-actions--center"><a class="primary-btn" href="{{ url_for('main.studio') }}">Try ARVision free <span>&rarr;</span></a><a class="text-btn" href="#comparison">See the difference <span>&darr;</span></a></div>
                 </div>
@@ -43,7 +42,7 @@
                 {% if page.note %}<aside class="comparison-note reveal" data-reveal><b>Good to know</b><p>{{ page.note }}</p></aside>{% endif %}
             </div>
         </section>
-        <section class="detail-cta"><div class="shell reveal" data-reveal><span class="status-label dark"><i></i> Test the difference</span><h2>Try it with your own model.</h2><p>Upload a file and get a working AR link in seconds. No credit card required.</p><a class="light-btn" href="{{ url_for('main.studio') }}">Start free <span>&rarr;</span></a></div></section>
+        <section class="detail-cta"><div class="shell reveal" data-reveal><h2>Try it with your own model.</h2><p>Upload a file and get a working AR link in seconds. No credit card required.</p><a class="light-btn" href="{{ url_for('main.studio') }}">Start free <span>&rarr;</span></a></div></section>
     </main>
     {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>

@@ -11,7 +11,7 @@
         <section class="detail-hero security-hero">
             <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
             <div class="shell detail-hero-grid">
-                <div class="detail-hero-copy reveal" data-reveal><span class="status-label"><i></i> Security &amp; trust</span><h1>Your work stays yours.</h1><p>You are uploading assets that matter. ARVision is designed to keep them private, controlled and protected from upload to delivery.</p><div class="detail-actions"><a class="primary-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Start a security review <span>&rarr;</span></a><a class="text-btn" href="#practices">Explore our practices <span>&darr;</span></a></div></div>
+                <div class="detail-hero-copy reveal" data-reveal><h1>Your work stays yours.</h1><p>You are uploading assets that matter. ARVision is designed to keep them private, controlled and protected from upload to delivery.</p><div class="detail-actions"><a class="primary-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Start a security review <span>&rarr;</span></a><a class="text-btn" href="#practices">Explore our practices <span>&darr;</span></a></div></div>
                 <div class="security-shield reveal" data-reveal style="--delay:120ms" aria-hidden="true"><div class="shield-core"><span></span><i></i></div><div class="shield-ring shield-ring--one"></div><div class="shield-ring shield-ring--two"></div><span class="shield-label shield-label--a">Private by default</span><span class="shield-label shield-label--b">Encrypted transit</span><span class="shield-label shield-label--c">Controlled access</span></div>
             </div>
         </section>
@@ -30,7 +30,7 @@
                 <div class="security-grid">{% for title, copy, number, icon in practices %}<article class="security-card reveal" data-reveal style="--delay:{{ (loop.index0 % 3) * 60 }}ms"><div><span>{{ number }}</span><i>{{ icon }}</i></div><h3>{{ title }}</h3><p>{{ copy }}</p></article>{% endfor %}</div>
             </div>
         </section>
-        <section class="detail-cta"><div class="shell reveal" data-reveal><span class="status-label dark"><i></i> Security review</span><h2>Bring your security team.</h2><p>For data-processing details, deletion requests or a review before rollout, we are ready to help.</p><a class="light-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Contact us <span>&rarr;</span></a></div></section>
+        <section class="detail-cta"><div class="shell reveal" data-reveal><h2>Bring your security team.</h2><p>For data-processing details, deletion requests or a review before rollout, we are ready to help.</p><a class="light-btn" href="{{ url_for('main.contact_sales', reason='security') }}">Contact us <span>&rarr;</span></a></div></section>
     </main>
     {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>

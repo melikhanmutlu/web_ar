@@ -59,10 +59,10 @@
     <div class="plans-grid">
         <div class="admin-field"><label class="field-label">name</label>
             <input type="text" name="{{ prefix }}__display_name" class="av-input" maxlength="60" value="{{ p.display_name if p else '' }}"></div>
-        <div class="admin-field"><label class="field-label">price ({{ p.currency if p else 'TRY' }}/period)</label>
+        <div class="admin-field"><label class="field-label">price ({{ p.currency if p else 'USD' }}/period)</label>
             <input type="number" name="{{ prefix }}__price" class="av-input" min="0" step="1" value="{{ p.price if p and p.price is not none else '' }}" placeholder="free"></div>
         <div class="admin-field"><label class="field-label">currency</label>
-            <input type="text" name="{{ prefix }}__currency" class="av-input" maxlength="3" value="{{ p.currency if p else 'TRY' }}"></div>
+            <input type="text" name="{{ prefix }}__currency" class="av-input" maxlength="3" value="{{ p.currency if p else 'USD' }}"></div>
         <div class="admin-field"><label class="field-label">billing period</label>
             <select name="{{ prefix }}__billing_period" class="av-input">
                 <option value="monthly" {% if not p or p.billing_period == 'monthly' %}selected{% endif %}>monthly</option>

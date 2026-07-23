@@ -27,7 +27,7 @@ PLANS = ("free", "pro", "business")
 DEFAULT_PLAN = "free"
 ADMIN_PLAN = "unlimited"
 _UNLIMITED = 1_000_000_000
-DEFAULT_CURRENCY = os.getenv("BILLING_CURRENCY", "TRY")
+DEFAULT_CURRENCY = os.getenv("BILLING_CURRENCY", "USD")
 
 # The editable field names inside a plan's "limits"/"features" dict -- shared by
 # the admin Plans editor (parsing + rendering) so the field list lives once.

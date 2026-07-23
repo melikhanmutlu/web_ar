@@ -359,6 +359,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 dirtyFields: Array.from(materialDirtyFields),
             };
         };
+        // Cross-file bridge: undo-redo.js needs the model's TRUE original
+        // material (as captured by captureOriginalMaterials() straight from
+        // the loaded GLB) to fix up its baseline snapshot once material sync
+        // completes -- _captureMaterialSnapshot() above reads the live
+        // slider DOM values, which by that point may already reflect edits
+        // the user made before the model finished loading, so it can't be
+        // reused here without corrupting the "no edits yet" baseline into
+        // "whatever the user has done so far".
+        window._originalMaterialSnapshot = function() {
+            const om = originalMaterials[0];
+            if (!om) return null;
+            const r = Math.round((om.baseColor[0] ?? 1) * 255);
+            const g = Math.round((om.baseColor[1] ?? 1) * 255);
+            const b = Math.round((om.baseColor[2] ?? 1) * 255);
+            const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+            return {
+                color: hex.toUpperCase(),
+                metalness: om.metallic ?? 0,
+                roughness: om.roughness ?? 1,
+                opacity: om.baseColor[3] ?? 1,
+                dirtyFields: [],
+            };
+        };
         // Exposed for save-flow.js: which material fields the user actually
         // touched, so the save payload only carries those fields.
         window._materialDirtyFields = function() {

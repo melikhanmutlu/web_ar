@@ -497,7 +497,18 @@ def api_get_mesh_bounds_route(model_id):
             return jsonify({"success": False, "error": denied.error}), denied.status
         from mesh_slicer import get_mesh_bounds as get_bounds
 
-        model_path = model.filename
+        # model.filename is a stale absolute path recorded at upload time --
+        # it goes stale both when the storage root moves between deploys AND
+        # whenever the model is edited afterward (a Transform save replaces
+        # CONVERTED_FOLDER/<id>/model.glb in place but never touches this
+        # column). The Slicer tab's axis sliders were being initialized from
+        # bounds computed against that stale file while the viewer displayed
+        # the current one -- most visible after a rotation swapped which
+        # axis holds the model's depth, since the Z slider's min/max/center
+        # would then no longer overlap the model's actual Z extent at all,
+        # clipping it away completely. glb_path always resolves the live,
+        # currently-rendered file (matching /slice_model below).
+        model_path = model.glb_path
 
         if not os.path.exists(model_path):
             return jsonify({"success": False, "error": "Model not found"}), 404

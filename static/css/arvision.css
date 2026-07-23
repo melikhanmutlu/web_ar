@@ -3557,9 +3557,9 @@ body {
 .cta p { margin-bottom: 32px; }
 @media (max-width: 640px) { .cta { min-height: 420px; padding: 96px 0; } }
 
-/* Expanded 4-column footer (brand + Product + Explore + meta). */
+/* 5-column footer (brand + Product + Explore + Solutions + meta). */
 footer { border-top: 1px solid #e2e5ea; background: #fff; }
-.footer-inner { min-height: 290px; padding: 72px 0; grid-template-columns: 1.45fr .7fr .7fr .8fr; align-items: start; gap: 76px; font-size: 14px; }
+.footer-inner { min-height: 290px; padding: 72px 0; grid-template-columns: 1.3fr .65fr .65fr .65fr .75fr; align-items: start; gap: 56px; font-size: 14px; }
 .footer-inner > div { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .footer-brand .brand { font-size: 2rem; }
 .footer-brand p { max-width: 390px; margin: 20px 0 0; color: #69717d; font-size: 15px; line-height: 1.7; }
@@ -3570,7 +3570,7 @@ footer { border-top: 1px solid #e2e5ea; background: #fff; }
 .footer-meta span { color: #777f8a; font-size: 11px; letter-spacing: .06em; }
 .footer-meta p { margin: 10px 0 0; color: #9aa1ab; font-size: 12px; letter-spacing: .05em; }
 @media (max-width: 950px) {
-    .footer-inner { grid-template-columns: 1.25fr .75fr .75fr; gap: 48px; }
+    .footer-inner { grid-template-columns: 1.1fr .7fr .7fr .7fr; gap: 40px; }
     .footer-meta { grid-column: 1 / -1; align-items: flex-start !important; text-align: left; }
 }
 @media (max-width: 640px) {

@@ -79,7 +79,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         saveChangesBtn?.addEventListener('click', async () => {
             const modifications = gatherModifications();
-            if (Object.keys(modifications).length === 0) {
+            const hasModifications = Object.keys(modifications).length > 0;
+            // "Front" is rotation 0/0/0 — identical to the default, so
+            // gatherModifications() never includes it in `modifications`
+            // (there's nothing to bake). But the preset still queued a
+            // canonical camera framing (window._pendingPresetCamera) that
+            // the user DOES want persisted: picking "Front" and hitting
+            // Save should swap the model's default view from the general
+            // perspective framing to this flat, straight-on one, even
+            // though no geometry needs to change. Treat a queued camera as
+            // "something to save" too, independent of `modifications`.
+            const pendingCamera = window._pendingPresetCamera;
+            if (!hasModifications && !pendingCamera) {
                 alert('No changes to save.');
                 return;
             }
@@ -88,44 +99,47 @@ document.addEventListener('DOMContentLoaded', () => {
             saveChangesBtn.innerHTML = '<i data-lucide="circle"></i> Saving...';
 
             try {
-                // Convert pending texture file to base64 if present
-                if (modifications.material?._pendingTextureFile) {
-                    const file = modifications.material._pendingTextureFile;
-                    const base64 = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
+                if (hasModifications) {
+                    // Convert pending texture file to base64 if present
+                    if (modifications.material?._pendingTextureFile) {
+                        const file = modifications.material._pendingTextureFile;
+                        const base64 = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = reject;
+                            reader.readAsDataURL(file);
+                        });
+                        modifications.material.texture = base64;
+                        delete modifications.material._pendingTextureFile;
+                    }
+
+                    const response = await fetch('/save_modifications', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model_id: modelId, modifications })
                     });
-                    modifications.material.texture = base64;
-                    delete modifications.material._pendingTextureFile;
+                    const result = await response.json();
+                    if (!result.success) {
+                        alert('Save failed: ' + (result.error || 'Unknown error'));
+                        return;
+                    }
                 }
 
-                const response = await fetch('/save_modifications', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model_id: modelId, modifications })
-                });
-                const result = await response.json();
-                if (result.success) {
-                    // A transform preset ("hazır görünüm") re-frames the live
-                    // preview to a canonical camera angle that isn't part of
-                    // the GLB bake — persist it now so the view the user
-                    // prepared is what they see after the reload below.
-                    if (modifications.transform && window._pendingPresetCamera) {
-                        try {
-                            await fetch(`/api/models/${modelId}/viewer-settings`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(window._pendingPresetCamera)
-                            });
-                        } catch (e) { /* best effort — don't block the save */ }
-                        window._pendingPresetCamera = null;
-                    }
-                    window.location.reload();
-                } else {
-                    alert('Save failed: ' + (result.error || 'Unknown error'));
+                // A transform preset ("hazır görünüm") re-frames the live
+                // preview to a canonical camera angle that isn't part of
+                // the GLB bake — persist it now so the view the user
+                // prepared is what they see after the reload below.
+                if (pendingCamera) {
+                    try {
+                        await fetch(`/api/models/${modelId}/viewer-settings`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(pendingCamera)
+                        });
+                    } catch (e) { /* best effort — don't block the save */ }
+                    window._pendingPresetCamera = null;
                 }
+                window.location.reload();
             } catch (err) {
                 console.error('Save error:', err);
                 alert('Failed to save changes.');

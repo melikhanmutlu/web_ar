@@ -81,12 +81,23 @@ def checkout(plan_slug):
         flash("Online payment isn't available right now. Please contact us.", "error")
         return redirect(url_for("billing.billing_home"))
 
+    charge_amount = Decimal(str(price))
+    charge_currency = cfg.get("currency", DEFAULT_CURRENCY)
+    # Plan prices are USD-denominated, but PayTR (our Turkish gateway)
+    # settles in TRY -- convert at the current rate so the amount PayTR
+    # actually charges the card matches what's displayed as USD on
+    # /pricing, instead of charging the raw USD number mislabeled as TRY.
+    if provider.name == "paytr" and charge_currency != "TRY":
+        from services.fx import usd_to_try
+        charge_amount = usd_to_try(price)
+        charge_currency = "TRY"
+
     merchant_oid = "arv" + secrets.token_hex(12)
     payment = Payment(
         user_id=current_user.id,
         plan=plan_slug,
-        amount=Decimal(str(price)),
-        currency=cfg.get("currency", "TRY"),
+        amount=charge_amount,
+        currency=charge_currency,
         status="pending",
         method="paytr",
         provider=provider.name,
@@ -165,14 +176,23 @@ def topup(pack):
         flash("Online payment isn't available right now. Please contact us.", "error")
         return redirect(url_for("billing.billing_home"))
 
+    charge_amount = Decimal(str(pack_cfg["price"]))
+    charge_currency = DEFAULT_CURRENCY
+    # Same USD -> TRY conversion as the plan checkout above: credit pack
+    # prices are USD-denominated, PayTR settles in TRY.
+    if provider.name == "paytr" and charge_currency != "TRY":
+        from services.fx import usd_to_try
+        charge_amount = usd_to_try(pack_cfg["price"])
+        charge_currency = "TRY"
+
     merchant_oid = "arv" + secrets.token_hex(12)
     payment = Payment(
         user_id=current_user.id,
         plan="credits",
         kind="topup",
         credits=pack_cfg["credits"],
-        amount=Decimal(str(pack_cfg["price"])),
-        currency=DEFAULT_CURRENCY,
+        amount=charge_amount,
+        currency=charge_currency,
         status="pending",
         method="paytr",
         provider=provider.name,

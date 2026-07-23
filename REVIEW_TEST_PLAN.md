@@ -233,22 +233,197 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
 
 ## Bulgu Kütüğü
 
-> En yüksek önemden düşüğe sırala. Format: `dosya:satır — senaryo — neden — düzeltme`.
+> **Tur 1 — 2026-07-23.** 6 paralel denetim ajanı + baseline pytest (646 passed,
+> 3 failed, 2 skipped). Bulgular önem sırasına göre; çapraz-ajan tekrarları
+> tekilleştirildi. Format: `dosya:satır — senaryo — neden — düzeltme`.
 
 ### 🔴 Kritik
-- _(henüz yok)_
+- **K1 — Converter harici-texture URI'sinde path traversal → keyfi sunucu dosyası okuma.**
+  `converters/glb_quality.py:70-88` (`_find_texture`, `embed_external_textures→finalize_glb`
+  ile **her** conversion'da çalışır) ve `converters/fbx_postprocess.py:602-637`
+  (`_embed_external_textures`, `search_paths` ham `image.uri` join'liyor).
+  Senaryo: texture referansı mutlak path (`/etc/passwd`) veya `../../../..`
+  traversal olan bir FBX/glTF yükle; `Path(root) / Path(uri)` mutlak path'te
+  `root`'u atar, `../` ile sandbox'tan çıkar; dosya `read_bytes()` ile GLB binary
+  chunk'ına gömülür ve saldırganın indirebildiği GLB'ye yazılır → secret/`.env`/
+  başka kullanıcı asset'i sızıntısı. **Tutarsızlık:** kardeş fonksiyon
+  `_embed_external_textures_gltf` (`fbx_postprocess.py:140-147`) `safe_join_within`'i
+  doğru kullanıyor — bu iki yol atlanmış. Düzeltme: her aday path'i `safe_join_within`'den
+  geçir, mutlak/`..` içeren `uri`'yi reddet, yalnızca `uri_path.name` kullan.
+  ⚠️ Erişilebilirlik: FBX2glTF'in ham external `uri` emit etmesine bağlı — bkz.
+  Doğrulanmadı D1. Kod düzeyinde kesinlikle açık.
 
 ### 🟠 Yüksek
-- _(henüz yok)_
+- **Y1 — API token'ları kullanıcı deaktive/org'dan atıldıktan sonra da çalışıyor.**
+  `blueprints/api_tokens.py:37-52` (`_bearer_token` yalnızca `token.is_active`'e
+  bakıyor), `:121-125`. Senaryo: (a) org admin'i org-scoped `models:write` token
+  üretir, sonra org'dan çıkarılır → token org modellerinde read/update/soft-delete
+  yetkisini korur; (b) admin bir kullanıcıyı deaktive eder → kullanıcı login olamaz
+  ama token'ı çalışmaya devam eder. Düzeltme: `_bearer_token`'da `token.user`'ı
+  yükle, `not user.is_active_flag` ise reddet; org-scoped token'da her çağrıda
+  `_organization_membership` yeniden kontrol et.
+- **Y2 — Pillow 12.2.0: 20 bilinen CVE, güvenilmeyen görsel işliyor.**
+  `requirements.txt` (pillow 12.2.0), kullanım `blueprints/model_files.py:148`
+  (`Image.open`/`verify` user base64 thumbnail'de) + converters/thumbnail.
+  `pip-audit` 20 açık raporluyor, hepsi **12.3.0**'da fixli. Senaryo: authenticated
+  kullanıcı crafted PNG POST'lar → decoder heap/buffer sorunları → crash/DoS/memory
+  corruption. Düzeltme: `pillow>=12.3.0`, pin güncelle (tek satır).
+- **Y3 — Org-creator/admin olan kullanıcı silinemiyor (FK RESTRICT).**
+  `models.py:156` (`Organization.created_by`, `ondelete` yok), `models.py:749`
+  (`AdminAuditLog.actor_id`, `ondelete` yok); ikisi de FK-rules migration'ında
+  (`8d4e1f7a2b9c`) yok. Canlı SQL ile kanıtlandı: user+org+audit ekle, `DELETE FROM
+  user` → `IntegrityError: FOREIGN KEY constraint failed`. Admin "Delete user"
+  → `{"success": false, "error": "Delete failed"}` (`admin.py:779-782`); bulk delete
+  tek transaction, bir org-creator batch'in tamamını düşürüyor. Düzeltme: migration
+  ile `admin_audit_log.actor_id` → `SET NULL`; `organization.created_by` politikası
+  belirle (`SET NULL`+nullable veya `_delete_user_and_content`'te org'ları önce reassign).
+- **Y4 — Version download unlisted/public modelin tüm geçmişini herkese açıyor (2 P0 testi kırık, KANITLI).**
+  `blueprints/versions.py:171` (`check_model_view_allowed` — view-tier),
+  `services/model_access.py:56` (yalnızca `visibility=="private"` bloklanıyor),
+  varsayılan görünürlük `models.py:273` (`"unlisted"`). `tests/test_p0_hardening.py:103,109`
+  anonim ve başka-kullanıcı için 403 bekliyor, ikisi de **200** alıyor. Private
+  korunuyor (non-owner 403), unlisted/public'te link'i olan herkes tüm versiyon
+  GLB'lerini indirebiliyor. Kod yorumu (`versions.py:167-170`) view-tier'i bilinçli
+  gerekçelendiriyor → **insan kararı gerek:** ya version download owner/share-gated
+  yapılsın (`check_model_mutation_allowed`), ya da 2 P0 test güncellensin.
 
 ### 🟡 Orta
-- _(henüz yok)_
+- **O1 — MTL allowlist eksik.** `converters/obj_converter.py:17-20` (`_MTL_FILE_KEYS`)
+  `map_ns`, PBR map'leri (`map_pr/pm/ps/...`) kapsamıyor; obj2gltf bunları çözüp
+  açıyor → kapsanmayan key altında traversal validate edilmiyor. Düzeltme: obj2gltf'in
+  tüm `map_*` direktiflerini allowlist'e al veya generic dosya-referansı taraması.
+- **O2 — OBJ converter'da mesh karmaşıklık guard'ı yok.** `converters/obj_converter.py:292,338`
+  (`trimesh.load` limitsiz); STL (`stl_converter.py:154-162`) ve STEP
+  (`step_converter.py:162-185`) `MAX_MESH_FACES` uyguluyor. Crafted büyük OBJ →
+  bellek/latency. Düzeltme: aynı guard'ı obj2gltf çıktısından sonra uygula.
+- **O3 — Webhook SSRF redirect bypass.** `services/webhooks.py:135` (`requests.post`,
+  `allow_redirects` default True). Guard yalnızca orijinal hostname'i pinliyor;
+  302 `Location: http://169.254.169.254/...` takip edilerek internal/metadata'ya
+  ulaşılıyor (blind SSRF). Düzeltme: `allow_redirects=False` (veya her hop'ta
+  `_resolve_safe_ips`).
+- **O4 — Login `next` açık yönlendirme (backslash).** `auth.py:87-88`.
+  `urlparse('/\\evil.com').netloc == ''` → güvenli sanılıyor; `?next=/\evil.com`
+  → tarayıcı `\`→`/` normalize edip `//evil.com`'a gidiyor (phishing). Düzeltme:
+  `startswith('/')` ve `not startswith(('//','/\\'))`, ya da
+  `url_has_allowed_host_and_scheme`. (Tarayıcıya bağlı — bkz. D3.)
+- **O5 — Ham exception string'i client'a sızıyor (yaygın).** `hotspots.py`,
+  `versions.py:49,107,136,158,195`, `model_editing.py:126,240,480,525,737`,
+  `models_crud.py:383,476,540,580,612,659,693,737`, `scenes.py:61-63,82`
+  (`jsonify({"error": str(e)}), 500`). Absolute path/trimesh/SQLAlchemy iç bilgisi
+  sızıyor. Düzeltme: `str(e)`'yi logla, generic mesaj dön.
+- **O6 — `generate_3d` DB row lock'unu Meshy HTTP boyunca tutuyor.**
+  `blueprints/ai_generation.py:70`→`:143`. User row `FOR UPDATE` kilitli kalıp
+  Meshy round-trip'i bekliyor → connection pool tükenmesi. Düzeltme: allowance'ı
+  kısa kilitte düş+commit, external çağrıyı kilit dışına al.
+- **O7 — `/discover` tüm public katalogu belleğe çekip Python'da paginate ediyor.**
+  `blueprints/discover.py:26,33` (`query...all()` sonra slice). Unauthenticated,
+  N ile lineer bellek/latency DoS. Düzeltme: SQL `LIMIT/OFFSET` + `+1` ile `has_more`.
+  (Backend ve DB ajanları ortak buldu.)
+- **O8 — Engagement sayaçları throttle'sız/anonim.** `blueprints/engagement.py:82-93`
+  (`track_share`), `:96-107` (`track_download`, CSRF-exempt). Anonim caller
+  `share_count`/`download_count` şişirebilir + sınırsız `ModelAnalyticsEvent` satırı
+  → analytics bozulması + DB büyüme DoS. Düzeltme: per-IP rate limit + dedup.
+- **O9 — `UserModel.user_id` ve `folder_id` index eksik (en sık filtre).**
+  `models.py:249,250`. `/my_models`, admin user-detail/delete, storage aggregation
+  full-scan. Düzeltme: `index=True` + migration (`ix_user_model_user_id`,
+  `ix_user_model_folder_id`).
+- **O10 — LemonSqueezy renewal iki ayrı commit → kalıcı strand.** `blueprints/billing.py:314-327`.
+  Pending renewal commit'lenip (`:325-326`) sonra `_apply_successful_payment` ayrı
+  commit (`:362`); arada crash olursa redelivery guard (`:310`) pending satırı görüp
+  branch'i atlıyor → plan hiç uzatılmıyor, self-heal yok. Düzeltme: create+apply
+  tek transaction, veya redelivery'de pending renewal'ı yeniden uygula.
+- **O11 — Health check storage'ı yansıtmıyor + worker ölümü web probe'unu 503 yapıyor.**
+  `blueprints/health.py:17-39`. DB `SELECT 1` (iyi) ve `JOB_QUEUE=true`'da worker
+  heartbeat kontrol ediliyor ama disk/writability hiç kontrol edilmiyor (dolu volume
+  → 200). Ayrıca worker liveness `/healthz`'e bağlı → ölü worker web instance'ını
+  LB'den düşürebilir. Düzeltme: storage writability probe ekle; worker liveness'i
+  ayrı path'e (`/healthz/worker`) taşı.
+- **O12 — Comment/camera-view submit'inde debounce yok → çift kayıt.**
+  `static/js/viewer/annotations.js:264-279` (comment), `:18-43` (Save Camera View).
+  Çift-tık iki POST → iki kayıt (input/`savedViews` yanıt dönene dek güncellenmiyor).
+  Düzeltme: handler başında butonu disable et, `.then/.catch`'te geri aç.
 
 ### 🔵 Düşük
-- _(henüz yok)_
+- **D-L1 — View-tier dosya route'u backup/intermediate GLB'leri veriyor.**
+  `blueprints/model_files.py:35-75`. `model_backup_<ts>.glb`, `modified_<ts>.glb`,
+  `temp_*.glb` (ts = `int(time.time())`, tahmin edilebilir) view-only share ile
+  indirilebiliyor → pre-edit/sliced geometri sızıntısı. Düzeltme: served filename
+  allowlist'i.
+- **D-L2 — `create_hotspot`/`create_camera_view` numeric coercion yok.**
+  `blueprints/hotspots.py:58-83,296-306`. `create_measurement` (`:347-356`) `float()`
+  sarıyor; bunlar ham JSON'u float kolonlara yazıyor → Postgres'te yanlış tip commit'te
+  500 (O5 leak'iyle), NaN/Inf kabul. Düzeltme: `float()` ile coerce/validate.
+- **D-L3 — Color/material mutasyonları stale `model.filename` path'ine yazıyor.**
+  `blueprints/models_crud.py:210-218`, `blueprints/material_presets.py:125-134`.
+  Kod geri kalanı `model.glb_path` kullanıyor (volume remount'ta `filename` stale
+  oluyor — `model_editing.py:500-511`). Düzeltme: `model.glb_path` kullan.
+- **D-L4 — Mutation policy anonim+token-hash'siz modelde ALLOW'a düşüyor.**
+  `services/model_access.py:42-47`. `user_id is None` ve `edit_token_hash` falsy ise
+  `AccessDecision(True)`. Şu an erişilemiyor (her anonim upload token hash set ediyor)
+  ama latent full auth-bypass. Düzeltme: ne ownership ne token-hash yoksa default-deny.
+- **D-L5 — İlk upload GLB'si atomik değil.** `app.py:2000` (`shutil.copy2`), `:2009`.
+  Disk dolarsa truncated `model.glb` kalır; ama `UserModel` satırı yalnızca başarıda
+  eklendiği için orphan (serve edilmez) — disk leak, served-corruption değil. Düzeltme
+  (ops.): `.tmp` + `os.replace`; büyük yazımlardan önce free-space preflight.
+- **D-L6 — Read-only demo viewer editing JS içeriyor (1 test kırık, template drift).**
+  `tests/test_home_viewer_demo.py:27`. `/demo/viewer` `ar-slicer-layers.js` içeriyor
+  (test yokluğunu assert ediyor). Güvenlik açığı değil (mutasyonlar server-guarded)
+  ama "read-only" niyetiyle çelişik. Düzeltme: demo template'inden slicer `<script>`'i
+  çıkar veya testi güncelle.
+- **D-L7 — Save sonrası camera PATCH sessizce düşebilir.** `static/js/viewer/save-flow.js:132-141`.
+  `viewer-settings` PATCH `try/catch` ile yutulup koşulsuz `reload()`; başarısız
+  olursa hazırlanan kamera görünümü kaybolur, uyarı yok. Düzeltme: PATCH başarısızsa
+  non-blocking uyarı ver.
+- **D-L8 — Tutarsız escape (bugün exploit değil).** `versions.js:143`
+  (`v.file_size_formatted` escape'siz), `ar-slicer-layers.js:806` (`origColorHex`
+  attribute'a escape'siz). Server-üretimli → şu an güvenli; tutarlılık için `escapeHtml`.
+- **D-L9 — Diğer.** STL guard'dan önce belleğe yükleniyor (`stl_converter.py:118`);
+  `Plan.price` Integer, cent ifade edemez (`models.py:771`); ikincil unindexed FK'ler
+  (`CameraView.model_id:578`, `HotspotComment.user_id:475`, `ConversionJob.user_id:882`);
+  `/my_models` folder döngüsü N+1 (`models_crud.py:57-62`); login'de session rotate
+  edilmiyor (signed-cookie olduğu için pratikte mitigasyonlu, `auth.py:79-89`).
 
 ### ❓ Doğrulanmadı (spekülatif — `muhtemelen`)
-- _(henüz yok)_
+- **D1 — K1 erişilebilirliği:** FBX2glTF'in ham traversal `uri`'yi verbatim external
+  `image.uri` olarak emit ettiği çalıştırılarak doğrulanmadı. Kod düzeyinde açık kesin;
+  **muhtemelen erişilebilir**.
+- **D2 — obj2gltf'in çözdüğü tam MTL key seti** (O1): paket ağaçta vendored değildi,
+  hangi `map_*` key'lerinin dosya açtığı **muhtemelen** map listesi kadar.
+- **D3 — O4 tarayıcı bağımlı:** `\`→`/` normalizasyonu Chrome/Edge'de var; guard bypass
+  kod düzeyinde kesin, exploit **muhtemelen** tarayıcıya bağlı.
+
+---
+
+## Test Durumu (Tur 1)
+
+- **646 passed · 3 failed · 2 skipped** (~368s). **3 kırığın hepsi GERÇEK, ortam değil.**
+  - `test_p0_hardening.py::test_download_version_blocks_other_users` → **Y4**
+  - `test_p0_hardening.py::test_download_version_requires_login_for_owned_model` → **Y4**
+  - `test_home_viewer_demo.py::test_demo_viewer_is_static_read_only_and_not_indexable` → **D-L6**
+- `test_step_converter.py` (cascadio ile) ve `test_thumbnail_render.py` **PASS** — bu
+  oturumda ortam sorunu görünmüyor. Native deps (numpy/trimesh/...) mevcut.
+- Stderr'deki `no such table: conversion_job` → per-test SQLite teardown'ı yarışan
+  daemon thread'lerden gelen **warning**, test failure değil (kozmetik gürültü).
+
+## Kapsam (services/blueprints/converters — toplam %66)
+
+- **Riskli-düşük kapsam:** `services/payments/paytr.py` **%57** (callback/verify gövdesi
+  test edilmemiş — en yüksek riskli boşluk), `auth.py` **%59** (register+referral,
+  change-password happy path'leri test edilmemiş), `fbx_converter.py` **%8**,
+  `obj_converter.py` **%11**, `model_files.py` **%27**.
+- **İyi kapsam:** `model_access.py` %91, `model_permissions.py` %96,
+  `conversion_jobs.py` %100, `storage.py` %89, `webhooks.py` %85.
+- Playwright e2e (`tests/e2e/`) bu turda **çalıştırılmadı** (browser).
+
+## Operasyonel cevaplar (Tur 1)
+
+- Worker crash → web etkilenmiyor (ayrı process); restart'ta `requeue_stale_jobs()`
+  (`worker.py:180`) poison-pill korumasıyla düzgün devam ediyor. Postgres job-claim
+  `FOR UPDATE SKIP LOCKED` (`worker.py:88`) — iki worker aynı job'ı alamaz.
+- Disk full → mevcut dosyalar atomic write'la korunuyor; ilk-upload GLB'si hariç
+  (D-L5). Fiziksel free-space preflight yok (yalnızca logical quota).
+- Log leak → `observability.py` temiz (body/header/secret loglamıyor); artık risk
+  yalnızca caller-side, aktif sızıntı bulunmadı.
 
 ---
 
@@ -256,13 +431,13 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
 
 | Bölüm | Durum | Not |
 |-------|-------|-----|
-| 0. Ortam ön-kontrolü | ⬜ | |
-| 1. Backend/route | ⬜ | |
-| 2. Converter pipeline | ⬜ | |
-| 3. Güvenlik | ⬜ | |
-| 4. Veritabanı | ⬜ | |
-| 5. Frontend/JS | ⬜ | |
-| 6. Operasyonel | ⬜ | |
-| 7. Test kapsamı | ⬜ | |
+| 0. Ortam ön-kontrolü | ✅ | Tur 1: tek head, native OK, 651 test toplandı |
+| 1. Backend/route | ✅ | Tur 1: Y1, O5/O6/O7/O8, D-L1..4 |
+| 2. Converter pipeline | ✅ | Tur 1: K1, O1/O2, D-L9 |
+| 3. Güvenlik | ✅ | Tur 1: Y2, O3/O4; ödeme/CSRF/path-traversal sağlam |
+| 4. Veritabanı | ✅ | Tur 1: Y3, O9/O10; migration zinciri temiz |
+| 5. Frontend/JS | ✅ | Tur 1: O12, D-L6/L7/L8; frontend iyi sertleşmiş |
+| 6. Operasyonel | ✅ | Tur 1: O11, D-L5; worker/log sağlam |
+| 7. Test kapsamı | ✅ | Tur 1: 646/3/2, 3 kırık gerçek; kapsam %66 |
 
 _Legend: ⬜ başlanmadı · 🔄 devam · ✅ bitti_

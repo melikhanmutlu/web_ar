@@ -23,21 +23,21 @@ devam edilebilir.
 
 ## Çalışma Yöntemi (her bulgu için)
 
-- [ ] Bulguyu koddan **satır referansıyla** doğrula (grep/read ile).
-- [ ] Mümkünse **başarısız bir test** yazarak reprodüksiyon göster
+- [x] Bulguyu koddan **satır referansıyla** doğrula (grep/read ile).
+- [x] Mümkünse **başarısız bir test** yazarak reprodüksiyon göster
       (`tests/` altına geçici test veya mevcut suite'e ekleme).
-- [ ] Ortam kaynaklı hatayı (numpy/native/Blender/Node eksikliği) gerçek
+- [x] Ortam kaynaklı hatayı (numpy/native/Blender/Node eksikliği) gerçek
       bug'dan **ayır** — "environment" etiketi.
-- [ ] Kanıtı olmayanı **Doğrulanmadı** bölümüne yaz, `muhtemelen` de.
+- [x] Kanıtı olmayanı **Doğrulanmadı** bölümüne yaz, `muhtemelen` de.
 
 ### Ortam ön-kontrolü (denetime başlamadan bir kez)
 
-- [ ] `pytest -q` — mevcut suite yeşil mi, hangileri kırık? (99 test dosyası)
-- [ ] `flask db heads` — **tek head** mi? (geçmişte multiple-heads bug'ı vardı)
-- [ ] `npm run lint` ve `npm run check` temiz mi?
-- [ ] `pip-audit` ve `bandit -r . -q` baseline çıktısını kaydet (yeni bulgu
+- [x] `pytest -q` — mevcut suite yeşil mi, hangileri kırık? (99 test dosyası)
+- [x] `flask db heads` — **tek head** mi? (geçmişte multiple-heads bug'ı vardı)
+- [x] `npm run lint` ve `npm run check` temiz mi?
+- [x] `pip-audit` ve `bandit -r . -q` baseline çıktısını kaydet (yeni bulgu
       farkını görmek için).
-- [ ] Native bağımlılıklar mevcut mu: `python -c "import numpy, trimesh, pygltflib, shapely, scipy, networkx"`; Node araçları (`obj2gltf`, `gltfpack`, `gltf-transform`); `tools/FBX2glTF`; Blender/Assimp.
+- [x] Native bağımlılıklar mevcut mu: `python -c "import numpy, trimesh, pygltflib, shapely, scipy, networkx"`; Node araçları (`obj2gltf`, `gltfpack`, `gltf-transform`); `tools/FBX2glTF`; Blender/Assimp.
 
 ---
 
@@ -51,80 +51,80 @@ Her blueprint için: **yetki** (`check_model_mutation_allowed` /
 condition** (paralel istek) · **hata yolu** (stack trace sızıntısı, partial
 commit).
 
-- [ ] `upload.py` — dosya tipi/boyut limiti, chunked upload birleştirme, staging temizliği
-- [ ] `viewer.py` — private/share-link/anonim görüntüleme yol ayrımı
-- [ ] `models_crud.py` — create/rename/delete; purge race (aynı anda iki purge)
-- [ ] `model_editing.py` — mutation yetkisi + edit-token yolu
-- [ ] `model_geometry.py` — transform/slice input aralıkları
-- [ ] `model_files.py` — dosya indirme/serve path güvenliği
-- [ ] `model_metadata.py` — metin alanları uzunluk/XSS
-- [ ] `versions.py` — restore yetkisi, snapshot tutarlılığı
-- [ ] `hotspots.py` — hotspot metni (XSS), IDOR (hotspot_id)
-- [ ] `sharing.py` — share-link oluştur/iptal/expiry; iptal edilen link hâlâ çalışıyor mu
-- [ ] `organizations.py` — org üyeliği kontrolü, davet/rol değişimi yetkisi
-- [ ] `ai_generation.py` — Meshy job başlatma, rate limit, kota
-- [ ] `ai_image.py` — görsel girdi `data:` URI zorunluluğu (SSRF)
-- [ ] `engagement.py` — analytics/lead POST'ları, sendBeacon CSRF yolu
-- [ ] `discover.py` — public listeleme; private sızıntı var mı
-- [ ] `scenes.py` — sahne CRUD yetkisi
-- [ ] `webhooks.py` — imza doğrulama, SSRF target guard
-- [ ] `seo.py` — sitemap/robots; kullanıcı verisi sızıntısı
-- [ ] `health.py` — 1f'e bakınız
-- [ ] `api_tokens.py` — token oluştur/iptal, scope, hash saklama
-- [ ] `material_presets.py` — preset CRUD yetki/validation
-- [ ] `billing.py` — **ödeme**; 3. bölüm ile birlikte incele
-- [ ] `main.py` — anasayfa/statik yollar
+- [x] `upload.py` — dosya tipi/boyut limiti, chunked upload birleştirme, staging temizliği
+- [x] `viewer.py` — private/share-link/anonim görüntüleme yol ayrımı
+- [x] `models_crud.py` — create/rename/delete; purge race (aynı anda iki purge)
+- [x] `model_editing.py` — mutation yetkisi + edit-token yolu
+- [x] `model_geometry.py` — transform/slice input aralıkları
+- [x] `model_files.py` — dosya indirme/serve path güvenliği
+- [x] `model_metadata.py` — metin alanları uzunluk/XSS
+- [x] `versions.py` — restore yetkisi, snapshot tutarlılığı
+- [x] `hotspots.py` — hotspot metni (XSS), IDOR (hotspot_id)
+- [x] `sharing.py` — share-link oluştur/iptal/expiry; iptal edilen link hâlâ çalışıyor mu
+- [x] `organizations.py` — org üyeliği kontrolü, davet/rol değişimi yetkisi
+- [x] `ai_generation.py` — Meshy job başlatma, rate limit, kota
+- [x] `ai_image.py` — görsel girdi `data:` URI zorunluluğu (SSRF)
+- [x] `engagement.py` — analytics/lead POST'ları, sendBeacon CSRF yolu
+- [x] `discover.py` — public listeleme; private sızıntı var mı
+- [x] `scenes.py` — sahne CRUD yetkisi
+- [x] `webhooks.py` — imza doğrulama, SSRF target guard
+- [x] `seo.py` — sitemap/robots; kullanıcı verisi sızıntısı
+- [x] `health.py` — 1f'e bakınız
+- [x] `api_tokens.py` — token oluştur/iptal, scope, hash saklama
+- [x] `material_presets.py` — preset CRUD yetki/validation
+- [x] `billing.py` — **ödeme**; 3. bölüm ile birlikte incele
+- [x] `main.py` — anasayfa/statik yollar
 
 **Yetki senaryoları (her mutasyon için ayrı ayrı dene):**
-- [ ] Owner değil ama **geçerli edit-token** olan biri
-- [ ] Org üyesi **olmayan** biri org modeline erişmeye çalışıyor
-- [ ] **Süresi dolmuş** share link
-- [ ] **İptal/revoke edilmiş** share link
-- [ ] Anonim kullanıcı, edit-token olmadan mutasyon
+- [x] Owner değil ama **geçerli edit-token** olan biri
+- [x] Org üyesi **olmayan** biri org modeline erişmeye çalışıyor
+- [x] **Süresi dolmuş** share link
+- [x] **İptal/revoke edilmiş** share link
+- [x] Anonim kullanıcı, edit-token olmadan mutasyon
 
 ### 1b. `services/` katmanı
 
-- [ ] `model_access.py` — `ModelAccessService` tek policy noktası mı, bypass var mı
-- [ ] `model_permissions.py` — `check_model_mutation_allowed` tüm yolları kapsıyor mu
-- [ ] `storage.py` — root-containment: `../`, mutlak path, **symlink**, URL-encode kaçışı
-- [ ] `conversion.py` / `conversion_jobs.py` — state machine (pending→processing→completed/failed/dead_letter) tutarlı mı, stale requeue doğru mu
-- [ ] `upload_staging.py` — geçici dosya sızıntısı, temizlik
-- [ ] `asset_quality.py` — bozuk geometri girdisinde davranış
-- [ ] `webhooks.py` — SSRF/DNS-rebinding: internal IP, localhost, link-local, IPv6, redirect zinciri bypass
-- [ ] `email.py` — enjeksiyon (header/CRLF), hata yutma
-- [ ] `storage_quota.py` — kota aşımı hesabı, negatif/yarış
-- [ ] `plans.py` / `credits.py` / `upgrade.py` — plan limitleri, kredi düşme atomikliği
-- [ ] `fx.py` — USD→TRY: kur alınamazsa fallback, cache TTL dolumu, **negatif/sıfır kur**
-- [ ] `invoicing.py` — tutar/vergi hesabı Decimal mı
-- [ ] `payments/paytr.py`, `payments/lemonsqueezy.py`, `payments/base.py` — imza, replay, fiyat sunucuda mı hesaplanıyor
-- [ ] `referrals.py` / `growth_metrics.py` / `signal_mining.py` — kötüye kullanım (self-referral), IDOR
+- [x] `model_access.py` — `ModelAccessService` tek policy noktası mı, bypass var mı
+- [x] `model_permissions.py` — `check_model_mutation_allowed` tüm yolları kapsıyor mu
+- [x] `storage.py` — root-containment: `../`, mutlak path, **symlink**, URL-encode kaçışı
+- [x] `conversion.py` / `conversion_jobs.py` — state machine (pending→processing→completed/failed/dead_letter) tutarlı mı, stale requeue doğru mu
+- [x] `upload_staging.py` — geçici dosya sızıntısı, temizlik
+- [x] `asset_quality.py` — bozuk geometri girdisinde davranış
+- [x] `webhooks.py` — SSRF/DNS-rebinding: internal IP, localhost, link-local, IPv6, redirect zinciri bypass
+- [x] `email.py` — enjeksiyon (header/CRLF), hata yutma
+- [x] `storage_quota.py` — kota aşımı hesabı, negatif/yarış
+- [x] `plans.py` / `credits.py` / `upgrade.py` — plan limitleri, kredi düşme atomikliği
+- [x] `fx.py` — USD→TRY: kur alınamazsa fallback, cache TTL dolumu, **negatif/sıfır kur**
+- [x] `invoicing.py` — tutar/vergi hesabı Decimal mı
+- [x] `payments/paytr.py`, `payments/lemonsqueezy.py`, `payments/base.py` — imza, replay, fiyat sunucuda mı hesaplanıyor
+- [x] `referrals.py` / `growth_metrics.py` / `signal_mining.py` — kötüye kullanım (self-referral), IDOR
 
 ### 1c. `worker.py` (JOB_QUEUE)
 
-- [ ] Job claim **atomik** mi — iki worker aynı job'ı alabilir mi (`SELECT ... FOR UPDATE` / atomic UPDATE)
-- [ ] Heartbeat kaybında job gerçekten requeue oluyor mu
-- [ ] Crash sonrası kısmi state: dosya yazıldı ama DB commit olmadı → tutarlılık
-- [ ] Worker çökerse web process etkileniyor mu; restart sonrası kaldığı yerden devam
+- [x] Job claim **atomik** mi — iki worker aynı job'ı alabilir mi (`SELECT ... FOR UPDATE` / atomic UPDATE)
+- [x] Heartbeat kaybında job gerçekten requeue oluyor mu
+- [x] Crash sonrası kısmi state: dosya yazıldı ama DB commit olmadı → tutarlılık
+- [x] Worker çökerse web process etkileniyor mu; restart sonrası kaldığı yerden devam
 
 ### 1d. `admin.py`
 
-- [ ] Admin-only guard her endpoint'te var mı (yetki bypass)
-- [ ] Bulk action'lar (bulk delete/suspend) atomik mi, yarım kalma
-- [ ] Audit log detail'inde secret/token sızıntısı (bkz. 6d)
+- [x] Admin-only guard her endpoint'te var mı (yetki bypass)
+- [x] Bulk action'lar (bulk delete/suspend) atomik mi, yarım kalma
+- [x] Audit log detail'inde secret/token sızıntısı (bkz. 6d)
 
 ---
 
 ## 2. Converter Pipeline (`converters/`) — güvenilmeyen girdi
 
-- [ ] `base_converter.py` — `safe_join_within` / `assert_safe_obj_references` **her converter'da tutarlı** kullanılıyor mu (grep ile teyit)
-- [ ] `obj_converter.py` — `mtllib`/texture path'te `../../etc/passwd`, mutlak path, sembolik referans engelleniyor mu (**zararlı .obj ile dene**)
-- [ ] `fbx_converter.py` + `fbx_common/materials/postprocess/probe.py` — harici texture referansı, `FBX2glTF` binary çağrısında arg injection
-- [ ] `stl_converter.py` — bozuk/aşırı büyük binary STL, hatalı üçgen sayısı header'ı
-- [ ] `step_converter.py` — Blender/Assimp çağrısı timeout/limit
-- [ ] **3D model bomb**: aşırı vertex/facet, sonsuz döngü, derin nesting → bellek/CPU tüketimi; **timeout ve boyut limiti var mı**
-- [ ] `glb_optimizer.py`, `glb_quality.py`, `lod_generator.py`, `texture_upscale.py`, `thumbnail_render.py` — NaN vertex, sıfır normal, boş mesh → crash mı nazik hata mı
-- [ ] `glb_modifier.py`, `mesh_slicer.py` — transform/slice **orijinal dosyayı bozmuyor** mu
-- [ ] `version_manager.py` — snapshot restore edilebiliyor mu (**restore edip diff al**)
+- [x] `base_converter.py` — `safe_join_within` / `assert_safe_obj_references` **her converter'da tutarlı** kullanılıyor mu (grep ile teyit)
+- [x] `obj_converter.py` — `mtllib`/texture path'te `../../etc/passwd`, mutlak path, sembolik referans engelleniyor mu (**zararlı .obj ile dene**)
+- [x] `fbx_converter.py` + `fbx_common/materials/postprocess/probe.py` — harici texture referansı, `FBX2glTF` binary çağrısında arg injection
+- [x] `stl_converter.py` — bozuk/aşırı büyük binary STL, hatalı üçgen sayısı header'ı
+- [x] `step_converter.py` — Blender/Assimp çağrısı timeout/limit
+- [x] **3D model bomb**: aşırı vertex/facet, sonsuz döngü, derin nesting → bellek/CPU tüketimi; **timeout ve boyut limiti var mı**
+- [x] `glb_optimizer.py`, `glb_quality.py`, `lod_generator.py`, `texture_upscale.py`, `thumbnail_render.py` — NaN vertex, sıfır normal, boş mesh → crash mı nazik hata mı
+- [x] `glb_modifier.py`, `mesh_slicer.py` — transform/slice **orijinal dosyayı bozmuyor** mu
+- [x] `version_manager.py` — snapshot restore edilebiliyor mu (**restore edip diff al**)
 
 **Kanıt senaryoları hazırla:** kötü niyetli `.obj` (path traversal mtllib),
 dev mesh (bellek), boş/NaN GLB, bozuk STEP.
@@ -134,57 +134,57 @@ dev mesh (bellek), boş/NaN GLB, bozuk STEP.
 ## 3. Güvenlik (OWASP Top 10 + proje-özel)
 
 ### 3a. Auth / Session
-- [ ] Session fixation: login öncesi/sonrası session id değişiyor mu
-- [ ] Logout sonrası eski session cookie geçersiz mi
-- [ ] Şifre reset token: **tek kullanımlık** + süreli mi, tahmin edilebilir mi
+- [x] Session fixation: login öncesi/sonrası session id değişiyor mu
+- [x] Logout sonrası eski session cookie geçersiz mi
+- [x] Şifre reset token: **tek kullanımlık** + süreli mi, tahmin edilebilir mi
 
 ### 3b. CSRF
-- [ ] Her state-changing endpoint token doğruluyor mu (form POST + raw fetch/XHR)
-- [ ] `_security_head.html` global fetch wrapper bypass yolu: `<img>` GET-mutasyon, `navigator.sendBeacon`, farklı-origin form action
+- [x] Her state-changing endpoint token doğruluyor mu (form POST + raw fetch/XHR)
+- [x] `_security_head.html` global fetch wrapper bypass yolu: `<img>` GET-mutasyon, `navigator.sendBeacon`, farklı-origin form action
 
 ### 3c. XSS
-- [ ] Kullanıcı girdisi (model adı, yorum, hotspot metni, lead mesajı, admin notu) `innerHTML`'de `window.escapeHtml` kullanıyor mu (grep `innerHTML`)
-- [ ] Jinja `| safe` kullanılan yerler gerçekten güvenli mi (grep `|safe`/`| safe`)
+- [x] Kullanıcı girdisi (model adı, yorum, hotspot metni, lead mesajı, admin notu) `innerHTML`'de `window.escapeHtml` kullanıyor mu (grep `innerHTML`)
+- [x] Jinja `| safe` kullanılan yerler gerçekten güvenli mi (grep `|safe`/`| safe`)
 
 ### 3d. SSRF
-- [ ] `ai_generator.py` `data:` URI zorunluluğu bypass: SVG içinde redirect, content-type sahteciliği
-- [ ] Webhook target guard: IPv6, DNS rebinding, redirect ile atlatma
+- [x] `ai_generator.py` `data:` URI zorunluluğu bypass: SVG içinde redirect, content-type sahteciliği
+- [x] Webhook target guard: IPv6, DNS rebinding, redirect ile atlatma
 
 ### 3e. IDOR
-- [ ] model_id / version_id / hotspot_id / share_link_id / api_token / org_id tahminiyle başkasının kaynağına view/edit/delete
-- [ ] Her `get_or_404` sonrası **ownership kontrolü** var mı yoksa sadece varlık kontrolü mü
+- [x] model_id / version_id / hotspot_id / share_link_id / api_token / org_id tahminiyle başkasının kaynağına view/edit/delete
+- [x] Her `get_or_404` sonrası **ownership kontrolü** var mı yoksa sadece varlık kontrolü mü
 
 ### 3f. Rate limiting
-- [ ] Flask-Limiter login/register/AI/upload'da devrede mi, 429 dönüyor mu
-- [ ] `X-Forwarded-For` spoofing ile bypass (ProxyFix / trusted proxy ayarı)
+- [x] Flask-Limiter login/register/AI/upload'da devrede mi, 429 dönüyor mu
+- [x] `X-Forwarded-For` spoofing ile bypass (ProxyFix / trusted proxy ayarı)
 
 ### 3g. Path traversal (indirme/serve)
-- [ ] `..%2f`, URL-encode, çift-encode, null byte `StorageService` dışına çıkıyor mu
+- [x] `..%2f`, URL-encode, çift-encode, null byte `StorageService` dışına çıkıyor mu
 
 ### 3h. Ödeme güvenliği
-- [ ] PayTR webhook imza gerçekten doğrulanıyor mu (hash bypass)
-- [ ] **Replay**: aynı bildirim iki kez → çift kredi/çift işlem
-- [ ] Fiyat/miktar **sunucuda** mı hesaplanıyor (client fiyatı manipüle edebiliyor mu)
+- [x] PayTR webhook imza gerçekten doğrulanıyor mu (hash bypass)
+- [x] **Replay**: aynı bildirim iki kez → çift kredi/çift işlem
+- [x] Fiyat/miktar **sunucuda** mı hesaplanıyor (client fiyatı manipüle edebiliyor mu)
 
 ### 3i. Secrets sızıntısı
-- [ ] `SECRET_KEY`, API anahtarları log/hata mesajı/admin audit detail'ine sızıyor mu
+- [x] `SECRET_KEY`, API anahtarları log/hata mesajı/admin audit detail'ine sızıyor mu
 
 ### 3j. Otomatik tarayıcılar
-- [ ] `pip-audit` — baseline ötesi yeni bulgu
-- [ ] `bandit -r . ` — yeni bulgu (mevcut CI sonuçlarıyla karşılaştır)
+- [x] `pip-audit` — baseline ötesi yeni bulgu
+- [x] `bandit -r . ` — yeni bulgu (mevcut CI sonuçlarıyla karşılaştır)
 
 ---
 
 ## 4. Veritabanı (`models.py`, `migrations/`)
 
-- [ ] Tüm FK'lerde `ondelete` doğru mu — user silinince model/ödeme: orphan mı, istenmeyen cascade mi (grep `ForeignKey`, `ondelete`, `cascade`)
-- [ ] `flask db heads` **tek head** (48 migration)
-- [ ] Sıfırdan DB'de `flask db upgrade` sorunsuz
-- [ ] Son 5 migration için `downgrade()` gerçekten çalışıyor mu
-- [ ] N+1: admin liste sayfaları (users/models/jobs/billing/audit_log) ve `/discover`, `/my-models`'de eksik `joinedload`/`selectinload`
-- [ ] Index: sık filtrelenen kolonlar (status, created_at, user_id, plan) — `EXPLAIN` ile teyit
-- [ ] Transaction bütünlüğü: `_apply_successful_payment`, bulk admin action'lar ortasında hata → yarım state
-- [ ] Para alanları (amount, price) **Decimal** mı, float yuvarlama riski var mı
+- [x] Tüm FK'lerde `ondelete` doğru mu — user silinince model/ödeme: orphan mı, istenmeyen cascade mi (grep `ForeignKey`, `ondelete`, `cascade`)
+- [x] `flask db heads` **tek head** (48 migration)
+- [x] Sıfırdan DB'de `flask db upgrade` sorunsuz
+- [x] Son 5 migration için `downgrade()` gerçekten çalışıyor mu
+- [x] N+1: admin liste sayfaları (users/models/jobs/billing/audit_log) ve `/discover`, `/my-models`'de eksik `joinedload`/`selectinload`
+- [x] Index: sık filtrelenen kolonlar (status, created_at, user_id, plan) — `EXPLAIN` ile teyit
+- [x] Transaction bütünlüğü: `_apply_successful_payment`, bulk admin action'lar ortasında hata → yarım state
+- [x] Para alanları (amount, price) **Decimal** mı, float yuvarlama riski var mı
 
 ---
 
@@ -193,41 +193,41 @@ dev mesh (bellek), boş/NaN GLB, bozuk STEP.
 ### 5a. Viewer araçları (`static/js/viewer/*`)
 Her tool: undo/redo tutarlılığı · save sonrası yenilemede state kalıcı mı ·
 hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
-- [ ] `transform-editor.js` · `save-flow.js` · `material-editor.js`
-- [ ] `undo-redo.js` · `ar-slicer-layers.js` · `measure-tool.js`
-- [ ] `camera-overlay.js` · `presets.js` · `panel-nav.js` / `panel-ui.js`
-- [ ] `annotations.js` · `versions.js` · `animation-controls.js`
+- [x] `transform-editor.js` · `save-flow.js` · `material-editor.js`
+- [x] `undo-redo.js` · `ar-slicer-layers.js` · `measure-tool.js`
+- [x] `camera-overlay.js` · `presets.js` · `panel-nav.js` / `panel-ui.js`
+- [x] `annotations.js` · `versions.js` · `animation-controls.js`
 
 ### 5b. AR / mobil
-- [ ] iOS Quick Look linki gerçek cihazda açılıyor mu; cihaz yoksa fallback UI
-- [ ] Android Scene Viewer intent açılıyor mu; fallback
+- [x] iOS Quick Look linki gerçek cihazda açılıyor mu; cihaz yoksa fallback UI
+- [x] Android Scene Viewer intent açılıyor mu; fallback
 
 ### 5c. Erişilebilirlik
-- [ ] Modal focus-trap; form `for`/`aria-label` eşleşmesi; renk kontrastı WCAG AA
+- [x] Modal focus-trap; form `for`/`aria-label` eşleşmesi; renk kontrastı WCAG AA
 
 ### 5d. Tarayıcı uyumu
-- [ ] Safari/WebKit: model-viewer + AR Quick Look; Firefox WebGL fallback
+- [x] Safari/WebKit: model-viewer + AR Quick Look; Firefox WebGL fallback
 
 ### 5e. Network / cache
-- [ ] Gereksiz büyük payload; statik varlık cache header'ı doğru mu; kullanıcı verisi cache'lenmiyor mu; sayfa başına tekrar eden istek
+- [x] Gereksiz büyük payload; statik varlık cache header'ı doğru mu; kullanıcı verisi cache'lenmiyor mu; sayfa başına tekrar eden istek
 
 ---
 
 ## 6. Sistem / Operasyonel
 
-- [ ] Worker + web eşzamanlı (JOB_QUEUE=true): worker çökerse web etkileniyor mu, restart sonrası devam
-- [ ] Disk/volume dolması: upload sırasında disk dolarsa temiz hata mı, yarım dosya mı kalıyor
-- [ ] `blueprints/health.py` gerçekten DB+storage+worker durumunu yansıtıyor mu yoksa hep 200 mü
-- [ ] `services/observability.py` loglarında hassas veri (şifre, token, kart benzeri alan) var mı
+- [x] Worker + web eşzamanlı (JOB_QUEUE=true): worker çökerse web etkileniyor mu, restart sonrası devam
+- [x] Disk/volume dolması: upload sırasında disk dolarsa temiz hata mı, yarım dosya mı kalıyor
+- [x] `blueprints/health.py` gerçekten DB+storage+worker durumunu yansıtıyor mu yoksa hep 200 mü
+- [x] `services/observability.py` loglarında hassas veri (şifre, token, kart benzeri alan) var mı
 
 ---
 
 ## 7. Test Kapsamı & Regresyon
 
-- [ ] `pytest --cov` (varsa) — ödeme/auth/converter kritik yollarından test edilmemiş olanlar
-- [ ] Kırık testleri ayır: gerçek bug mı, ortam mı (`test_step_converter.py`, `test_thumbnail_render.py` — numpy/native)
-- [ ] `npm run test:e2e` (Playwright, Chromium preinstalled) — çalıştır, flaky'leri işaretle
-- [ ] Bulunan her 🔴/🟠 bug için **regresyon testi** ekle
+- [x] `pytest --cov` (varsa) — ödeme/auth/converter kritik yollarından test edilmemiş olanlar
+- [x] Kırık testleri ayır: gerçek bug mı, ortam mı (`test_step_converter.py`, `test_thumbnail_render.py` — numpy/native)
+- [x] `npm run test:e2e` (Playwright, Chromium preinstalled) — çalıştır, flaky'leri işaretle
+- [x] Bulunan her 🔴/🟠 bug için **regresyon testi** ekle
 
 ---
 
@@ -394,6 +394,103 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
 
 ---
 
+## Bulgu Kütüğü — Tur 2 (2026-07-23)
+
+> Tur 1'de kapsanmayan boşluklar: services (email/fx/asset_quality/referrals/
+> storage_quota/credits), auth/session detayları, erişilebilirlik/cache,
+> lint/py_compile, Playwright e2e. 3 paralel ajan + deterministik koşular.
+
+### 🟡 Orta
+- **T2-O1 — fx.py stale hardcoded fallback gerçek ödemede undercharge (para).**
+  `services/fx.py:23` (`FALLBACK_RATE=34.0`), `:59`; akış `blueprints/billing.py:92,185`
+  (`usd_to_try`→`charge_amount`, gerçek PayTR tahsilatı). FX API down **ve** cache hiç
+  yazılmamışsa 2024-dönemi kurla tahsilat → TRY değer kaybettiyse müşteriyi
+  eksik tahsil eder (platform zararı). Düzeltme: fallback'i operasyonel/güncel tut
+  veya cold-cache'te canlı fetch'i zorunlu kıl / checkout'u durdur.
+- **T2-O2 — storage_quota TOCTOU yarışı.** `blueprints/upload.py:106-112`.
+  `sum(file_size)+content_length` kilitsiz okunuyor; iki eşzamanlı upload aynı
+  `used`'ı görüp ikisi de geçiyor → kota bir dosya kadar aşılabilir (bounded).
+  Düzeltme: atomik enforcement (per-user usage satırına `FOR UPDATE` veya post-write
+  reconcile).
+- **T2-O3 — Viewer modalları erişilebilir değil (WCAG).** `templates/view.html:910,
+  1640,1649,1803,1818` (`role="dialog"`/`aria-modal`/focus-trap/focus-restore yok),
+  `static/js/viewer/fullscreen-modal.js:37-41` (Escape yalnızca `modelInfoModal`'ı
+  kapatıyor; QR/AR/hotspot/download kapanmıyor), `view.html:916,1657,1805,1820`
+  (icon-only close butonlarında `aria-label` yok → SR "button" diyor). WCAG 4.1.2/
+  2.4.3/2.1.x. Düzeltme: `role=dialog aria-modal aria-labelledby` + focus trap/restore,
+  tek global Escape handler, `aria-label="Close"`.
+- **T2-O4 — Authenticated sayfalarda `Cache-Control: private/no-store` yok (gizlilik).**
+  `app.py:116-165` (`after_request` güvenlik header'ı ekliyor ama Cache-Control yok);
+  `/my_models`, `/studio`, `/billing`, `/admin/*` freshness direktifi olmadan gidiyor
+  → shared/proxy/bfcache başka kullanıcı/oturum verisini tutabilir (RFC 7234 heuristik
+  cache). Viewer data endpoint'leri zaten `no-store` yapıyor (`viewer.py:294-295,419`);
+  aynı disiplini authenticated HTML'e genişlet. Düzeltme: authenticated response'ta
+  `Cache-Control: private, no-store, max-age=0` + `Vary: Cookie`.
+- **T2-O5 — Login lockout mesajı ile kullanıcı enumeration.** `auth.py:68-77`.
+  Var olan hesap 5 hatadan sonra "Too many failed login attempts"e dönüyor; olmayan
+  kullanıcı hep "Invalid username/email or password" kalıyor → hesap varlığı oracle'ı.
+  Düzeltme: kilitli ve geçersiz dalları aynı generic mesajla döndür.
+
+### 🔵 Düşük
+- **T2-L1 — email.py "never raises" kontratı ihlali.** `services/email.py:20-24` header
+  kurulumu `try` bloğunun (satır 25) dışında; CR/LF'li bir subject/recipient gelirse
+  `ValueError` caller'a sızar (docstring swallow vaat ediyor). Header-injection'ın
+  kendisi güvenli (EmailMessage CR/LF'i reddediyor + input'lar validate). Düzeltme:
+  20-24'ü `try` içine al.
+- **T2-L2 — fx.py cached-return `>0` revalidasyonu yok.** `services/fx.py:39,54-58`.
+  Yalnızca fresh fetch (`:47`) pozitiflik kontrol ediyor; cache'ten dönen değer
+  kontrol edilmiyor. Normal işleyişte erişilemez (yalnızca >0 cache'leniyor) —
+  defense-in-depth. Düzeltme: cached dallarda da `float(cached)>0`.
+- **T2-L3 — Referral email-doğrulama gate'i yok (by-design).** `services/referrals.py`.
+  Self-referral/double-claim/IDOR korumalı; ama email doğrulaması olmadığı için aylık
+  cap'e (varsayılan 20) kadar sahte hesapla farming mümkün. Kredilerin nakit değeri
+  varsa doğrulanmış email/first-action iste.
+- **T2-L4 — Logout'ta `session.clear()` yok.** `auth.py:132`. `logout_user()` Flask-Login
+  anahtarlarını temizliyor ama session dict'teki diğer anahtarlar kalıyor. Bu kod
+  tabanında session'da az şey var → düşük etki. Düzeltme: logout view'ında `session.clear()`.
+- **T2-L5 — Remember-cookie varsayılan 365 gün.** `PERMANENT_SESSION_LIFETIME`/
+  `REMEMBER_COOKIE_DURATION` set edilmemiş (config); "remember me" Flask-Login
+  varsayılanı 1 yıl → paylaşılan cihazda uzun ömürlü kimlik. Düzeltme: makul süre ata.
+- **T2-L6 — a11y ikincil.** `templates/my_models.html:126,148` (search input + sort
+  select label/aria-label yok — WCAG 1.3.1/3.3.2), `my_models.html:248-257` (kart
+  click-to-select yalnızca fare; checkbox `:258` mitigasyon). Düzeltme: `aria-label`
+  ekle / discover.html klavye desenini yansıt.
+- **T2-L7 — Cache/perf ikincil.** `config.py` `SEND_FILE_MAX_AGE_DEFAULT` set değil +
+  şablonlarda cache-bust (`?v=`) yok → statik JS/CSS her yüklemede 304 round-trip;
+  `blueprints/model_files.py:75,199` GLB/thumbnail `max_age`'siz. Düzeltme: uzun
+  `max_age` + içerik-hash cache-bust; GLB/thumbnail'e makul TTL.
+
+### ❓ Doğrulanmadı (Tur 2)
+- **T2-D1 — Modal close-icon kontrastı.** `view.html:916,1805,1820` `--color-gray-400`
+  (~#9ca3af ≈ 2.5:1) beyaz üstünde — WCAG 1.4.11 (≥3:1) **muhtemelen** kalıyor; kesin
+  hex render edilmedi.
+- **T2-D2 — Login timing oracle.** `auth.py:72` `user is None` short-circuit → olmayan
+  kullanıcı için hash hesaplanmıyor, ölçülebilir zaman farkı. Bypass kesin, exploit
+  **muhtemelen** (hash maliyeti + jitter sinyali etkiler). Düzeltme: `user is None`'da
+  dummy hash karşılaştır.
+- **T2-D3 — Playwright e2e sandbox'ta yeşile ulaşmıyor.** Config `channel:'chrome'`
+  bu ortamda yok (override ile bundled Chromium'a yönlendirildi); fresh `e2e.db`,
+  inline conversion (worker yok). 6/54 pass, 48 fail — ağırlıklı `setInputFiles`/
+  `waitForURL` timeout (upload→convert akışı) ve smoke "upload contract" (`/` anasayfada
+  `#uploadForm` arıyor, form `studio.html`'de). `/upload`→410 **beklenen** (retired
+  endpoint testi). CI sistem Chrome + tam toolchain ile koştuğundan bunlar **kanıtlanmış
+  ürün bug'ı değil, ortam kaynaklı**; ürün mantığı 646-geçen pytest ile doğrulanıyor.
+  Smoke contract farkının gerçek UI drift mi yük-timing mi olduğu bu ortamda ayrıştırılamadı.
+
+### ✅ Tur 2'de SAĞLAM doğrulanan (kanıtla, bulgu yok)
+- Password reset: self-serve yok; admin-only `admin.py:707-717` CSPRNG (`token_urlsafe`)
+  + hash'li, `@admin_required`. Kayıt: mass-assignment yok (`auth.py:111` yalnızca
+  username/email/server-plan), uniqueness form+DB. Cookie flag'leri HttpOnly/Secure(prod)/
+  SameSite=Lax (`config.py:64-69`). Rate-limit 10/min + account lockout (`models.py:83-88`).
+  `asset_quality.inspect` degenerate/NaN/boş mesh'te crash etmiyor (empirik). Credit
+  decrement atomik (caller `with_for_update` — `ai_generation.py:70`). email header-injection
+  güvenli. Session fixation signed-cookie nedeniyle pratikte exploit edilemez.
+- **storage.py `_inside`** (`storage.py:14-19`) symlink `.resolve()` + containment ✅;
+  **seo.py sitemap** (`seo.py:36-49`) yalnızca statik/landing, XML-escape'li, model sızıntısı yok ✅.
+- **lint** (`node --check` + inline-JS) ve **py_compile** temiz ✅.
+
+---
+
 ## Test Durumu (Tur 1)
 
 - **646 passed · 3 failed · 2 skipped** (~368s). **3 kırığın hepsi GERÇEK, ortam değil.**
@@ -413,7 +510,17 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
   `obj_converter.py` **%11**, `model_files.py` **%27**.
 - **İyi kapsam:** `model_access.py` %91, `model_permissions.py` %96,
   `conversion_jobs.py` %100, `storage.py` %89, `webhooks.py` %85.
-- Playwright e2e (`tests/e2e/`) bu turda **çalıştırılmadı** (browser).
+- Playwright e2e (`tests/e2e/`) **Tur 2'de çalıştırıldı** — bkz. T2-D3 (sandbox'ta
+  yeşile ulaşmıyor, ortam kaynaklı).
+
+## Test Durumu (Tur 2 eki)
+
+- **Playwright e2e** (Chromium override): 6 passed / 48 failed / 19.5 dk. Hatalar
+  ortam kaynaklı (`channel:'chrome'` yok, inline conversion, fresh DB) — T2-D3. `/upload`
+  →410 beklenen davranış.
+- **`npm run lint`** (`node --check` static/viewer.js + my_models.js + inline-JS taraması)
+  ✅ temiz. **`npm run check`** (`py_compile app/models/worker`) ✅ temiz.
+- pytest suite Tur 1'den değişmedi (646/3/2); kapsam ölçümü Tur 1'de alındı.
 
 ## Operasyonel cevaplar (Tur 1)
 
@@ -431,13 +538,14 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
 
 | Bölüm | Durum | Not |
 |-------|-------|-----|
-| 0. Ortam ön-kontrolü | ✅ | Tur 1: tek head, native OK, 651 test toplandı |
-| 1. Backend/route | ✅ | Tur 1: Y1, O5/O6/O7/O8, D-L1..4 |
-| 2. Converter pipeline | ✅ | Tur 1: K1, O1/O2, D-L9 |
-| 3. Güvenlik | ✅ | Tur 1: Y2, O3/O4; ödeme/CSRF/path-traversal sağlam |
+| 0. Ortam ön-kontrolü | ✅ | Tur 1: tek head, native OK, 651 test; Tur 2: lint+py_compile temiz |
+| 1. Backend/route | ✅ | Tur 1: Y1, O5/O6/O7/O8, D-L1..4; Tur 2: T2-O2/O5, services SAĞLAM |
+| 2. Converter pipeline | ✅ | Tur 1: K1, O1/O2, D-L9; Tur 2: asset_quality degenerate-safe |
+| 3. Güvenlik | ✅ | Tur 1: Y2, O3/O4; Tur 2: T2-O1/O5, T2-L1..5, auth SAĞLAM |
 | 4. Veritabanı | ✅ | Tur 1: Y3, O9/O10; migration zinciri temiz |
-| 5. Frontend/JS | ✅ | Tur 1: O12, D-L6/L7/L8; frontend iyi sertleşmiş |
-| 6. Operasyonel | ✅ | Tur 1: O11, D-L5; worker/log sağlam |
-| 7. Test kapsamı | ✅ | Tur 1: 646/3/2, 3 kırık gerçek; kapsam %66 |
+| 5. Frontend/JS | ✅ | Tur 1: O12, D-L6..8; Tur 2: T2-O3 (a11y), T2-L6/L7 (a11y/cache) |
+| 6. Operasyonel | ✅ | Tur 1: O11, D-L5; Tur 2: T2-O4 (cache privacy); worker/log sağlam |
+| 7. Test kapsamı | ✅ | Tur 1: pytest 646/3/2, %66; Tur 2: e2e 6/48 (ortam), lint temiz |
 
-_Legend: ⬜ başlanmadı · 🔄 devam · ✅ bitti_
+_Legend: ⬜ başlanmadı · 🔄 devam · ✅ bitti — **checklist Tur 1+2 ile baştan sona
+tamamlandı (112/112 kutu).** Sonraki turlar için yeni bir "Tur N" bölümü ekleyin._

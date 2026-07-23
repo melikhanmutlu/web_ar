@@ -207,7 +207,9 @@ def update_model_color():
 
         try:
             color = app_module.validate_color(color)
-            output_path = model.filename
+            # glb_path resolves the live converted file; model.filename is a
+            # stale absolute path once the storage root moves between deploys.
+            output_path = model.glb_path
             temp_output = output_path + ".color.tmp.glb"
             if not modify_glb(
                 output_path,
@@ -380,7 +382,7 @@ def delete_selected_models():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error deleting models: {str(e)}")
-        return jsonify({"success": False, "message": str(e)})
+        return jsonify({"success": False, "message": "Internal error"})
 
 
 @models_crud_bp.route("/create_folder", methods=["POST"])
@@ -473,7 +475,7 @@ def delete_folder(folder_id):
         db.session.rollback()
         current_app.logger.error(f"Error deleting folder {folder_id}: {str(e)}")
         current_app.logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 
 @models_crud_bp.route("/move_model", methods=["POST"])
@@ -515,7 +517,7 @@ def move_model():
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error moving model: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @models_crud_bp.route("/restore_model/<string:model_id>", methods=["POST"])
@@ -537,7 +539,7 @@ def restore_model(model_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error restoring model {model_id}: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal error"}), 500
 
 
 @models_crud_bp.route("/restore_selected_models", methods=["POST"])
@@ -609,7 +611,7 @@ def rename_folder(folder_id):
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error renaming folder {folder_id}: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @models_crud_bp.route("/move_selected_models", methods=["POST"])

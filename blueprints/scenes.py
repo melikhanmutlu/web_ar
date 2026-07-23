@@ -58,9 +58,9 @@ def build_scene():
         model_id = item.get("model_id")
         model = UserModel.query.filter_by(id=model_id, user_id=current_user.id).first()
         if not model or model.deleted_at is not None:
-            return jsonify({"success": False, "error": f"Model not found or not owned: {model_id}"}), 404
+            return jsonify({"success": False, "error": "Model not found or not owned"}), 404
         if not model.glb_path or not os.path.exists(model.glb_path):
-            return jsonify({"success": False, "error": f"Model file missing: {model_id}"}), 404
+            return jsonify({"success": False, "error": "Model file missing"}), 404
 
         try:
             position = item.get("position") or {}
@@ -79,7 +79,8 @@ def build_scene():
         try:
             piece = trimesh.load(model.glb_path, force="scene")
         except Exception as e:
-            return jsonify({"success": False, "error": f"Could not load model {model_id}: {e}"}), 400
+            app_module.logger.error(f"[build_scene] Could not load model {model_id}: {e}")
+            return jsonify({"success": False, "error": "Could not load model"}), 400
 
         transform = trimesh.transformations.concatenate_matrices(
             trimesh.transformations.translation_matrix([px, py, pz]),

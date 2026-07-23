@@ -31,6 +31,24 @@ _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 
+# Only published, viewer-facing assets may be served from a model directory.
+# The dir also holds internal-only files (model_backup_<ts>.glb from Save/Slice,
+# modified_<ts>.glb from Apply, temp_*.glb work files) that must never be
+# handed out through this public route -- they can contain geometry the owner
+# later removed. Everything the viewer/AR actually requests matches one of
+# these: the canonical GLB, the iOS USDZ, and the derived variants (LODs,
+# exploded view, retopology, texture upscale).
+_ALLOWED_SERVE_RE = re.compile(
+    r"^(?:"
+    r"model\.glb"
+    r"|model_lod\d+\.glb"
+    r"|model_exploded\.glb"
+    r"|model_retopology\.glb"
+    r"|model_textures_\d+x\.glb"
+    r"|[\w.-]+\.usdz"
+    r")$"
+)
+
 
 @model_files_bp.route("/converted_files/<path:unique_id>/<path:filename>")
 def serve_converted_file(unique_id, filename):
@@ -47,6 +65,11 @@ def serve_converted_file(unique_id, filename):
     # Basic security check: ensure filename is just a filename, not trying to escape
     if os.path.basename(filename) != filename:
         current_app.logger.warning(f"Potential unsafe filename detected: {filename}")
+        return "Not Found", 404
+    # Restrict to the published, viewer-facing asset names -- never serve
+    # backups/modified/temp working files that also live in this directory.
+    if not _ALLOWED_SERVE_RE.match(filename):
+        current_app.logger.warning(f"Non-published filename rejected: {filename}")
         return "Not Found", 404
     try:
         # Older FBX jobs may have written textures as ``data:`` image URIs.
@@ -72,7 +95,9 @@ def serve_converted_file(unique_id, filename):
                         glb_path,
                         exc,
                     )
-        return send_from_directory(directory, filename, as_attachment=False)
+        # Content is cache-busted with ?v= query params, so a 1-day TTL is
+        # safe and avoids a revalidation round-trip on every viewer load.
+        return send_from_directory(directory, filename, as_attachment=False, max_age=86400)
     except FileNotFoundError:
         current_app.logger.error(
             f"File not found in serve_converted_file: {directory}/{filename}"
@@ -197,7 +222,8 @@ def serve_thumbnail(unique_id):
     # If thumbnail exists, serve it
     if os.path.exists(thumbnail_path):
         return send_from_directory(
-            os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id), "thumbnail.png"
+            os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id), "thumbnail.png",
+            max_age=86400,
         )
 
     # Generate thumbnail on-the-fly

@@ -39,9 +39,11 @@ def test_failed_logins_lock_account(client, init_database):
     user = db.session.get(User, init_database.id)
     assert user.is_locked
 
-    # even the correct password is rejected while locked
+    # even the correct password is rejected while locked. The message is
+    # intentionally the same generic string as a wrong password so the response
+    # can't be used to enumerate which accounts exist (see auth.py).
     response = login(client, "testuser", "testpassword", follow_redirects=True)
-    assert b"Too many failed login attempts" in response.data
+    assert b"temporarily locked" in response.data
     assert response.request.path == "/login"
 
 

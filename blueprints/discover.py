@@ -23,15 +23,17 @@ def discover():
                 UserModel.tags.ilike(like_pattern),
             )
         )
-    models = query.order_by(UserModel.upload_date.desc()).all()
-
     try:
         page = max(1, int(request.args.get("page", 1)))
     except ValueError:
         page = 1
     start = (page - 1) * PAGE_SIZE
-    page_models = models[start:start + PAGE_SIZE]
-    has_more = start + PAGE_SIZE < len(models)
+    # Paginate in SQL (LIMIT/OFFSET) instead of loading the whole public catalog
+    # into memory. Fetch one extra row to know whether a next page exists.
+    rows = (query.order_by(UserModel.upload_date.desc())
+            .offset(start).limit(PAGE_SIZE + 1).all())
+    page_models = rows[:PAGE_SIZE]
+    has_more = len(rows) > PAGE_SIZE
 
     return render_template(
         "discover.html", models=page_models, search=search,

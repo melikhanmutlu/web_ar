@@ -803,7 +803,7 @@ void main() {
                             '<i data-lucide="eye-off" class="layer-eye-off' + (layer.node.visible ? ' hidden' : '') + '" style="width:0.85rem;height:0.85rem;"></i>' +
                         '</button>' +
                         '<span style="flex:1;font-size:0.72rem;color:var(--color-gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + window.escapeHtml(layer.name) + '</span>' +
-                        '<input type="color" class="tp-color-swatch layer-color-input" data-idx="' + i + '" value="' + layer.origColorHex + '" style="width:1.6rem;height:1.6rem;padding:0;">';
+                        '<input type="color" class="tp-color-swatch layer-color-input" data-idx="' + i + '" value="' + window.escapeHtml(layer.origColorHex) + '" style="width:1.6rem;height:1.6rem;padding:0;">';
                     list.appendChild(row);
                 });
                 if (window.lucide?.createIcons) lucide.createIcons();

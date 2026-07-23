@@ -141,6 +141,10 @@ def dispatch_webhook_event(event_type, user_id, payload):
                         "X-ARVision-Signature": f"sha256={signature}",
                     },
                     timeout=_REQUEST_TIMEOUT_SECONDS,
+                    # Never follow redirects: only the original host is DNS-pinned
+                    # and validated as public. A 3xx Location would re-resolve an
+                    # unchecked (possibly internal) host and defeat the SSRF guard.
+                    allow_redirects=False,
                 )
             subscription.last_status_code = response.status_code
         except requests.RequestException as e:

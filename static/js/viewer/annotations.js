@@ -17,6 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         saveCameraView?.addEventListener('click', () => {
             if (!modelViewer) return;
+            if (saveCameraView.disabled) return; // guard against double-submit
+            saveCameraView.disabled = true;
             const orbit = modelViewer.getCameraOrbit();
             const target = modelViewer.getCameraTarget();
             const fov = modelViewer.getFieldOfView();
@@ -39,7 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 savedViews.push({ ...data.view, _orbit: orbit, _target: target, _fov: fov });
                 renderCameraViews();
             })
-            .catch(err => console.error('Error saving camera view:', err));
+            .catch(err => console.error('Error saving camera view:', err))
+            .finally(() => { saveCameraView.disabled = false; });
         });
 
         function loadCameraViewsFromDB() {
@@ -264,6 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
         discussionSubmit?.addEventListener('click', () => {
             const body = discussionInput?.value.trim();
             if (!body || !activeDiscussionHotspotId) return;
+            if (discussionSubmit.disabled) return; // guard against double-submit
+            discussionSubmit.disabled = true;
             fetch('/api/models/' + modelId + '/hotspots/' + activeDiscussionHotspotId + '/comments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -275,7 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (discussionInput) discussionInput.value = '';
                     loadDiscussionComments(activeDiscussionHotspotId);
                 })
-                .catch(err => console.error('Error posting comment:', err));
+                .catch(err => console.error('Error posting comment:', err))
+                .finally(() => { discussionSubmit.disabled = false; });
         });
 
         function renderHotspotOnViewer(name, label, pos, norm) {

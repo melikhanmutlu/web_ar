@@ -162,6 +162,15 @@ def after_request(response):
     )
     if request.is_secure:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    # Keep per-user HTML pages (my_models, studio, billing, admin, ...) out of
+    # shared/proxy caches and the browser back-forward cache. Scoped to HTML so
+    # cacheable static assets are unaffected; endpoints that set their own
+    # Cache-Control (e.g. the viewer's no-store data routes) win via the guard.
+    if (current_user.is_authenticated
+            and response.mimetype == "text/html"
+            and "Cache-Control" not in response.headers):
+        response.headers["Cache-Control"] = "private, no-store, max-age=0"
+        response.headers.setdefault("Vary", "Cookie")
     return response
 
 
@@ -427,6 +436,11 @@ for _endpoint in (
 app.view_functions["engagement.create_model_analytics_event"] = limiter.limit(
     "120 per minute"
 )(app.view_functions["engagement.create_model_analytics_event"])
+# Anonymous, view-tier counter writes: throttle per IP so a public/unlisted
+# model's share/download counts (and their ModelAnalyticsEvent rows) can't be
+# inflated without bound.
+for _endpoint in ("engagement.track_share", "engagement.track_download"):
+    app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
 for _endpoint in ("model_editing.save_modifications", "model_editing.slice_model"):
     app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
 app.view_functions["upload.upload_file"] = limiter.limit(
@@ -1995,9 +2009,13 @@ def _run_upload_pipeline(payload, progress_callback=None):
         elif file_extension in (".glb", ".gltf"):
             try:
                 report(56, "Preparing GLB", "Copying or repacking the uploaded glTF asset.")
+                # Write via a temp file + atomic rename so a disk-full/killed
+                # write can't leave a truncated model.glb behind.
+                tmp_output = output_path + ".part"
                 if file_extension == ".glb":
                     # GLB is already binary glTF - just copy it
-                    shutil.copy2(temp_file_path, output_path)
+                    shutil.copy2(temp_file_path, tmp_output)
+                    _atomic_replace(output_path, tmp_output)
                     logger.info(
                         f"[upload_model - {unique_id}] GLB file copied directly to {output_path}"
                     )
@@ -2006,7 +2024,8 @@ def _run_upload_pipeline(payload, progress_callback=None):
                     import trimesh as tm_gltf
 
                     gltf_mesh = tm_gltf.load(temp_file_path)
-                    gltf_mesh.export(output_path, file_type="glb")
+                    gltf_mesh.export(tmp_output, file_type="glb")
+                    _atomic_replace(output_path, tmp_output)
                     logger.info(
                         f"[upload_model - {unique_id}] GLTF converted to GLB: {output_path}"
                     )
@@ -2737,6 +2756,18 @@ def _consume_ai_allowance(user):
         user.ai_credit_balance -= 1
         return True, count, limit
     return False, count, limit
+
+
+def _refund_ai_credit(user_id):
+    """Return one overage credit consumed by _consume_ai_allowance when the
+    generation failed to start. Used by generate_3d, which now commits the
+    decrement early (to release the per-user row lock before the slow Meshy
+    HTTP call) and must refund on failure to preserve the original
+    charge-only-if-started guarantee."""
+    user = db.session.query(User).filter_by(id=user_id).with_for_update().one_or_none()
+    if user is not None:
+        user.ai_credit_balance = (user.ai_credit_balance or 0) + 1
+        db.session.commit()
 
 
 

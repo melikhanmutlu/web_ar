@@ -14,6 +14,30 @@ health_bp = Blueprint("health", __name__)
 logger = logging.getLogger(__name__)
 
 
+def _storage_writable():
+    """True if the converted-model storage root accepts a write+delete."""
+    try:
+        root = current_app.config.get("CONVERTED_FOLDER")
+        if not root:
+            return True
+        os.makedirs(root, exist_ok=True)
+        probe = os.path.join(root, f".healthz-{os.getpid()}")
+        with open(probe, "w") as fh:
+            fh.write("ok")
+        os.remove(probe)
+        return True
+    except Exception:
+        logger.exception("Storage health check failed")
+        return False
+
+
+def _active_worker_count():
+    cutoff = datetime.utcnow() - timedelta(
+        seconds=int(os.environ.get("WORKER_HEALTH_MAX_AGE_SECONDS", "90"))
+    )
+    return WorkerHeartbeat.query.filter(WorkerHeartbeat.last_seen_at >= cutoff).count()
+
+
 @health_bp.route("/healthz")
 def healthz():
     """Liveness/readiness probe including database connectivity."""
@@ -24,19 +48,36 @@ def healthz():
     except Exception:
         logger.exception("Database health check failed")
         return jsonify({"status": "unhealthy", "database": "down"}), 503
-    result = {"status": "ok", "database": "up", "observability": app_module.OBSERVABILITY_STATUS}
+    # Storage writability — a full/read-only volume still leaves the DB
+    # reachable, so without this probe /healthz stayed 200 while uploads failed.
+    storage_ok = _storage_writable()
+    result = {
+        "status": "ok", "database": "up", "storage": "up" if storage_ok else "down",
+        "observability": app_module.OBSERVABILITY_STATUS,
+    }
+    if not storage_ok:
+        result["status"] = "degraded"
+        return jsonify(result), 503
     if os.environ.get("JOB_QUEUE", "false").lower() in ("true", "1", "yes"):
-        cutoff = datetime.utcnow() - timedelta(
-            seconds=int(os.environ.get("WORKER_HEALTH_MAX_AGE_SECONDS", "90"))
-        )
-        active_workers = WorkerHeartbeat.query.filter(
-            WorkerHeartbeat.last_seen_at >= cutoff
-        ).count()
+        active_workers = _active_worker_count()
         result["active_workers"] = active_workers
         if active_workers == 0:
             result["status"] = "degraded"
             return jsonify(result), 503
     return jsonify(result)
+
+
+@health_bp.route("/healthz/worker")
+def healthz_worker():
+    """Dedicated worker-liveness probe, so a deployment can watch the worker
+    without coupling it to the web instance's readiness probe (a dead worker
+    otherwise 503s /healthz and can pull healthy web instances from the LB)."""
+    if os.environ.get("JOB_QUEUE", "false").lower() not in ("true", "1", "yes"):
+        return jsonify({"status": "ok", "job_queue": "disabled"})
+    active = _active_worker_count()
+    if active == 0:
+        return jsonify({"status": "degraded", "active_workers": 0}), 503
+    return jsonify({"status": "ok", "active_workers": active})
 
 
 @health_bp.route("/metrics")

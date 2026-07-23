@@ -12,10 +12,28 @@ import shutil
 from typing import Optional, List
 from .base_converter import BaseConverter, hex_to_linear_rgb
 
+# Complexity guard shared with the STL/STEP converters — reject meshes large
+# enough to exhaust memory before the (double) trimesh reload does.
+MAX_MESH_FACES = int(os.environ.get("MAX_MESH_FACES", 2_000_000))
+MAX_MESH_VERTICES = int(os.environ.get("MAX_MESH_VERTICES", 2_000_000))
 
-# Material/texture directive keys in OBJ/MTL that reference external files.
+
+def _mesh_complexity(m) -> tuple:
+    """(faces, vertices) for a trimesh Trimesh or Scene."""
+    if isinstance(m, trimesh.Scene):
+        faces = sum(len(g.faces) for g in m.geometry.values()
+                    if isinstance(g, trimesh.Trimesh))
+        verts = sum(len(g.vertices) for g in m.geometry.values()
+                    if isinstance(g, trimesh.Trimesh))
+        return faces, verts
+    return len(getattr(m, "faces", [])), len(getattr(m, "vertices", []))
+
+
+# Non-"map_*" material/texture directive keys in OBJ/MTL that reference
+# external files. Any "map_*" directive is also treated as file-bearing (see
+# _scan) so obj2gltf-resolved PBR maps (map_ns, map_pr, map_pm, map_ps, ...)
+# can't smuggle a traversal reference through an un-listed key.
 _MTL_FILE_KEYS = (
-    "map_kd", "map_ka", "map_ks", "map_ke", "map_d", "map_bump",
     "bump", "disp", "decal", "refl", "norm",
 )
 
@@ -47,7 +65,7 @@ def assert_safe_obj_references(obj_path: str) -> None:
                     if len(parts) != 2:
                         continue
                     key, val = parts[0].lower(), parts[1]
-                    if key in line_keys:
+                    if key in line_keys or key.startswith("map_"):
                         # texture directives can carry options before the path;
                         # the filename is the last whitespace-separated token.
                         candidate = val.split()[-1] if val.split() else val
@@ -290,6 +308,18 @@ class OBJConverter(BaseConverter):
             # Check if scaling is needed
             try:
                 temp_mesh = trimesh.load(output_path)
+
+                # Complexity guard — fail fast instead of OOM on a huge OBJ.
+                n_faces, n_verts = _mesh_complexity(temp_mesh)
+                if n_faces > MAX_MESH_FACES or n_verts > MAX_MESH_VERTICES:
+                    del temp_mesh
+                    self.handle_error(
+                        f"Model too complex: {n_faces:,} faces / {n_verts:,} vertices "
+                        f"(limits: {MAX_MESH_FACES:,} faces, {MAX_MESH_VERTICES:,} vertices). "
+                        "Please decimate the mesh and re-upload."
+                    )
+                    return False
+
                 if isinstance(temp_mesh, trimesh.Scene):
                     bounds = temp_mesh.bounds
                     extents = bounds[1] - bounds[0]

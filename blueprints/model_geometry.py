@@ -97,7 +97,7 @@ def get_model_bounds(model_id):
 
     except Exception as e:
         app_module.logger.error(f"Error in get_model_bounds: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @model_geometry_bp.route("/api/models/<model_id>/validation")
@@ -119,7 +119,8 @@ def get_model_validation(model_id):
             model.faces = report.get("triangles")
             db.session.commit()
         except Exception as exc:
-            return jsonify({"success": False, "error": f"Validation failed: {exc}"}), 422
+            app_module.logger.error("Model validation failed for %s: %s", model_id, exc)
+            return jsonify({"success": False, "error": "Validation failed"}), 422
     return jsonify({"success": True, "report": report})
 
 
@@ -251,7 +252,7 @@ def model_exploded_asset(model_id):
         db.session.commit()
     except Exception as exc:
         app_module.logger.exception("Exploded view generation failed for %s", model_id)
-        return jsonify({"success": False, "error": f"Exploded view failed: {exc}"}), 500
+        return jsonify({"success": False, "error": "Exploded view failed"}), 500
     return jsonify({"success": True, "url": url_for(
         "model_files.serve_converted_file", unique_id=model_id, filename=filename
     ), "factor": factor})

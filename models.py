@@ -153,7 +153,7 @@ class Organization(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     slug = db.Column(db.String(140), unique=True, nullable=False, index=True)
-    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     # Tenant-level white-label theme (logo/name/color, hide "Powered by")
     # applied to the org's custom-domain gallery. None -> default ARVision
@@ -246,8 +246,8 @@ class UserModel(db.Model):
     color = db.Column(db.String(7), nullable=True)  # Hex color code
     qr_code = db.Column(db.String(255), nullable=True)  # QR code filename
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
-    folder_id = db.Column(db.Integer, db.ForeignKey('folder.id', ondelete='SET NULL'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True, index=True)
+    folder_id = db.Column(db.Integer, db.ForeignKey('folder.id', ondelete='SET NULL'), nullable=True, index=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='SET NULL'), nullable=True, index=True)
     
     # Scale tracking
@@ -746,7 +746,7 @@ class AdminAuditLog(db.Model):
     (actor_id), what (action, a short dotted string like 'user.delete'),
     on what (target_type/target_id), and any extra context (detail)."""
     id = db.Column(db.Integer, primary_key=True)
-    actor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     action = db.Column(db.String(64), nullable=False, index=True)
     target_type = db.Column(db.String(32), nullable=True)
     target_id = db.Column(db.String(64), nullable=True)

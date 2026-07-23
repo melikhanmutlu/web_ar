@@ -35,7 +35,7 @@ def get_usd_try_rate():
     now = time.time()
     if cached and cached_at:
         try:
-            if now - float(cached_at) < CACHE_SECONDS:
+            if now - float(cached_at) < CACHE_SECONDS and float(cached) > 0:
                 return float(cached)
         except (TypeError, ValueError):
             pass
@@ -53,9 +53,17 @@ def get_usd_try_rate():
 
     if cached:
         try:
-            return float(cached)
+            if float(cached) > 0:
+                return float(cached)
         except (TypeError, ValueError):
             pass
+    # API is down AND no valid rate has ever been cached: this hardcoded rate
+    # is about to convert a real charge. Surface it so ops can catch a
+    # cold-cache + API-outage window.
+    logger.warning(
+        "USD->TRY: API unavailable and no valid cached rate; using hardcoded "
+        "fallback rate %s for a live charge", FALLBACK_RATE
+    )
     return FALLBACK_RATE
 
 

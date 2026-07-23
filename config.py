@@ -1,5 +1,6 @@
 import os
 import platform
+from datetime import timedelta
 
 # Load a local .env if present (no-op in production where real env vars are set).
 # Railway/Heroku env vars take precedence — load_dotenv does not override them.
@@ -67,6 +68,10 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 REMEMBER_COOKIE_HTTPONLY = True
 REMEMBER_COOKIE_SECURE = _IS_PRODUCTION
 REMEMBER_COOKIE_SAMESITE = 'Lax'
+# Cap credential lifetime instead of Flask-Login's 365-day "remember me"
+# default, which is a very long-lived token on shared devices.
+REMEMBER_COOKIE_DURATION = timedelta(days=30)
+PERMANENT_SESSION_LIFETIME = timedelta(days=14)
 
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')

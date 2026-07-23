@@ -307,24 +307,32 @@ def lemonsqueezy_webhook():
         elif invoice_tag and payment.note == invoice_tag:
             # Duplicate delivery of the already-applied first invoice.
             return "OK"
-        elif invoice_ref and not Payment.query.filter_by(
-            provider_ref=invoice_ref
-        ).first():
+        elif invoice_ref:
             # A renewal invoice: fresh period, deduped on its own invoice id.
-            renewal = Payment(
-                user_id=payment.user_id,
-                plan=payment.plan,
-                kind="plan",
-                amount=Decimal(attributes.get("total") or 0) / 100,
-                currency=(attributes.get("currency") or payment.currency or "USD"),
-                status="pending",
-                method="lemonsqueezy",
-                provider=provider.name,
-                provider_ref=invoice_ref,
-            )
-            db.session.add(renewal)
-            db.session.commit()
-            _apply_successful_payment(renewal)
+            existing = Payment.query.filter_by(provider_ref=invoice_ref).first()
+            if existing is None:
+                renewal = Payment(
+                    user_id=payment.user_id,
+                    plan=payment.plan,
+                    kind="plan",
+                    amount=Decimal(attributes.get("total") or 0) / 100,
+                    currency=(attributes.get("currency") or payment.currency or "USD"),
+                    status="pending",
+                    method="lemonsqueezy",
+                    provider=provider.name,
+                    provider_ref=invoice_ref,
+                )
+                db.session.add(renewal)
+                # Create + apply in ONE transaction (_apply_successful_payment
+                # commits). Committing the pending row first risked a crash that
+                # left it stranded — redelivery then saw the row and skipped it
+                # forever, so the renewal was never granted.
+                _apply_successful_payment(renewal)
+            elif existing.status == "pending":
+                # A prior delivery created the row but crashed before applying;
+                # re-apply instead of treating its existence as "done".
+                _apply_successful_payment(existing)
+            # else already paid -> duplicate delivery, nothing to do.
     return "OK"
 
 

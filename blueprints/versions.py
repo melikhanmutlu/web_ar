@@ -5,7 +5,10 @@ import os
 from flask import Blueprint, jsonify, send_from_directory
 
 from models import ModelVersion
-from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
+from services.model_permissions import (
+    check_model_history_allowed, check_model_mutation_allowed,
+    check_model_view_allowed, get_live_model,
+)
 from version_manager import delete_version, get_version_history, restore_version, version_path
 
 versions_bp = Blueprint("versions", __name__)
@@ -46,7 +49,7 @@ def get_versions(model_id):
         )
     except Exception as e:
         app_module.logger.error(f"Failed to get versions for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 def _version_summary(v):
@@ -104,7 +107,7 @@ def compare_model_versions(model_id, version_a, version_b):
         })
     except Exception as e:
         app_module.logger.error(f"Failed to compare versions {version_a}/{version_b} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @versions_bp.route("/api/versions/<model_id>/restore/<int:version_number>", methods=["POST"])
@@ -133,7 +136,7 @@ def restore_model_version(model_id, version_number):
             ), 500
     except Exception as e:
         app_module.logger.error(f"Failed to restore version {version_number} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @versions_bp.route("/api/versions/<model_id>/delete/<int:version_number>", methods=["DELETE"])
@@ -155,7 +158,7 @@ def delete_model_version(model_id, version_number):
             return jsonify({"success": False, "error": "Failed to delete version"}), 500
     except Exception as e:
         app_module.logger.error(f"Failed to delete version {version_number} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @versions_bp.route("/api/versions/<model_id>/download/<int:version_number>", methods=["GET"])
@@ -164,13 +167,13 @@ def download_version(model_id, version_number):
     import app as app_module
 
     try:
-        # This endpoint backs both the History tab's "Preview" (loaded
-        # straight into modelViewer.src) and "Download" buttons, which are
-        # shown to any viewer — same access tier as listing/comparing
-        # versions above, not the mutation-only actions (Restore/Delete).
-        denied = check_model_view_allowed(model_id)
-        if denied:
-            return jsonify({"success": False, "error": denied.error}), denied.status
+        # A historical version GLB can contain geometry the owner later removed,
+        # so downloading/previewing one is gated tighter than public viewing:
+        # owner, org member, active share-link, edit-token holder, or admin only
+        # (not anyone holding the unlisted/public model link).
+        guard = check_model_history_allowed(model_id)
+        if guard:
+            return guard
         version = ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first()
@@ -192,4 +195,4 @@ def download_version(model_id, version_number):
         )
     except Exception as e:
         app_module.logger.error(f"Failed to download version {version_number} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500

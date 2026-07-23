@@ -1,6 +1,21 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
+
+
+def _safe_next(next_page):
+    """Return next_page only if it's a same-origin relative path.
+
+    Rejects absolute URLs and protocol-relative forms (`//host`, `/\\host`)
+    which browsers normalize to an off-site redirect (open-redirect / phishing).
+    """
+    if not next_page or not next_page.startswith('/'):
+        return None
+    if next_page.startswith('//') or next_page.startswith('/\\'):
+        return None
+    if urlparse(next_page).netloc:
+        return None
+    return next_page
 from models import User, UserModel, Payment, db
 from site_settings import setting_bool
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
@@ -65,15 +80,21 @@ def login():
             (User.username == form.username.data) | (User.email == form.username.data)
         ).first()
 
+        # Use one generic message for the locked, wrong-password, and
+        # unknown-user branches so the response can't be used to enumerate which
+        # accounts exist (a distinct "locked" message would reveal existence).
+        invalid_msg = ('Invalid username/email or password, or the account is '
+                       'temporarily locked after too many failed attempts.')
+
         if user is not None and user.is_locked:
-            flash('Too many failed login attempts. Please try again in a few minutes.', 'error')
+            flash(invalid_msg, 'error')
             return redirect(url_for('auth.login'))
 
         if user is None or not user.check_password(form.password.data):
             if user is not None:
                 user.register_failed_login()
                 db.session.commit()
-            flash('Invalid username/email or password', 'error')
+            flash(invalid_msg, 'error')
             return redirect(url_for('auth.login'))
 
         user.register_successful_login()
@@ -83,9 +104,7 @@ def login():
             # login_user refuses inactive (admin-deactivated) accounts
             flash('This account has been deactivated.', 'error')
             return redirect(url_for('auth.login'))
-        next_page = request.args.get('next')
-        if not next_page or urlparse(next_page).netloc != '':
-            next_page = url_for('main.index')
+        next_page = _safe_next(request.args.get('next')) or url_for('main.index')
         return redirect(next_page)
     
     return render_template('login.html', form=form)
@@ -130,6 +149,8 @@ def logout():
     # POST-only so logout can't be triggered cross-site via a GET (e.g. an
     # <img src=".../logout"> tag) or by link prefetchers. CSRF-protected.
     logout_user()
+    # Drop any residual keys stashed in the session dict, not just Flask-Login's.
+    session.clear()
     flash('You have been logged out.', 'info')
     return redirect(url_for('main.index'))
 

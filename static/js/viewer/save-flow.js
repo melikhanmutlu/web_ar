@@ -131,12 +131,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 // prepared is what they see after the reload below.
                 if (pendingCamera) {
                     try {
-                        await fetch(`/api/models/${modelId}/viewer-settings`, {
+                        const camResp = await fetch(`/api/models/${modelId}/viewer-settings`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(pendingCamera)
                         });
-                    } catch (e) { /* best effort — don't block the save */ }
+                        if (!camResp.ok) throw new Error('HTTP ' + camResp.status);
+                    } catch (e) {
+                        // Persisting the prepared framing failed — warn the user
+                        // rather than silently reloading and losing the view.
+                        console.error('Camera framing save error:', e);
+                        alert('Your changes were saved, but the prepared camera view could not be applied. Try setting it again.');
+                    }
                     window._pendingPresetCamera = null;
                 }
                 window.location.reload();

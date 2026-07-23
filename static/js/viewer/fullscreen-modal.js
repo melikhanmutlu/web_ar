@@ -33,11 +33,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Close modal with Escape key
+    // Close modal with Escape key. Covers both modal styles on this page:
+    // `.hidden`-toggled modals (modelInfoModal, downloadFormatModal) and
+    // `.show`-toggled modals (qrModal, arModal, hotspotDiscussionModal).
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !modelInfoModal?.classList.contains('hidden')) {
-            modelInfoModal?.classList.add('hidden');
-        }
+        if (e.key !== 'Escape') return;
+        ['modelInfoModal', 'downloadFormatModal'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
+        });
+        ['qrModal', 'arModal', 'hotspotDiscussionModal'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el && el.classList.contains('show')) el.classList.remove('show');
+        });
     });
 
     modelViewer?.addEventListener('load', () => {

@@ -17,12 +17,15 @@ def send_email(to_email, subject, body_text):
     dev/test default) or `to_email` is empty."""
     if not to_email or not current_app.config.get("EMAIL_NOTIFICATIONS_ENABLED"):
         return False
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = current_app.config["SMTP_FROM_EMAIL"]
-    message["To"] = to_email
-    message.set_content(body_text)
     try:
+        # Build inside the try: a CR/LF-bearing subject/recipient makes
+        # EmailMessage raise, and the "never raises, just returns False"
+        # contract must hold for that too.
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = current_app.config["SMTP_FROM_EMAIL"]
+        message["To"] = to_email
+        message.set_content(body_text)
         with smtplib.SMTP(
             current_app.config["SMTP_HOST"], current_app.config["SMTP_PORT"], timeout=10
         ) as smtp:

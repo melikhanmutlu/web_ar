@@ -123,7 +123,7 @@ def apply_modifications():
 
     except Exception as e:
         app_module.logger.error(f"[apply_modifications] Error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @model_editing_bp.route("/download_modified/<model_id>/<filename>")
@@ -157,7 +157,7 @@ def download_modified(model_id, filename):
         )
     except Exception as e:
         app_module.logger.error(f"[download_modified] Error: {e}", exc_info=True)
-        return str(e), 500
+        return "Server error", 500
 
 
 @model_editing_bp.route("/get_model_dimensions/<model_id>")
@@ -237,7 +237,7 @@ def get_model_dimensions(model_id):
 
     except Exception as e:
         app_module.logger.error(f"[get_model_dimensions] Error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @model_editing_bp.route("/save_modifications", methods=["POST"])
@@ -477,7 +477,7 @@ def save_modifications():
         # clean it up so a failed save doesn't leave orphaned temp_*.glb files.
         if 'temp_output' in locals() and os.path.exists(temp_output):
             os.remove(temp_output)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @model_editing_bp.route("/get_mesh_bounds/<model_id>")
@@ -522,7 +522,7 @@ def api_get_mesh_bounds_route(model_id):
 
     except Exception as e:
         app_module.logger.error(f"Error getting mesh bounds: {e}", exc_info=True)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @model_editing_bp.route("/slice_model", methods=["POST"])
@@ -734,4 +734,4 @@ def slice_model():
         # temp_sliced_*.glb behind forever.
         if 'temp_output' in locals() and os.path.exists(temp_output):
             os.remove(temp_output)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500

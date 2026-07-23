@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 
 from services.time_utils import datetime
 from datetime import timedelta
-from models import ApiToken, ConversionJob, ModelAnalyticsEvent, User, UserModel, db
+from models import ApiToken, ConversionJob, ModelAnalyticsEvent, OrganizationMember, User, UserModel, db
 from services import UploadStagingError
 from services.org_membership import _organization_membership
 from services.plans import effective_storage_quota_mb, plan_allows, plan_limit
@@ -45,6 +45,19 @@ def _bearer_token(required_scope):
     token = ApiToken.query.filter_by(token_digest=digest).first()
     if not token or not token.is_active:
         return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
+    # The token authenticates as its owner. A deactivated owner, or one removed
+    # from the token's organization, must lose access on the very next call —
+    # session auth re-validates this every request, so the API path must too,
+    # otherwise a revoked admin keeps full org read/write until token expiry.
+    owner = db.session.get(User, token.user_id)
+    if owner is None or not owner.is_active_flag:
+        return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
+    if token.organization_id is not None:
+        still_member = OrganizationMember.query.filter_by(
+            organization_id=token.organization_id, user_id=token.user_id
+        ).first()
+        if still_member is None:
+            return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
     if not token.has_scope(required_scope):
         return None, (jsonify({"success": False, "error": f"Missing scope: {required_scope}"}), 403)
     token.last_used_at = datetime.utcnow()

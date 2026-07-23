@@ -1,5 +1,6 @@
 """Model hotspots/annotations and saved camera views."""
 
+import math
 import time
 
 from flask import Blueprint, jsonify, request
@@ -34,7 +35,7 @@ def get_hotspots(model_id):
         })
     except Exception as e:
         app_module.logger.error(f"Error getting hotspots for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots", methods=["POST"])
@@ -55,32 +56,59 @@ def create_hotspot(model_id):
         if not data:
             return jsonify({"success": False, "error": "No data provided"}), 400
 
+        def _opt_finite(value):
+            # Optional numeric column: keep None, else coerce to a finite float
+            # (rejects NaN/Inf, which SQLite/Postgres float columns accept).
+            if value is None:
+                return None
+            value = float(value)
+            if not math.isfinite(value):
+                raise ValueError("non-finite value")
+            return value
+
+        # Validate raw client JSON before it reaches float columns (mirror
+        # create_measurement): coordinates must be finite numbers.
+        try:
+            position = data["position"]
+            px, py, pz = float(position["x"]), float(position["y"]), float(position["z"])
+            if not (math.isfinite(px) and math.isfinite(py) and math.isfinite(pz)):
+                raise ValueError("non-finite coordinate")
+            normal = data.get("normal") or {}
+            nx = _opt_finite(normal.get("x"))
+            ny = _opt_finite(normal.get("y"))
+            nz = _opt_finite(normal.get("z"))
+
+            camera = data.get("cameraView")
+            camera_fields = {}
+            if camera:
+                orbit = camera.get("orbit", {})
+                target = camera.get("target", {})
+                camera_fields = {
+                    "camera_view_id": data.get("cameraViewId"),
+                    "camera_orbit_theta": _opt_finite(orbit.get("theta")),
+                    "camera_orbit_phi": _opt_finite(orbit.get("phi")),
+                    "camera_orbit_radius": _opt_finite(orbit.get("radius")),
+                    "camera_target_x": _opt_finite(target.get("x")),
+                    "camera_target_y": _opt_finite(target.get("y")),
+                    "camera_target_z": _opt_finite(target.get("z")),
+                    "camera_fov": _opt_finite(camera.get("fov")),
+                }
+        except (KeyError, TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid coordinates"}), 400
+
         hotspot = ModelHotspot(
             model_id=model_id,
             hotspot_id=data.get("id", f"hotspot-{int(time.time()*1000)}"),
             title=data.get("title", "Untitled"),
             description=data.get("description"),
-            position_x=data["position"]["x"],
-            position_y=data["position"]["y"],
-            position_z=data["position"]["z"],
-            normal_x=data.get("normal", {}).get("x"),
-            normal_y=data.get("normal", {}).get("y"),
-            normal_z=data.get("normal", {}).get("z"),
+            position_x=px,
+            position_y=py,
+            position_z=pz,
+            normal_x=nx,
+            normal_y=ny,
+            normal_z=nz,
+            **camera_fields,
         )
-
-        # Optional camera view
-        camera = data.get("cameraView")
-        if camera:
-            hotspot.camera_view_id = data.get("cameraViewId")
-            orbit = camera.get("orbit", {})
-            hotspot.camera_orbit_theta = orbit.get("theta")
-            hotspot.camera_orbit_phi = orbit.get("phi")
-            hotspot.camera_orbit_radius = orbit.get("radius")
-            target = camera.get("target", {})
-            hotspot.camera_target_x = target.get("x")
-            hotspot.camera_target_y = target.get("y")
-            hotspot.camera_target_z = target.get("z")
-            hotspot.camera_fov = camera.get("fov")
 
         db.session.add(hotspot)
         db.session.commit()
@@ -91,7 +119,7 @@ def create_hotspot(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error creating hotspot for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots/<hotspot_id>", methods=["DELETE"])
@@ -116,7 +144,7 @@ def delete_hotspot(model_id, hotspot_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error deleting hotspot {hotspot_id} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 def _get_hotspot_or_404(model_id, hotspot_id):
@@ -142,7 +170,7 @@ def get_hotspot_comments(model_id, hotspot_id):
         return jsonify({"success": True, "comments": [c.to_dict() for c in hotspot.comments]})
     except Exception as e:
         app_module.logger.error(f"Error getting comments for hotspot {hotspot_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots/<hotspot_id>/comments", methods=["POST"])
@@ -178,7 +206,7 @@ def create_hotspot_comment(model_id, hotspot_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error posting comment on hotspot {hotspot_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots/<hotspot_id>/comments/<int:comment_id>", methods=["DELETE"])
@@ -211,7 +239,7 @@ def delete_hotspot_comment(model_id, hotspot_id, comment_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error deleting comment {comment_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots", methods=["DELETE"])
@@ -230,7 +258,7 @@ def delete_all_hotspots(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error deleting all hotspots for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots/visibility", methods=["PATCH"])
@@ -254,7 +282,7 @@ def toggle_hotspots_visibility(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error toggling hotspot visibility for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/camera-views", methods=["GET"])
@@ -272,7 +300,7 @@ def get_camera_views(model_id):
         return jsonify({"success": True, "views": [v.to_dict() for v in views]})
     except Exception as e:
         app_module.logger.error(f"Error getting camera views for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/camera-views", methods=["POST"])
@@ -293,16 +321,35 @@ def create_camera_view(model_id):
         orbit = data.get("orbit", {})
         target = data.get("target", {})
 
+        # Validate raw client JSON before it reaches float columns (mirror
+        # create_measurement): orbit/target must be finite numbers.
+        try:
+            orbit_theta = float(orbit.get("theta", 0))
+            orbit_phi = float(orbit.get("phi", 0))
+            orbit_radius = float(orbit.get("radius", 0))
+            target_x = float(target.get("x", 0))
+            target_y = float(target.get("y", 0))
+            target_z = float(target.get("z", 0))
+            fov = data.get("fov")
+            fov = float(fov) if fov is not None else None
+            numeric = [orbit_theta, orbit_phi, orbit_radius, target_x, target_y, target_z]
+            if fov is not None:
+                numeric.append(fov)
+            if not all(math.isfinite(value) for value in numeric):
+                raise ValueError("non-finite value")
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid coordinates"}), 400
+
         view = CameraView(
             model_id=model_id,
             name=data.get("name", "View"),
-            orbit_theta=orbit.get("theta", 0),
-            orbit_phi=orbit.get("phi", 0),
-            orbit_radius=orbit.get("radius", 0),
-            target_x=target.get("x", 0),
-            target_y=target.get("y", 0),
-            target_z=target.get("z", 0),
-            fov=data.get("fov"),
+            orbit_theta=orbit_theta,
+            orbit_phi=orbit_phi,
+            orbit_radius=orbit_radius,
+            target_x=target_x,
+            target_y=target_y,
+            target_z=target_z,
+            fov=fov,
         )
         db.session.add(view)
         db.session.commit()
@@ -310,7 +357,7 @@ def create_camera_view(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error creating camera view for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/measurements", methods=["GET"])
@@ -328,7 +375,7 @@ def get_measurements(model_id):
         return jsonify({"success": True, "measurements": [m.to_dict() for m in rows]})
     except Exception as e:
         app_module.logger.error(f"Error getting measurements for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/measurements", methods=["POST"])
@@ -363,7 +410,7 @@ def create_measurement(model_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error creating measurement for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/measurements/<int:measurement_id>", methods=["DELETE"])
@@ -384,7 +431,7 @@ def delete_measurement(model_id, measurement_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error deleting measurement {measurement_id} for {model_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500
 
 
 @hotspots_bp.route("/api/models/<model_id>/camera-views/<int:view_id>", methods=["DELETE"])
@@ -406,4 +453,4 @@ def delete_camera_view(model_id, view_id):
     except Exception as e:
         db.session.rollback()
         app_module.logger.error(f"Error deleting camera view {view_id}: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error"}), 500

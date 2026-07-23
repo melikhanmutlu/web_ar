@@ -27,6 +27,8 @@ from pygltflib import (
     Texture, TextureInfo,
 )
 
+from converters.base_converter import safe_join_within
+
 logger = logging.getLogger(__name__)
 
 # Cap a single downloaded texture so a hostile/broken URL can't exhaust memory.
@@ -68,12 +70,16 @@ def _append_blob(gltf: GLTF2, payload: bytes) -> int:
 
 
 def _find_texture(uri: str, search_dirs: list) -> "Path | None":
+    # Untrusted uri comes from the model file; never honor its directory
+    # components (absolute paths or ../ traversal would read arbitrary server
+    # files and embed them into the served GLB). Resolve only by basename,
+    # contained within each search dir via safe_join_within.
     candidates = []
     uri_path = Path(uri.replace("\\", "/"))
     for directory in search_dirs:
-        root = Path(directory)
-        candidates.append(root / uri_path)
-        candidates.append(root / uri_path.name)
+        safe = safe_join_within(directory, uri)
+        if safe:
+            candidates.append(Path(safe))
     lower_name = uri_path.name.lower()
     for directory in search_dirs:
         root = Path(directory)

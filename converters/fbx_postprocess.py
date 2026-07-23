@@ -604,17 +604,17 @@ class FBXPostProcessMixin:
                 if image.uri and not image.uri.startswith("data:"):
                     self.log_operation(f"Found external texture: {image.uri}")
 
-                    # Try multiple locations for texture file
+                    # Try multiple locations for texture file. image.uri is
+                    # untrusted (from the FBX/glTF); resolve only by basename
+                    # contained within glb_dir/fbx_dir via safe_join_within so
+                    # an absolute or ../ path can't read arbitrary server files
+                    # and get embedded into the served GLB.
                     texture_path = None
                     search_paths = [
-                        os.path.join(glb_dir, image.uri),  # Same dir as GLB
-                        os.path.join(fbx_dir, image.uri),  # Same dir as FBX
-                        os.path.join(
-                            glb_dir, os.path.basename(image.uri)
-                        ),  # GLB dir, filename only
-                        os.path.join(
-                            fbx_dir, os.path.basename(image.uri)
-                        ),  # FBX dir, filename only
+                        p for p in (
+                            safe_join_within(glb_dir, image.uri),
+                            safe_join_within(fbx_dir, image.uri),
+                        ) if p
                     ]
 
                     for path in search_paths:

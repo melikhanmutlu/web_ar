@@ -877,11 +877,12 @@
       };
     </script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>
-    <!-- Layers (visibility / color / explode) + slicer. Loaded on the homepage
-         demo too so the Layers + Explode panel works there; all mutating
-         actions (save layout, apply slice) stay owner-gated, and its AR event /
-         USDZ fetches are .catch-guarded so the fake demo model id is harmless. -->
+    <!-- Layers (visibility / color / explode) + slicer. Not loaded on the
+         read-only homepage demo, which ships no editing JS; all mutating
+         actions (save layout, apply slice) stay owner-gated elsewhere. -->
+    {% if not marketing_demo|default(false) %}
     <script src="{{ url_for('static', filename='js/viewer/ar-slicer-layers.js') }}"></script>
+    {% endif %}
 
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen{% if marketing_demo|default(false) %} marketing-demo viewer-stage-dark{% endif %}">
@@ -907,13 +908,13 @@
     {% include '_site_header.html' %}
 
     <!-- QR Modal -->
-    <div id="qrModal">
+    <div id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
         <div class="modal-card">
             <div style="display:flex;align-items:flex-start;gap:1.25rem;">
                 <div style="flex:1;min-width:0;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
-                        <h3 style="font-size:0.95rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
-                        <button id="closeQrModal" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+                        <h3 id="qrModalTitle" style="font-size:0.95rem;font-weight:700;margin:0;color:var(--color-gray-900);">Scan QR Code</h3>
+                        <button id="closeQrModal" aria-label="Close" style="background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
                     </div>
                     <p style="font-size:0.8rem;color:var(--color-gray-500);margin:0;line-height:1.5;">Scan this QR code with your mobile device to view the model in AR</p>
                 </div>
@@ -1637,24 +1638,24 @@
 
         <!-- Download format picker: mobile/tablet only (see static/js/viewer/fullscreen-modal.js).
              On desktop the same formats appear as a hover fan-out around #downloadButton. -->
-        <div id="downloadFormatModal" class="info-modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div id="downloadFormatModal" class="info-modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="downloadFormatModalTitle">
             <div class="info-modal-card" style="width:min(20rem, calc(100vw - 2rem));padding:1.25rem;">
-                <h3 style="font-size:0.9rem;font-weight:700;margin:0 0 0.85rem;color:var(--color-gray-900);">Download format</h3>
+                <h3 id="downloadFormatModalTitle" style="font-size:0.9rem;font-weight:700;margin:0 0 0.85rem;color:var(--color-gray-900);">Download format</h3>
                 <div id="downloadFormatModalOptions" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
                 <button type="button" id="downloadFormatModalClose" class="btn-secondary" style="width:100%;margin-top:0.85rem;">Cancel</button>
             </div>
         </div>
 
         <!-- Model Info Modal -->
-        <div id="modelInfoModal" class="info-modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div id="modelInfoModal" class="info-modal-backdrop hidden fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="modelInfoModalTitle">
             <div class="info-modal-card max-h-[80vh] overflow-y-auto">
                 <!-- Modal Header -->
                 <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+                    <h3 id="modelInfoModalTitle" class="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
                         <i data-lucide="image"></i>
                         Model Information
                     </h3>
-                    <button id="closeModalButton" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <button id="closeModalButton" aria-label="Close" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
@@ -1800,9 +1801,9 @@
     </div>
 
     <!-- AR Modal -->
-    <div id="arModal">
+    <div id="arModal" role="dialog" aria-modal="true" aria-labelledby="arModalTitle">
         <div class="modal-card">
-            <button id="closeArModal" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <button id="closeArModal" aria-label="Close" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
             <div style="display:flex;align-items:flex-start;gap:1.25rem;">
                 <div style="flex:1;min-width:0;">
                     <h3 id="arModalTitle" style="font-size:0.95rem;font-weight:700;margin:0 0 0.5rem;color:var(--color-gray-900);">AR Not Supported</h3>
@@ -1815,9 +1816,9 @@
         </div>
     </div>
 
-    <div id="hotspotDiscussionModal">
+    <div id="hotspotDiscussionModal" role="dialog" aria-modal="true" aria-labelledby="hotspotDiscussionTitle">
         <div class="modal-card">
-            <button id="closeHotspotDiscussion" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
+            <button id="closeHotspotDiscussion" aria-label="Close" style="position:absolute;top:0.85rem;right:0.85rem;background:none;border:none;cursor:pointer;color:var(--color-gray-400);padding:0;line-height:0;"><i data-lucide="x" style="width:1rem;height:1rem;"></i></button>
             <h3 id="hotspotDiscussionTitle" style="font-size:0.95rem;font-weight:700;margin:0 0 0.75rem;color:var(--color-gray-900);padding-right:1.5rem;"></h3>
             <div id="hotspotDiscussionComments"><p class="tp-note">No comments yet.</p></div>
             <div id="hotspotDiscussionFormWrap" style="margin-top:0.75rem;">

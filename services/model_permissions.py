@@ -74,6 +74,43 @@ def check_model_mutation_allowed(model_id, require_exists=True):
     return None
 
 
+def check_model_history_allowed(model_id):
+    """Guard for version-history download/preview.
+
+    Stricter than public view: a historical version GLB can contain geometry
+    the owner later removed/sliced away, so it must not be reachable by anyone
+    who merely has the (unlisted/public) model link. Allowed for the owner, an
+    org member, an active share-link holder (view or edit), the anonymous
+    model's edit-token holder, or an admin. Returns a response tuple to return
+    from the view, or None when access is allowed.
+    """
+    from werkzeug.security import check_password_hash
+
+    actor_id = current_user.id if current_user.is_authenticated else None
+    model = db.session.get(UserModel, model_id)
+    if model is None or model.deleted_at is not None:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    if current_user.is_authenticated and current_user.is_admin:
+        return None
+    if _active_share_grant(model_id) is not None:
+        return None
+    if model.user_id is not None:
+        if actor_id == model.user_id:
+            return None
+        if actor_id and model.organization_id and OrganizationMember.query.filter_by(
+            organization_id=model.organization_id, user_id=actor_id
+        ).first():
+            return None
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    # Anonymous model: require its edit capability token.
+    token = (request.headers.get("X-Model-Edit-Token") or
+             request.args.get("edit_token") or
+             session.get(f"model_edit_token:{model_id}"))
+    if model.edit_token_hash and token and check_password_hash(model.edit_token_hash, token):
+        return None
+    return jsonify({"success": False, "error": "Forbidden"}), 403
+
+
 def check_model_view_allowed(model_id):
     actor_id = current_user.id if current_user.is_authenticated else None
     grant = _active_share_grant(model_id)

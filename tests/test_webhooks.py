@@ -95,7 +95,7 @@ def test_dispatch_signs_payload_and_only_notifies_matching_active_subscriptions(
     class FakeResponse:
         status_code = 200
 
-    def fake_post(url, data=None, headers=None, timeout=None):
+    def fake_post(url, data=None, headers=None, timeout=None, allow_redirects=None):
         calls.append((url, data, headers))
         return FakeResponse()
 

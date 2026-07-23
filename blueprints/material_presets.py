@@ -122,7 +122,9 @@ def apply_model_material_preset(model_id):
     if not preset:
         return jsonify({"success": False, "error": "Material preset not found"}), 404
     model = get_live_model(model_id)
-    source = model.filename
+    # glb_path resolves the live converted file; model.filename is a stale
+    # absolute path once the storage root moves between deploys.
+    source = model.glb_path
     temp_output = source + ".material.tmp.glb"
     modifications = {"material": {
         "color": preset["color"], "metalness": preset["metalness"],

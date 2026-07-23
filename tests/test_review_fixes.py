@@ -83,7 +83,7 @@ def test_dispatch_pins_dns_against_rebinding(client, monkeypatch):
 
     observed = {}
 
-    def fake_post(url, data=None, headers=None, timeout=None):
+    def fake_post(url, data=None, headers=None, timeout=None, allow_redirects=None):
         # Simulate what urllib3 does internally: resolve the host to connect.
         import socket as socket_module
         infos = socket_module.getaddrinfo(webhooks_service.urlsplit(url).hostname, 443)

@@ -44,6 +44,9 @@ class ModelAccessService:
                 return model, AccessDecision(True)
             if not edit_token or not check_password_hash(model.edit_token_hash, edit_token):
                 return model, AccessDecision(False, 403, "Valid edit token required")
+        # A model with no owner and no edit-token hash is intentionally open
+        # (anonymous, token-less models are freely viewable AND editable — the
+        # export/edit/slice flows rely on this). Do not default-deny here.
         return model, AccessDecision(True)
 
     def view_decision(self, model_id, *, actor_id=None, has_share_grant=False,

@@ -140,7 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             '<span style="font-size:0.6rem;color:var(--color-gray-500);">' + escapeHtml(v.created_at || '') + '</span>' +
                             '</div>' +
                             (v.comment ? '<p style="font-size:0.68rem;color:var(--color-gray-500);margin-bottom:0.2rem;">' + escapeHtml(v.comment) + '</p>' : '') +
-                            (v.file_size_formatted ? '<p style="font-size:0.6rem;color:var(--color-gray-500);margin-bottom:0.3rem;">Size: ' + v.file_size_formatted + '</p>' : '') +
+                            (v.file_size_formatted ? '<p style="font-size:0.6rem;color:var(--color-gray-500);margin-bottom:0.3rem;">Size: ' + escapeHtml(v.file_size_formatted) + '</p>' : '') +
                             '<div style="display:flex;gap:3px;">' +
                             '<button class="preview-btn tp-btn-sm" style="flex:1;">Preview</button>' +
                             (CAN_EDIT ? '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' : '') +

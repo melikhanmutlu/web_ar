@@ -68,13 +68,21 @@ def generate_3d():
     # Serialize quota checks per user on PostgreSQL so concurrent requests
     # cannot each observe the same remaining credit and overspend it.
     user = db.session.query(User).filter_by(id=current_user.id).with_for_update().one()
+    balance_before = user.ai_credit_balance or 0
     allowed, count, limit = app_module._consume_ai_allowance(user)
     if not allowed:
+        db.session.rollback()
         from services.upgrade import upgrade_hint
         return jsonify({"success": False,
                         "error": f"Monthly generation limit reached ({limit}) and no AI credits left. "
                                  "Buy a credit pack or upgrade your plan.",
                         "upgrade": upgrade_hint("ai_credits")}), 429
+    # Commit the decrement now to RELEASE the per-user row lock before the slow
+    # Meshy HTTP call (holding it across the round-trip serialized generations
+    # and could exhaust the DB pool). Refund on failure below preserves the
+    # original "charge only if the generation actually started" guarantee.
+    credit_spent = (user.ai_credit_balance or 0) < balance_before
+    db.session.commit()
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()
@@ -143,10 +151,19 @@ def generate_3d():
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
     except ValueError as e:
+        db.session.rollback()
+        if credit_spent:
+            app_module._refund_ai_credit(current_user.id)
         return jsonify({"success": False, "error": str(e)}), 400
     except ai_generator.MeshyError as e:
+        db.session.rollback()
+        if credit_spent:
+            app_module._refund_ai_credit(current_user.id)
         return jsonify({"success": False, "error": str(e)}), 502
     except Exception as e:
+        db.session.rollback()
+        if credit_spent:
+            app_module._refund_ai_credit(current_user.id)
         app_module.logger.error(f"[generate-3d] start error: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Failed to start generation."}), 500
 

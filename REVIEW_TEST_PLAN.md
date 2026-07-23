@@ -491,6 +491,75 @@ hızlı ardışık tıklamada (debounce) çift kayıt/çakışma.
 
 ---
 
+## Tur 3 — Düzeltmeler (2026-07-23)
+
+> Tüm bulgular kod düzeyinde ele alındı; regresyon testleri eklendi. Tam suite
+> **655 passed / 0 failed**, lint + py_compile temiz, tek migration head.
+
+### Uygulanan düzeltmeler
+- **K1** — `converters/glb_quality.py:_find_texture` ve `converters/fbx_postprocess.py`
+  harici-texture çözümlemesi artık `safe_join_within`'den geçiyor (mutlak/`..` reddediliyor).
+- **Y1** — `blueprints/api_tokens.py:_bearer_token` owner-active (`is_active_flag`) +
+  org-membership recheck ekledi (deaktive/atılan sahibin token'ı anında geçersiz).
+- **Y2** — `requirements.txt` Pillow `12.2.0`→`12.3.0` (20 CVE fixli).
+- **Y3** — `models.py` `Organization.created_by` SET NULL+nullable, `AdminAuditLog.actor_id`
+  SET NULL; migration `c1f2a3b4d5e6` (upgrade+downgrade fresh-SQLite'ta doğrulandı).
+  Org-creator kullanıcı artık silinebiliyor.
+- **Y4** — `blueprints/versions.py:download_version` yeni
+  `check_model_history_allowed` (owner/org/share/edit-token/admin) guard'ına bağlandı;
+  2 P0 testi artık geçiyor. Public/unlisted viewer artık versiyon geçmişini indiremez.
+- **O1/O2** — `obj_converter.py`: MTL taraması tüm `map_*` direktiflerini kapsıyor;
+  mesh complexity guard (STL/STEP ile aynı limit) eklendi.
+- **O3** — `services/webhooks.py` `allow_redirects=False` (redirect SSRF bypass kapandı).
+- **O4** — `auth.py:_safe_next` protocol-relative/`\`/absolute reddediyor.
+- **O5** — hotspots/versions/model_editing/models_crud/model_geometry/scenes ham
+  exception string'leri loglanıp generic mesaja çevrildi.
+- **O6** — `blueprints/ai_generation.py` kredi decrement'i kısa kilitte commit edip
+  Meshy çağrısını kilit dışına aldı; hata halinde `app._refund_ai_credit` ile iade.
+- **O7** — `blueprints/discover.py` SQL `LIMIT/OFFSET` (+1 ile has_more).
+- **O8** — `app.py` `engagement.track_share/track_download` per-IP rate limit.
+- **O9** — `UserModel.user_id`/`folder_id` index (migration `c1f2a3b4d5e6`).
+- **O10** — `blueprints/billing.py` LemonSqueezy renewal create+apply tek transaction
+  + stranded-pending self-heal.
+- **O11** — `blueprints/health.py` storage writability probe + ayrık `/healthz/worker`.
+- **O12, D-L6, D-L7, D-L8, T2-O3, T2-L6** — frontend: debounce, demo slicer JS gate,
+  camera PATCH uyarısı, escape tutarlılığı, modal a11y (role/aria/Escape), form label'ları.
+- **D-L1** — `blueprints/model_files.py:serve_converted_file` yayın-adı allowlist'i
+  (`model.glb`/lod/exploded/retopology/textures/usdz); backup/modified/temp bloklu.
+  GLB+thumbnail'e `max_age=86400`.
+- **D-L2** — `blueprints/hotspots.py` create_hotspot/create_camera_view numeric coercion
+  + NaN/Inf reddi.
+- **D-L3** — `models_crud.update_model_color` + `material_presets` `model.glb_path` kullanıyor.
+- **D-L5** — `app.py` ilk-upload GLB/GLTF yazımı `.part` + `_atomic_replace`.
+- **T2-O1/T2-L2** — `services/fx.py` cached-return `>0` revalidasyonu + cold-cache
+  fallback uyarı logu.
+- **T2-O4** — `app.py` after_request authenticated HTML'e `private, no-store` + `Vary: Cookie`.
+- **T2-O5** — `auth.py` login kilitli/geçersiz aynı generic mesaj (enumeration kapandı).
+- **T2-L1** — `services/email.py` header kurulumu try içine alındı.
+- **T2-L4** — `auth.py` logout'ta `session.clear()`.
+- **T2-L5** — `config.py` `REMEMBER_COOKIE_DURATION=30g`, `PERMANENT_SESSION_LIFETIME=14g`.
+
+### Geri alınan
+- **D-L4** — mutation default-deny **geri alındı.** Bu uygulamada "sahipsiz + token'sız"
+  anonim modeller kasıtlı olarak serbestçe görüntülenip düzenlenebilir (export/edit/slice
+  akışları buna dayanıyor); default-deny 12+ meşru testi bozdu. Bulgu zaten "latent, şu an
+  erişilemez" idi — kod yorumu ile belgelendi, davranış korundu.
+
+### Ertelenen (bilinçli, riskli/kapsamlı)
+- **T2-O2** — storage_quota TOCTOU: tam çözüm async upload pipeline'ında model-oluşturma
+  anında atomik kota rezervasyonu gerektiriyor; upload yolunu istikrarsızlaştırmamak için
+  uygulanmadı. Etki bounded (bir dosyalık aşım).
+- **T2-L7 (statik)** — JS/CSS uzun `max-age`'i içerik-hash cache-busting altyapısı
+  gerektiriyor (stale-JS riski); yalnızca content-addressed GLB/thumbnail'e TTL verildi.
+
+### Regresyon testleri
+- `tests/test_audit_fixes.py` (yeni): K1 (traversal), O4 (open-redirect), Y1 (deaktive
+  token), Y3 (org-creator delete).
+- `tests/test_p0_hardening.py`: Y4 (2 test artık geçiyor) + lockout mesajı T2-O5'e güncellendi.
+- `tests/test_webhooks.py`, `tests/test_review_fixes.py`: mock imzaları `allow_redirects`.
+
+---
+
 ## Test Durumu (Tur 1)
 
 - **646 passed · 3 failed · 2 skipped** (~368s). **3 kırığın hepsi GERÇEK, ortam değil.**

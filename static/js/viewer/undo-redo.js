@@ -85,12 +85,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Material sync is async (model-viewer's 'load' + material-editor.js's
     // own load handling), so the sliders may not reflect the model's real
-    // material state yet at the point above. Once material-editor.js signals
-    // they do, refresh the baseline in place -- but only if the user hasn't
-    // edited anything yet, so a real edit is never overwritten/dropped.
+    // material state yet at the point above -- history[0].material is
+    // whatever placeholder the HTML inputs start with (e.g. plain white),
+    // not the model's actual baked-in color/texture. The old guard here
+    // only refreshed history[0] "if the user hasn't edited anything yet",
+    // which sounds safe but permanently locked in that white placeholder as
+    // history[0] the moment a user made even one edit before this event
+    // fired (e.g. while a texture was still downloading) -- from then on,
+    // undoing all the way back to the start silently replaced the model's
+    // real appearance with white, which read as "the material got deleted".
+    // Always refresh just the material half of history[0] instead: it never
+    // touches history[0].transform or any later (real) history entry, so
+    // walking all the way back always lands on the model's true starting
+    // material, not a placeholder.
     window.addEventListener('viewer:material-ready', () => {
-        if (history.length === 1 && pointer === 0) {
-            history[0] = captureSnapshot();
+        if (history.length > 0) {
+            const original = window._originalMaterialSnapshot?.();
+            if (original) history[0] = { ...history[0], material: original };
         }
     });
 

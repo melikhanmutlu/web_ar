@@ -761,7 +761,7 @@ class Plan(db.Model):
     slug = db.Column(db.String(30), unique=True, nullable=False, index=True)
     display_name = db.Column(db.String(60), nullable=False)
     price = db.Column(db.Integer, nullable=True)          # per period; NULL for the unlimited/admin tier
-    currency = db.Column(db.String(3), nullable=False, default='TRY', server_default='TRY')
+    currency = db.Column(db.String(3), nullable=False, default='USD', server_default='USD')
     billing_period = db.Column(db.String(10), nullable=False, default='monthly', server_default='monthly')
     is_public = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
     is_system = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())

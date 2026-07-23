@@ -69,6 +69,65 @@
         {% endfor %}
     </section>
 
+    <section class="pricing-compare shell">
+        <div class="reveal" data-reveal>
+            <h2>Compare plans in detail.</h2>
+        </div>
+        <div class="pricing-compare-wrap reveal" data-reveal>
+            <table class="pricing-compare-table">
+                <thead>
+                    <tr>
+                        <th></th>
+                        {% for plan in plans %}
+                        <th{% if plan == 'pro' %} class="pricing-compare-featured"{% endif %}>{{ plan_config[plan].display_name }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set limit_rows = [
+                        ('Storage', 'storage_mb', 'gb'),
+                        ('Models', 'max_models', 'count'),
+                        ('AI generations / month', 'ai_monthly', 'count0'),
+                        ('Max file size', 'max_upload_mb', 'mb'),
+                        ('Batch upload size', 'batch_size', 'files'),
+                        ('Analytics history', 'analytics_retention_days', 'days'),
+                    ] %}
+                    {% for label, key, kind in limit_rows %}
+                    <tr>
+                        <th>{{ label }}</th>
+                        {% for plan in plans %}
+                        {% set v = plan_config[plan].limits[key] %}
+                        <td{% if plan == 'pro' %} class="pricing-compare-featured"{% endif %}>
+                            {% if kind == 'gb' %}{{ (v // 1024 ~ ' GB') if v else '1 GB' }}
+                            {% elif kind == 'count' %}{{ v if v else 'Unlimited' }}
+                            {% elif kind == 'count0' %}{{ v if v else 0 }}
+                            {% elif kind == 'mb' %}{{ v }} MB
+                            {% elif kind == 'files' %}{{ v }} files
+                            {% elif kind == 'days' %}{{ v }} days
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    {% for key, label in feature_labels.items() %}
+                    <tr>
+                        <th>{{ label }}</th>
+                        {% for plan in plans %}
+                        <td{% if plan == 'pro' %} class="pricing-compare-featured"{% endif %}>
+                            {% if plan_config[plan].features[key] %}
+                            <span class="pricing-compare-yes" aria-label="Included">&check;</span>
+                            {% else %}
+                            <span class="pricing-compare-no" aria-label="Not included">&times;</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
     <section class="faq shell">
         <div class="reveal" data-reveal>
             <h2>Need more generations?</h2>

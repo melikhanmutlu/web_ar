@@ -11,41 +11,53 @@
     <title>{{ seo_title }}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
-    <style>
-        .docs-shell{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;align-items:start;padding-top:24px;padding-bottom:80px;}
-        .docs-nav{position:sticky;top:98px;font-size:.92rem;}
-        .docs-nav strong{display:block;text-transform:uppercase;letter-spacing:.05em;font-size:.72rem;opacity:.55;margin:1.1rem 0 .4rem;}
-        .docs-nav a{display:block;padding:.28rem 0;color:inherit;text-decoration:none;opacity:.8;border-left:2px solid transparent;padding-left:.6rem;}
-        .docs-nav a:hover{opacity:1;border-left-color:currentColor;}
-        .docs-content h2{margin-top:2.4rem;scroll-margin-top:98px;}
-        .docs-content h3{margin-top:1.6rem;}
-        .docs-content p, .docs-content li{line-height:1.6;}
-        .docs-content pre{position:relative;background:#0f172a;color:#e2e8f0;padding:1rem 1.1rem;border-radius:10px;overflow-x:auto;font-size:.86rem;}
-        .docs-content pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
-        .docs-content code:not(pre code){background:#eef2f7;padding:.1rem .35rem;border-radius:5px;font-size:.9em;}
-        .docs-copy{position:absolute;top:.5rem;right:.5rem;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;font-size:.72rem;padding:.2rem .5rem;cursor:pointer;}
-        .docs-table{width:100%;border-collapse:collapse;font-size:.9rem;margin:.5rem 0;}
-        .docs-table th,.docs-table td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid #e5e7eb;vertical-align:top;}
-        .docs-endpoint{display:inline-block;background:#eef2f7;border-radius:6px;padding:.15rem .5rem;font-family:ui-monospace,monospace;font-size:.85rem;}
-        .docs-method{font-weight:700;}
-        @media (max-width:860px){.docs-shell{grid-template-columns:1fr;}.docs-nav{position:static;}}
-    </style>
 </head>
-<body class="av-home">
+<body class="av-home developer-docs-page">
     {% include "_site_header.html" %}
 
     <main>
-        <section class="page-hero">
-            <div class="shell">
+        <section class="dev-docs-hero">
+            <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+            <div class="shell dev-docs-hero-grid">
                 <div class="reveal" data-reveal>
                     <span class="status-label"><i></i> Developer platform</span>
-                    <h1>ARVision REST API</h1>
-                    <p>Upload and convert 3D models, read analytics, and receive signed events — programmatically. Base URL <code>{{ site_url }}/api/v1</code>.</p>
+                    <h1>Build 3D into<br>your product.</h1>
+                    <p>Upload and convert models, read analytics and receive signed events through one focused REST API.</p>
+                    <div class="detail-actions">
+                        <a class="primary-btn" href="{{ url_for('main.developer_settings') }}">Get API access <span>&rarr;</span></a>
+                        <a class="text-btn" href="#overview">Read the reference <span>&darr;</span></a>
+                    </div>
+                    <div class="dev-base-url"><span>BASE URL</span><code>{{ site_url }}/api/v1</code></div>
+                </div>
+                <div class="dev-code-window reveal" data-reveal style="--delay:120ms">
+                    <div class="dev-code-bar"><span>quickstart.js</span><i></i><i></i><i></i></div>
+                    <pre><code><em>const</em> form = <em>new</em> FormData();
+form.append(<strong>"file"</strong>, modelFile);
+
+<em>const</em> response = <em>await</em> fetch(
+  <strong>"{{ site_url }}/api/v1/models"</strong>,
+  {
+    method: <strong>"POST"</strong>,
+    headers: { Authorization: <strong>`Bearer ${token}`</strong> },
+    body: form
+  }
+);
+
+<em>const</em> { data } = <em>await</em> response.json();</code></pre>
+                    <div class="dev-code-status"><i></i><span>202 Accepted</span><b>Conversion queued</b></div>
                 </div>
             </div>
         </section>
 
-        <div class="shell docs-shell">
+        <section class="dev-capabilities">
+            <div class="shell">
+                <article><span>01</span><b>Model pipeline</b><p>Upload, convert and publish 3D assets.</p></article>
+                <article><span>02</span><b>Usage analytics</b><p>Read viewer and AR engagement signals.</p></article>
+                <article><span>03</span><b>Signed events</b><p>React to completed jobs with webhooks.</p></article>
+            </div>
+        </section>
+
+        <div class="shell docs-shell" id="reference">
             <aside class="docs-nav" aria-label="API reference">
                 <strong>Getting started</strong>
                 <a href="#overview">Overview</a>
@@ -205,6 +217,8 @@ def verify(raw_body: bytes, header: str, secret: str) -> bool:
     </main>
 
     {% include "_site_footer.html" %}
+
+    <script src="{{ url_for('static', filename='js/site.js') }}"></script>
 
     <script>
     (function () {

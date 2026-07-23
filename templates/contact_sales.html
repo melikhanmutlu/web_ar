@@ -1,68 +1,47 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {% include '_security_head.html' %}
-    {% set seo_title = "Talk to sales — ARVision" %}
-    {% set seo_description = "Book a demo or ask about Business and Enterprise plans for ARVision — AR for e-commerce, architecture and agencies." %}
-    {% set seo_robots = "index, follow" %}
-    {% include '_seo_head.html' %}
-    <title>{{ seo_title }}</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% include '_security_head.html' %}{% set seo_title = "Talk to sales — ARVision" %}{% set seo_description = "Book a demo or ask about Business and Enterprise plans for ARVision — AR for e-commerce, architecture and agencies." %}{% set seo_robots = "index, follow" %}{% include '_seo_head.html' %}
+    <title>{{ seo_title }}</title><link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}"><link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
-<body class="av-home">
+<body class="av-home marketing-detail marketing-detail--sales">
     {% include "_site_header.html" %}
-
     <main>
-        <section class="page-hero">
-            <div class="shell">
-                <div class="reveal" data-reveal>
+        <section class="sales-layout">
+            <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+            <div class="shell sales-grid">
+                <div class="sales-copy reveal" data-reveal>
                     <span class="status-label"><i></i> Talk to sales</span>
-                    <h1>Let's put your products in AR</h1>
-                    <p>Tell us a little about what you're building. We'll reply within one business day — or book a 25-minute demo where we convert one of your models live.</p>
+                    <h1>Let’s build the right 3D workflow.</h1>
+                    <p>Tell us what you are creating. We will reply within one business day—or show you the complete workflow in a focused 25-minute demo.</p>
+                    <div class="sales-expectations">
+                        <div><span>01</span><p><b>A practical conversation</b>No generic pitch. We start with your models, channels and delivery needs.</p></div>
+                        <div><span>02</span><p><b>Your model, live</b>Bring a file and we can convert it during the call.</p></div>
+                        <div><span>03</span><p><b>A clear next step</b>Leave with a recommended workflow, plan and rollout path.</p></div>
+                    </div>
+                    <div class="sales-trust"><span>Built for</span><b>E-commerce</b><b>Architecture</b><b>Agencies</b></div>
+                </div>
+                <div class="sales-form-wrap reveal" data-reveal style="--delay:100ms">
+                    <div class="sales-form-head"><span>START A CONVERSATION</span><h2>Tell us about your project.</h2><p>Fields marked with * are required.</p></div>
+                    {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="form-message form-message--{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+                    <form method="POST" action="{{ url_for('main.contact_sales') }}" class="sales-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="reason" value="{{ reason }}">
+                        <div class="form-honeypot" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+                        <div class="field-row">
+                            <label class="field-label">Name<input type="text" name="name" maxlength="120" autocomplete="name" value="{{ form.get('name', '') }}" placeholder="Your name"></label>
+                            <label class="field-label">Company<input type="text" name="company" maxlength="160" autocomplete="organization" value="{{ form.get('company', '') }}" placeholder="Company name"></label>
+                        </div>
+                        <label class="field-label">Work email *<input type="email" name="email" required maxlength="255" autocomplete="email" value="{{ form.get('email', '') }}" placeholder="you@company.com"></label>
+                        <label class="field-label">What are you trying to do?<textarea name="message" rows="5" maxlength="4000" placeholder="Tell us about your models, audience and goals…">{{ form.get('message', '') }}</textarea></label>
+                        <button type="submit" class="primary-btn wide">Send enquiry <span>&rarr;</span></button>
+                    </form>
+                    {% if calcom_url %}<p class="sales-calendar">Prefer to choose a time? <a href="{{ calcom_url }}" target="_blank" rel="noopener">Book directly <span>&nearr;</span></a></p>{% endif %}
+                    <p class="sales-privacy">Your details are used only to respond to this enquiry.</p>
                 </div>
             </div>
         </section>
-
-        <section class="shell" style="padding-bottom:64px;">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% for category, message in messages %}
-                <p style="color:{{ '#0a7d33' if category == 'success' else '#b42318' }};font-weight:700;">{{ message }}</p>
-                {% endfor %}
-            {% endwith %}
-
-            <article class="admin-card" style="max-width:620px;">
-                <form method="POST" action="{{ url_for('main.contact_sales') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="reason" value="{{ reason }}">
-                    <!-- honeypot: hidden from humans, tempting to bots -->
-                    <div style="position:absolute;left:-9999px;" aria-hidden="true">
-                        <label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
-                    </div>
-
-                    <label class="field-label">Name
-                        <input type="text" name="name" maxlength="120" value="{{ form.get('name', '') }}">
-                    </label>
-                    <label class="field-label">Work email *
-                        <input type="email" name="email" required maxlength="255" value="{{ form.get('email', '') }}">
-                    </label>
-                    <label class="field-label">Company
-                        <input type="text" name="company" maxlength="160" value="{{ form.get('company', '') }}">
-                    </label>
-                    <label class="field-label">What are you trying to do?
-                        <textarea name="message" rows="4" maxlength="4000">{{ form.get('message', '') }}</textarea>
-                    </label>
-                    <button type="submit" class="primary-btn wide" style="margin-top:1rem;">Send &rarr;</button>
-                </form>
-
-                {% if calcom_url %}
-                <p class="field-help" style="margin-top:1rem;">Prefer to pick a time now? <a href="{{ calcom_url }}" target="_blank" rel="noopener">Book a demo &rarr;</a></p>
-                {% endif %}
-            </article>
-        </section>
     </main>
-    {% include "_site_footer.html" %}
+    {% include "_site_footer.html" %}<script src="{{ url_for('static', filename='js/site.js') }}"></script>
 </body>
 </html>

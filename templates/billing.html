@@ -3,90 +3,99 @@
 {% block title %}Billing - ARVision{% endblock %}
 
 {% block content %}
-<main>
-    <section class="page-hero">
-        <div class="shell">
+<main class="account-surface billing-page">
+    <section class="account-hero billing-hero">
+        <div class="detail-orb detail-orb--one" aria-hidden="true"></div>
+        <div class="shell account-hero-grid">
             <div class="reveal" data-reveal>
-                <span class="status-label"><i></i> Billing</span>
-                <h1>Your subscription</h1>
-                {% if paid %}<p style="color:#0a7d33;font-weight:700;">Payment received — thank you! Your plan is now active.</p>{% endif %}
-                {% if failed %}<p style="color:#b42318;font-weight:700;">The payment wasn't completed. You can try again below.</p>{% endif %}
+                <span class="status-label"><i></i> Billing &amp; plans</span>
+                <h1>A plan that moves<br>with your work.</h1>
+                <p>Manage your subscription, add AI capacity and keep a clear record of every payment.</p>
+                {% if paid %}<div class="account-notice account-notice--success">Payment received. Your plan is now active.</div>{% endif %}
+                {% if failed %}<div class="account-notice account-notice--error">The payment was not completed. You can try again below.</div>{% endif %}
             </div>
-        </div>
-    </section>
-
-    <section class="shell" style="padding-bottom:32px;">
-        <article class="admin-card" style="max-width:640px;">
-            <p style="margin:0 0 .35rem;">Current plan</p>
-            <h2 style="margin:0;">{{ plan_config.display_name or plan }}</h2>
+            <article class="current-plan-card reveal" data-reveal style="--delay:100ms">
+                <div class="current-plan-top"><span>CURRENT PLAN</span><i>ACTIVE</i></div>
+                <h2>{{ plan_config.display_name or plan }}</h2>
+                <p>Your ARVision workspace and included monthly capacity.</p>
+                <div class="current-plan-meta">
+                    <div><span>AI CREDIT BALANCE</span><b>{{ credit_balance }}</b></div>
+                    <div><span>RENEWAL</span><b>{% if plan_expires_at %}{{ plan_expires_at.strftime('%b %d, %Y') }}{% elif plan == 'unlimited' %}No limit{% else %}No expiry{% endif %}</b></div>
+                </div>
             {% if plan_expires_at %}
-            <p class="field-help">Active until {{ plan_expires_at.strftime('%Y-%m-%d') }} — renew before then to keep your features.</p>
+            <p class="current-plan-note">Renew before {{ plan_expires_at.strftime('%Y-%m-%d') }} to keep your features.</p>
             {% elif plan == 'unlimited' %}
-            <p class="field-help">Admin account — no usage limits apply.</p>
+            <p class="current-plan-note">Admin account — no usage limits apply.</p>
+            {% elif plan == 'free' %}
+            <p class="current-plan-note">The Free plan has no expiry.</p>
             {% else %}
-            <p class="field-help">The Free plan has no expiry.</p>
+            <p class="current-plan-note">Your {{ plan_config.display_name or plan }} plan stays active until changed.</p>
             {% endif %}
-
             {% if trial_available %}
-            <form method="POST" action="{{ url_for('billing.start_trial') }}" style="margin:1rem 0 0;">
+            <form method="POST" action="{{ url_for('billing.start_trial') }}" class="trial-action">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="primary-btn">Start your {{ trial_days }}-day Business trial &rarr;</button>
-                <span class="field-help" style="display:block;margin-top:.35rem;">No card required. Full Business features for {{ trial_days }} days.</span>
+                <button type="submit" class="light-btn wide">Start your {{ trial_days }}-day Business trial <span>&rarr;</span></button>
+                <span>No card required · Full Business access</span>
             </form>
             {% endif %}
         </article>
+        </div>
     </section>
 
-    <section class="shell" style="padding-top:0;padding-bottom:32px;">
-        <h2>Plans</h2>
-        <div class="pricing-grid" style="margin-top:1rem;">
+    <section class="billing-section billing-section--soft">
+        <div class="shell">
+        <div class="billing-heading"><div><span class="section-tag">SUBSCRIPTION</span><h2>Choose your workspace.</h2></div><p>Start simple, then unlock more capacity and collaboration as your 3D operation grows.</p></div>
+        <div class="billing-plan-grid">
         {% for slug, cfg in public_plans.items() %}
-            <article {% if slug == plan %}class="popular"{% endif %}>
-                {% if slug == plan %}<em>YOUR PLAN</em>{% endif %}
-                <span>{{ cfg.display_name }}</span>
+            <article {% if slug == plan %}class="is-current"{% endif %}>
+                <div class="billing-plan-head"><span>0{{ loop.index }}</span>{% if slug == plan %}<em>YOUR PLAN</em>{% endif %}</div>
+                <h3>{{ cfg.display_name }}</h3>
                 <strong>{{ cfg.price }} {{ cfg.currency }}<small>/{{ 'mo' if cfg.billing_period == 'monthly' else 'yr' }}</small></strong>
+                <p>{{ 'For teams scaling immersive commerce and delivery.' if slug == 'business' else ('For professional 3D workflows and API access.' if slug == 'pro' else 'The essentials for publishing your first experiences.') }}</p>
                 {% if slug == plan %}
                     <button type="button" class="secondary-btn wide" disabled>Current plan</button>
                 {% elif not cfg.price %}
-                    <span class="field-help">Free tier</span>
+                    <span class="billing-plan-label">Free forever</span>
                 {% elif checkout_enabled %}
-                    <form method="POST" action="{{ url_for('billing.checkout', plan_slug=slug) }}" style="margin:0;">
+                    <form method="POST" action="{{ url_for('billing.checkout', plan_slug=slug) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="primary-btn wide">Choose &rarr;</button>
+                        <button type="submit" class="primary-btn wide">Choose {{ cfg.display_name }} <span>&rarr;</span></button>
                     </form>
                 {% else %}
-                    <span class="field-help">Online payment unavailable</span>
+                    <span class="billing-plan-label">Online payment unavailable</span>
                 {% endif %}
             </article>
         {% endfor %}
         </div>
+        </div>
     </section>
 
-    <section class="shell" style="padding-top:0;padding-bottom:32px;">
-        <h2>AI credits</h2>
-        <p class="field-help" style="margin-top:.35rem;">1 credit = 1 AI generation, used after your plan's monthly quota. Your balance: <strong>{{ credit_balance }}</strong> credit{{ '' if credit_balance == 1 else 's' }}.</p>
-        <div class="pricing-grid" style="margin-top:1rem;">
+    <section class="billing-section">
+        <div class="shell">
+        <div class="billing-heading"><div><span class="section-tag">ON-DEMAND CAPACITY</span><h2>Add AI credits.</h2></div><p>One credit equals one AI generation after your monthly allowance. Current balance: <strong>{{ credit_balance }}</strong>.</p></div>
+        <div class="credit-pack-grid">
         {% for pack_id, pack in credit_packs.items() %}
             <article>
-                <span>{{ pack.credits }} credits</span>
-                <strong>{{ pack.price }} {{ (public_plans.values() | first).currency if public_plans else '' }}</strong>
+                <span>PACK 0{{ loop.index }}</span><div><strong>{{ pack.credits }} credits</strong><small>AI generation capacity</small></div><b>{{ pack.price }} {{ (public_plans.values() | first).currency if public_plans else '' }}</b>
                 {% if checkout_enabled %}
-                    <form method="POST" action="{{ url_for('billing.topup', pack=pack_id) }}" style="margin:0;">
+                    <form method="POST" action="{{ url_for('billing.topup', pack=pack_id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <button type="submit" class="primary-btn wide">Buy &rarr;</button>
+                        <button type="submit" class="secondary-btn wide">Add credits <span>&rarr;</span></button>
                     </form>
                 {% else %}
-                    <span class="field-help">Online payment unavailable</span>
+                    <em>Online payment unavailable</em>
                 {% endif %}
             </article>
         {% endfor %}
         </div>
+        </div>
     </section>
 
-    <section class="shell" style="padding-top:0;padding-bottom:64px;">
-        <h2>Payment history</h2>
+    <section class="billing-section billing-section--history">
+        <div class="shell">
+        <div class="billing-heading billing-heading--compact"><div><span class="section-tag">RECEIPTS</span><h2>Payment history.</h2></div></div>
         {% if payments %}
-        <table class="plans-editor-table" style="margin-top:1rem;">
+        <div class="billing-table-wrap"><table class="billing-history-table">
             <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Status</th></tr></thead>
             <tbody>
             {% for p in payments %}
@@ -98,10 +107,11 @@
                 </tr>
             {% endfor %}
             </tbody>
-        </table>
+        </table></div>
         {% else %}
-        <p class="field-help">No payments yet.</p>
+        <div class="billing-empty"><span>◇</span><h3>No payments yet.</h3><p>Your completed subscriptions and credit purchases will appear here.</p></div>
         {% endif %}
+        </div>
     </section>
 </main>
 {% include "_site_footer.html" %}

@@ -26,13 +26,14 @@
             <a href="{{ url_for('main.contact_sales') }}">Talk to sales</a>
             <a href="{{ url_for('main.security') }}">Security</a>
         </div>
-        <div class="footer-group">
-            <b>Compare &amp; convert</b>
-            <a href="{{ url_for('main.vs_page', competitor='sketchfab') }}">vs Sketchfab</a>
-            <a href="{{ url_for('main.vs_page', competitor='meshy') }}">vs Meshy</a>
-            <a href="{{ url_for('main.convert_page', pair='fbx-to-glb') }}">FBX to GLB</a>
-            <a href="{{ url_for('main.convert_page', pair='stl-to-ar') }}">STL to AR</a>
-        </div>
+        <!-- The "Compare & convert" (vs Sketchfab/Meshy, format-conversion
+             landing) links used to render here, but the footer grid is only
+             4 columns wide (see .footer-inner's grid-template-columns) — a
+             5th group wrapped onto its own row and sat there looking
+             unfinished. These pages are still fully reachable and indexable
+             (every VS_SLUGS/CONVERT_SLUGS URL is listed in seo.sitemap_xml,
+             and robots.txt has no Disallow for them); they just aren't
+             linked from the visible nav anymore. -->
         <div class="footer-meta">
             <span>&copy; 2026 ARVISION</span>
             <p>Web &middot; AR &middot; Embed</p>

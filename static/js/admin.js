@@ -50,7 +50,9 @@
             data = await response.json();
         } catch (e) { /* non-JSON error page */ }
         if (!response.ok || data.success === false) {
-            throw new Error(data.error || `Request failed (${response.status})`);
+            const err = new Error(data.error || `Request failed (${response.status})`);
+            err.data = data;
+            throw err;
         }
         return data;
     }
@@ -152,9 +154,32 @@
                 return;
             }
             closeModal();
+            // Bulk endpoints report ids they silently couldn't act on (already
+            // removed by another admin, or your own account excluded) instead
+            // of only ever returning a plain success count -- surface that
+            // instead of letting a partial success look identical to a full one.
+            const skippedCount = (data.skipped_missing || []).length + (data.skipped_self ? 1 : 0);
+            if (skippedCount > 0) {
+                displayToast(`Done, but ${skippedCount} selected item(s) were skipped (already changed or excluded).`, 'info');
+            }
+            // window.alert (not the toast) because the page reloads right
+            // after -- a toast would vanish before the admin could read it.
+            if (data.warning) window.alert(data.warning);
             if (redirect) window.location.href = redirect;
             else window.location.reload();
         } catch (err) {
+            // A 409 with requires_force means the server deliberately refused
+            // (e.g. "this would demote the last other active admin") rather
+            // than failed -- offer the one-click override instead of just
+            // dead-ending on an error toast.
+            if (err.data && err.data.requires_force) {
+                closeModal();
+                if (window.confirm(err.message + '\n\nProceed anyway?')) {
+                    runAction(url, showPassword, redirect, Object.assign({}, body, { force: true }));
+                    return;
+                }
+                return;
+            }
             closeModal();
             displayToast(err.message, 'error');
         }

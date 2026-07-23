@@ -113,7 +113,8 @@
                         <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete permanently"
                                 aria-label="delete permanently"
                                 data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
-                                data-confirm="Permanently delete this model and its files? This cannot be undone."><i data-lucide="x"></i></button>
+                                data-confirm="Permanently delete this model and its files? This cannot be undone."
+                                data-confirm-typed="DELETE"><i data-lucide="x"></i></button>
                     </td>
                 </tr>
                 {% else %}

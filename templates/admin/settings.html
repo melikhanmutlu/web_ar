@@ -44,6 +44,7 @@
         <h3>{{ p.display_name if p else 'New plan' }}
             {% if p and p.slug %}<code>{{ p.slug }}</code>{% endif %}
             {% if p and p.is_system %}<span class="field-help" style="display:inline;">(system — can't delete)</span>{% endif %}
+            {% if p %}<span class="field-help" style="display:inline;">({{ p.user_count }} user{{ 's' if p.user_count != 1 else '' }} on this plan)</span>{% endif %}
         </h3>
         {% if deletable %}
         <button type="submit" form="del-{{ p.slug }}" class="admin-btn admin-btn--danger"
@@ -62,7 +63,11 @@
         <div class="admin-field"><label class="field-label">price ({{ p.currency if p else 'USD' }}/period)</label>
             <input type="number" name="{{ prefix }}__price" class="av-input" min="0" step="1" value="{{ p.price if p and p.price is not none else '' }}" placeholder="free"></div>
         <div class="admin-field"><label class="field-label">currency</label>
-            <input type="text" name="{{ prefix }}__currency" class="av-input" maxlength="3" value="{{ p.currency if p else 'USD' }}"></div>
+            <select name="{{ prefix }}__currency" class="av-input">
+                {% for cur in ('USD', 'TRY', 'EUR') %}
+                <option value="{{ cur }}" {% if (p.currency if p else 'USD') == cur %}selected{% endif %}>{{ cur }}</option>
+                {% endfor %}
+            </select></div>
         <div class="admin-field"><label class="field-label">billing period</label>
             <select name="{{ prefix }}__billing_period" class="av-input">
                 <option value="monthly" {% if not p or p.billing_period == 'monthly' %}selected{% endif %}>monthly</option>

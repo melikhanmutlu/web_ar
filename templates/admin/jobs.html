@@ -24,7 +24,7 @@
 
 <div class="admin-pills">
     <a href="{{ url_for('admin.jobs', q=q or None) }}" class="admin-pill {% if not status %}is-active{% endif %}">all</a>
-    {% for s in ('pending', 'processing', 'completed', 'failed') %}
+    {% for s in ('pending', 'processing', 'completed', 'failed', 'dead_letter') %}
     <a href="{{ url_for('admin.jobs', status=s, q=q or None) }}" class="admin-pill {% if status == s %}is-active{% endif %}">
         {{ s }} <span class="count">{{ counts.get(s, 0) }}</span>
     </a>

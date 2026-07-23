@@ -12,21 +12,27 @@
 {% block content %}
 <div class="kpi-grid">
     <div class="kpi-card">
-        <div class="kpi-value">${{ '%.2f'|format(stats.revenue_month) }}</div>
+        <div class="kpi-value">
+            {% for cur, amt in stats.revenue_month.items() %}{{ '%.2f'|format(amt) }} {{ cur }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        </div>
         <div class="kpi-label">revenue this month</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">${{ '%.2f'|format(stats.revenue_total) }}</div>
+        <div class="kpi-value">
+            {% for cur, amt in stats.revenue_total.items() %}{{ '%.2f'|format(amt) }} {{ cur }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        </div>
         <div class="kpi-label">revenue all-time</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">${{ '%.2f'|format(stats.mrr) }}</div>
+        <div class="kpi-value">
+            {% for cur, amt in stats.mrr.items() %}{{ '%.2f'|format(amt) }} {{ cur }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        </div>
         <div class="kpi-label">estimated MRR</div>
         <div class="kpi-sub">plan price &times; active users, current plan config</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">{{ stats.plan_counts.get('free', 0) }} / {{ stats.plan_counts.get('pro', 0) }} / {{ stats.plan_counts.get('business', 0) }}</div>
-        <div class="kpi-label">free / pro / business users</div>
+        <div class="kpi-value">{% for p in plans %}{{ stats.plan_counts.get(p, 0) }}{% if not loop.last %} / {% endif %}{% endfor %}</div>
+        <div class="kpi-label">{{ plans | join(' / ') }} users</div>
         <div class="kpi-sub">{{ stats.admin_count }} admin (unlimited)</div>
     </div>
     <div class="kpi-card">
@@ -45,10 +51,18 @@
     </select>
     <select name="status" class="av-select">
         <option value="">all statuses</option>
-        {% for s in statuses %}
+        {% for s in filter_statuses %}
         <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
         {% endfor %}
     </select>
+    <select name="provider" class="av-select">
+        <option value="">all providers</option>
+        {% for p in providers %}
+        <option value="{{ p }}" {% if provider == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+    </select>
+    <input type="date" name="from" value="{{ date_from }}" class="av-input" aria-label="from date">
+    <input type="date" name="to" value="{{ date_to }}" class="av-input" aria-label="to date">
     <button type="submit" class="admin-filter-submit">filter</button>
 </form>
 

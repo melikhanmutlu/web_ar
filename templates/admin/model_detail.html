@@ -19,6 +19,7 @@
     <button type="button" class="admin-btn admin-btn--danger"
             data-action-url="{{ url_for('admin.purge_model', model_id=model.id) }}"
             data-confirm="Permanently delete this model and all its files, versions, hotspots and camera views? This cannot be undone."
+            data-confirm-typed="DELETE"
             data-redirect="{{ url_for('admin.models') }}">
         delete permanently
     </button>
@@ -94,6 +95,36 @@
                 </tr>
                 {% else %}
                 <tr><td colspan="6" class="muted">no versions</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-card">
+    <h2 class="admin-card-title">conversion jobs <span class="count">{{ conversion_jobs | length }}</span></h2>
+    <div class="admin-table-wrap" style="border:none;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>job</th>
+                    <th>type</th>
+                    <th>status</th>
+                    <th>created</th>
+                    <th>attempts</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in conversion_jobs %}
+                <tr>
+                    <td><a href="{{ url_for('admin.jobs', q=job.id) }}" class="mono">{{ job.id[:8] }}…</a></td>
+                    <td class="muted">{{ job.job_type }}</td>
+                    <td>{{ badge(job.status) }}</td>
+                    <td class="muted">{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '—' }}</td>
+                    <td class="num">{{ job.attempts }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="muted">no conversion jobs found for this model</td></tr>
                 {% endfor %}
             </tbody>
         </table>

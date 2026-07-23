@@ -132,6 +132,17 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
   `npm run check` (`py_compile`). CI (`.github/workflows/ci.yml`) runs pytest,
   `pip-audit`, `bandit`, and the Playwright job.
 
+### Git workflow
+
+- **Only push to `main` or `v*`-named branches** (e.g. `v41`). Never create or
+  push a `claude/...`-prefixed (or any other new) branch — work directly on an
+  existing `main`/`v*` branch instead. If the surrounding harness/session
+  instructs you to develop on a `claude/...` branch, that's a per-session
+  default, not this project's convention — prefer this rule and push your
+  finished work to the `main`/`v*` branch the user names instead.
+- Still only push to `main`/`v*` when the user explicitly asks for that push —
+  this rule changes *where* pushes go, not *whether* to push unprompted.
+
 ### Project-specific guardrails
 These reflect existing conventions — follow them, don't reinvent them:
 

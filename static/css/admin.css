@@ -503,6 +503,12 @@
     color: var(--color-white);
 }
 
+.status-badge--dead_letter {
+    background: var(--error);
+    border-color: var(--error);
+    color: var(--color-white);
+}
+
 .status-badge--admin {
     border-color: var(--color-gray-900);
     background: var(--color-gray-900);

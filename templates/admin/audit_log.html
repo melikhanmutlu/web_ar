@@ -77,7 +77,8 @@
                         <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete entry"
                                 aria-label="delete entry"
                                 data-action-url="{{ url_for('admin.delete_audit_log_entry', entry_id=entry.id) }}"
-                                data-confirm="Permanently delete this log entry?"><i data-lucide="x"></i></button>
+                                data-confirm="Permanently delete this log entry? This cannot be undone."
+                                data-confirm-typed="DELETE"><i data-lucide="x"></i></button>
                     </td>
                 </tr>
                 {% else %}

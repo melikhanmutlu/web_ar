@@ -4,17 +4,27 @@
 {% block title %}leads — arvision admin{% endblock %}
 {% block page_title %}sales leads{% endblock %}
 
+{% block topbar_actions %}
+<a href="{{ url_for('admin.export_leads_csv', status=status, q=q) }}" class="admin-btn">export csv</a>
+{% endblock %}
+
 {% block content %}
+<form method="GET" action="{{ url_for('admin.leads') }}" class="admin-filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search name, email or company…" class="av-input">
+    {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+    <button type="submit" class="admin-filter-submit">filter</button>
+</form>
+
 <div class="admin-filter-bar" style="margin-bottom:1rem;">
-    <a href="{{ url_for('admin.leads') }}" class="admin-btn {% if not status %}is-active{% endif %}">all</a>
+    <a href="{{ url_for('admin.leads', q=q or None) }}" class="admin-btn {% if not status %}is-active{% endif %}">all</a>
     {% for s in statuses %}
-    <a href="{{ url_for('admin.leads', status=s) }}" class="admin-btn {% if status == s %}is-active{% endif %}">{{ s }}</a>
+    <a href="{{ url_for('admin.leads', status=s, q=q or None) }}" class="admin-btn {% if status == s %}is-active{% endif %}">{{ s }}</a>
     {% endfor %}
 </div>
 
 {% if page.items %}
 <table class="plans-editor-table">
-    <thead><tr><th>Date</th><th>Email</th><th>Company</th><th>Source</th><th>Message</th><th>Status</th></tr></thead>
+    <thead><tr><th>Date</th><th>Email</th><th>Company</th><th>Source</th><th>Message</th><th>Notes</th><th>Status</th></tr></thead>
     <tbody>
     {% for lead in page.items %}
         <tr>
@@ -22,9 +32,26 @@
             <td>{{ lead.name or '' }}<br><a href="mailto:{{ lead.email }}">{{ lead.email }}</a></td>
             <td>{{ lead.company or '—' }}</td>
             <td>{{ lead.source or '—' }}</td>
-            <td style="max-width:280px;">{{ (lead.message or '')[:200] }}</td>
+            <td style="max-width:280px;">
+                {% if lead.message and lead.message | length > 200 %}
+                <details>
+                    <summary>{{ lead.message[:200] }}…</summary>
+                    <p style="white-space:pre-wrap;margin-top:0.4rem;">{{ lead.message }}</p>
+                </details>
+                {% else %}
+                {{ lead.message or '—' }}
+                {% endif %}
+            </td>
             <td>
-                <form method="POST" action="{{ url_for('admin.set_lead_status', lead_id=lead.id) }}" style="margin:0;">
+                <form method="POST" action="{{ url_for('admin.set_lead_status', lead_id=lead.id, status=status, q=q) }}" style="margin:0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="status" value="{{ lead.status }}">
+                    <textarea name="notes" placeholder="who's working this, next step…" rows="2" style="width:11rem;font-size:0.78rem;">{{ lead.admin_notes or '' }}</textarea>
+                    <button type="submit" class="admin-btn" style="margin-top:0.3rem;">save notes</button>
+                </form>
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('admin.set_lead_status', lead_id=lead.id, status=status, q=q) }}" style="margin:0;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <select name="status" onchange="this.form.submit()">
                         {% for s in statuses %}
@@ -39,6 +66,6 @@
 </table>
 {{ pager(page, 'admin.leads') }}
 {% else %}
-<p class="field-help">No leads yet.</p>
+<p class="field-help">No leads found.</p>
 {% endif %}
 {% endblock %}

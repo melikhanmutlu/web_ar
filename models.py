@@ -836,6 +836,10 @@ class SalesLead(db.Model):
     status = db.Column(db.String(20), nullable=False, default='new', server_default='new', index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    # Free-form follow-up notes an admin keeps while working a lead (who they
+    # talked to, why it was marked lost, next step). Nothing else in this
+    # model records that -- status alone can't answer "what happened."
+    admin_notes = db.Column(db.Text, nullable=True)
 
     def __repr__(self):
         return f'<SalesLead {self.id} {self.email} status={self.status}>'

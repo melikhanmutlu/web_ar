@@ -63,7 +63,7 @@ def test_mutations_are_recorded_in_audit_log(client, admin_user, init_database):
     assert entry.actor_id == admin_user.id
     assert entry.target_type == "user"
     assert entry.target_id == str(init_database.id)
-    assert entry.detail == {"is_admin": True}
+    assert entry.detail == {"is_admin": True, "was_admin": False}
 
 
 def test_settings_save_is_recorded_without_csrf_token_leaking(client, admin_user):

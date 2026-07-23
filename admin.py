@@ -141,6 +141,12 @@ def _page_arg():
         return 1
 
 
+# Mirrors app.py's DISPLAY_TZ_OFFSET / models.py's _DISPLAY_TZ_OFFSET (not
+# imported directly -- admin.py deliberately doesn't import app.py). Analytics
+# day-buckets are computed in this timezone so they match what the `localdt`
+# filter shows for individual timestamps on the day-detail page.
+_DISPLAY_TZ_OFFSET = timedelta(hours=int(os.getenv("DISPLAY_TZ_OFFSET_HOURS", "3")))
+
 DAY_RANGE_CHOICES = (7, 30, 90)
 
 
@@ -152,12 +158,20 @@ def _days_arg():
     return days if days in DAY_RANGE_CHOICES else CHART_DAYS
 
 
+def _csv_safe_cell(value):
+    """Prefix cells that a spreadsheet app would interpret as a formula."""
+    text = "" if value is None else str(value)
+    if text and text[0] in ("=", "+", "-", "@"):
+        return "'" + text
+    return text
+
+
 def _csv_response(filename, header, rows):
     """Build a CSV download from a header row + iterable of row tuples."""
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(header)
-    writer.writerows(rows)
+    writer.writerows(tuple(_csv_safe_cell(cell) for cell in row) for row in rows)
     return Response(
         buf.getvalue(),
         mimetype="text/csv",
@@ -166,20 +180,24 @@ def _csv_response(filename, header, rows):
 
 
 def _daily_series(date_col, days=CHART_DAYS, extra_filter=None):
-    """Per-day row counts for the trailing `days` days, gap-filled."""
-    start = datetime.utcnow() - timedelta(days=days - 1)
-    start = datetime(start.year, start.month, start.day)
+    """Per-day row counts for the trailing `days` days, gap-filled. Buckets
+    are calendar days in the display timezone, not naive UTC, so a bucket's
+    date matches what the `localdt` filter shows for timestamps within it."""
+    local_now = datetime.utcnow() + _DISPLAY_TZ_OFFSET
+    start_local = datetime(local_now.year, local_now.month, local_now.day) - timedelta(days=days - 1)
+    start_utc = start_local - _DISPLAY_TZ_OFFSET
+    shifted_col = date_col + _DISPLAY_TZ_OFFSET
     query = (
-        db.session.query(func.date(date_col), func.count())
-        .filter(date_col >= start)
-        .group_by(func.date(date_col))
+        db.session.query(func.date(shifted_col), func.count())
+        .filter(date_col >= start_utc)
+        .group_by(func.date(shifted_col))
     )
     if extra_filter is not None:
         query = query.filter(extra_filter)
     counts = {str(day): count for day, count in query.all()}
     series = []
     for i in range(days):
-        day = start + timedelta(days=i)
+        day = start_local + timedelta(days=i)
         series.append(
             {
                 "d": day.strftime("%b %d"),
@@ -207,6 +225,13 @@ def _effective_storage_quota_mb():
     STORAGE_QUOTA_MB env default (app.py's original module constant) when no
     admin override has been saved yet."""
     return setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
+
+
+def _active_admin_count(exclude_user_id=None):
+    q = User.query.filter(User.is_admin.is_(True), User.is_active_flag.is_(True))
+    if exclude_user_id is not None:
+        q = q.filter(User.id != exclude_user_id)
+    return q.count()
 
 
 def _worker_health():
@@ -501,8 +526,26 @@ def toggle_admin(user_id):
             {"success": False, "error": "You cannot change your own admin status"}
         ), 400
     user = User.query.get_or_404(user_id)
-    user.is_admin = not user.is_admin
-    log_action("user.toggle_admin", "user", user.id, {"is_admin": user.is_admin})
+    was_admin = user.is_admin
+    new_is_admin = not was_admin
+    # Demoting the last other active admin would leave you as the sole admin
+    # with no one else to catch a mistake or lock-out -- require explicit
+    # confirmation (force=true) rather than let that happen as a side effect
+    # of clicking through a list of users one at a time.
+    if was_admin and not new_is_admin and user.is_active_flag:
+        force = bool((request.get_json(silent=True) or {}).get("force"))
+        if not force and _active_admin_count(exclude_user_id=user.id) < 1:
+            return jsonify({
+                "success": False,
+                "error": f"{user.username} is the last other active admin. "
+                         "Promote someone else first, or resend with force=true to proceed anyway.",
+                "requires_force": True,
+            }), 409
+    user.is_admin = new_is_admin
+    log_action(
+        "user.toggle_admin", "user", user.id,
+        {"is_admin": new_is_admin, "was_admin": was_admin},
+    )
     db.session.commit()
     logger.info(
         f"admin: {current_user.username} set is_admin={user.is_admin} on {user.username}"
@@ -518,8 +561,22 @@ def toggle_active(user_id):
             {"success": False, "error": "You cannot deactivate your own account"}
         ), 400
     user = User.query.get_or_404(user_id)
-    user.is_active_flag = not user.is_active_flag
-    log_action("user.toggle_active", "user", user.id, {"is_active": user.is_active_flag})
+    was_active = user.is_active_flag
+    new_is_active = not was_active
+    if user.is_admin and was_active and not new_is_active:
+        force = bool((request.get_json(silent=True) or {}).get("force"))
+        if not force and _active_admin_count(exclude_user_id=user.id) < 1:
+            return jsonify({
+                "success": False,
+                "error": f"{user.username} is the last other active admin. "
+                         "Activate/promote someone else first, or resend with force=true to proceed anyway.",
+                "requires_force": True,
+            }), 409
+    user.is_active_flag = new_is_active
+    log_action(
+        "user.toggle_active", "user", user.id,
+        {"is_active": new_is_active, "was_active": was_active},
+    )
     db.session.commit()
     logger.info(
         f"admin: {current_user.username} set is_active={user.is_active_flag} on {user.username}"
@@ -540,11 +597,19 @@ def set_plan(user_id):
     allowed = assignable_plan_slugs()
     if plan not in allowed:
         return jsonify({"success": False, "error": f"Invalid plan; must be one of {sorted(allowed)}"}), 400
+    previous_plan = user.plan
     user.plan = plan
-    log_action("user.set_plan", "user", user.id, {"plan": plan})
+    log_action("user.set_plan", "user", user.id, {"plan": plan, "previous_plan": previous_plan})
     db.session.commit()
     logger.info(f"admin: {current_user.username} set plan={plan} on {user.username}")
     return jsonify({"success": True, "plan": user.plan})
+
+
+# grant_ai_credits floors the resulting balance at 0 but has no ceiling of its
+# own (it's the same seam a future payment webhook will call with provider-
+# verified amounts) -- bound what a single admin-panel adjustment can do so a
+# typo or a compromised admin session can't hand out an arbitrary balance.
+MAX_CREDIT_ADJUSTMENT = 100_000
 
 
 @admin_bp.route("/users/<int:user_id>/adjust-credits", methods=["POST"])
@@ -560,8 +625,17 @@ def adjust_credits(user_id):
         amount = int((request.get_json(silent=True) or {}).get("amount"))
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "amount must be an integer"}), 400
+    if abs(amount) > MAX_CREDIT_ADJUSTMENT:
+        return jsonify({
+            "success": False,
+            "error": f"amount must be between -{MAX_CREDIT_ADJUSTMENT} and {MAX_CREDIT_ADJUSTMENT}",
+        }), 400
+    previous_balance = user.ai_credit_balance or 0
     balance = grant_ai_credits(user, amount)
-    log_action("user.adjust_credits", "user", user.id, {"amount": amount, "balance": balance})
+    log_action(
+        "user.adjust_credits", "user", user.id,
+        {"amount": amount, "balance": balance, "previous_balance": previous_balance},
+    )
     db.session.commit()
     logger.info(f"admin: {current_user.username} adjusted credits by {amount} (-> {balance}) on {user.username}")
     return jsonify({"success": True, "ai_credit_balance": balance})
@@ -716,26 +790,51 @@ def delete_user(user_id):
 @admin_bp.route("/users/bulk-deactivate", methods=["POST"])
 @admin_required
 def bulk_deactivate_users():
-    ids = [i for i in _parse_bulk_ids(int) if i != current_user.id]
+    requested = _parse_bulk_ids(int)
+    ids = [i for i in requested if i != current_user.id]
+    skipped_self = current_user.id in requested
     if not ids:
         return jsonify({"success": False, "error": "No valid users selected"}), 400
     users = User.query.filter(User.id.in_(ids)).all()
+    found_ids = {u.id for u in users}
+    skipped_missing = [i for i in ids if i not in found_ids]
+
+    body = request.get_json(silent=True) or {}
+    force = bool(body.get("force"))
+    admins_in_batch = [u for u in users if u.is_admin and u.is_active_flag]
+    if admins_in_batch and not force:
+        remaining_admins = _active_admin_count() - len(admins_in_batch)
+        if remaining_admins < 1:
+            return jsonify({
+                "success": False,
+                "error": f"This would deactivate the last {len(admins_in_batch)} other active admin(s). "
+                         "Resend with force=true to proceed anyway.",
+                "requires_force": True,
+            }), 409
+
     for user in users:
         user.is_active_flag = False
     log_action(
         "user.bulk_deactivate", detail={"count": len(users), "ids": [u.id for u in users]}
     )
     db.session.commit()
-    return jsonify({"success": True, "count": len(users)})
+    return jsonify({
+        "success": True, "count": len(users),
+        "skipped_self": skipped_self, "skipped_missing": skipped_missing,
+    })
 
 
 @admin_bp.route("/users/bulk-delete", methods=["POST"])
 @admin_required
 def bulk_delete_users():
-    ids = [i for i in _parse_bulk_ids(int) if i != current_user.id]
+    requested = _parse_bulk_ids(int)
+    ids = [i for i in requested if i != current_user.id]
+    skipped_self = current_user.id in requested
     if not ids:
         return jsonify({"success": False, "error": "No valid users selected"}), 400
     users = User.query.filter(User.id.in_(ids)).all()
+    found_ids = {u.id for u in users}
+    skipped_missing = [i for i in ids if i not in found_ids]
     usernames = [u.username for u in users]
     try:
         for user in users:
@@ -746,7 +845,10 @@ def bulk_delete_users():
         db.session.rollback()
         logger.error(f"admin: bulk delete users failed: {e}")
         return jsonify({"success": False, "error": "Bulk delete failed"}), 500
-    return jsonify({"success": True, "count": len(users)})
+    return jsonify({
+        "success": True, "count": len(users),
+        "skipped_self": skipped_self, "skipped_missing": skipped_missing,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -876,6 +978,17 @@ def model_detail(model_id):
         .order_by(CameraView.created_at)
         .all()
     )
+    # ConversionJob.id becomes the model id once a job completes, but a model
+    # can also be the target of LATER jobs (e.g. re-conversion) that reuse its
+    # id as model_id -- checking both catches the model's full conversion
+    # history, not just the job that originally created it.
+    conversion_jobs = (
+        ConversionJob.query.filter(
+            or_(ConversionJob.id == model_id, ConversionJob.model_id == model_id)
+        )
+        .order_by(ConversionJob.created_at.desc())
+        .all()
+    )
 
     return render_template(
         "admin/model_detail.html",
@@ -884,6 +997,7 @@ def model_detail(model_id):
         version_bytes=sum(v.file_size or 0 for v in versions),
         hotspots=hotspots,
         camera_views=camera_views,
+        conversion_jobs=conversion_jobs,
         likes=ModelLike.query.filter_by(model_id=model_id).count(),
         saves=ModelSave.query.filter_by(model_id=model_id).count(),
     )
@@ -1284,28 +1398,71 @@ def refresh_meshy_balance():
 # ---------------------------------------------------------------------------
 
 
+_GROWTH_METRICS_CACHE_TTL = 300  # seconds
+_growth_metrics_cache = {"at": 0.0, "value": None}
+
+
+def get_cached_growth_metrics(force=False):
+    import time
+    from services.growth_metrics import collect_growth_metrics
+
+    now = time.time()
+    if force or (now - _growth_metrics_cache["at"]) >= _GROWTH_METRICS_CACHE_TTL:
+        _growth_metrics_cache.update(at=now, value=collect_growth_metrics())
+    return _growth_metrics_cache["value"]
+
+
 @admin_bp.route("/growth")
 @admin_required
 def growth():
-    from services.growth_metrics import collect_growth_metrics
-
-    return render_template("admin/growth.html", metrics=collect_growth_metrics())
+    return render_template("admin/growth.html", metrics=get_cached_growth_metrics())
 
 
 _LEAD_STATUSES = ("new", "contacted", "won", "lost")
 
 
-@admin_bp.route("/leads")
-@admin_required
-def leads():
+def _leads_query():
     status = request.args.get("status")
+    q = (request.args.get("q") or "").strip()
     query = SalesLead.query
     if status in _LEAD_STATUSES:
         query = query.filter(SalesLead.status == status)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(SalesLead.email.ilike(like), SalesLead.company.ilike(like), SalesLead.name.ilike(like))
+        )
     query = query.order_by(SalesLead.created_at.desc())
+    return query, status, q
+
+
+@admin_bp.route("/leads")
+@admin_required
+def leads():
+    query, status, q = _leads_query()
     page = paginate(query, _page_arg())
     return render_template(
-        "admin/leads.html", page=page, status=status, statuses=_LEAD_STATUSES
+        "admin/leads.html", page=page, status=status, q=q, statuses=_LEAD_STATUSES
+    )
+
+
+@admin_bp.route("/leads/export.csv")
+@admin_required
+def export_leads_csv():
+    query, _, _ = _leads_query()
+    rows = (
+        (
+            lead.id, lead.name or "", lead.email, lead.company or "",
+            lead.source or "", lead.status,
+            lead.created_at.isoformat() if lead.created_at else "",
+            (lead.message or "").replace("\n", " "),
+        )
+        for lead in query.all()
+    )
+    return _csv_response(
+        "leads.csv",
+        ["id", "name", "email", "company", "source", "status", "created", "message"],
+        rows,
     )
 
 
@@ -1319,13 +1476,21 @@ def set_lead_status(lead_id):
     if new_status not in _LEAD_STATUSES:
         flash("Unknown status.", "error")
         return redirect(url_for("admin.leads"))
+    detail = {"status": new_status}
+    if "notes" in request.form:
+        lead.admin_notes = (request.form.get("notes") or "").strip()[:4000] or None
+        detail["notes_updated"] = True
     lead.status = new_status
-    log_action("lead_status", target_type="sales_lead", target_id=lead.id, detail=new_status)
+    log_action("lead_status", target_type="sales_lead", target_id=lead.id, detail=detail)
     db.session.commit()
     flash("Lead updated.", "success")
     # Redirect to a fixed internal URL (not request.referrer, which is
     # client-supplied and would be an unvalidated open-redirect target).
-    return redirect(url_for("admin.leads", status=request.args.get("status")))
+    return redirect(url_for(
+        "admin.leads",
+        status=request.args.get("status"),
+        q=request.args.get("q"),
+    ))
 
 
 @admin_bp.route("/analytics")
@@ -1384,10 +1549,14 @@ def analytics_day(date_str):
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
         abort(404)
-    if day > datetime.utcnow().date():
+    local_today = (datetime.utcnow() + _DISPLAY_TZ_OFFSET).date()
+    if day > local_today:
         abort(404)
 
-    day_start = datetime(day.year, day.month, day.day)
+    # `day` is a calendar day in the display timezone (matches _daily_series'
+    # bucketing and the `localdt` filter); convert its boundaries to naive
+    # UTC to query the naive-UTC-stored timestamp columns.
+    day_start = datetime(day.year, day.month, day.day) - _DISPLAY_TZ_OFFSET
     day_end = day_start + timedelta(days=1)
 
     def _in_day(col):
@@ -1427,7 +1596,7 @@ def analytics_day(date_str):
         day=day,
         prev_day=(day - timedelta(days=1)).isoformat(),
         next_day=(day + timedelta(days=1)).isoformat(),
-        is_today=(day == datetime.utcnow().date()),
+        is_today=(day == local_today),
         counts=counts,
         registrations=registrations,
         uploads=uploads,
@@ -1440,23 +1609,51 @@ def analytics_day(date_str):
 # Billing (Faz 5: manually-recorded payments -- no payment provider wired in)
 # ---------------------------------------------------------------------------
 
+# Statuses an admin can manually SET a payment to.
 PAYMENT_STATUSES = ("paid", "refunded", "void")
+# Statuses a payment can actually be in (adds the two the live checkout/
+# webhook flow sets on its own -- pending on creation, failed on a declined
+# charge) so the billing list can filter for them even though an admin never
+# hand-picks either from the status dropdown.
+PAYMENT_FILTER_STATUSES = ("pending", "failed") + PAYMENT_STATUSES
 
 
 def _billing_query():
     status = request.args.get("status", "")
     plan = request.args.get("plan", "")
+    provider = request.args.get("provider", "")
     q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("from") or "").strip()
+    date_to = (request.args.get("to") or "").strip()
 
-    query = Payment.query.outerjoin(User, Payment.user_id == User.id)
-    if status in PAYMENT_STATUSES:
+    query = (
+        Payment.query
+        .outerjoin(User, Payment.user_id == User.id)
+        .options(db.contains_eager(Payment.user), db.joinedload(Payment.recorded_by))
+    )
+    if status in PAYMENT_FILTER_STATUSES:
         query = query.filter(Payment.status == status)
     if plan:
         query = query.filter(Payment.plan == plan)
+    if provider:
+        query = query.filter(Payment.provider == provider)
     if q:
         like = f"%{q}%"
         query = query.filter(or_(User.username.ilike(like), User.email.ilike(like)))
-    return query.order_by(Payment.created_at.desc()), status, plan, q
+    if date_from:
+        try:
+            query = query.filter(Payment.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            date_from = ""
+    if date_to:
+        try:
+            query = query.filter(Payment.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+        except ValueError:
+            date_to = ""
+    return (
+        query.order_by(Payment.created_at.desc()),
+        status, plan, q, provider, date_from, date_to,
+    )
 
 
 @admin_bp.route("/billing")
@@ -1465,18 +1662,26 @@ def billing():
     from services.plans import assignable_plan_slugs, get_plan_config
     plan_slugs = assignable_plan_slugs()
 
-    query, status, plan, q = _billing_query()
+    query, status, plan, q, provider, date_from, date_to = _billing_query()
     page = paginate(query, _page_arg())
 
     now = datetime.utcnow()
     month_start = datetime(now.year, now.month, 1)
 
-    revenue_month = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-        Payment.status == "paid", Payment.created_at >= month_start
-    ).scalar()
-    revenue_total = db.session.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-        Payment.status == "paid"
-    ).scalar()
+    # Grouped BY CURRENCY: Payment.amount now carries a mix of USD (Plan
+    # pricing, Lemon Squeezy) and TRY (PayTR settlement) rows since the
+    # currency migration -- summing across currencies without grouping would
+    # add them together as if they were the same unit.
+    def _revenue_by_currency(extra_filter=None):
+        q_ = db.session.query(Payment.currency, func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.status == "paid"
+        )
+        if extra_filter is not None:
+            q_ = q_.filter(extra_filter)
+        return dict(q_.group_by(Payment.currency).all())
+
+    revenue_month = _revenue_by_currency(Payment.created_at >= month_start)
+    revenue_total = _revenue_by_currency()
 
     # Grouped on the raw stored plan (not plan_name()'s admin resolution) --
     # is_admin users are excluded outright since they never pay.
@@ -1486,10 +1691,21 @@ def billing():
         .group_by(User.plan)
         .all()
     )
-    mrr = sum(plan_counts.get(p, 0) * (get_plan_config(p).get("price") or 0) for p in plan_slugs)
+    mrr = {}
+    for p in plan_slugs:
+        count = plan_counts.get(p, 0)
+        if not count:
+            continue
+        cfg = get_plan_config(p)
+        price = cfg.get("price") or 0
+        currency = cfg.get("currency") or "USD"
+        mrr[currency] = mrr.get(currency, 0) + count * price
     outstanding_credits = db.session.query(
         func.coalesce(func.sum(User.ai_credit_balance), 0)
     ).scalar()
+    providers = [
+        p for (p,) in db.session.query(Payment.provider).distinct().all() if p
+    ]
 
     stats = {
         "revenue_month": revenue_month,
@@ -1502,15 +1718,18 @@ def billing():
 
     return render_template(
         "admin/billing.html",
-        page=page, status=status, plan=plan, q=q,
-        plans=plan_slugs, statuses=PAYMENT_STATUSES, stats=stats,
+        page=page, status=status, plan=plan, q=q, provider=provider,
+        date_from=date_from, date_to=date_to,
+        plans=plan_slugs, providers=providers,
+        statuses=PAYMENT_STATUSES, filter_statuses=PAYMENT_FILTER_STATUSES,
+        stats=stats,
     )
 
 
 @admin_bp.route("/billing/export.csv")
 @admin_required
 def export_billing_csv():
-    query, _, _, _ = _billing_query()
+    query, _, _, _, _, _, _ = _billing_query()
     rows = (
         (
             p.id,
@@ -1539,10 +1758,36 @@ def set_payment_status(payment_id):
     status = (request.get_json(silent=True) or {}).get("status")
     if status not in PAYMENT_STATUSES:
         return jsonify({"success": False, "error": f"status must be one of {PAYMENT_STATUSES}"}), 400
-    payment.status = status
-    log_action("billing.set_status", "payment", payment.id, {"status": status})
+
+    previous_status = payment.status
+    warning = None
+
+    if status == previous_status:
+        pass
+    elif status == "paid" and previous_status != "paid":
+        from blueprints.billing import _apply_successful_payment
+        _apply_successful_payment(payment)
+    elif previous_status == "paid" and status in ("refunded", "void"):
+        if payment.kind == "topup":
+            from services.credits import grant_ai_credits
+            user = db.session.get(User, payment.user_id)
+            if user is not None:
+                grant_ai_credits(user, -(payment.credits or 0))
+        else:
+            warning = (
+                "This was a plan payment already marked paid — the user's plan/expiry "
+                "was NOT automatically rolled back. Review and adjust their plan manually if needed."
+            )
+        payment.status = status
+    else:
+        payment.status = status
+
+    log_action("billing.set_status", "payment", payment.id, {"status": status, "previous_status": previous_status})
     db.session.commit()
-    return jsonify({"success": True, "status": payment.status})
+    result = {"success": True, "status": payment.status}
+    if warning:
+        result["warning"] = warning
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
@@ -1679,7 +1924,9 @@ def _parse_plan_fields(prefix, slug):
                 raise ValueError
         except ValueError:
             raise ValueError(f"{display_name}: price must be a non-negative whole number.")
-    currency = ((request.form.get(f"{prefix}__currency") or "TRY").strip().upper() or "TRY")[:3]
+    currency = ((request.form.get(f"{prefix}__currency") or "USD").strip().upper() or "USD")[:3]
+    if currency not in ("USD", "TRY", "EUR"):
+        raise ValueError(f"{display_name}: currency must be one of USD, TRY, EUR.")
     billing_period = request.form.get(f"{prefix}__billing_period", "monthly")
     is_public = request.form.get(f"{prefix}__is_public") == "on"
     try:
@@ -1860,6 +2107,9 @@ def settings():
     }
 
     plan_rows = {p.slug: p for p in Plan.query.order_by(Plan.sort_order, Plan.id).all()}
+    plan_user_counts = dict(
+        db.session.query(User.plan, func.count(User.id)).group_by(User.plan).all()
+    )
     plans_editor = []
     for slug in assignable_plan_slugs():
         row = plan_rows.get(slug)
@@ -1875,6 +2125,7 @@ def settings():
             "sort_order": row.sort_order if row else 0,
             "limits": {key: cfg.get("limits", {}).get(key) for key in LIMIT_KEYS},
             "features": {key: bool(cfg.get("features", {}).get(key)) for key in FEATURE_KEYS},
+            "user_count": plan_user_counts.get(slug, 0),
         })
 
     plan_slugs = assignable_plan_slugs()

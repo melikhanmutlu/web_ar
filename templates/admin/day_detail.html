@@ -2,7 +2,7 @@
 {% from "admin/_status_badge.html" import badge %}
 
 {% block title %}{{ day.isoformat() }} — arvision admin{% endblock %}
-{% block page_title %}{{ day.strftime('%B %-d, %Y') }}{% endblock %}
+{% block page_title %}{{ day.strftime('%B') }} {{ day.day }}, {{ day.year }}{% endblock %}
 
 {% block content %}
 <div class="admin-pills">

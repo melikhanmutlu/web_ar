@@ -131,6 +131,8 @@ test('undo/redo steps a material change back and forth', async ({ page }) => {
 });
 
 test('undo back to baseline, then a transform-only save sends no material block', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
   // Regression: touching a material control, undoing back to the original
   // state, then saving a scale change used to re-send a material block
   // (built from mat[0] only), flattening every material on multi-material
@@ -150,11 +152,9 @@ test('undo back to baseline, then a transform-only save sends no material block'
   // Now make a transform-only change
   await page.locator('#toolsDetailBackBtn').click();
   await page.locator('#transformContainer .tp-section-header').click();
-  await page.locator('#scaleSlider').evaluate((el) => {
-    el.value = '1.5';
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  });
+  await page.locator('#scaleInput').fill('1.5');
+  await page.locator('#scaleInput').press('Tab');
+  await expect(page.locator('#scaleSlider')).toHaveValue('1.5');
 
   const [request] = await Promise.all([
     page.waitForRequest('**/save_modifications'),
@@ -163,6 +163,7 @@ test('undo back to baseline, then a transform-only save sends no material block'
   const payload = request.postDataJSON();
   expect(payload.modifications.transform.scale).toBe(1.5);
   expect(payload.modifications.material).toBeUndefined();
+  expect(errors).toEqual([]);
 });
 
 test('roughness-only edit saves a material block without color', async ({ page }) => {

@@ -5,7 +5,7 @@ import shutil
 import trimesh
 from pygltflib import GLTF2
 
-from converters import FBXConverter, OBJConverter, STLConverter
+from converters import FBXConverter, OBJConverter, STLConverter, STEPConverter
 from converters.glb_optimizer import optimize_glb
 from converters.glb_quality import finalize_glb
 from glb_modifier import normalize_model_to_center
@@ -36,6 +36,9 @@ class ConversionService:
             return converter
         if extension == ".fbx":
             return FBXConverter()
+        if extension in {".step", ".stp"}:
+            # STEP embeds its own units; do not apply the upload unit selector.
+            return STEPConverter()
         if extension in {".glb", ".gltf"}:
             return None
         raise RuntimeError(f"Unsupported file format: {extension}")

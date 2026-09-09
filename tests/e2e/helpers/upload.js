@@ -20,7 +20,7 @@ function isUnexpectedError(message) {
 }
 
 async function uploadCubeAndGetViewerUrl(page) {
-  await page.goto('/');
+  await page.goto('/studio');
   const fileInput = page.locator('#file-upload');
   await fileInput.setInputFiles(path.join(__dirname, '..', 'fixtures', 'cube.glb'));
   await page.getByRole('button', { name: /upload and convert/i }).click();
@@ -29,6 +29,9 @@ async function uploadCubeAndGetViewerUrl(page) {
   // real-time SSE); wait for the client-side redirect to the viewer once it
   // completes.
   await page.waitForURL(/\/view\//, { timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelector('model-viewer')?.loaded);
+  const onboardingDismiss = page.locator('#onboardingDismiss');
+  if (await onboardingDismiss.isVisible()) await onboardingDismiss.click();
   return page.url();
 }
 

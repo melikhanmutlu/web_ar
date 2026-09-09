@@ -35,6 +35,7 @@ test('clicking a hotspot opens its discussion thread and a comment can be posted
   const placed = await page.locator('.hotspot-dot').count() > 0;
   test.skip(!placed, 'hotspot placement raycast did not register a hit in this environment');
 
+  await page.locator('#toolsPanelToggle').click();
   await page.locator('.hotspot-dot').click();
   await expect(page.locator('#hotspotDiscussionModal')).toHaveClass(/show/);
   await expect(page.locator('#hotspotDiscussionTitle')).toHaveText('Corner detail');

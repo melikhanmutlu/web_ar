@@ -13,10 +13,24 @@
     var burger = document.getElementById('navBurger');
     var mobileMenu = document.getElementById('mobileMenu');
     if (burger && nav && mobileMenu) {
-        burger.addEventListener('click', function () {
-            var open = nav.classList.toggle('menu-open');
+        var setMobileMenuOpen = function (open) {
+            nav.classList.toggle('menu-open', open);
             burger.setAttribute('aria-expanded', open ? 'true' : 'false');
             mobileMenu.hidden = !open;
+        };
+        burger.addEventListener('click', function () {
+            setMobileMenuOpen(mobileMenu.hidden);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !mobileMenu.hidden) {
+                setMobileMenuOpen(false);
+                burger.focus();
+            }
+        });
+        document.addEventListener('click', function (e) {
+            if (!mobileMenu.hidden && !mobileMenu.contains(e.target) && !burger.contains(e.target)) {
+                setMobileMenuOpen(false);
+            }
         });
     }
 

@@ -14,7 +14,7 @@ class UploadStagingError(ValueError):
 class UploadStagingService:
     """Safely stage model uploads and resolve ZIP companions."""
 
-    MODEL_EXTENSIONS = {".obj", ".stl", ".fbx", ".glb", ".gltf"}
+    MODEL_EXTENSIONS = {".obj", ".stl", ".fbx", ".glb", ".gltf", ".step", ".stp"}
     TEXTURE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tga", ".bmp", ".webp"}
 
     def __init__(self, temp_root, *, max_uncompressed_bytes, max_archive_entries=500):

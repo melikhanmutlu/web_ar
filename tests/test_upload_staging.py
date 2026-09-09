@@ -20,6 +20,33 @@ def _zip_file(name, entries):
     return FileStorage(stream=buffer, filename=name)
 
 
+@pytest.mark.parametrize("extension", ["step", "stp", "STEP", "STP"])
+@pytest.mark.parametrize("packaged", [False, True])
+def test_step_formats_are_staged(tmp_path, extension, packaged):
+    service = UploadStagingService(tmp_path, max_uncompressed_bytes=1024 * 1024)
+    content = Path("tests/fixtures/featuretype.step").read_bytes()
+    name = f"part.{extension}"
+    upload = (_zip_file("part.zip", {name: content}) if packaged else
+              FileStorage(stream=io.BytesIO(content), filename=name))
+    result = service.stage("step-job", upload)
+    assert result["file_extension"] == f".{extension.lower()}"
+    assert Path(result["temp_file_path"]).read_bytes() == content
+    from services.conversion import ConversionService
+    from converters import STEPConverter
+    assert isinstance(ConversionService._converter(result), STEPConverter)
+
+
+def test_step_batch_archive_is_staged(tmp_path):
+    service = UploadStagingService(tmp_path, max_uncompressed_bytes=1024 * 1024)
+    content = Path("tests/fixtures/featuretype.step").read_bytes()
+    ids = iter(["step-job", "stp-job"])
+    results = service.stage_archive_models(
+        _zip_file("parts.zip", {"one.step": content, "two.stp": content}),
+        lambda: next(ids),
+    )
+    assert {data["file_extension"] for _, data in results} == {".step", ".stp"}
+
+
 def test_zip_obj_bundle_is_safely_staged():
     root = Path(".test-upload-staging").resolve()
     service = UploadStagingService(root, max_uncompressed_bytes=1024 * 1024)

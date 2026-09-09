@@ -136,6 +136,8 @@
 
             // ===== USDZ STATUS CHECK (iOS AR) =====
             (function checkUsdzStatus() {
+                // Static marketing demos have no persisted model or AR asset.
+                if (!window.VIEWER_CONFIG?.modelId) return;
                 fetch('/api/models/' + window.VIEWER_CONFIG.modelId + '/usdz_status')
                 .then(r => r.json())
                 .then(data => {

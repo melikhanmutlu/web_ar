@@ -93,5 +93,10 @@ def test_draco_can_be_selected_per_upload(monkeypatch):
 
     monkeypatch.setattr(glb_optimizer.subprocess, "run", fake_run)
     assert glb_optimizer.optimize_glb(str(root), enabled=True, mode="draco")
-    assert captured["args"][-2:] == ["--compress", "draco"]
+    args = captured["args"]
+    assert args[args.index("--compress") + 1] == "draco"
+    # compression only: never join/merge/decimate (would destroy layers,
+    # the material editor and measurements)
+    for flag in ("--join", "--flatten", "--palette", "--instance", "--simplify"):
+        assert args[args.index(flag) + 1] == "false"
     root.unlink(missing_ok=True)

@@ -1419,6 +1419,10 @@
                     {% endif %}
                     <p class="tp-note" style="margin-bottom:0.5rem;">Enable an axis, drag the slider, then apply. The highlighted side is the part that stays.</p>
                     <p id="slicerPreviewWarn" class="tp-note hidden" style="margin-bottom:0.5rem;color:#f59e0b;">Live preview isn't available in this browser — the slice will still apply correctly when you press Apply.</p>
+                    <label class="tp-slicer-axis-label" style="margin-bottom:0.5rem;" title="Draw the cut faces of solid parts filled in the part's colour instead of showing a hollow shell">
+                        <input type="checkbox" id="slicerFillCaps" class="tp-checkbox" checked>
+                        <span>Fill cut surfaces</span>
+                    </label>
 
                     <!-- X Axis -->
                     <div class="tp-slicer-axis" id="slicerAxisX">

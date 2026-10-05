@@ -233,6 +233,32 @@ def _exported_material_count(glb_path):
         return 0
 
 
+def _carry_layer_extras(input_path, output_path):
+    """Restore the viewer layer list (scene extras, e.g. a STEP assembly's
+    grouped parts) that the trimesh export drops, keeping only the layers
+    whose materials survived the cut."""
+    from converters.layers import EXTRAS_KEY
+
+    try:
+        source = GLTF2().load_binary(input_path)
+        scene = source.scenes[source.scene or 0] if source.scenes else None
+        layers = (scene.extras or {}).get(EXTRAS_KEY) if scene is not None and isinstance(scene.extras, dict) else None
+        if not layers:
+            return
+        sliced = GLTF2().load_binary(output_path)
+        names = {m.name for m in sliced.materials or []}
+        kept = [layer for layer in layers if any(m in names for m in layer.get("materials") or [])]
+        if not kept or not sliced.scenes:
+            return
+        out_scene = sliced.scenes[sliced.scene or 0]
+        extras = out_scene.extras if isinstance(out_scene.extras, dict) else {}
+        extras[EXTRAS_KEY] = kept
+        out_scene.extras = extras
+        sliced.save_binary(output_path)
+    except Exception as exc:
+        logger.warning(f"Could not carry layer metadata into the sliced model: {exc}")
+
+
 def _relink_dropped_materials(glb_path):
     """Restore primitive→material links trimesh drops on export.
 
@@ -583,6 +609,8 @@ def _slice_core(input_path, output_path, planes):
         # primitive→material link for meshes whose COLOR_0 rode through as a
         # vertex attribute — restore it.
         _relink_dropped_materials(output_path)
+
+    _carry_layer_extras(input_path, output_path)
 
     logger.info(f"Exported sliced model: {os.path.getsize(output_path)} bytes")
     return {

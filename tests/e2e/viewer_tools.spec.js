@@ -27,7 +27,9 @@ test('viewer tools panel opens each section without script errors', async ({ pag
   const sectionIds = ['viewContainer', 'materialContainer', 'transformContainer', 'layersContainer'];
   for (const id of sectionIds) {
     const header = page.locator(`#${id} .tp-section-header`);
-    if (await header.count() === 0) continue;
+    // Hidden sections are skipped: e.g. Layers only appears for multi-part
+    // models, and this upload is a single-part cube.
+    if (await header.count() === 0 || !(await header.first().isVisible())) continue;
     await header.first().click();
     const backBtn = page.locator('#toolsDetailBackBtn');
     if (await backBtn.isVisible()) await backBtn.click();

@@ -20,9 +20,13 @@ function isUnexpectedError(message) {
 }
 
 async function uploadCubeAndGetViewerUrl(page) {
+  return uploadFileAndGetViewerUrl(page, path.join(__dirname, '..', 'fixtures', 'cube.glb'));
+}
+
+async function uploadFileAndGetViewerUrl(page, filePath) {
   await page.goto('/studio');
   const fileInput = page.locator('#file-upload');
-  await fileInput.setInputFiles(path.join(__dirname, '..', 'fixtures', 'cube.glb'));
+  await fileInput.setInputFiles(filePath);
   await page.getByRole('button', { name: /upload and convert/i }).click();
 
   // The upload goes through the async job flow (job_id + status polling, or
@@ -35,4 +39,4 @@ async function uploadCubeAndGetViewerUrl(page) {
   return page.url();
 }
 
-module.exports = { KNOWN_BLOCKED_CDN_ERRORS, isUnexpectedError, uploadCubeAndGetViewerUrl };
+module.exports = { KNOWN_BLOCKED_CDN_ERRORS, isUnexpectedError, uploadCubeAndGetViewerUrl, uploadFileAndGetViewerUrl };

@@ -211,7 +211,15 @@ def optimize_glb(glb_path: str, timeout: int = 300, enabled=None, mode="meshopt"
     # -kn / -ke / -km: keep named nodes, extras and materials so the material editor,
     #                  hotspots and animations keep working after optimization.
     if mode == "draco":
-        cmd = cmd_base + ["optimize", glb_path, tmp_out, "--compress", "draco"]
+        # Compression only, like gltfpack's -kn/-km above: `optimize`'s defaults
+        # would join every part into one mesh, merge all materials into a
+        # palette and decimate the geometry — destroying the Layers panel,
+        # the material editor and measurement accuracy.
+        cmd = cmd_base + [
+            "optimize", glb_path, tmp_out, "--compress", "draco",
+            "--join", "false", "--flatten", "false", "--palette", "false",
+            "--instance", "false", "--simplify", "false",
+        ]
     else:
         cmd = cmd_base + ["-i", glb_path, "-o", tmp_out, "-cc", "-kn", "-ke", "-km"]
 

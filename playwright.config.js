@@ -23,6 +23,8 @@ module.exports = defineConfig({
       SECRET_KEY: 'e2e-only-secret',
       DEBUG: 'False',
       DATABASE_URL: 'sqlite:///e2e.db',
+      // One IP uploads the whole suite; see RATELIMIT_ENABLED in config.py.
+      RATELIMIT_ENABLED: 'false',
     },
   },
 });

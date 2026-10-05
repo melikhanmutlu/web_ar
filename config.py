@@ -73,6 +73,11 @@ REMEMBER_COOKIE_SAMESITE = 'Lax'
 REMEMBER_COOKIE_DURATION = timedelta(days=30)
 PERMANENT_SESSION_LIFETIME = timedelta(days=14)
 
+# Flask-Limiter switch — on unless explicitly disabled. Only the Playwright
+# e2e server turns it off: the whole suite uploads from one IP (127.0.0.1)
+# and otherwise trips the 30/hour upload limit near the end of a run.
+RATELIMIT_ENABLED = os.environ.get('RATELIMIT_ENABLED', 'true').strip().lower() != 'false'
+
 # Database - Railway PostgreSQL veya local SQLite
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL:

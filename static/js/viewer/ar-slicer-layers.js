@@ -390,7 +390,11 @@
                 slicerPlaneNY: { value: [0, 0, 0] },  // plane normals (y components)
                 slicerPlaneNZ: { value: [0, 0, 0] },  // plane normals (z components)
                 slicerPlaneD:  { value: [0, 0, 0] },   // plane constants
-                slicerNumPlanes: { value: 0 }
+                slicerNumPlanes: { value: 0 },
+                // 1 = fill cut surfaces: back faces seen through the cut are
+                // drawn flat in the part's own (darkened) colour, so a solid
+                // (e.g. a STEP part) reads as a filled section, not a hollow shell.
+                slicerCapEnabled: { value: 1 }
             };
 
             function patchMaterialForClipping(mat) {
@@ -414,6 +418,7 @@
                     shader.uniforms.slicerPlaneNZ = _clipUniforms.slicerPlaneNZ;
                     shader.uniforms.slicerPlaneD = _clipUniforms.slicerPlaneD;
                     shader.uniforms.slicerNumPlanes = _clipUniforms.slicerNumPlanes;
+                    shader.uniforms.slicerCapEnabled = _clipUniforms.slicerCapEnabled;
 
                     // Vertex shader: pass world-space position to fragment
                     // Uses modelMatrix to match the coordinate system of
@@ -448,6 +453,7 @@ uniform float slicerPlaneNY[3];
 uniform float slicerPlaneNZ[3];
 uniform float slicerPlaneD[3];
 uniform int slicerNumPlanes;
+uniform float slicerCapEnabled;
 void main() {
   for (int i = 0; i < 3; i++) {
     if (i >= slicerNumPlanes) break;
@@ -455,6 +461,16 @@ void main() {
     if (d < 0.0) discard;
   }
 `
+                    );
+
+                    // Section caps: runs before tone mapping / colour-space
+                    // conversion so the cap colour is treated like lit output.
+                    shader.fragmentShader = shader.fragmentShader.replace(
+                        '#include <tonemapping_fragment>',
+                        `if (slicerNumPlanes > 0 && slicerCapEnabled > 0.5 && !gl_FrontFacing) {
+  gl_FragColor = vec4(diffuseColor.rgb * 0.6, gl_FragColor.a);
+}
+#include <tonemapping_fragment>`
                     );
                 };
 
@@ -643,8 +659,37 @@ void main() {
             // Reuses the THREE internals discovered above for the slicer —
             // no server round-trip needed to enumerate a model's parts.
             let modelLayers = [];
+            // Panel rows: groups of modelLayers indices. One row per mesh,
+            // unless the GLB declares its layers (scene extras written by the
+            // STEP converter, converters/layers.py) — then the repeats of one
+            // part (20 bolts) share a row. Saving/explode stay per mesh.
+            let layerGroups = [];
             let layersBuiltForModel = false;
             let layersExplodeDiagonal = 1;
+
+            function declaredLayers() {
+                let declared = null;
+                _mvScene?.traverse(obj => {
+                    if (!declared && Array.isArray(obj.userData?.arvision_layers)) declared = obj.userData.arvision_layers;
+                });
+                return declared;
+            }
+
+            function groupLayers() {
+                const declared = declaredLayers();
+                if (!declared) return modelLayers.map((layer, i) => ({ name: layer.name, members: [i] }));
+                const groupOfMaterial = {};
+                declared.forEach((entry, gi) => (entry.materials || []).forEach(name => { groupOfMaterial[name] = gi; }));
+                const groups = declared.map(entry => ({ name: String(entry.name || ''), members: [] }));
+                const loose = [];
+                modelLayers.forEach((layer, i) => {
+                    const mats = Array.isArray(layer.node.material) ? layer.node.material : [layer.node.material];
+                    const gi = mats.map(m => groupOfMaterial[m?.name]).find(v => v !== undefined);
+                    if (gi === undefined) loose.push({ name: layer.name, members: [i] });
+                    else groups[gi].members.push(i);
+                });
+                return groups.filter(g => g.members.length).concat(loose);
+            }
 
             function getMvMaterialsForLayers() {
                 try { return document.querySelector('model-viewer')?.model?.materials || []; } catch (e) { return []; }
@@ -668,9 +713,17 @@ void main() {
                 if (layersBuiltForModel) return;
                 if (!discoverInternals() || !_mvScene) return;
 
+                // Only the model's own meshes: model-viewer's contact-shadow
+                // planes live under the same scene and used to show up as
+                // phantom "Layer N" rows (even making a one-part STL look
+                // multi-layer). Walk the loaded glTF root when it is exposed,
+                // and skip the shadow subtree either way.
+                const shadowRoot = _mvScene.shadow?.isObject3D ? _mvScene.shadow : null;
+                const isShadow = obj => { for (let p = obj; p; p = p.parent) if (p === shadowRoot) return true; return false; };
+                const layerRoot = _mvScene._model?.isObject3D ? _mvScene._model : _mvScene;
                 const meshes = [];
-                _mvScene.traverse(child => {
-                    if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
+                layerRoot.traverse(child => {
+                    if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position && !isShadow(child)) {
                         meshes.push(child);
                     }
                 });
@@ -769,6 +822,7 @@ void main() {
                     };
                 });
 
+                layerGroups = groupLayers();
                 renderLayersList();
 
                 // An active AnimationMixer overwrites node transforms every
@@ -792,11 +846,14 @@ void main() {
                 const container = document.getElementById('layersContainer');
                 const list = document.getElementById('layersList');
                 if (!list || !container) return;
-                if (modelLayers.length === 0) { container.classList.add('hidden'); return; }
+                if (layerGroups.length === 0) { container.classList.add('hidden'); return; }
                 container.classList.remove('hidden');
 
                 list.innerHTML = '';
-                modelLayers.forEach((layer, i) => {
+                layerGroups.forEach((group, i) => {
+                    const layer = modelLayers[group.members[0]];
+                    const count = group.members.length > 1
+                        ? ' <span style="color:var(--color-gray-500);">×' + group.members.length + '</span>' : '';
                     const row = document.createElement('div');
                     row.style.cssText = 'display:flex;align-items:center;gap:0.4rem;padding:0.25rem 0.35rem;background:var(--color-gray-800);border:1px solid var(--color-gray-700);';
                     row.innerHTML =
@@ -804,27 +861,30 @@ void main() {
                             '<i data-lucide="eye" class="layer-eye-on' + (layer.node.visible ? '' : ' hidden') + '" style="width:0.85rem;height:0.85rem;"></i>' +
                             '<i data-lucide="eye-off" class="layer-eye-off' + (layer.node.visible ? ' hidden' : '') + '" style="width:0.85rem;height:0.85rem;"></i>' +
                         '</button>' +
-                        '<span style="flex:1;font-size:0.72rem;color:var(--color-gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + window.escapeHtml(layer.name) + '</span>' +
+                        '<span style="flex:1;font-size:0.72rem;color:var(--color-gray-200);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + window.escapeHtml(group.name) + count + '</span>' +
                         '<input type="color" class="tp-color-swatch layer-color-input" data-idx="' + i + '" value="' + window.escapeHtml(layer.origColorHex) + '" style="width:1.6rem;height:1.6rem;padding:0;">';
                     list.appendChild(row);
                 });
                 if (window.lucide?.createIcons) lucide.createIcons();
 
                 list.querySelectorAll('.layer-vis-btn').forEach(btn => {
-                    btn.addEventListener('click', () => toggleLayerVisibility(parseInt(btn.dataset.idx, 10)));
+                    btn.addEventListener('click', () => toggleGroupVisibility(parseInt(btn.dataset.idx, 10)));
                 });
                 list.querySelectorAll('.layer-color-input').forEach(inp => {
-                    inp.addEventListener('input', (e) => applyLayerColor(parseInt(inp.dataset.idx, 10), e.target.value));
+                    inp.addEventListener('input', (e) => {
+                        (layerGroups[parseInt(inp.dataset.idx, 10)]?.members || []).forEach(m => applyLayerColor(m, e.target.value));
+                    });
                 });
             }
 
-            function toggleLayerVisibility(i) {
-                const layer = modelLayers[i];
-                if (!layer) return;
-                layer.node.visible = !layer.node.visible;
-                const btn = document.querySelector('.layer-vis-btn[data-idx="' + i + '"]');
-                btn?.querySelector('.layer-eye-on')?.classList.toggle('hidden', !layer.node.visible);
-                btn?.querySelector('.layer-eye-off')?.classList.toggle('hidden', layer.node.visible);
+            function toggleGroupVisibility(gi) {
+                const group = layerGroups[gi];
+                if (!group) return;
+                const visible = !modelLayers[group.members[0]].node.visible;
+                group.members.forEach(m => { modelLayers[m].node.visible = visible; });
+                const btn = document.querySelector('.layer-vis-btn[data-idx="' + gi + '"]');
+                btn?.querySelector('.layer-eye-on')?.classList.toggle('hidden', !visible);
+                btn?.querySelector('.layer-eye-off')?.classList.toggle('hidden', visible);
                 forceModelViewerRender();
             }
 
@@ -1013,6 +1073,7 @@ void main() {
                     meshBounds = null;
                     layersBuiltForModel = false;
                     modelLayers = [];
+                    layerGroups = [];
                     const layersList = document.getElementById('layersList');
                     if (layersList) layersList.innerHTML = '';
                 }
@@ -1179,6 +1240,11 @@ void main() {
             };
 
             // Reset button
+            document.getElementById('slicerFillCaps')?.addEventListener('change', (e) => {
+                _clipUniforms.slicerCapEnabled.value = e.target.checked ? 1 : 0;
+                forceModelViewerRender();
+            });
+
             document.getElementById('slicerReset')?.addEventListener('click', () => {
                 disableAllClipping();
                 document.querySelectorAll('.slicer-axis-toggle').forEach(cb => { cb.checked = false; });

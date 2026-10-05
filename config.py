@@ -77,9 +77,13 @@ PERMANENT_SESSION_LIFETIME = timedelta(days=14)
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL:
     # Railway PostgreSQL
-    # Fix: Railway uses postgres:// but SQLAlchemy needs postgresql://
+    # Railway uses postgres://; name the driver explicitly (psycopg2, the one in
+    # requirements.txt) instead of relying on SQLAlchemy's default, which
+    # switched to psycopg v3 in SQLAlchemy 2.1.
     if DATABASE_URL.startswith('postgres://'):
-        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg2://', 1)
+    elif DATABASE_URL.startswith('postgresql://'):
+        DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg2://', 1)
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
 else:
     # Local SQLite (Flask-SQLAlchemy resolves the relative path to instance/)

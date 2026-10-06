@@ -53,7 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('buildSceneBtn').addEventListener('click', () => {
+    const buildBtn = document.getElementById('buildSceneBtn');
+    buildBtn.addEventListener('click', () => window.withBusy(buildBtn, buildScene, 'Building…'));
+
+    // Returns a promise so withBusy keeps the button disabled while the scene
+    // builds (a double-click used to create two scenes).
+    function buildScene() {
         const items = [];
         document.querySelectorAll('.scene-item-checkbox:checked').forEach((checkbox) => {
             const row = checkbox.closest('.tp-list-item');
@@ -73,7 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
         status.classList.remove('hidden');
         status.textContent = 'Building scene…';
 
-        fetch('/api/scenes/build', {
+        return fetch('/api/scenes/build', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: document.getElementById('sceneName').value, items }),
@@ -85,10 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 status.textContent = 'Scene ready! Opening viewer…';
+                // Keep the button locked while the browser navigates away.
+                buildBtn.disabled = true;
                 window.location.href = data.viewer_url;
+                return new Promise(() => {});
             })
             .catch(() => { status.textContent = 'Failed to build scene.'; });
-    });
+    }
 });
 </script>
 {% endblock %}

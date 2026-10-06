@@ -35,13 +35,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     fov: parseFloat(fov) || 24
                 })
             })
-            .then(r => r.json())
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
             .then(data => {
-                if (!data.success) { console.error('Failed to save camera view:', data.error); return; }
+                if (!data.success) throw new Error(data.error || 'Save failed');
                 savedViews.push({ ...data.view, _orbit: orbit, _target: target, _fov: fov });
                 renderCameraViews();
             })
-            .catch(err => console.error('Error saving camera view:', err))
+            .catch(err => {
+                console.error('Error saving camera view:', err);
+                window.arToast('Could not save the camera view. Please try again.', 'error');
+            })
             .finally(() => { saveCameraView.disabled = false; });
         });
 
@@ -173,23 +176,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = hit.position;
             const norm = hit.normal;
 
-            // Save to DB
-            fetch('/api/models/' + modelId + '/hotspots', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: name,
-                    title: label,
-                    position: { x: pos.x, y: pos.y, z: pos.z },
-                    normal: { x: norm.x, y: norm.y, z: norm.z }
+            // Save to DB; on failure tell the user and offer a retry (the
+            // label they just typed would otherwise be lost silently).
+            const saveHotspot = () => {
+                fetch('/api/models/' + modelId + '/hotspots', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: name,
+                        title: label,
+                        position: { x: pos.x, y: pos.y, z: pos.z },
+                        normal: { x: norm.x, y: norm.y, z: norm.z }
+                    })
                 })
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (!data.success) { console.error('Failed to save hotspot:', data.error); return; }
-                renderHotspotOnViewer(name, label, pos, norm);
-            })
-            .catch(err => console.error('Error saving hotspot:', err));
+                .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+                .then(data => {
+                    if (!data.success) throw new Error(data.error || 'Save failed');
+                    renderHotspotOnViewer(name, label, pos, norm);
+                })
+                .catch(err => {
+                    console.error('Error saving hotspot:', err);
+                    window.arToast('Could not save the hotspot "' + label + '".', 'error',
+                        { actionLabel: 'Retry', onAction: saveHotspot });
+                });
+            };
+            saveHotspot();
         });
 
         // HOTSPOT DISCUSSION THREAD
@@ -274,13 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ body }),
             })
-                .then(r => r.json())
+                .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
                 .then(data => {
-                    if (!data.success) { console.error('Failed to post comment:', data.error); return; }
+                    if (!data.success) throw new Error(data.error || 'Post failed');
                     if (discussionInput) discussionInput.value = '';
                     loadDiscussionComments(activeDiscussionHotspotId);
                 })
-                .catch(err => console.error('Error posting comment:', err))
+                .catch(err => {
+                    console.error('Error posting comment:', err);
+                    window.arToast('Could not post your comment. Your text was kept - try again.', 'error');
+                })
                 .finally(() => { discussionSubmit.disabled = false; });
         });
 

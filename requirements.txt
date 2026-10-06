@@ -870,10 +870,6 @@ pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
     --hash=sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c
     # via rich
-pypng==0.20220715.0 \
-    --hash=sha256:4a43e969b8f5aaafb2a415536c1a8ec7e341cd6a3f957fd5b5f32a4cfeed902c \
-    --hash=sha256:739c433ba96f078315de54c0db975aee537cbc3e1d0ae4ed9aab0ca1e427e2c1
-    # via qrcode
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
@@ -882,9 +878,9 @@ python-slugify==8.0.1 \
     --hash=sha256:70ca6ea68fe63ecc8fa4fcf00ae651fc8a5d02d93dcd12ae6d4fc7ca46c4d395 \
     --hash=sha256:ce0d46ddb668b3be82f4ed5e503dbc33dd815d83e2eb6824211310d3fb172a27
     # via -r requirements.in
-qrcode==7.4.2 \
-    --hash=sha256:581dca7a029bcb2deef5d01068e39093e80ef00b4a61098a2182eac59d01643a \
-    --hash=sha256:9dd969454827e127dbd93696b20747239e6d540e082937c90f14ac95b30f5845
+qrcode==8.2 \
+    --hash=sha256:16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f \
+    --hash=sha256:35c3f2a4172b33136ab9f6b3ef1c00260dd2f66f858f24d88418a015f446506c
     # via -r requirements.in
 requests==2.33.0 \
     --hash=sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b \
@@ -921,7 +917,7 @@ scipy==1.11.4 \
     --hash=sha256:f313b39a7e94f296025e3cffc2c567618174c0b1dde173960cf23808f9fae4be \
     --hash=sha256:f3cd9e7b3c2c1ec26364856f9fbe78695fe631150f94cd1c22228456404cf1ec
     # via -r requirements.in
-sentry-sdk==2.71.0 \
+sentry-sdk[flask]==2.71.0 \
     --hash=sha256:7beb27a22f06396f3a05510c3da6ea10e1c79e02e859993c27ce4ff074e296d6 \
     --hash=sha256:9ed36b4c206048aa67b5ddba0a6e28d59fc55cf10d60f5f7aea2c3917184bf4a
     # via -r requirements.in
@@ -1062,7 +1058,6 @@ typing-extensions==4.16.0 \
     #   alembic
     #   flask-limiter
     #   limits
-    #   qrcode
     #   sqlalchemy
     #   typing-inspect
 typing-inspect==0.9.0 \

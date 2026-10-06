@@ -9,6 +9,7 @@ import re
 
 from flask import Blueprint, current_app, jsonify, request, send_file, send_from_directory
 from flask_login import current_user, login_required
+from werkzeug.exceptions import NotFound
 
 from converters.glb_optimizer import readable_glb
 from models import UserModel, db
@@ -113,7 +114,8 @@ def serve_converted_file(unique_id, filename):
             send_from_directory(directory, filename, as_attachment=False, max_age=86400),
             live_model,
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, NotFound):
+        # send_from_directory raises werkzeug's NotFound for a missing file
         current_app.logger.error(
             f"File not found in serve_converted_file: {directory}/{filename}"
         )

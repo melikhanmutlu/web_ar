@@ -3,6 +3,8 @@
 {% block title %}My Models — ARVision{% endblock %}
 
 {% block content %}
+{# A brand-new, folder-less library has nothing to select/filter/trash. #}
+{% set library_empty = (not models) and (not folders) and (not current_folder) and (not trash_view) and (not trash_count) %}
 <main id="main" class="library-main">
     <section class="library-header">
         <div>
@@ -14,7 +16,7 @@
         <div class="library-actions">
             {% if not trash_view %}
             <div class="library-actions-primary">
-                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn">
+                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn{% if library_empty %} hidden{% endif %}">
                     <i data-lucide="check-square"></i>
                     Select
                 </button>
@@ -123,7 +125,7 @@
         </label>
     </section>
 
-    <section class="library-tools">
+    <section class="library-tools{% if library_empty %} hidden{% endif %}">
         <div class="library-search">
             <i data-lucide="search"></i>
             <input type="text" id="modelSearch" placeholder="Search models..." aria-label="Search models">
@@ -172,22 +174,22 @@
     </section>
     {% endif %}
 
-    {% if folders or (not trash_view and not current_folder) %}
+    {% if folders or (not trash_view and not current_folder and trash_count) %}
     <section class="library-section library-section--folders{% if not trash_view and not current_folder %} library-section--root{% endif %}">
         <div class="library-section-title">
             <h2>Folders</h2>
             <span>{{ folders|length }}</span>
         </div>
         <div class="library-folder-grid">
-            {% if not trash_view and not current_folder %}
+            {% if not trash_view and not current_folder and trash_count %}
             <article class="folder-card library-folder library-folder--trash"
-                     onclick="navigateToTrash()"
                      title="{{ trash_count }} model{{ '' if trash_count == 1 else 's' }} in trash · auto-deleted after {{ trash_retention_days }} days">
+                <a class="library-folder-link" href="{{ url_for('models_crud.my_models_trash') }}" aria-labelledby="trashFolderName"></a>
                 <div class="library-folder-icon">
                     <i data-lucide="trash-2"></i>
                 </div>
                 <div class="library-folder-copy">
-                    <h3 class="folder-name">Trash</h3>
+                    <h3 class="folder-name" id="trashFolderName">Trash</h3>
                     <p>{{ trash_count }} model{{ '' if trash_count == 1 else 's' }}</p>
                 </div>
             </article>
@@ -195,10 +197,10 @@
             {% for folder in folders %}
             <article class="folder-card library-folder folder-drop-target"
                      data-folder-id="{{ folder.id }}"
-                     onclick="navigateToFolder('{{ folder.id }}')"
                      ondragover="handleDragOver(event)"
                      ondragleave="handleDragLeave(event)"
                      ondrop="handleDrop(event)">
+                <a class="library-folder-link" href="{{ url_for('models_crud.my_models', folder_id=folder.id) }}" aria-labelledby="folderName-{{ folder.id }}"></a>
                 {% set previews = folder_previews.get(folder.id, []) if folder_previews else [] %}
                 <div class="library-folder-icon {% if previews %}has-collage{% endif %}">
                     {% if previews %}
@@ -212,7 +214,7 @@
                     {% endif %}
                 </div>
                 <div class="library-folder-copy">
-                    <h3 class="folder-name" data-folder-id="{{ folder.id }}">{{ folder.name }}</h3>
+                    <h3 class="folder-name" id="folderName-{{ folder.id }}" data-folder-id="{{ folder.id }}">{{ folder.name }}</h3>
                     <p>{{ folder_model_counts.get(folder.id, 0) }} model{{ '' if folder_model_counts.get(folder.id, 0) == 1 else 's' }}</p>
                 </div>
                 <div class="library-card-action library-folder-actions">
@@ -327,6 +329,8 @@
                     <p class="library-model-meta">
                         {% if trash_view %}
                         <span class="upload-date">Trashed {{ model.deleted_at | localdt('%Y-%m-%d %H:%M') if model.deleted_at }}</span>
+                        {% set days_left = (trash_days_left or {}).get(model.id) %}
+                        {% if days_left is not none %}<span class="trash-purge{% if days_left <= 3 %} trash-purge--soon{% endif %}">Deleted forever in {{ days_left }} day{{ '' if days_left == 1 else 's' }}</span>{% endif %}
                         {% else %}
                         <span class="upload-date">{{ model.upload_date_formatted }}</span>
                         {% endif %}
@@ -359,8 +363,8 @@
         <div class="library-empty">
             <i data-lucide="boxes"></i>
             <h2>No models here yet</h2>
-            <p>Upload a model from the home screen and it will appear here as a lightweight screenshot preview.</p>
-            <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">Upload Model</button>
+            <p>{% if current_folder %}Move models into this folder from your library, or upload a new one in Studio.{% else %}Upload your first model in Studio and it will appear here as a lightweight preview.{% endif %}</p>
+            <a href="{{ url_for('main.studio') }}" class="btn-primary library-primary">Open Studio</a>
         </div>
         {% endif %}
     </section>

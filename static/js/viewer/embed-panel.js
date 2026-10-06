@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!saveBtn && !copyBtn) return;
 
+    // Colour pickers are just swatches; show the hex value next to each one.
+    function bindHex(input, outputId) {
+        const out = document.getElementById(outputId);
+        if (!input || !out) return () => {};
+        const sync = () => { out.textContent = input.value; };
+        input.addEventListener('input', sync);
+        sync();
+        return sync;
+    }
+    const syncBackgroundHex = bindHex(backgroundColor, 'embedBackgroundHex');
+    const syncPrimaryHex = bindHex(primaryColor, 'embedPrimaryHex');
+
     let snippets = null;
 
     function loadSettings() {
@@ -32,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (autoRotate) autoRotate.checked = !!s.auto_rotate;
                 if (backgroundColor) backgroundColor.value = s.background_color || '#ffffff';
                 if (primaryColor) primaryColor.value = (s.branding && s.branding.primary_color) || '#4CAF50';
+                syncBackgroundHex();
+                syncPrimaryHex();
                 if (hidePoweredBy) hidePoweredBy.checked = !!(s.branding && s.branding.hide_powered_by);
             })
             .catch(() => {});

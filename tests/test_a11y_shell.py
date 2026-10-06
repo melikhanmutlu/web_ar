@@ -57,3 +57,40 @@ def test_auth_discover_studio_render_the_shared_footer(client, path):
 
 def test_dead_dark_theme_rules_are_gone():
     assert ".dark " not in open(CSS).read()
+
+
+def _make_user(name):
+    from models import User, db
+    u = User(username=name, email=f"{name}@test.com")
+    u.set_password("pw")
+    db.session.add(u)
+    db.session.commit()
+    return u
+
+
+def test_library_empty_state_points_to_studio_and_hides_filters(client):
+    _make_user("emptylib")
+    client.post("/login", data={"username": "emptylib", "password": "pw"})
+    html = client.get("/my_models").get_data(as_text=True)
+    assert "Upload your first model in Studio" in html
+    assert 'href="/studio"' in html
+    assert "library-tools hidden" in html
+    assert "library-folder--trash" not in html  # no "Trash 0" card
+
+
+def test_trash_cards_show_days_left_and_folder_cards_are_links(client):
+    import uuid
+    from models import Folder, UserModel, db
+    from services.time_utils import datetime
+    u = _make_user("trashy")
+    f = Folder(name="Box", slug="box-1", user_id=u.id)
+    m = UserModel(id=str(uuid.uuid4()), filename="x.glb", file_size=1, file_type="glb",
+                  user_id=u.id, deleted_at=datetime.utcnow())
+    db.session.add_all([f, m])
+    db.session.commit()
+    client.post("/login", data={"username": "trashy", "password": "pw"})
+    trash = client.get("/my_models/trash").get_data(as_text=True)
+    assert "Deleted forever in 30 days" in trash
+    root = client.get("/my_models").get_data(as_text=True)
+    assert f'class="library-folder-link" href="/my_models/{f.id}"' in root
+    assert 'class="library-folder-link" href="/my_models/trash"' in root

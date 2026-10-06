@@ -219,6 +219,26 @@ def serve_thumbnail(unique_id):
 
     model = get_live_model(unique_id)
     if not model:
+        # Library Trash: the owner still has to recognise what they are about
+        # to restore, so serve the already-stored thumbnail of THEIR OWN
+        # trashed models (privately cached, never generated on the fly).
+        trashed = db.session.get(UserModel, unique_id)
+        if (
+            trashed is not None
+            and trashed.deleted_at is not None
+            and current_user.is_authenticated
+            and trashed.user_id == current_user.id
+        ):
+            trash_thumb = os.path.join(
+                current_app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.png"
+            )
+            if os.path.exists(trash_thumb):
+                response = send_from_directory(
+                    os.path.dirname(trash_thumb), "thumbnail.png", max_age=3600
+                )
+                response.cache_control.public = False
+                response.cache_control.private = True
+                return response
         return "Model not found", 404
     denied = check_model_view_allowed(unique_id)
     if denied:

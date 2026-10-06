@@ -1694,13 +1694,17 @@ footer {
 .footer-inner>span {
     font-size:var(--fs-micro)
 }
+/* UIP-26: only hide reveal blocks once JS is running (`.js` is set in
+   _security_head.html); without JS the content stays visible. */
 .reveal {
-    opacity:0;
-    transform:translateY(28px);
     transition:.7s cubic-bezier(.2,.75,.2,1);
     transition-delay:var(--delay)
 }
-.reveal.is-visible {
+.js .reveal {
+    opacity:0;
+    transform:translateY(28px)
+}
+.js .reveal.is-visible {
     opacity:1;
     transform:none
 }
@@ -2336,7 +2340,7 @@ footer {
     .studio-drop {
         height:230px
     }
-    .reveal {
+    .js .reveal {
         transform:translateY(20px)
     }
 }
@@ -2809,7 +2813,7 @@ footer {
     * {
         scroll-behavior:auto!important
     }
-    .reveal {
+    .reveal,.js .reveal {
         opacity:1;
         transform:none;
         transition:none
@@ -3635,4 +3639,80 @@ html :focus-visible {
     padding: 0.55rem 0.9rem;
     font-size: 0.86rem;
     border-radius: 10px;
+}
+
+/* ===================================================================
+   Faz 4 — library links, trash, tap targets, mobile menu, no-JS reveal
+   =================================================================== */
+/* UIA-24: folder / Trash cards are real links (stretched over the card);
+   the rename/delete buttons sit above the overlay and show on keyboard focus. */
+.library-folder-link {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+}
+.library-folder .library-card-action { z-index: 2; }
+.library-folder:focus-within .library-card-action { opacity: 1; }
+.library-folder:has(.library-folder-link:focus-visible) { border-color: var(--focus-ring); }
+.library-folder-link:focus-visible { outline-offset: -2px; }
+
+/* UIA-26: trash cards say when they will be purged. */
+.trash-purge { color: var(--text-subtle); font-weight: 700; }
+.trash-purge--soon { color: var(--error); }
+
+/* UIA-30: empty library — centred icon. */
+.library-empty > i, .library-empty > svg { display: block; margin: 0 auto; }
+@media (max-width: 640px) {
+    /* Compact header actions: Upload on its own full-width row, the three
+       secondary actions share one row beneath it. */
+    .library-actions .library-actions-primary { gap: 0.5rem; flex-wrap: wrap; }
+    .library-actions .library-actions-primary > * { flex: 1 1 0; min-width: 0; white-space: nowrap; }
+    .library-actions .library-actions-primary > .btn-primary { order: -1; flex-basis: 100%; }
+    .library-actions .library-btn,
+    .library-actions .btn-primary.library-primary { min-height: 44px; padding: 10px 12px; font-size: 13px; }
+    .library-subtitle { display: none; }
+    .library-header { margin-bottom: 1.25rem; }
+}
+
+/* UIP-21: credit packs overflowed at tablet width (only collapsed <=640px). */
+.credit-pack-grid article { min-width: 0; }
+.credit-pack-grid article>div strong { font-size: clamp(34px, 6vw, 52px); }
+@media (max-width: 900px) {
+    .credit-pack-grid { grid-template-columns: 1fr; }
+    .credit-pack-grid article { min-height: 0; border-right: 0; border-bottom: 1px solid var(--line); }
+    .credit-pack-grid article:last-child { border-bottom: 0; }
+}
+
+/* UIP-22: tap targets >= 44px (hit area grown without changing the look). */
+.capability-pagination { gap: 0.8rem; }
+.capability-pagination button { position: relative; }
+.capability-pagination button::after { content: ""; position: absolute; inset: -19px -7px; }
+.auth-check { min-height: 44px; }
+.auth-check input { width: 1.25rem; height: 1.25rem; }
+.auth-alt a,
+.profile-stat-sub a,
+.feature-grid a { display: inline-flex; align-items: center; min-height: 44px; }
+.profile-stat-sub a { padding-inline: 0.25rem; }
+
+/* UIP-23: the mobile menu panel is opaque and fills the viewport below the
+   header (the blur never worked: it is nested inside the blurred .nav). */
+.mobile-menu {
+    background: var(--paper);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+@media (max-width: 950px) {
+    .nav.menu-open { background: var(--paper); }
+    .mobile-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        height: calc(100vh - 78px);
+        height: calc(100dvh - 78px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .nav-scrolled .mobile-menu { height: calc(100vh - 64px); height: calc(100dvh - 64px); }
 }

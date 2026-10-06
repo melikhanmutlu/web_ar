@@ -236,8 +236,34 @@ def test_trashed_and_unknown_models_are_404_even_for_owner(client, env):
     trashed = _model(env, visibility="public", deleted=True)
     _login(client, "owner")
     assert client.get(f"/converted_files/{trashed.id}/model.glb").status_code == 404
-    assert client.get(f"/thumbnail/{trashed.id}").status_code == 404
     assert client.get(f"/converted_files/{uuid.uuid4()}/model.glb").status_code == 404
+    assert client.get(f"/thumbnail/{uuid.uuid4()}").status_code == 404
+
+
+def test_owner_sees_thumbnails_of_their_trashed_models(client, env):
+    """Library Trash must show what will be restored (UIA-26)."""
+    trashed = _model(env, visibility="public", deleted=True)
+    _login(client, "owner")
+    resp = client.get(f"/thumbnail/{trashed.id}")
+    assert resp.status_code == 200
+    assert resp.mimetype == "image/png"
+    assert resp.cache_control.public is not True  # never in shared caches
+
+
+def test_trashed_thumbnail_is_not_served_to_anyone_else(client, env):
+    trashed = _model(env, visibility="public", deleted=True)
+    assert client.get(f"/thumbnail/{trashed.id}").status_code == 404  # anonymous
+    _login(client, "stranger")
+    assert client.get(f"/thumbnail/{trashed.id}").status_code == 404
+    assert client.get(f"/converted_files/{trashed.id}/thumbnail.png").status_code == 404
+
+
+def test_trashed_thumbnail_is_never_generated_on_the_fly(client, env):
+    trashed = _model(env, deleted=True)
+    (env.conv / trashed.id / "thumbnail.png").unlink()
+    _login(client, "owner")
+    assert client.get(f"/thumbnail/{trashed.id}").status_code == 404
+    assert not (env.conv / trashed.id / "thumbnail.png").exists()
 
 
 def test_valid_share_link_unlocks_private_files_and_thumbnail(client, env):

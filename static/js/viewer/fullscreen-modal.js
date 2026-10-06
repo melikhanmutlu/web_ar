@@ -187,6 +187,26 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadMenu.addEventListener('mouseleave', scheduleClose);
     }
 
+    // Keyboard: ArrowUp/Down moves through the format menu, Esc closes it and
+    // returns focus to the Download button.
+    if (downloadMenu) {
+        const items = () => Array.from(downloadMenu.querySelectorAll('.download-fanout-btn'));
+        downloadMenu.addEventListener('keydown', (e) => {
+            const list = items();
+            if (!list.length) return;
+            const i = list.indexOf(document.activeElement);
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const step = e.key === 'ArrowDown' ? 1 : -1;
+                list[i === -1 ? (step === 1 ? 0 : list.length - 1) : (i + step + list.length) % list.length].focus();
+            } else if (e.key === 'Escape' && i !== -1) {
+                e.preventDefault();
+                downloadMenu.classList.remove('is-open');
+                downloadButton?.focus();
+            }
+        });
+    }
+
     downloadFormatModalClose?.addEventListener('click', () => {
         downloadFormatModal?.classList.add('hidden');
     });

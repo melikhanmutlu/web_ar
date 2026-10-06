@@ -110,11 +110,19 @@ def my_models_trash():
             .all()
         )
 
+        # Whole days left before the auto-purge, shown on each trash card.
+        now = datetime.utcnow()
+        trash_days_left = {
+            m.id: max(0, TRASH_RETENTION_DAYS - (now - m.deleted_at).days)
+            for m in trashed_models
+        }
+
         from flask import render_template
         return render_template(
             "my_models.html",
             folders=[],
             models=trashed_models,
+            trash_days_left=trash_days_left,
             current_folder=None,
             folder_model_counts={},
             folder_previews={},

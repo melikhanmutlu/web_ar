@@ -6,12 +6,14 @@ import time
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from services.request_json import json_dict
 from models import CameraView, HotspotComment, ModelHotspot, ModelMeasurement, UserModel, db
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 
 hotspots_bp = Blueprint("hotspots", __name__)
 
 HOTSPOT_COMMENT_MAX_LENGTH = 2000
+HOTSPOT_DESCRIPTION_MAX_LENGTH = 2000
 
 
 @hotspots_bp.route("/api/models/<model_id>/hotspots", methods=["GET"])
@@ -52,7 +54,7 @@ def create_hotspot(model_id):
         if guard:
             return guard
 
-        data = request.get_json()
+        data = json_dict()
         if not data:
             return jsonify({"success": False, "error": "No data provided"}), 400
 
@@ -93,14 +95,22 @@ def create_hotspot(model_id):
                     "camera_target_z": _opt_finite(target.get("z")),
                     "camera_fov": _opt_finite(camera.get("fov")),
                 }
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, AttributeError):
             return jsonify({"success": False, "error": "Invalid coordinates"}), 400
+
+        # Text fields: coerce to str and clamp to the column sizes (a longer
+        # value would be a DataError/500 on Postgres).
+        title = str(data.get("title") or "Untitled")[:200]
+        description = data.get("description")
+        description = None if description is None else str(description)[:HOTSPOT_DESCRIPTION_MAX_LENGTH]
+        client_id = data.get("id")
+        client_id = str(client_id)[:50] if client_id else f"hotspot-{int(time.time()*1000)}"
 
         hotspot = ModelHotspot(
             model_id=model_id,
-            hotspot_id=data.get("id", f"hotspot-{int(time.time()*1000)}"),
-            title=data.get("title", "Untitled"),
-            description=data.get("description"),
+            hotspot_id=client_id,
+            title=title,
+            description=description,
             position_x=px,
             position_y=py,
             position_z=pz,
@@ -192,8 +202,9 @@ def create_hotspot_comment(model_id, hotspot_id):
         if not hotspot:
             return jsonify({"success": False, "error": "Hotspot not found"}), 404
 
-        data = request.get_json(silent=True) or {}
-        body = (data.get("body") or "").strip()
+        data = json_dict()
+        body = data.get("body")
+        body = body.strip() if isinstance(body, str) else ""
         if not body:
             return jsonify({"success": False, "error": "Comment cannot be empty"}), 400
         if len(body) > HOTSPOT_COMMENT_MAX_LENGTH:
@@ -275,8 +286,11 @@ def toggle_hotspots_visibility(model_id):
         if guard:
             return guard
 
-        data = request.get_json()
-        model.hotspots_visible = data.get("visible", not model.hotspots_visible)
+        data = json_dict()
+        visible = data.get("visible", not model.hotspots_visible)
+        if not isinstance(visible, bool):
+            return jsonify({"success": False, "error": "visible must be a boolean"}), 400
+        model.hotspots_visible = visible
         db.session.commit()
         return jsonify({"success": True, "hotspots_visible": model.hotspots_visible})
     except Exception as e:
@@ -317,9 +331,11 @@ def create_camera_view(model_id):
         if guard:
             return guard
 
-        data = request.get_json()
+        data = json_dict()
         orbit = data.get("orbit", {})
         target = data.get("target", {})
+        if not isinstance(orbit, dict) or not isinstance(target, dict):
+            return jsonify({"success": False, "error": "Invalid coordinates"}), 400
 
         # Validate raw client JSON before it reaches float columns (mirror
         # create_measurement): orbit/target must be finite numbers.
@@ -342,7 +358,7 @@ def create_camera_view(model_id):
 
         view = CameraView(
             model_id=model_id,
-            name=data.get("name", "View"),
+            name=str(data.get("name") or "View")[:100],
             orbit_theta=orbit_theta,
             orbit_phi=orbit_phi,
             orbit_radius=orbit_radius,
@@ -390,7 +406,7 @@ def create_measurement(model_id):
         if guard:
             return guard
 
-        data = request.get_json(silent=True) or {}
+        data = json_dict()
         try:
             a = data["a"]
             b = data["b"]
@@ -401,6 +417,11 @@ def create_measurement(model_id):
                 bx=float(b["x"]), by=float(b["y"]), bz=float(b["z"]),
                 distance_cm=float(data["distance_cm"]),
             )
+            if not all(math.isfinite(v) for v in (
+                measurement.ax, measurement.ay, measurement.az,
+                measurement.bx, measurement.by, measurement.bz, measurement.distance_cm,
+            )):
+                raise ValueError("non-finite value")
         except (KeyError, TypeError, ValueError):
             return jsonify({"success": False, "error": "Invalid measurement data"}), 400
 

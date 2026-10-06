@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from werkzeug.exceptions import NotFound
 
 from services.time_utils import datetime
+from services.request_json import json_dict
 from models import Folder, UserModel, db
 from model_cleanup import purge_model_completely
 from services.org_membership import _organization_membership
@@ -205,7 +206,7 @@ def update_model_color():
 
     edit_lock = None
     try:
-        data = request.get_json()
+        data = json_dict()
         model_id = data.get("model_id")
         color = data.get("color")
 
@@ -302,7 +303,7 @@ def delete_model(model_id):
 
         # Soft delete by default; permanent only when explicitly requested
         # (from the trash UI) or when the model is already in the trash.
-        data = request.get_json(silent=True) or {}
+        data = json_dict()
         permanent = bool(data.get("permanent")) or model.deleted_at is not None
 
         if not permanent:
@@ -390,8 +391,8 @@ def delete_all_models():
 @login_required
 def delete_selected_models():
     try:
-        data = request.get_json()
-        model_ids = data.get("model_ids", [])
+        data = json_dict()
+        model_ids = _model_id_list(data)
 
         if not model_ids:
             return jsonify({"success": False, "message": "No models selected"})
@@ -474,6 +475,26 @@ def create_folder():
         return redirect(url_for("models_crud.my_models"))
 
 
+def _model_id_list(data):
+    """`model_ids` from a JSON body as a list of strings ([] if absent/invalid)."""
+    ids = data.get("model_ids")
+    if isinstance(ids, list) and all(isinstance(i, str) for i in ids):
+        return ids
+    return []
+
+
+def _parse_folder_id(raw):
+    """int folder id, None when empty, False when not an integer."""
+    if not raw:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)):
+        return False
+    try:
+        return int(raw)
+    except ValueError:
+        return False
+
+
 def _org_folder_denied(folder):
     """True when `folder` is an organization folder and the current user is not
     (still) an owner/admin/editor of that organization. Personal folders -> False."""
@@ -530,7 +551,7 @@ def delete_folder(folder_id):
 @login_required
 def move_model():
     try:
-        data = request.get_json()
+        data = json_dict()
         if not data:
             return jsonify({"success": False, "error": "No JSON data received"}), 400
 
@@ -541,7 +562,9 @@ def move_model():
             return jsonify({"success": False, "error": "Model ID is required"}), 400
 
         # Convert folder_id to int if it exists, otherwise None
-        folder_id = int(folder_id) if folder_id else None
+        folder_id = _parse_folder_id(folder_id)
+        if folder_id is False:
+            return jsonify({"success": False, "error": "Invalid folder_id"}), 400
 
         # Get the model
         model = UserModel.query.get_or_404(model_id)
@@ -601,8 +624,8 @@ def restore_model(model_id):
 def restore_selected_models():
     """Bulk-restore trashed models back to the active library."""
     try:
-        data = request.get_json()
-        model_ids = data.get("model_ids", [])
+        data = json_dict()
+        model_ids = _model_id_list(data)
 
         if not model_ids:
             return jsonify({"success": False, "error": "No models selected"}), 400
@@ -644,7 +667,7 @@ def rename_folder(folder_id):
         if folder.user_id != current_user.id or _org_folder_denied(folder):
             return jsonify({"success": False, "error": "Unauthorized"}), 403
 
-        data = request.get_json(silent=True) or {}
+        data = json_dict()
         new_name = (data.get("name") or "").strip()[:100]
         if not new_name:
             return jsonify({"success": False, "error": "Folder name is required"}), 400
@@ -675,15 +698,17 @@ def rename_folder(folder_id):
 @login_required
 def move_selected_models():
     try:
-        data = request.get_json()
-        model_ids = data.get("model_ids", [])
+        data = json_dict()
+        model_ids = _model_id_list(data)
         folder_id = data.get("folder_id")
 
         if not model_ids:
             return jsonify({"success": False, "error": "No models selected"}), 400
 
         # JS sends folder_id as a string; Integer column needs int (or None)
-        folder_id = int(folder_id) if folder_id else None
+        folder_id = _parse_folder_id(folder_id)
+        if folder_id is False:
+            return jsonify({"success": False, "error": "Invalid folder_id"}), 400
 
         # Verify folder exists and belongs to user if folder_id is provided
         if folder_id:
@@ -726,8 +751,8 @@ def move_selected_models():
 def bulk_update_visibility():
     """Set sharing visibility (private/unlisted/public) on multiple models at once."""
     try:
-        data = request.get_json()
-        model_ids = data.get("model_ids", [])
+        data = json_dict()
+        model_ids = _model_id_list(data)
         visibility = data.get("visibility")
 
         if not model_ids:
@@ -762,8 +787,8 @@ def bulk_add_tags():
     each model are kept — this only adds, matching the per-model tag editor's
     max of 10 tags of up to 30 chars each)."""
     try:
-        data = request.get_json()
-        model_ids = data.get("model_ids", [])
+        data = json_dict()
+        model_ids = _model_id_list(data)
         raw_tags = data.get("tags", [])
 
         if not model_ids:

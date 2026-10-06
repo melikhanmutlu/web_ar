@@ -15,6 +15,7 @@ from glb_modifier import modify_glb
 from models import ModelHotspot, UserModel, db
 from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
+from services.request_json import json_dict
 from version_manager import bump_asset_version, create_version
 
 model_editing_bp = Blueprint("model_editing", __name__)
@@ -128,13 +129,17 @@ def apply_modifications():
 
     edit_lock = None
     try:
-        data = request.json
+        data = json_dict()
         model_id = data.get("model_id")
         modifications = data.get("modifications")
 
         if not model_id or not modifications:
             return jsonify(
                 {"success": False, "error": "Missing model_id or modifications"}
+            ), 400
+        if not isinstance(model_id, str) or not isinstance(modifications, dict):
+            return jsonify(
+                {"success": False, "error": "Invalid model_id or modifications"}
             ), 400
 
         guard = check_model_mutation_allowed(model_id)
@@ -326,13 +331,17 @@ def save_modifications():
 
     edit_lock = None
     try:
-        data = request.json
+        data = json_dict()
         model_id = data.get("model_id")
         modifications = data.get("modifications")
 
         if not model_id or not modifications:
             return jsonify(
                 {"success": False, "error": "Missing model_id or modifications"}
+            ), 400
+        if not isinstance(model_id, str) or not isinstance(modifications, dict):
+            return jsonify(
+                {"success": False, "error": "Invalid model_id or modifications"}
             ), 400
 
         app_module.logger.info(f"[save_modifications] Model ID: {model_id}")
@@ -625,8 +634,10 @@ def slice_model():
     try:
         from mesh_slicer import slice_mesh_multi, slicing_unsupported_reason
 
-        data = request.json
+        data = json_dict()
         model_id = data.get("model_id")
+        if model_id is not None and not isinstance(model_id, str):
+            return jsonify({"success": False, "error": "Invalid model_id"}), 400
 
         # Accept either the new atomic multi-plane payload (`planes`) or the legacy
         # single-plane fields. Everything is funnelled through one multi-plane slice
@@ -643,6 +654,11 @@ def slice_model():
                         "keep_side": data.get("keep_side", "positive"),
                     }
                 ]
+
+        if planes and (
+            not isinstance(planes, list) or not all(isinstance(p, dict) for p in planes)
+        ):
+            return jsonify({"success": False, "error": "Invalid planes"}), 400
 
         app_module.logger.info(
             f"[slice_model] Received request for model_id: {model_id}, "

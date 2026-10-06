@@ -3,6 +3,8 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from services.request_json import json_dict, json_text
+
 ai_image_bp = Blueprint("ai_image", __name__)
 
 # Stateless by design: image generation finishes in seconds, produces only
@@ -37,12 +39,12 @@ def generate_image():
                                  "Buy a credit pack or upgrade your plan.",
                         "upgrade": upgrade_hint("ai_credits")}), 429
 
-    data = request.get_json(silent=True) or {}
-    mode = (data.get("mode") or "text").strip()
-    prompt = (data.get("prompt") or "").strip()
+    data = json_dict()
+    mode = json_text(data, "mode", "text")
+    prompt = json_text(data, "prompt")
     try:
         if mode == "image":
-            image = (data.get("image") or "").strip()
+            image = json_text(data, "image")
             if not image.startswith("data:image/"):
                 return jsonify({"success": False,
                                 "error": "A valid image (jpg/png) is required."}), 400
@@ -56,7 +58,7 @@ def generate_image():
                 return jsonify({"success": False,
                                 "error": "A text prompt is required."}), 400
             task_id = ai_generator.start_text_to_image(
-                prompt, aspect_ratio=(data.get("aspect_ratio") or "1:1"))
+                prompt, aspect_ratio=json_text(data, "aspect_ratio", "1:1"))
             kind = "t2i"
         return jsonify({"success": True, "task_id": task_id, "kind": kind})
     except ai_generator.MeshyError as e:
@@ -100,8 +102,8 @@ def _resolve_image_task(image_task):
     """
     import ai_generator
 
-    kind = (image_task.get("kind") or "").strip()
-    task_id = (image_task.get("task_id") or "").strip()
+    kind = json_text(image_task, "kind")
+    task_id = json_text(image_task, "task_id")
     try:
         index = int(image_task.get("index", 0))
     except (TypeError, ValueError):

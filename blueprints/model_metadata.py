@@ -6,6 +6,7 @@ import re
 from flask import Blueprint, jsonify, request, url_for
 from flask_login import current_user, login_required
 
+from services.request_json import json_dict
 from models import User, UserModel, db
 from services.model_permissions import (
     check_model_mutation_allowed,
@@ -24,7 +25,7 @@ def update_model_metadata(model_id):
     model = UserModel.query.get_or_404(model_id)
     if model.user_id != current_user.id:
         return jsonify({"error": "Forbidden"}), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     if "display_name" in data:
         model.display_name = str(data["display_name"])[:255] or None
     if "description" in data:
@@ -49,7 +50,7 @@ def update_model_sharing(model_id):
     model = UserModel.query.get_or_404(model_id)
     if model.user_id != current_user.id:
         return jsonify({"success": False, "error": "Forbidden"}), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     visibility = data.get("visibility", model.visibility)
     if visibility not in {"private", "unlisted", "public"}:
         return jsonify({"success": False, "error": "Invalid visibility"}), 400
@@ -83,7 +84,7 @@ def model_viewer_settings(model_id):
     guard = check_model_mutation_allowed(model_id)
     if guard:
         return guard
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     # Read-modify-write on a JSON column: two PATCHes issued close together
     # from the same session (e.g. the View tab's AR-placement select and a
     # Transform-preset save's camera-orbit patch) would otherwise each read

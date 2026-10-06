@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from services.time_utils import datetime
+from services.request_json import json_dict
 from models import ModelShareLink, UserModel, db
 from services import send_email
 from services.plans import plan_allows
@@ -22,7 +23,7 @@ def create_model_share_link(model_id):
     model = UserModel.query.get_or_404(model_id)
     if model.user_id != current_user.id:
         return jsonify({"success": False, "error": "Forbidden"}), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     permission = data.get("permission", "view")
     if permission not in {"view", "edit"}:
         return jsonify({"success": False, "error": "Invalid permission"}), 400
@@ -140,8 +141,7 @@ def open_model_share_link(token):
         return _share_unavailable(
             410, "Link expired", "This share link has expired. Ask the owner for a new link.")
     if link.password_hash:
-        body = request.get_json(silent=True) or {}
-        password = body.get("password") or request.form.get("password")
+        password = json_dict().get("password") or request.form.get("password")
         if not password or not check_password_hash(link.password_hash, password):
             if request.method == "GET":
                 return _share_password_page(token, link)

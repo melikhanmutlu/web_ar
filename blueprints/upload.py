@@ -25,6 +25,7 @@ from config import (
     SIZE_LIMIT_MAX_CM,
     SIZE_LIMIT_MIN_CM,
 )
+from services.request_json import json_dict
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
 from services.model_permissions import check_model_view_allowed, get_live_model
@@ -522,7 +523,7 @@ def init_chunked_upload():
     The client slices the file into chunks itself and PUTs each one."""
     import app as app_module
 
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     filename = secure_filename(data.get("filename") or "")
     if not filename or not app_module.allowed_file(filename):
         return jsonify({"success": False, "error": "Unsupported or missing filename"}), 400
@@ -668,7 +669,7 @@ def complete_chunked_upload(upload_id):
         missing = sorted(set(range(meta["total_chunks"])) - set(received))
         return jsonify({"success": False, "error": "Upload incomplete", "missing_chunks": missing}), 409
 
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     compression = data.get("compression")
     if compression not in (None, "none", "meshopt", "draco"):
         return jsonify({"success": False, "error": "Invalid compression mode"}), 400
@@ -997,7 +998,7 @@ def retry_upload_job(job_id):
     if not job:
         return jsonify({"success": False, "error": "Job not found"}), 404
     is_owner = current_user.is_authenticated and job.user_id == current_user.id
-    token = request.headers.get("X-Job-Status-Token") or (request.get_json(silent=True) or {}).get("status_token")
+    token = request.headers.get("X-Job-Status-Token") or (json_dict()).get("status_token")
     if not is_owner and (not token or not job.status_token_hash or
                          not check_password_hash(job.status_token_hash, token)):
         return jsonify({"success": False, "error": "Valid status token required"}), 403

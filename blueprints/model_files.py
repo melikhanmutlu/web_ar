@@ -13,6 +13,7 @@ from werkzeug.exceptions import NotFound
 
 from converters.glb_optimizer import readable_glb
 from models import UserModel, db
+from services.request_json import json_dict
 from services.model_permissions import (
     check_model_mutation_allowed,
     check_model_view_allowed,
@@ -174,8 +175,8 @@ def save_viewer_thumbnail(unique_id):
     if not model or model.user_id != current_user.id:
         return jsonify({"error": "Not authorized"}), 403
 
-    data = request.get_json()
-    if not data or not data.get("image"):
+    data = json_dict()
+    if not isinstance(data.get("image"), str) or not data["image"]:
         return jsonify({"error": "No image data"}), 400
 
     try:

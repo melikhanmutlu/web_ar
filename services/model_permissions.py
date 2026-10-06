@@ -10,6 +10,7 @@ from flask_login import current_user
 
 from models import ModelShareLink, OrganizationMember, UserModel, db
 from services.model_access import ModelAccessService
+from services.request_json import json_dict
 
 model_access = ModelAccessService(UserModel)
 
@@ -48,9 +49,11 @@ def check_model_mutation_allowed(model_id, require_exists=True):
     models require owner/editor authorization. Returns a response tuple to return from
     the view, or None when the mutation is allowed.
     """
-    body = request.get_json(silent=True) or {}
+    body = json_dict()
+    body_token = body.get("edit_token")
     token = (request.headers.get("X-Model-Edit-Token") or
-             request.args.get("edit_token") or body.get("edit_token") or
+             request.args.get("edit_token") or
+             (body_token if isinstance(body_token, str) else None) or
              session.get(f"model_edit_token:{model_id}"))
     actor_id = current_user.id if current_user.is_authenticated else None
     grant = _active_share_grant(model_id)

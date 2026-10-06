@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 
 from services.time_utils import datetime
 from datetime import timedelta
+from services.request_json import json_dict
 from models import ApiToken, ConversionJob, ModelAnalyticsEvent, OrganizationMember, User, UserModel, db
 from services import UploadStagingError
 from services.org_membership import _organization_membership
@@ -97,7 +98,7 @@ def api_tokens():
             "error": "API access requires a Pro or Business plan.",
             "upgrade": upgrade_hint("api_access"),
         }), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name", "API token")).strip()[:120]
     scopes = data.get("scopes", ["models:read"])
     if not isinstance(scopes, list) or not scopes or not set(scopes) <= API_TOKEN_SCOPES:

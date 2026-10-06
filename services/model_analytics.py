@@ -28,7 +28,7 @@ def record_model_event(model_id, event_type, metadata=None):
     user_agent = request.headers.get("User-Agent", "").lower()
     device = "mobile" if any(marker in user_agent for marker in ("mobile", "android", "iphone")) else "desktop"
     clean_metadata = {}
-    for key, value in (metadata or {}).items():
+    for key, value in (metadata if isinstance(metadata, dict) else {}).items():
         if len(clean_metadata) >= 10:
             break
         if isinstance(value, (str, int, float, bool)):

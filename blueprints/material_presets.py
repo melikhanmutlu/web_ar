@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from glb_modifier import modify_glb
+from services.request_json import json_dict
 from models import AIGenerationJob, MaterialPreset, OrganizationMember, PromptPreset, db
 from services.model_permissions import check_model_mutation_allowed, get_live_model
 from services.org_membership import _organization_membership
@@ -61,7 +62,7 @@ def material_presets_api():
             "opacity": preset.opacity, "organization_id": preset.organization_id,
             "custom": True,
         } for preset in custom]})
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name", "")).strip()[:120]
     if not name:
         return jsonify({"success": False, "error": "Preset name is required"}), 400
@@ -122,7 +123,7 @@ def apply_model_material_preset(model_id):
     guard = check_model_mutation_allowed(model_id)
     if guard:
         return guard
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     preset = _resolve_material_preset(data.get("preset_id"))
     if not preset:
         return jsonify({"success": False, "error": "Material preset not found"}), 404
@@ -176,7 +177,7 @@ def ai_prompt_presets():
             "id": preset.id, "name": preset.name, "category": preset.category,
             "prompt_template": preset.prompt_template, "custom": True,
         } for preset in custom]})
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name", "")).strip()[:120]
     template = str(data.get("prompt_template", "")).strip()[:2000]
     if not name or not template or "{prompt}" not in template:
@@ -198,7 +199,7 @@ def ai_prompt_preset(preset_id):
         db.session.delete(preset)
         db.session.commit()
         return jsonify({"success": True})
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     if "name" in data:
         preset.name = str(data["name"]).strip()[:120] or preset.name
     if "prompt_template" in data:
@@ -230,7 +231,11 @@ def _resolve_prompt_preset(preset_id, prompt):
         if not preset:
             raise ValueError("Preset not found")
         return preset["prompt_template"].replace("{prompt}", prompt), None
-    preset = PromptPreset.query.filter_by(id=int(preset_id), user_id=current_user.id).first()
+    try:
+        preset_pk = int(preset_id)
+    except (TypeError, ValueError):
+        raise ValueError("Preset not found")
+    preset = PromptPreset.query.filter_by(id=preset_pk, user_id=current_user.id).first()
     if not preset:
         raise ValueError("Preset not found")
     return preset.prompt_template.replace("{prompt}", prompt), preset.id

@@ -10,6 +10,7 @@ from flask_login import current_user, login_required
 from slugify import slugify
 
 from services.time_utils import datetime
+from services.request_json import json_dict
 from models import (
     Folder,
     Organization,
@@ -45,7 +46,7 @@ def organizations_api():
             "error": "Organizations require a Business plan.",
             "upgrade": upgrade_hint("organizations"),
         }), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name", "")).strip()[:120]
     if not name:
         return jsonify({"success": False, "error": "Organization name is required"}), 400
@@ -106,7 +107,7 @@ def organization_members_api(organization_id):
         ]})
     if membership.role not in {"owner", "admin"}:
         return jsonify({"success": False, "error": "Admin role required"}), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     role = data.get("role", "viewer")
     if role not in {"admin", "editor", "viewer"}:
         return jsonify({"success": False, "error": "Invalid role"}), 400
@@ -154,7 +155,7 @@ def organization_member_api(organization_id, user_id):
         db.session.delete(target)
         db.session.commit()
         return jsonify({"success": True})
-    role = (request.get_json(silent=True) or {}).get("role")
+    role = (json_dict()).get("role")
     if role not in {"admin", "editor", "viewer"}:
         return jsonify({"success": False, "error": "Invalid role"}), 400
     target.role = role
@@ -177,7 +178,7 @@ def organization_folders_api(organization_id):
         } for folder in folders]})
     if membership.role not in {"owner", "admin", "editor"}:
         return jsonify({"success": False, "error": "Editor role required"}), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name", "")).strip()[:100]
     if not name:
         return jsonify({"success": False, "error": "Folder name is required"}), 400
@@ -226,7 +227,7 @@ def organization_folder_api(organization_id, folder_id):
         db.session.delete(folder)
         db.session.commit()
         return jsonify({"success": True})
-    name = str((request.get_json(silent=True) or {}).get("name", "")).strip()[:100]
+    name = str((json_dict()).get("name", "")).strip()[:100]
     if not name:
         return jsonify({"success": False, "error": "Folder name is required"}), 400
     folder.name = name
@@ -268,7 +269,7 @@ def organization_domains_api(organization_id):
             "error": "Custom domains require a Business plan.",
             "upgrade": upgrade_hint("custom_domains"),
         }), 403
-    raw_hostname = str((request.get_json(silent=True) or {}).get("hostname", "")).strip().lower().rstrip(".")
+    raw_hostname = str((json_dict()).get("hostname", "")).strip().lower().rstrip(".")
     try:
         hostname = raw_hostname.encode("idna").decode("ascii")
     except UnicodeError:
@@ -343,7 +344,7 @@ def assign_model_organization(model_id):
     model = UserModel.query.get_or_404(model_id)
     if model.user_id != current_user.id:
         return jsonify({"success": False, "error": "Only the model owner can assign a team"}), 403
-    organization_id = (request.get_json(silent=True) or {}).get("organization_id")
+    organization_id = (json_dict()).get("organization_id")
     try:
         organization_id = int(organization_id) if organization_id is not None else None
     except (TypeError, ValueError):
@@ -377,7 +378,7 @@ def organization_branding_api(organization_id):
             "error": "White-label branding requires a Business plan.",
             "upgrade": upgrade_hint("white_label"),
         }), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     branding = dict(organization.branding or {})
     if "name" in data:
         branding["name"] = str(data["name"]).strip()[:80] or None

@@ -9,6 +9,7 @@ from sqlalchemy import or_
 
 from blueprints.ai_image import _IMAGE_GEN_KINDS, _resolve_image_task
 from blueprints.material_presets import _resolve_prompt_preset
+from services.request_json import json_dict, json_text
 from models import AIGenerationJob, User, db
 
 ai_generation_bp = Blueprint("ai_generation", __name__)
@@ -31,7 +32,7 @@ def _parse_ai_options(raw):
     each field is extracted and validated individually here."""
     raw = raw if isinstance(raw, dict) else {}
     out = {}
-    negative_prompt = (raw.get("negative_prompt") or "").strip()
+    negative_prompt = json_text(raw, "negative_prompt")
     if negative_prompt:
         out["negative_prompt"] = negative_prompt[:600]
     seed = raw.get("seed")
@@ -54,7 +55,7 @@ def _parse_ai_options(raw):
         out["remove_lighting"] = True
     if isinstance(raw.get("should_texture"), bool):
         out["should_texture"] = raw["should_texture"]
-    texture_prompt = (raw.get("texture_prompt") or "").strip()
+    texture_prompt = json_text(raw, "texture_prompt")
     if texture_prompt:
         out["texture_prompt"] = texture_prompt[:600]
     return out
@@ -114,12 +115,14 @@ def generate_3d():
             app_module._refund_ai_credit(current_user.id)
         return jsonify({"success": False, "error": error}), status
 
-    data = request.get_json(silent=True) or {}
-    mode = (data.get("mode") or "text").strip()
+    data = json_dict()
+    mode = json_text(data, "mode", "text")
     options = _parse_ai_options(data.get("options"))
     job_id = str(uuid.uuid4())
     try:
         parent_job_id = data.get("parent_job_id")
+        if parent_job_id and not isinstance(parent_job_id, str):
+            return reject("Invalid parent_job_id", 400)
         if parent_job_id:
             parent = AIGenerationJob.query.filter_by(
                 id=parent_job_id, user_id=current_user.id
@@ -133,7 +136,7 @@ def generate_3d():
                 # resolved server-side from its Meshy task id
                 image = _resolve_image_task(image_task)
             else:
-                image = (data.get("image") or "").strip()
+                image = json_text(data, "image")
             if not image.startswith("data:image/"):
                 return reject("A valid image (jpg/png) is required.", 400)
             task_id = ai_generator.start_image_to_3d(
@@ -154,7 +157,7 @@ def generate_3d():
             # admin audit -- see _persist_ai_source_image.
             job.source_image_ref = app_module._persist_ai_source_image(job_id, image)
         else:
-            prompt = (data.get("prompt") or "").strip()
+            prompt = json_text(data, "prompt")
             if not prompt and parent_job_id:
                 prompt = parent.prompt or ""
             if not prompt:
@@ -236,7 +239,7 @@ def meshy_webhook():
     """
     import app as app_module
 
-    payload = request.get_json(silent=True) or {}
+    payload = json_dict()
     task_id = payload.get("id") or payload.get("task_id")
     if not task_id:
         return jsonify({"ok": True}), 200

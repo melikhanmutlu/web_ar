@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from services.request_json import json_dict
 from models import WebhookSubscription, db
 from services import WEBHOOK_EVENT_TYPES
 from services.plans import plan_allows
@@ -28,7 +29,7 @@ def webhooks():
             "error": "Webhooks require a Business plan.",
             "upgrade": upgrade_hint("webhooks"),
         }), 403
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     url = str(data.get("url", "")).strip()
     parsed = urlsplit(url)
     if parsed.scheme != "https" or not parsed.netloc:

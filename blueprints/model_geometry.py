@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash
 
 from converters.glb_optimizer import readable_glb
 from converters.glb_quality import finalize_glb
+from services.request_json import json_dict
 from models import ConversionJob, ModelDerivedAsset, ModelLOD, db
 from services.model_permissions import (
     check_model_mutation_allowed,
@@ -146,7 +147,7 @@ def model_lods(model_id):
     guard = check_model_mutation_allowed(model_id)
     if guard:
         return guard
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     ratios = data.get("ratios", [0.5, 0.25, 0.1])
     if not isinstance(ratios, list) or not 1 <= len(ratios) <= 5:
         return jsonify({"success": False, "error": "Provide 1-5 LOD ratios"}), 400
@@ -243,7 +244,7 @@ def model_exploded_asset(model_id):
     if guard:
         return guard
     try:
-        factor = float((request.get_json(silent=True) or {}).get("factor", 0.35))
+        factor = float((json_dict()).get("factor", 0.35))
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "Invalid explosion factor"}), 400
     if not math.isfinite(factor) or not 0.05 <= factor <= 2.0:
@@ -322,7 +323,7 @@ def model_derivatives(model_id):
     guard = check_model_mutation_allowed(model_id)
     if guard:
         return guard
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     kind = data.get("kind")
     if kind not in {"retopology", "texture_upscale"}:
         return jsonify({"success": False, "error": "Invalid derivative kind"}), 400

@@ -15,6 +15,7 @@ from flask_login import current_user, login_required
 
 from converters.glb_optimizer import readable_glb
 from blueprints.upload import _check_model_count_limit, _check_storage_quota
+from services.request_json import json_dict
 from models import UserModel
 
 scenes_bp = Blueprint("scenes", __name__)
@@ -43,7 +44,7 @@ def build_scene():
     a position/rotation/scale) into a single new model."""
     import app as app_module
 
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     name = str(data.get("name") or "Scene").strip()[:80] or "Scene"
     items = data.get("items")
     if not isinstance(items, list) or not MIN_SCENE_ITEMS <= len(items) <= MAX_SCENE_ITEMS:

@@ -9,6 +9,7 @@ from flask import Blueprint, Response, jsonify, request, session
 from flask_login import current_user, login_required
 
 from services.time_utils import datetime
+from services.request_json import json_dict
 from models import ModelAnalyticsEvent, ModelLike, ModelSave, Organization, OrganizationMember, UserModel, db
 from services import abuse_guard
 from services.model_analytics import ANALYTICS_EVENT_TYPES, record_model_event
@@ -125,9 +126,9 @@ def create_model_analytics_event(model_id):
     denied = check_model_view_allowed(model_id)
     if denied:
         return jsonify({"success": False, "error": denied.error}), denied.status
-    data = request.get_json(silent=True) or {}
+    data = json_dict()
     event_type = data.get("event_type")
-    if event_type not in ANALYTICS_EVENT_TYPES - {"view", "embed_view"}:
+    if not isinstance(event_type, str) or event_type not in ANALYTICS_EVENT_TYPES - {"view", "embed_view"}:
         return jsonify({"success": False, "error": "Invalid event type"}), 400
     record_model_event(model_id, event_type, data.get("metadata"))
     return jsonify({"success": True}), 202

@@ -281,6 +281,25 @@ def view_model(model_id):
         if session_token and check_password_hash(model.edit_token_hash, session_token):
             anon_edit_token = session_token
 
+    # Delivery budget (asset_quality thresholds): tell the owner when the
+    # model is heavy for phones; offer one-click meshopt compression unless
+    # the file is already compressed.
+    delivery_budget = None
+    report = model.validation_report if is_owner else None
+    if isinstance(report, dict):
+        budgets = report.get("budgets") or {}
+        triangles = report.get("triangles") or 0
+        size_bytes = report.get("file_size_bytes") or 0
+        if (triangles > (budgets.get("warning_triangles") or float("inf"))
+                or size_bytes > (budgets.get("warning_bytes") or float("inf"))):
+            from converters.glb_optimizer import glb_compression_mode
+
+            delivery_budget = {
+                "size_mb": round(size_bytes / 1024 / 1024, 1),
+                "triangles": triangles,
+                "can_optimize": glb_compression_mode(model.glb_path) is None,
+            }
+
     response = make_response(render_template(
         "view.html",
         model_id=model_id,
@@ -300,6 +319,8 @@ def view_model(model_id):
         viewer_settings=resolved_viewer_settings(model),
         can_edit=can_edit,
         anon_edit_token=anon_edit_token,
+
+        delivery_budget=delivery_budget,
         seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

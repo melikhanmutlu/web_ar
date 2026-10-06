@@ -184,6 +184,44 @@ def model_lods(model_id):
     }), 202
 
 
+@model_geometry_bp.route("/api/models/<model_id>/optimize-mobile", methods=["POST"])
+def optimize_model_for_mobile(model_id):
+    """Queue meshopt compression of the model's GLB (delivery-budget fix).
+
+    Runs as a background job (worker queue or inline thread) so a large model
+    cannot block the request."""
+    import app as app_module
+    from converters.glb_optimizer import glb_compression_mode
+
+    model = get_live_model(model_id)
+    if not model:
+        return jsonify({"success": False, "error": "Model not found"}), 404
+    guard = check_model_mutation_allowed(model_id)
+    if guard:
+        return guard
+    if not os.path.isfile(model.glb_path):
+        return jsonify({"success": False, "error": "Model file not found"}), 404
+    if glb_compression_mode(model.glb_path) is not None:
+        return jsonify({"success": False, "error": "This model is already compressed"}), 409
+    job_id = str(uuid.uuid4())
+    status_token = secrets.token_urlsafe(32)
+    db.session.add(ConversionJob(
+        id=job_id, job_type="optimize_mobile", status="pending",
+        payload={"job_id": job_id, "model_id": model_id},
+        user_id=model.user_id,
+        status_token_hash=generate_password_hash(status_token),
+        max_attempts=1,
+    ))
+    db.session.commit()
+    if not app_module.JOB_QUEUE_ENABLED:
+        app_module._start_local_conversion(job_id)
+    return jsonify({
+        "success": True, "job_id": job_id, "status": "pending",
+        "status_token": status_token,
+        "status_url": url_for("upload.upload_job_status", job_id=job_id),
+    }), 202
+
+
 @model_geometry_bp.route("/api/models/<model_id>/exploded", methods=["GET", "POST"])
 def model_exploded_asset(model_id):
     import app as app_module

@@ -486,6 +486,9 @@
         .version-preview-banner button { padding: 0.35rem 0.75rem; font-size: 0.78rem; border-radius: 6px; cursor: pointer; border: 1px solid var(--color-gray-500); background: transparent; color: var(--color-gray-200); }
         .version-preview-banner .vpb-restore { background: var(--color-white); color: #111; border-color: transparent; font-weight: 600; }
         .version-preview-banner button:hover { opacity: 0.85; }
+        .delivery-budget-banner { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); z-index: 9990; max-width: calc(100vw - 2rem); display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.55rem 0.9rem; background: rgba(17, 17, 17, 0.92); border: 1px solid var(--color-gray-600); border-radius: 8px; backdrop-filter: blur(8px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); color: var(--color-white); font-size: 0.82rem; }
+        .delivery-budget-banner button { padding: 0.35rem 0.75rem; font-size: 0.78rem; border-radius: 6px; cursor: pointer; border: 0; background: var(--color-white); color: #111; font-weight: 600; }
+        .delivery-budget-banner button:disabled { opacity: 0.6; cursor: default; }
 
         /* Save bar */
         .tp-save-bar { padding: 0.65rem 0.85rem; border-top: 1px solid var(--color-gray-700); background: var(--color-gray-900); }
@@ -888,6 +891,14 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-view.min.css') }}">
 </head>
 <body class="bg-white dark:bg-gray-900 min-h-screen{% if marketing_demo|default(false) %} marketing-demo viewer-stage-dark{% endif %}">
+    {% if delivery_budget %}
+    <div id="deliveryBudgetBanner" class="delivery-budget-banner" role="status">
+        <span id="deliveryBudgetText">This model is {{ delivery_budget.size_mb }} MB / {{ '{:,}'.format(delivery_budget.triangles) }} triangles &mdash; it will load slowly on phones.</span>
+        {% if delivery_budget.can_optimize %}
+        <button id="deliveryOptimizeBtn" type="button">Optimize for mobile</button>
+        {% endif %}
+    </div>
+    {% endif %}
     <div id="mobileArOnboarding" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.88);align-items:flex-end;">
         <div style="width:100%;background:#fff;color:#0f172a;padding:24px 20px 28px;border-radius:18px 18px 0 0;">
             <div style="font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;">Mobile AR</div>
@@ -1907,6 +1918,9 @@
     <script defer src="{{ url_for('static', filename='js/viewer/share-dialog.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/viewer/embed-panel.js') }}"></script>
+    {% if delivery_budget and delivery_budget.can_optimize %}
+    <script defer src="{{ url_for('static', filename='js/viewer/delivery-budget.js') }}"></script>
+    {% endif %}
     {% endif %}
     <script defer src="{{ url_for('static', filename='js/viewer/title-editing.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>

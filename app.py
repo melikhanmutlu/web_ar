@@ -1717,6 +1717,8 @@ def run_conversion_job(job, allow_retry=True):
         )
         if job.job_type == "lod":
             model_id = _run_lod_pipeline(job.payload, progress_callback=callback)
+        elif job.job_type == "optimize_mobile":
+            model_id = _run_optimize_mobile_pipeline(job.payload, progress_callback=callback)
         elif job.job_type in {"retopology", "texture_upscale"}:
             model_id = _run_derived_pipeline(job.payload, progress_callback=callback)
         elif job.job_type in {"thumbnail", "usdz"}:
@@ -1770,6 +1772,36 @@ def run_conversion_job(job, allow_retry=True):
                     logger.error(
                         f"[conversion_job - {job.id}] staged cleanup failed: {cleanup_error}"
                     )
+
+
+def _run_optimize_mobile_pipeline(payload, progress_callback=None):
+    """Meshopt-compress a model's GLB for mobile delivery (owner-triggered)."""
+    from converters.glb_optimizer import glb_compression_mode, optimize_glb
+    from services.model_lock import ModelEditLock
+    from version_manager import create_version
+
+    model_id = payload["model_id"]
+    model = get_live_model(model_id)
+    if not model or not os.path.isfile(model.glb_path):
+        raise RuntimeError("Model source is unavailable")
+    report = progress_callback or (lambda *_: None)
+    report(50, "Optimizing for mobile", "Compressing the model so it loads faster on phones.")
+    glb_path = model.glb_path
+    with ModelEditLock(os.path.dirname(glb_path)):
+        if glb_compression_mode(glb_path) is not None:
+            raise RuntimeError("This model is already compressed")
+        before = os.path.getsize(glb_path)
+        if not optimize_glb(glb_path, enabled=True, mode="meshopt"):
+            raise RuntimeError("Optimization could not make this model smaller")
+        after = os.path.getsize(glb_path)
+        model.file_size = after
+        model.validation_report = asset_quality.inspect(glb_path)
+        model.bump_asset_version()
+        db.session.commit()
+        create_version(model_id, "optimize", {
+            "compression": "meshopt", "bytes_before": before, "bytes_after": after,
+        }, "Optimized for mobile (meshopt)")
+    return model_id
 
 
 def _run_lod_pipeline(payload, progress_callback=None):

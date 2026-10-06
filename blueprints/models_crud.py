@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from werkzeug.exceptions import NotFound
 
 from services.time_utils import datetime
+from services import usdz as usdz_service
 from services.request_json import json_dict
 from models import Folder, UserModel, db
 from model_cleanup import purge_model_completely
@@ -251,7 +252,7 @@ def update_model_color():
             db.session.commit()
             # Regenerate the USDZ so iOS Quick Look (served via ios-src) reflects
             # the new color, matching every other GLB-mutating path.
-            app_module.refresh_usdz_after_edit(model_id, output_path)
+            usdz_service.refresh_usdz_after_edit(model_id, output_path)
             create_version(
                 model_id=model_id,
                 operation_type="material",

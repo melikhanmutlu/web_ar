@@ -15,6 +15,7 @@ from glb_modifier import modify_glb
 from models import ModelHotspot, UserModel, db
 from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
+from services import usdz as usdz_service
 from services.request_json import json_dict
 from version_manager import bump_asset_version, create_version
 
@@ -420,7 +421,7 @@ def save_modifications():
 
             # Keep iOS AR in sync: Quick Look uses the USDZ, so it must be
             # rebuilt from the freshly modified GLB.
-            app_module.refresh_usdz_after_edit(model_id, current_model_path)
+            usdz_service.refresh_usdz_after_edit(model_id, current_model_path)
 
             # Hotspots store world-space position/normal captured from
             # model-viewer's positionAndNormalFromPoint -- the same
@@ -773,7 +774,7 @@ def slice_model():
             _restore_compression(app_module, input_path, compression_mode, "slice_model")
 
             # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
-            app_module.refresh_usdz_after_edit(model_id, input_path)
+            usdz_service.refresh_usdz_after_edit(model_id, input_path)
 
             # Update dimensions in database
             try:

@@ -14,6 +14,7 @@ import trimesh
 from pygltflib import GLTF2
 
 import app as app_module
+from services import usdz as usdz_service
 from app import app, db
 from models import User, UserModel
 
@@ -86,7 +87,7 @@ def make_sized_box_model(extent, user_id=None):
 
 @pytest.fixture(autouse=True)
 def _no_usdz(monkeypatch):
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit", lambda *a, **k: None)
+    monkeypatch.setattr(usdz_service, "refresh_usdz_after_edit", lambda *a, **k: None)
 
 
 def test_transform_only_save_preserves_all_materials(client):

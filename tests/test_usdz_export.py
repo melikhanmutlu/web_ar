@@ -5,6 +5,7 @@ import stat
 import sys
 
 import app as app_module
+from services import usdz as usdz_service
 
 
 FAKE_BLENDER = """#!{python}
@@ -32,7 +33,7 @@ def test_convert_to_usdz_succeeds_and_leaves_no_temp(tmp_path, monkeypatch):
     glb = tmp_path / "model.glb"
     glb.write_bytes(b"glb")
     out = tmp_path / "model.usdz"
-    assert app_module.convert_to_usdz(str(glb), str(out)) is True
+    assert usdz_service.convert_to_usdz(str(glb), str(out)) is True
     assert out.read_bytes() == b"PK-fake-usdz"
     assert sorted(p.name for p in tmp_path.iterdir() if p.suffix == ".usdz") == ["model.usdz"]
     assert not [p for p in tmp_path.iterdir() if ".tmp" in p.name]
@@ -46,7 +47,7 @@ def test_convert_to_usdz_failure_cleans_up(tmp_path, monkeypatch):
     glb = tmp_path / "model.glb"
     glb.write_bytes(b"glb")
     out = tmp_path / "model.usdz"
-    assert app_module.convert_to_usdz(str(glb), str(out)) is False
+    assert usdz_service.convert_to_usdz(str(glb), str(out)) is False
     assert not out.exists()
 
 
@@ -59,7 +60,7 @@ def test_stale_temp_files_are_swept(tmp_path, monkeypatch):
         os.utime(p, (1, 1))
     glb = tmp_path / "model.glb"
     glb.write_bytes(b"glb")
-    assert app_module.convert_to_usdz(str(glb), str(tmp_path / "model.usdz"))
+    assert usdz_service.convert_to_usdz(str(glb), str(tmp_path / "model.usdz"))
     assert not old_a.exists() and not old_b.exists()
 
 

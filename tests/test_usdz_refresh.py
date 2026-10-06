@@ -9,6 +9,7 @@ import pytest
 import trimesh
 
 import app as app_module
+from services import usdz as usdz_service
 from app import app
 from models import UserModel, db
 
@@ -34,7 +35,7 @@ def model_on_disk(client):
 
 def test_save_modifications_refreshes_usdz(client, model_on_disk, monkeypatch):
     calls = []
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit",
+    monkeypatch.setattr(usdz_service, "refresh_usdz_after_edit",
                         lambda mid, glb: calls.append((mid, glb)))
 
     resp = client.post("/save_modifications", json={
@@ -53,7 +54,7 @@ def test_save_modifications_refreshes_usdz(client, model_on_disk, monkeypatch):
 
 def test_slice_refreshes_usdz(client, model_on_disk, monkeypatch):
     calls = []
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit",
+    monkeypatch.setattr(usdz_service, "refresh_usdz_after_edit",
                         lambda mid, glb: calls.append(mid))
 
     resp = client.post("/slice_model", json={

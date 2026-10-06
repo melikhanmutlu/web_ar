@@ -14,7 +14,10 @@ import os
 import pytest
 
 import app as app_module
-from app import _atomic_replace, app, convert_to_usdz
+from services import usdz as usdz_service
+from app import app
+from services.thumbnails import _atomic_replace
+from services.usdz import convert_to_usdz
 
 
 def test_atomic_replace_moves_tmp_onto_dest(tmp_path):
@@ -74,7 +77,7 @@ def test_convert_to_usdz_writes_to_temp_path_not_final_path(client, tmp_path, mo
             f.write(b"freshly-exported-usdz")
         return FakeProcess()
 
-    monkeypatch.setattr(app_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(usdz_service.subprocess, "run", fake_run)
 
     with app.app_context():
         result = convert_to_usdz("input.glb", final_path)
@@ -111,7 +114,7 @@ def test_convert_to_usdz_failure_leaves_existing_file_untouched(client, tmp_path
         # Blender died before producing any output at all.
         return FakeProcess()
 
-    monkeypatch.setattr(app_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(usdz_service.subprocess, "run", fake_run)
 
     with app.app_context():
         result = convert_to_usdz("input.glb", final_path)

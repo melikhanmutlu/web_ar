@@ -20,6 +20,7 @@ import trimesh
 from pygltflib import GLTF2
 
 import app as app_module
+from services import usdz as usdz_service
 from app import app, db
 from models import User, UserModel, WebhookSubscription
 from services.webhooks import dispatch_webhook_event, is_safe_webhook_url
@@ -267,7 +268,7 @@ def test_update_model_color_refreshes_usdz(client, monkeypatch):
     db.session.commit()
 
     calls = []
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit",
+    monkeypatch.setattr(usdz_service, "refresh_usdz_after_edit",
                         lambda mid, path, *a, **k: calls.append((mid, path)))
 
     resp = client.post("/api/update-model-color", json={"model_id": model_id, "color": "#3355ff"})
@@ -392,7 +393,7 @@ def test_run_upload_pipeline_short_circuits_when_model_already_exists(client, mo
 def test_save_modifications_invalidates_stale_thumbnail(client, monkeypatch):
     from tests.test_viewer_page import make_two_material_model
 
-    monkeypatch.setattr(app_module, "refresh_usdz_after_edit", lambda *a, **k: None)
+    monkeypatch.setattr(usdz_service, "refresh_usdz_after_edit", lambda *a, **k: None)
     model_id, glb_path = make_two_material_model(user_id=None)
     thumbnail_path = os.path.join(os.path.dirname(glb_path), "thumbnail.png")
     with open(thumbnail_path, "wb") as f:

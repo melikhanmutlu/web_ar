@@ -990,10 +990,10 @@ void main() {
                         window.location.reload();
                         return;
                     }
-                    alert('Restore failed: ' + (result.error || 'Unknown error'));
+                    window.arToast('Restore failed: ' + (result.error || 'Unknown error'), 'error');
                 } catch (err) {
                     console.error('Restore hidden layers error:', err);
-                    alert('Failed to restore hidden layers.');
+                    window.arToast('Failed to restore hidden layers.', 'error');
                 }
                 btn.disabled = false;
             });

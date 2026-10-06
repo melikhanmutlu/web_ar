@@ -220,9 +220,17 @@ test('non-owner viewing a model only sees GLB in the download menu', async ({ pa
   test.setTimeout(60_000);
   await registerAndLogin(page, 'downloadowner2');
   const viewerUrl = await uploadCubeAndGetViewerUrl(page);
+  const modelId = viewerUrl.match(/\/view\/([^/?]+)/)[1];
 
-  // A fresh, logged-out context is a non-owner viewer of this (unlisted
-  // by default, so still viewable-by-link) model.
+  // Account uploads are private by default; make it unlisted so a fresh,
+  // logged-out context can open it by link as a non-owner.
+  const shared = await page.evaluate(async (id) => (await fetch(`/api/models/${id}/sharing`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visibility: 'unlisted' }),
+  })).ok, modelId);
+  expect(shared).toBeTruthy();
+
   const otherContext = await browser.newContext();
   const otherPage = await otherContext.newPage();
   await otherPage.goto(viewerUrl);

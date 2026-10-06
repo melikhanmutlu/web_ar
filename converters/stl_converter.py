@@ -213,83 +213,49 @@ class STLConverter(BaseConverter):
             else:
                 self.log_operation("No scaling applied - max_dimension not set by user")
 
-            # Apply color using vertex colors (no UV coordinates needed)
-            # STL meshes have no UV data, so TextureVisuals would create phantom TEXCOORD_0
-            # causing purple striped texture in AR (iOS Quick Look, Android Scene Viewer)
-            # Use ColorVisuals with vertex colors instead
+            # STL carries a single flat colour, so store it as the material
+            # baseColorFactor -- NOT as COLOR_0 vertex colours. A uniform
+            # vertex colour made the slicer treat every STL as per-vertex
+            # coloured and delete the triangles straddling the cut instead of
+            # clipping them. A material with no TextureVisuals UV adds no
+            # phantom TEXCOORD_0 (which would stripe the model in AR).
             if color:
-                try:
-                    self.log_operation(f"Applying color: {color}")
-                    # Color picker gives sRGB; glTF COLOR_0 vertex data is linear.
-                    # Convert so renderers (and especially iOS AR) show the picked color.
-                    lr, lg, lb = hex_to_linear_rgb(color)
-                    r = int(round(lr * 255))
-                    g = int(round(lg * 255))
-                    b = int(round(lb * 255))
-
-                    # Apply vertex colors only (no TextureVisuals, no phantom UV data)
-                    if isinstance(mesh, trimesh.Scene):
-                        for geom in mesh.geometry.values():
-                            if isinstance(geom, trimesh.Trimesh):
-                                vertex_colors = np.tile(
-                                    [r, g, b, 255], (len(geom.vertices), 1)
-                                )
-                                geom.visual = trimesh.visual.ColorVisuals(
-                                    vertex_colors=vertex_colors.astype(np.uint8)
-                                )
-                    else:
-                        vertex_colors = np.tile([r, g, b, 255], (len(mesh.vertices), 1))
-                        mesh.visual = trimesh.visual.ColorVisuals(
-                            vertex_colors=vertex_colors.astype(np.uint8)
-                        )
-
-                    self.log_operation(
-                        f"Color applied successfully: RGB({r}, {g}, {b}) using vertex colors (no UV)"
-                    )
-                except Exception as e:
-                    self.log_operation(
-                        f"Warning: Could not apply color: {str(e)}", "WARNING"
-                    )
-                    import traceback
-
-                    self.log_operation(f"Traceback: {traceback.format_exc()}")
-                    # Continue even if color application fails
+                self.log_operation(f"Applying color: {color}")
+                # Color picker gives sRGB; glTF colour factors are linear.
+                lr, lg, lb = hex_to_linear_rgb(color)
+                r = int(round(lr * 255))
+                g = int(round(lg * 255))
+                b = int(round(lb * 255))
+                color_desc = f"RGB({r}, {g}, {b})"
             else:
-                # No color specified - apply default gray using vertex colors
-                self.log_operation(
-                    "No color specified - applying default gray using vertex colors"
+                # Default light gray sRGB #cccccc, linear(0.8) ~= 0.604 -> 154
+                r = g = b = 154
+                color_desc = "default gray"
+                self.log_operation("No color specified - applying default gray material")
+            try:
+                geometries = (
+                    [g_ for g_ in mesh.geometry.values() if isinstance(g_, trimesh.Trimesh)]
+                    if isinstance(mesh, trimesh.Scene)
+                    else [mesh]
                 )
-                try:
-                    # Default light gray sRGB #cccccc, stored as linear (glTF COLOR_0
-                    # expects linear values): linear(0.8) ≈ 0.604 → 154
-                    default_r, default_g, default_b = 154, 154, 154
-
-                    if isinstance(mesh, trimesh.Scene):
-                        for geom in mesh.geometry.values():
-                            if isinstance(geom, trimesh.Trimesh):
-                                vertex_colors = np.tile(
-                                    [default_r, default_g, default_b, 255],
-                                    (len(geom.vertices), 1),
-                                )
-                                geom.visual = trimesh.visual.ColorVisuals(
-                                    vertex_colors=vertex_colors.astype(np.uint8)
-                                )
-                    else:
-                        vertex_colors = np.tile(
-                            [default_r, default_g, default_b, 255], (len(mesh.vertices), 1)
+                for geom in geometries:
+                    geom.visual = trimesh.visual.TextureVisuals(
+                        material=trimesh.visual.material.PBRMaterial(
+                            baseColorFactor=[r, g, b, 255],
+                            metallicFactor=0.0,
+                            roughnessFactor=0.75,
+                            doubleSided=True,
                         )
-                        mesh.visual = trimesh.visual.ColorVisuals(
-                            vertex_colors=vertex_colors.astype(np.uint8)
-                        )
+                    )
+                self.log_operation(f"Color applied as material baseColorFactor: {color_desc}")
+            except Exception as e:
+                self.log_operation(
+                    f"Warning: Could not apply color: {str(e)}", "WARNING"
+                )
+                import traceback
 
-                    self.log_operation(
-                        f"Default gray applied using vertex colors (no UV/texture data)"
-                    )
-                except Exception as e:
-                    self.log_operation(
-                        f"Warning: Could not apply default color: {str(e)}",
-                        "WARNING",
-                    )
+                self.log_operation(f"Traceback: {traceback.format_exc()}")
+                # Continue even if color application fails
 
             # Note: Basis correction (Z-up to Y-up) is NOT applied here
             # It will be handled in glb_modifier during normalization
@@ -307,6 +273,7 @@ class STLConverter(BaseConverter):
             self.log_operation("Exporting to GLB format")
             tmp_output = f"{output_path}.tmp.{os.getpid()}"
             scene.export(tmp_output, file_type="glb")
+            self._link_flat_material(tmp_output)
             os.replace(tmp_output, output_path)
 
             if not os.path.exists(output_path):
@@ -325,6 +292,25 @@ class STLConverter(BaseConverter):
 
             self.log_operation(f"Traceback: {traceback.format_exc()}")
             return False
+
+    @staticmethod
+    def _link_flat_material(glb_path: str) -> None:
+        """trimesh only references a material from a primitive that has UV
+        coordinates; the flat STL material has none, so it is exported but left
+        unlinked (and would be replaced by a default grey). Link it here."""
+        from pygltflib import GLTF2
+
+        gltf = GLTF2().load_binary(glb_path)
+        if len(gltf.materials or []) != 1:
+            return
+        changed = False
+        for gltf_mesh in gltf.meshes or []:
+            for primitive in gltf_mesh.primitives or []:
+                if primitive.material is None:
+                    primitive.material = 0
+                    changed = True
+        if changed:
+            gltf.save_binary(glb_path)
 
     def handle_error(self, error_message: str) -> None:
         """

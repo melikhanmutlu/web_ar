@@ -103,10 +103,14 @@ def test_slice_caps_plain_mesh():
     assert result.is_watertight, "plain-mesh slice should be capped (closed), not an open shell"
 
 
-def _make_vertex_colored_glb(path, rgba=(200, 50, 50, 255)):
-    """What the STL converter writes: COLOR_0 vertex colors, no materials."""
+def _make_vertex_colored_glb(path, rgba=(200, 50, 50, 255), uniform=False):
+    """Real per-vertex colours (R/G constant, B varies along x) as COLOR_0, no
+    materials. `uniform=True` writes one flat colour, which the slicer treats
+    as a material colour rather than per-vertex data."""
     box = trimesh.creation.box(extents=(1, 1, 1)).subdivide()
     vertex_colors = np.tile(rgba, (len(box.vertices), 1)).astype(np.uint8)
+    if not uniform:
+        vertex_colors[:, 2] = np.clip((box.vertices[:, 0] + 0.5) * 200, 0, 255).astype(np.uint8)
     box.visual = trimesh.visual.ColorVisuals(vertex_colors=vertex_colors)
     trimesh.Scene([box]).export(path, file_type="glb")
 
@@ -148,7 +152,7 @@ def test_slice_preserves_vertex_color_without_double_tinting():
         gltf = GLTF2().load(out_path)
         color, material = _first_color0(gltf)
         assert color is not None, "sliced GLB lost its COLOR_0 vertex colors"
-        assert color[:3] == (200, 50, 50)
+        assert color[:2] == (200, 50)
         assert material is None, (
             "primitive has both COLOR_0 and the material promoted from that "
             "same color — glTF will multiply them, crushing it towards black"
@@ -174,7 +178,7 @@ def test_slice_keeps_color_through_real_upload_pipeline():
     try:
         finalize_glb(path)  # what upload does before the model reaches disk
         color, material = _first_color0(GLTF2().load(path))
-        assert color[:3] == (200, 50, 50) and material is not None
+        assert color[:2] == (200, 50) and material is not None
 
         # First slice (the /slice_model flow: slice + finalize).
         assert ms.slice_mesh(path, path, [0, 0, 0], [1, 0, 0], "positive") is True
@@ -182,7 +186,7 @@ def test_slice_keeps_color_through_real_upload_pipeline():
         gltf = GLTF2().load(path)
         color, material = _first_color0(gltf)
         assert color is not None, "slice dropped COLOR_0 — model renders gray"
-        assert color[:3] == (200, 50, 50)
+        assert color[:2] == (200, 50)
         if material is not None:
             base = gltf.materials[material].pbrMetallicRoughness.baseColorFactor
             assert base == pytest.approx([1.0, 1.0, 1.0, 1.0]), (
@@ -193,7 +197,7 @@ def test_slice_keeps_color_through_real_upload_pipeline():
         assert ms.slice_mesh(path, path, [0, 0, 0], [0, 1, 0], "positive") is True
         finalize_glb(path)
         color, _ = _first_color0(GLTF2().load(path))
-        assert color is not None and color[:3] == (200, 50, 50)
+        assert color is not None and color[:2] == (200, 50)
     finally:
         if os.path.exists(path):
             os.remove(path)
@@ -216,7 +220,7 @@ def test_slice_keeps_user_edited_material_multiplying_color0():
         assert ms.slice_mesh(path, path, [0, 0, 0], [1, 0, 0], "positive") is True
         gltf = GLTF2().load(path)
         color, material = _first_color0(gltf)
-        assert color is not None and color[:3] == (200, 50, 50)
+        assert color is not None and color[:2] == (200, 50)
         assert material is not None, "user-edited material lost its primitive link"
         base = gltf.materials[material].pbrMetallicRoughness.baseColorFactor
         # trimesh round-trips the factor through 8-bit, so allow quantization.
@@ -245,3 +249,148 @@ def test_slice_fallback_preserves_uv_and_material():
     assert result is not None
     assert getattr(result.visual, 'uv', None) is not None
     assert getattr(result.visual, 'material', None) is not None
+
+
+# ---- STL slicing: flat colour must clip, not face-mask (P3D-03) ----------
+
+def _box_slice_extent_x(path, origin_x=0.02):
+    out = f"/tmp/test_slice_stl_out_{uuid.uuid4().hex}.glb"
+    try:
+        assert ms.slice_mesh(path, out, [origin_x, 0, 0], [1, 0, 0], "positive") is True
+        scene = trimesh.load(out, force="scene")
+        return float(scene.extents[0]), GLTF2().load(out)
+    finally:
+        if os.path.exists(out):
+            os.remove(out)
+
+
+def _convert_box_stl(tmp_path):
+    from converters.stl_converter import STLConverter
+
+    stl = tmp_path / "box.stl"
+    trimesh.creation.box(extents=(10, 2, 5)).export(str(stl))
+    out = tmp_path / "box.glb"
+    conv = STLConverter()
+    conv.set_source_unit("cm")
+    assert conv.convert(str(stl), str(out)) is True
+    return out
+
+
+def test_stl_converter_stores_colour_as_material_not_vertex_colours(tmp_path):
+    out = _convert_box_stl(tmp_path)
+    gltf = GLTF2().load(str(out))
+    prim = gltf.meshes[0].primitives[0]
+    assert getattr(prim.attributes, "COLOR_0", None) is None
+    assert getattr(prim.attributes, "TEXCOORD_0", None) is None
+    assert gltf.materials[prim.material].pbrMetallicRoughness.baseColorFactor[0] < 1.0
+
+
+def test_stl_box_sliced_keeps_thickness_new_conversion(tmp_path):
+    """10x2x5 cm box cut at x=2 cm keeps the 3 cm slab (used to leave a
+    0-thickness face)."""
+    out = _convert_box_stl(tmp_path)
+    # centred box spans x in [-0.05, 0.05] m; cut at x=+0.02 keeps [0.02, 0.05]
+    extent, _ = _box_slice_extent_x(str(out))
+    assert extent == pytest.approx(0.03, abs=1e-4)
+
+
+def _uniform_grey_box():
+    box = trimesh.creation.box(extents=(0.10, 0.02, 0.05))
+    box.visual = trimesh.visual.ColorVisuals(
+        vertex_colors=np.tile([154, 154, 154, 255], (len(box.vertices), 1)).astype(np.uint8))
+    return box
+
+
+def test_already_converted_stl_with_uniform_color0_clips():
+    """Models converted before the fix carry one uniform grey COLOR_0."""
+    path = f"/tmp/test_slice_old_stl_{uuid.uuid4().hex}.glb"
+    trimesh.Scene([_uniform_grey_box()]).export(path, file_type="glb")
+    try:
+        extent, gltf = _box_slice_extent_x(path)
+        assert extent == pytest.approx(0.03, abs=1e-4)
+        prim = gltf.meshes[0].primitives[0]
+        assert getattr(prim.attributes, "COLOR_0", None) is None  # flattened into the material
+        base = gltf.materials[prim.material].pbrMetallicRoughness.baseColorFactor
+        assert base[0] == pytest.approx(154 / 255, abs=0.01)
+    finally:
+        os.remove(path)
+
+
+def test_uniform_color_slice_has_section_cap():
+    flat = ms._flatten_uniform_color(_uniform_grey_box())
+    result = ms._slice_single_mesh(flat, np.array([0.02, 0, 0]), np.array([1.0, 0, 0]))
+    assert result.is_watertight
+
+
+def test_real_vertex_colors_clip_and_interpolate_at_the_cut():
+    box = trimesh.creation.box(extents=(1, 1, 1)).subdivide()
+    colors = np.zeros((len(box.vertices), 4), dtype=np.uint8)
+    colors[:, 0] = np.clip((box.vertices[:, 0] + 0.5) * 255, 0, 255).astype(np.uint8)
+    colors[:, 3] = 255
+    box.visual = trimesh.visual.ColorVisuals(vertex_colors=colors)
+    result = ms._slice_single_mesh(box, np.array([0.2, 0, 0]), np.array([1.0, 0, 0]))
+    assert result.bounds[0][0] == pytest.approx(0.2, abs=1e-6)  # clipped, not stepped
+    vc = result.visual.vertex_colors
+    cut = np.isclose(result.vertices[:, 0], 0.2, atol=1e-6)
+    assert cut.any()
+    assert vc[cut][:, 0].astype(int) == pytest.approx(int(0.7 * 255), abs=2)  # interpolated
+
+
+def test_multi_material_glb_keeps_all_parts_when_sliced(tmp_path):
+    scene = trimesh.Scene()
+    for i, rgba in enumerate(([255, 0, 0, 255], [0, 0, 255, 255])):
+        b = trimesh.creation.box(extents=(0.1, 0.1, 0.1))
+        b.apply_translation([0.3 * i, 0, 0])
+        b.visual = trimesh.visual.TextureVisuals(material=trimesh.visual.material.PBRMaterial(
+            name=f"m{i}", baseColorFactor=rgba))
+        scene.add_geometry(b, node_name=f"p{i}")
+    src = tmp_path / "in.glb"
+    scene.export(str(src))
+    # trimesh leaves UV-less primitives unlinked; link them as a real file would.
+    source = GLTF2().load(str(src))
+    for i, gltf_mesh in enumerate(source.meshes):
+        gltf_mesh.primitives[0].material = i
+    source.save(str(src))
+    out = tmp_path / "out.glb"
+    assert ms.slice_mesh(str(src), str(out), [-1, 0, 0], [1, 0, 0], "positive") is True
+    gltf = GLTF2().load(str(out))
+    assert len(gltf.materials) == 2
+    links = [p.material for m in gltf.meshes for p in m.primitives]
+    assert None not in links and len(set(links)) == 2, "each part must stay linked to its own material"
+    assert len(trimesh.load(str(out), force="scene").geometry) == 2
+
+
+def test_slice_refuses_animated_models(tmp_path):
+    from pygltflib import Animation
+
+    src = tmp_path / "anim.glb"
+    trimesh.creation.box().export(str(src))
+    gltf = GLTF2().load(str(src))
+    gltf.animations = [Animation(name="spin")]
+    gltf.save(str(src))
+    assert ms.slicing_unsupported_reason(str(src))
+    result = ms.slice_mesh_multi(str(src), str(tmp_path / "o.glb"), [
+        {"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0]}])
+    assert result.get("unsupported")
+
+
+def test_slice_route_refuses_animated_model_with_422(client):
+    from pygltflib import Animation
+
+    model_id = "test-" + uuid.uuid4().hex[:8]
+    model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
+    os.makedirs(model_dir, exist_ok=True)
+    glb_path = os.path.join(model_dir, "model.glb")
+    trimesh.creation.box().export(glb_path)
+    gltf = GLTF2().load(glb_path)
+    gltf.animations = [Animation(name="spin")]
+    gltf.save(glb_path)
+    db.session.add(UserModel(id=model_id, filename=glb_path, file_type="glb", file_size=1, user_id=None))
+    db.session.commit()
+    before = os.path.getsize(glb_path)
+
+    resp = client.post("/slice_model", json={"model_id": model_id, "planes": [
+        {"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0], "keep_side": "positive"}]})
+    assert resp.status_code == 422
+    assert "animat" in resp.get_json()["error"].lower()
+    assert os.path.getsize(glb_path) == before

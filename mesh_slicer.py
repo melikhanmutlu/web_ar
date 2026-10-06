@@ -354,6 +354,119 @@ def _mesh_needs_attribute_preserve(mesh):
     return _mesh_has_uv(mesh) or _mesh_has_vertex_color(mesh)
 
 
+def _color_array_01(arr):
+    """Per-vertex colours as an (n, 4) float array in 0-1 range."""
+    arr = np.asarray(arr)
+    out = arr.astype(np.float64)
+    if arr.dtype.kind != 'f':
+        out = out / 255.0
+    if out.ndim == 2 and out.shape[1] == 3:
+        out = np.hstack([out, np.ones((len(out), 1))])
+    return out
+
+
+def _uniform_color(mesh):
+    """The single flat colour (RGBA 0-1) carried by a mesh whose vertex/face
+    colours are all identical, else None. The STL converter used to write one
+    uniform grey COLOR_0 on every model; that is a material colour in
+    disguise and must not push the slicer into its colour-preserving path."""
+    vis = getattr(mesh, 'visual', None)
+    arr = None
+    if isinstance(vis, trimesh.visual.ColorVisuals):
+        kind = getattr(vis, 'kind', None)
+        if kind == 'vertex':
+            arr = vis.vertex_colors
+        elif kind == 'face':
+            arr = vis.face_colors
+    else:
+        arr = _texture_visual_color_attr(mesh)
+    if arr is None or len(arr) == 0:
+        return None
+    arr = _color_array_01(arr)
+    if np.all(np.abs(arr - arr[0]) < 1e-6):
+        return arr[0]
+    return None
+
+
+def _flatten_uniform_color(mesh):
+    """Turn a uniform vertex colour into a material baseColorFactor (in place).
+
+    glTF multiplies COLOR_0 by baseColorFactor, so folding the colour into the
+    factor renders identically while leaving a plain/UV mesh the slicer can
+    clip properly (with section caps) instead of face-masking."""
+    color = _uniform_color(mesh)
+    if color is None:
+        return mesh
+    vis = mesh.visual
+    material = getattr(vis, 'material', None) if isinstance(vis, trimesh.visual.TextureVisuals) else None
+    uv = getattr(vis, 'uv', None) if isinstance(vis, trimesh.visual.TextureVisuals) else None
+    if isinstance(material, trimesh.visual.material.PBRMaterial):
+        material = material.copy()
+        base = material.baseColorFactor
+        base = np.ones(4) if base is None else _color_array_01(np.asarray(base).reshape(1, -1))[0]
+        material.baseColorFactor = np.round(np.clip(base * color, 0, 1) * 255).astype(np.uint8)
+    else:
+        material = trimesh.visual.material.PBRMaterial(
+            baseColorFactor=np.round(np.clip(color, 0, 1) * 255).astype(np.uint8),
+            metallicFactor=0.0,
+            roughnessFactor=0.75,
+            doubleSided=True,
+        )
+    mesh.visual = trimesh.visual.TextureVisuals(
+        uv=uv if (uv is not None and len(uv) == len(mesh.vertices)) else None,
+        material=material,
+    )
+    return mesh
+
+
+def _clip_slice_with_vertex_colors(mesh, plane_origin, plane_normal):
+    """Clip triangles at the plane (no triangle is dropped whole) and
+    interpolate vertex colours -- and UV, when present -- at the new cut
+    vertices. Uncapped. Returns None for faces-coloured meshes (a face colour
+    cannot be interpolated) so the caller falls back to the face mask."""
+    vis = mesh.visual
+    n = len(mesh.vertices)
+    if isinstance(vis, trimesh.visual.ColorVisuals):
+        if getattr(vis, 'kind', None) != 'vertex':
+            return None
+        colors = vis.vertex_colors
+        uv = None
+        material = None
+    else:
+        colors = _texture_visual_color_attr(mesh)
+        uv = getattr(vis, 'uv', None)
+        uv = uv if (uv is not None and len(uv) == n) else None
+        material = getattr(vis, 'material', None)
+    if colors is None:
+        return None
+
+    attrs = _color_array_01(colors)
+    if uv is not None:
+        attrs = np.hstack([np.asarray(uv, dtype=np.float64), attrs])
+    vertices, faces, new_attrs = trimesh.intersections.slice_faces_plane(
+        vertices=mesh.vertices.copy(),
+        faces=mesh.faces.copy(),
+        plane_normal=plane_normal,
+        plane_origin=plane_origin,
+        uv=attrs,
+    )
+    if faces is None or len(faces) == 0 or new_attrs is None or len(new_attrs) != len(vertices):
+        return None
+
+    result = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    color_cols = new_attrs[:, -4:]
+    rgba = np.round(np.clip(color_cols, 0, 1) * 255).astype(np.uint8)
+    if material is None and uv is None:
+        result.visual = trimesh.visual.ColorVisuals(result, vertex_colors=rgba)
+    else:
+        result.visual = trimesh.visual.TextureVisuals(
+            uv=new_attrs[:, :2] if uv is not None else None,
+            material=material,
+        )
+        result.visual.vertex_attributes['color'] = rgba
+    return result
+
+
 def _facemask_slice(mesh, plane_origin, plane_normal):
     """
     Keep only faces whose vertices all lie on the kept side. No new
@@ -451,6 +564,16 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
         except Exception as e:
             logger.warning(f"slice_plane(cap=False) failed ({e}); trying face mask")
 
+    if has_vertex_color:
+        # Real per-vertex colours: clip the straddling triangles and
+        # interpolate the colour at the cut (the face mask would delete them).
+        try:
+            sliced = _clip_slice_with_vertex_colors(mesh, plane_origin, plane_normal)
+            if sliced is not None and len(sliced.vertices) > 0:
+                return sliced
+        except Exception as e:
+            logger.warning(f"Colour-interpolating slice failed ({e}); trying face mask")
+
     if has_uv or has_vertex_color:
         try:
             sliced = _facemask_slice(mesh, plane_origin, plane_normal)
@@ -539,6 +662,72 @@ def _iter_world_meshes(loaded):
         yield name, m
 
 
+_LINK_MARK = "\u241f"
+
+
+def _mark_unlinked_materials(scene):
+    """trimesh's GLB export only references a primitive's material when the
+    mesh has UV, so flat-colour materials come out unlinked. Tag each such
+    material with a unique name for this export (returns {marker: original
+    name}) so _relink_marked_materials can restore the link and the name,
+    even with several materials."""
+    marked = {}
+    for key, geom in scene.geometry.items():
+        vis = getattr(geom, 'visual', None)
+        material = getattr(vis, 'material', None) if isinstance(vis, trimesh.visual.TextureVisuals) else None
+        if material is None or _mesh_has_uv(geom):
+            continue
+        try:
+            material = material.copy()
+            marker = f"{material.name or ''}{_LINK_MARK}{key}"
+            marked[marker] = material.name
+            material.name = marker
+            vis.material = material
+        except Exception as e:
+            logger.warning(f"Could not mark material of {key}: {e}")
+    return marked
+
+
+def _relink_marked_materials(glb_path, marked):
+    if not marked:
+        return
+    try:
+        gltf = GLTF2().load(glb_path)
+        index_by_marker = {m.name: i for i, m in enumerate(gltf.materials or []) if m.name in marked}
+        changed = False
+        for gltf_mesh in gltf.meshes or []:
+            for prim in gltf_mesh.primitives or []:
+                if prim.material is None:
+                    for marker, idx in index_by_marker.items():
+                        if marker.endswith(f"{_LINK_MARK}{gltf_mesh.name}"):
+                            prim.material = idx
+                            changed = True
+                            break
+        for material in gltf.materials or []:
+            if material.name in marked:
+                material.name = marked[material.name]
+                changed = True
+        if changed:
+            gltf.save(glb_path)
+    except Exception as e:
+        logger.warning(f"_relink_marked_materials failed: {e}")
+
+
+def slicing_unsupported_reason(glb_path):
+    """A user-facing reason slicing would damage this GLB, else None.
+
+    The slicer rebuilds the scene from baked world-space meshes, which drops
+    animations and skins -- refuse rather than silently strip them."""
+    try:
+        gltf = GLTF2().load(glb_path)
+    except Exception:
+        return None
+    if gltf.animations or gltf.skins:
+        return ("This model is animated or skinned, and slicing would remove its "
+                "animation. Nothing was changed.")
+    return None
+
+
 def _slice_core(input_path, output_path, planes):
     """
     Shared pipeline for single- and multi-plane slicing.
@@ -549,6 +738,10 @@ def _slice_core(input_path, output_path, planes):
 
     Returns: {'success': bool, 'degenerate': bool, 'extents': list|None}
     """
+    unsupported = slicing_unsupported_reason(input_path)
+    if unsupported:
+        return {"success": False, "degenerate": False, "extents": None, "unsupported": unsupported}
+
     mat_data = _extract_material_data(input_path)
 
     loaded = trimesh.load(input_path, force=None)
@@ -567,7 +760,7 @@ def _slice_core(input_path, output_path, planes):
     total_in, total_kept = 0, 0
     for name, mesh in _iter_world_meshes(loaded):
         total_in += 1
-        current = mesh
+        current = _flatten_uniform_color(mesh)
         for origin, normal in normalized:
             current = _slice_single_mesh(current, origin, normal)
             if current is None or len(current.vertices) == 0:
@@ -596,7 +789,9 @@ def _slice_core(input_path, output_path, planes):
         f"extents={extents.tolist() if extents is not None else None}, degenerate={degenerate}"
     )
 
+    marked = _mark_unlinked_materials(out_scene)
     out_scene.export(output_path, file_type='glb')
+    _relink_marked_materials(output_path, marked)
 
     if not (os.path.exists(output_path) and os.path.getsize(output_path) > 0):
         logger.error("Output file missing or empty after export")

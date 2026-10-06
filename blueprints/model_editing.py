@@ -542,7 +542,7 @@ def slice_model():
     from converters.glb_quality import finalize_glb
 
     try:
-        from mesh_slicer import slice_mesh_multi
+        from mesh_slicer import slice_mesh_multi, slicing_unsupported_reason
 
         data = request.json
         model_id = data.get("model_id")
@@ -609,6 +609,10 @@ def slice_model():
         refused = _make_editable(app_module, input_path, model_id, "slice_model")
         if refused:
             return refused
+
+        unsupported = slicing_unsupported_reason(input_path)
+        if unsupported:
+            return jsonify({"success": False, "error": unsupported}), 422
 
         # Create backup
         backup_path = os.path.join(

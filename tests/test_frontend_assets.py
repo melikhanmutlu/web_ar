@@ -1,7 +1,13 @@
-"""Faz 4: self-hosted frontend assets, prebuilt Tailwind, CSP."""
+"""Faz 4: self-hosted frontend assets, prebuilt Tailwind, compression, CSP."""
 
+import io
+import json
 import re
 from pathlib import Path
+
+import app as app_module
+import trimesh
+from models import ConversionJob, UserModel, db
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "templates"
@@ -55,3 +61,49 @@ def test_csp_no_longer_lists_removed_cdn_hosts(client):
     for host in REMOVED_HOSTS:
         assert host not in policy
     assert "'wasm-unsafe-eval'" in policy
+
+
+def test_text_assets_are_compressed(client):
+    # Static files are streamed responses; Flask-Compress only encodes those
+    # with br/zstd (no streaming gzip), so ask for br here.
+    resp = client.get("/static/css/arvision.css", headers={"Accept-Encoding": "br"})
+    assert resp.status_code == 200
+    assert resp.headers.get("Content-Encoding") == "br"
+    assert "Accept-Encoding" in resp.headers.get("Vary", "")
+    resp = client.get("/login", headers={"Accept-Encoding": "gzip"})
+    assert resp.headers.get("Content-Encoding") == "gzip"
+
+
+def test_glb_and_event_stream_are_not_compressed(client, monkeypatch):
+    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
+    response = client.post(
+        "/upload_model",
+        data={"file": (io.BytesIO(source), "box.glb"), "compression": "none"},
+        content_type="multipart/form-data",
+    )
+    payload = response.get_json()
+    job = db.session.get(ConversionJob, payload["job_id"])
+    app_module.run_conversion_job(job, allow_retry=False)
+    db.session.refresh(job)
+    assert job.status == "completed"
+
+    gzip_headers = {"Accept-Encoding": "gzip, br"}
+    stream = client.get(
+        f"/api/upload-jobs/{job.id}/stream",
+        query_string={"status_token": payload["status_token"]},
+        headers=gzip_headers,
+    )
+    assert stream.status_code == 200
+    assert stream.mimetype == "text/event-stream"
+    assert "Content-Encoding" not in stream.headers
+    events = [l[6:] for l in stream.get_data(as_text=True).splitlines() if l.startswith("data: ")]
+    assert json.loads(events[-1])["status"] == "completed"
+
+    model = db.session.get(UserModel, payload["job_id"])
+    glb = client.get(
+        f"/converted_files/{model.id}/{Path(model.filename).name}", headers=gzip_headers
+    )
+    assert glb.status_code == 200
+    assert "Content-Encoding" not in glb.headers
+    app_module.shutil.rmtree(Path(model.filename).parent, ignore_errors=True)

@@ -67,6 +67,7 @@ import uuid
 import secrets
 import hashlib
 from urllib.parse import urlparse, urlsplit
+from flask_compress import Compress
 from flask_migrate import Migrate
 from config import *
 from sqlalchemy.orm import Session
@@ -277,6 +278,21 @@ db.init_app(app)
 app.config.setdefault("WTF_CSRF_TIME_LIMIT", None)
 csrf = CSRFProtect(app)
 migrate = Migrate(app, db)
+
+# Response compression (br/gzip) for text payloads only. GLB/USDZ/images are
+# already compressed and text/event-stream (job progress SSE) must stay
+# unbuffered, so neither mimetype is listed.
+app.config["COMPRESS_MIMETYPES"] = [
+    "text/html",
+    "text/css",
+    "text/xml",
+    "text/javascript",
+    "application/javascript",
+    "application/json",
+    "image/svg+xml",
+    "application/wasm",
+]
+Compress(app)
 
 # Initialize login manager
 login_manager = LoginManager()

@@ -6,13 +6,13 @@ Also flips the user_model.visibility server default to "private" (existing rows
 are untouched; the ORM sets "unlisted" for owner-less uploads).
 
 Revision ID: f2b3c4d5e6f7
-Revises: e3f5a7b9c1d2
+Revises: f3c4d5e6f7a8
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "f2b3c4d5e6f7"
-down_revision = "e3f5a7b9c1d2"
+down_revision = "f3c4d5e6f7a8"
 branch_labels = None
 depends_on = None
 

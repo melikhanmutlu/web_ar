@@ -2753,7 +2753,10 @@ def _ai_quota_state(user_id):
     trial = _free_ai_trial_allowance(user, limit)
     if trial and is_verified(user):
         # Free trial: a lifetime (not monthly) allowance, so count every job.
-        used = AIGenerationJob.query.filter(AIGenerationJob.user_id == user_id).count()
+        used = AIGenerationJob.query.filter(
+            AIGenerationJob.user_id == user_id,
+            AIGenerationJob.status != "failed",  # a failed generation doesn't use up a trial
+        ).count()
         return (used >= trial), used, trial
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,

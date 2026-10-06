@@ -274,3 +274,22 @@ def test_private_default_owner_can_view_others_cannot(client, monkeypatch, tmp_p
     assert client.get(f"/view/{model.id}").status_code in (403, 404)
     _login(client, "vown")
     assert client.get(f"/view/{model.id}").status_code == 200
+
+
+def test_failed_generations_do_not_use_up_free_trials(client, monkeypatch):
+    from services.time_utils import datetime as dt
+    from site_settings import invalidate_cache
+    invalidate_cache()  # an earlier test may have cached a different free_ai_trial_count
+    monkeypatch.setitem(app_module.app.config, "AI_GEN_MONTHLY_LIMIT", 0)  # prod default for Free
+    u = User(username="trialfail", email="trialfail@example.com", plan="free",
+             email_verified_at=dt.utcnow())
+    u.set_password("password123")
+    db.session.add(u)
+    db.session.commit()
+    for i, status in enumerate(("failed", "failed", "ready")):
+        db.session.add(AIGenerationJob(id=f"trialfail-{i}", user_id=u.id, kind="text", status=status))
+    db.session.commit()
+
+    exceeded, used, trial = app_module._ai_quota_state(u.id)
+
+    assert (exceeded, used, trial) == (False, 1, 3)

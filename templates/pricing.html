@@ -11,6 +11,8 @@
     'white_label': 'White-label / remove branding',
     'webhooks': 'Webhooks',
 } %}
+{# No self-serve UI for these yet: configured by our team on request. #}
+{% set on_request = ['organizations', 'custom_domains', 'white_label'] %}
 
 {% block content %}
 <main>
@@ -61,7 +63,7 @@
                         <p>&#10003; {{ limits.batch_size }} files per batch upload</p>
                         <p>&#10003; {{ limits.analytics_retention_days }}-day analytics history</p>
                         {% for feature, enabled in cfg.features.items() %}
-                            {% if enabled %}<p>&#10003; {{ feature_labels[feature] }}</p>{% endif %}
+                            {% if enabled %}<p>&#10003; {{ feature_labels[feature] }}{% if feature in on_request %} <small style="color:var(--muted);">(set up on request)</small>{% endif %}</p>{% endif %}
                         {% endfor %}
                     </div>
                 </article>
@@ -94,7 +96,7 @@
                     ] %}
                     {% for label, key, kind in limit_rows %}
                     <tr>
-                        <th>{{ label }}</th>
+                        <th>{{ label }}{% if key in on_request %} <small style="color:var(--muted);font-weight:400;">(set up on request)</small>{% endif %}</th>
                         {% for plan in plans %}
                         {% set v = plan_config[plan].limits[key] %}
                         <td{% if plan == 'pro' %} class="pricing-compare-featured"{% endif %}>
@@ -156,7 +158,7 @@
             ("Can I change my plan later?", "Yes. Upgrade or downgrade as your usage changes; your models remain in the same workspace."),
             ("How do AI credits work?", "Your monthly Pro or Business allowance is used first. Purchased AI credits are used only after that allowance runs out."),
             ("Can I control who sees a model?", "Every model can be private, unlisted or public. Pro also includes password-protected and expiring links."),
-            ("Does Business include a custom domain?", "Yes. Business includes organisation roles, a custom domain, a white-label viewer and webhooks."),
+            ("Does Business include a custom domain?", "Yes. Business includes organisation roles, a custom domain, a white-label viewer and webhooks. Organisations, custom domains and white-label are set up on request: contact us and we configure them for you."),
         ] %}
         {% for q, a in faq %}
         <div class="reveal" data-reveal style="--delay:{{ loop.index0 * 40 }}ms">

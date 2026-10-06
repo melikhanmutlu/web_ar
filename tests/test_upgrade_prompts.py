@@ -65,3 +65,12 @@ def test_ai_quota_rejection_carries_upgrade_hint(client, monkeypatch):
     _login_free_user(client, "hint_ai")
     resp = client.post("/api/generate-3d", json={"mode": "text", "prompt": "a chair"})
     _assert_upgrade(resp, "ai_credits", 429)
+
+
+def test_pricing_marks_ui_less_features_as_set_up_on_request(client):
+    html = client.get("/pricing").get_data(as_text=True)
+    # Teams/organizations, custom domains, white-label: in the compare table
+    # and the Business card each carry the note (webhooks etc. do not).
+    assert html.count("(set up on request)") >= 3
+    assert "Webhooks <small" not in html
+    assert "Webhooks</th>" in html

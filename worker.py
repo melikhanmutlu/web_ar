@@ -285,6 +285,20 @@ def reconcile_stale_ai_jobs():
             db.session.rollback()
 
 
+def run_once():
+    """Claim and process a single pending job; returns it, or None when idle."""
+    job = claim_next_job()
+    if job is None:
+        return None
+
+    logger.info(f"Processing job {job.id} (attempt {(job.attempts or 0) + 1})")
+    record_worker_heartbeat(job.id)
+    run_conversion_job(job)
+    record_worker_heartbeat()
+    logger.info(f"Job {job.id} -> {job.status}")
+    return job
+
+
 def main():
     logger.info(
         f"Conversion worker started (poll {POLL_INTERVAL}s, "
@@ -332,16 +346,9 @@ def main():
                         db.session.rollback()
                 last_heartbeat_prune = time.monotonic()
 
-            job = claim_next_job()
-            if job is None:
+            if run_once() is None:
                 time.sleep(POLL_INTERVAL)
                 continue
-
-            logger.info(f"Processing job {job.id} (attempt {(job.attempts or 0) + 1})")
-            record_worker_heartbeat(job.id)
-            run_conversion_job(job)
-            record_worker_heartbeat()
-            logger.info(f"Job {job.id} -> {job.status}")
         except KeyboardInterrupt:
             logger.info("Worker stopped")
             break

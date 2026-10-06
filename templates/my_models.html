@@ -16,57 +16,57 @@
         <div class="library-actions">
             {% if not trash_view %}
             <div class="library-actions-primary">
-                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn{% if library_empty %} hidden{% endif %}">
+                <button id="selectModeBtn" type="button" data-action="toggleSelectMode" class="library-btn library-utility-btn{% if library_empty %} hidden{% endif %}">
                     <i data-lucide="check-square"></i>
                     Select
                 </button>
-                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn hidden">
+                <button id="cancelSelectBtn" type="button" data-action="toggleSelectMode" class="library-btn library-utility-btn hidden">
                     <i data-lucide="x"></i>
                     Cancel
                 </button>
-                <button type="button" onclick="showCreateFolderModal()" class="library-btn library-utility-btn">
+                <button type="button" data-action="showCreateFolderModal" class="library-btn library-utility-btn">
                     + New folder
                 </button>
                 <a href="{{ url_for('scenes.scene_builder_page') }}" class="library-btn library-utility-btn">
                     + New scene
                 </a>
-                <button type="button" onclick="showUploadModal()" class="btn-primary library-primary">
+                <button type="button" data-action="showUploadModal" class="btn-primary library-primary">
                     ↑ Upload model
                 </button>
             </div>
             <div class="library-actions-selection">
-                <button id="moveSelectedBtn" type="button" onclick="showBulkMoveModal()" class="library-btn hidden">
+                <button id="moveSelectedBtn" type="button" data-action="showBulkMoveModal" class="library-btn hidden">
                     <i data-lucide="folder-input"></i>
                     Move selected
                 </button>
-                <button id="visibilitySelectedBtn" type="button" onclick="showBulkVisibilityModal()" class="library-btn hidden">
+                <button id="visibilitySelectedBtn" type="button" data-action="showBulkVisibilityModal" class="library-btn hidden">
                     <i data-lucide="eye"></i>
                     Set visibility
                 </button>
-                <button id="tagSelectedBtn" type="button" onclick="showBulkTagModal()" class="library-btn hidden">
+                <button id="tagSelectedBtn" type="button" data-action="showBulkTagModal" class="library-btn hidden">
                     <i data-lucide="tag"></i>
                     Add tag
                 </button>
-                <button id="deleteSelectedBtn" type="button" onclick="deleteSelectedModels()" class="library-btn library-danger hidden">
+                <button id="deleteSelectedBtn" type="button" data-action="deleteSelectedModels" class="library-btn library-danger hidden">
                     <i data-lucide="trash-2"></i>
                     Delete selected
                 </button>
             </div>
             {% else %}
             <div class="library-actions-selection">
-                <button id="selectModeBtn" type="button" onclick="toggleSelectMode()" class="library-btn library-utility-btn">
+                <button id="selectModeBtn" type="button" data-action="toggleSelectMode" class="library-btn library-utility-btn">
                     <i data-lucide="check-square"></i>
                     Select
                 </button>
-                <button id="cancelSelectBtn" type="button" onclick="toggleSelectMode()" class="library-btn hidden">
+                <button id="cancelSelectBtn" type="button" data-action="toggleSelectMode" class="library-btn hidden">
                     <i data-lucide="x"></i>
                     Cancel
                 </button>
-                <button id="restoreSelectedBtn" type="button" onclick="restoreSelectedModels()" class="library-btn hidden">
+                <button id="restoreSelectedBtn" type="button" data-action="restoreSelectedModels" class="library-btn hidden">
                     <i data-lucide="undo-2"></i>
                     Restore selected
                 </button>
-                <button id="deleteSelectedBtn" type="button" onclick="deleteForeverSelected()" class="library-btn library-danger hidden">
+                <button id="deleteSelectedBtn" type="button" data-action="deleteForeverSelected" class="library-btn library-danger hidden">
                     <i data-lucide="trash-2"></i>
                     Delete forever
                 </button>
@@ -120,7 +120,7 @@
             <strong id="selectionCount">0 selected</strong>
         </div>
         <label class="auth-check">
-            <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)">
+            <input type="checkbox" id="selectAllCheckbox" data-action-change="toggleSelectAll">
             <span>Select all visible models</span>
         </label>
     </section>
@@ -160,7 +160,7 @@
 
     {% if current_folder or trash_view %}
     <section class="library-breadcrumb">
-        <button type="button" onclick="navigateBack()" class="library-icon-btn" title="Back" aria-label="Back">
+        <button type="button" data-action="navigateBack" class="library-icon-btn" title="Back" aria-label="Back">
             <i data-lucide="chevron-left"></i>
         </button>
         <a href="{{ url_for('models_crud.my_models') }}">My Models</a>
@@ -197,16 +197,16 @@
             {% for folder in folders %}
             <article class="folder-card library-folder folder-drop-target"
                      data-folder-id="{{ folder.id }}"
-                     ondragover="handleDragOver(event)"
-                     ondragleave="handleDragLeave(event)"
-                     ondrop="handleDrop(event)">
+                     data-action-dragover="handleDragOver"
+                     data-action-dragleave="handleDragLeave"
+                     data-action-drop="handleDrop">
                 <a class="library-folder-link" href="{{ url_for('models_crud.my_models', folder_id=folder.id) }}" aria-labelledby="folderName-{{ folder.id }}"></a>
                 {% set previews = folder_previews.get(folder.id, []) if folder_previews else [] %}
                 <div class="library-folder-icon {% if previews %}has-collage{% endif %}">
                     {% if previews %}
                     <div class="folder-collage folder-collage--{{ previews|length }}">
                         {% for mid in previews %}
-                        <img src="{{ url_for('model_files.serve_thumbnail', unique_id=mid) }}" alt="" loading="lazy" onerror="this.remove();">
+                        <img src="{{ url_for('model_files.serve_thumbnail', unique_id=mid) }}" alt="" loading="lazy" data-action-error="removeSelf">
                         {% endfor %}
                     </div>
                     {% else %}
@@ -220,14 +220,14 @@
                 <div class="library-card-action library-folder-actions">
                     <button type="button"
                             class="library-icon-btn"
-                            onclick="event.stopPropagation(); startRenameFolder('{{ folder.id }}')"
+                            data-action="startRenameFolder" data-id="{{ folder.id }}"
                             title="Rename folder"
                             aria-label="Rename folder">
                         <i data-lucide="pencil"></i>
                     </button>
                     <button type="button"
                             class="library-icon-btn library-danger-icon"
-                            onclick="event.stopPropagation(); deleteFolder('{{ folder.id }}')"
+                            data-action="deleteFolder" data-id="{{ folder.id }}"
                             title="Delete folder"
                             aria-label="Delete folder">
                         <i data-lucide="trash-2"></i>
@@ -256,14 +256,14 @@
                      data-size-bytes="{{ model.file_size or 0 }}"
                      data-file-type="{{ (model.file_type or '') | lower }}"
                      data-tags="{{ model.tags or '' }}"
-                     onclick="toggleModelSelection(event, '{{ model.id }}', this)"
+                     data-action="toggleModelSelection" data-id="{{ model.id }}"
                      draggable="true"
-                     ondragstart="handleDragStart(event)"
-                     ondragend="handleDragEnd(event)">
+                     data-action-dragstart="handleDragStart"
+                     data-action-dragend="handleDragEnd">
                 <input type="checkbox"
                        class="model-checkbox"
                        data-model-id="{{ model.id }}"
-                       onclick="event.stopPropagation(); toggleModelSelection(event, '{{ model.id }}', this.closest('.model-card'))">
+                       data-action="toggleModelCheckbox" data-id="{{ model.id }}">
                 <div class="selected-overlay"></div>
 
                 <div class="library-preview" data-glb="{{ url_for('model_files.serve_converted_file', unique_id=model.id, filename='model.glb', v=(model.asset_version or 0)) }}">
@@ -271,7 +271,7 @@
                          alt="{{ model_name }} preview"
                          loading="lazy"
                          decoding="async"
-                         onerror="this.closest('.library-preview').classList.add('is-empty'); this.remove();">
+                         data-action-error="previewFailed">
                     <div class="library-preview-fallback">
                         <i data-lucide="box"></i>
                         <span>No screenshot yet</span>
@@ -282,25 +282,25 @@
                     <div class="library-model-heading">
                         <h3 class="model-name" title="{{ model_name }}" data-model-id="{{ model.id }}">{{ model_name }}</h3>
                         {% if not trash_view %}
-                        <details class="library-model-menu" onclick="event.stopPropagation()">
+                        <details class="library-model-menu" data-action="stop">
                             <summary class="library-icon-btn" title="More options" aria-label="More options">
                                 <i data-lucide="more-horizontal"></i>
                             </summary>
                             <div class="library-model-menu-popover">
-                                <button type="button" onclick="event.stopPropagation(); startRenameModel('{{ model.id }}')">
+                                <button type="button" data-action="startRenameModel" data-id="{{ model.id }}">
                                     <i data-lucide="pencil"></i> Rename
                                 </button>
-                                <button type="button" onclick="event.stopPropagation(); showMoveToFolderModal('{{ model.id }}')">
+                                <button type="button" data-action="showMoveToFolderModal" data-id="{{ model.id }}">
                                     <i data-lucide="folder-input"></i> Move to folder
                                 </button>
-                                <button type="button" onclick="event.stopPropagation(); startEditTags('{{ model.id }}')">
+                                <button type="button" data-action="startEditTags" data-id="{{ model.id }}">
                                     <i data-lucide="tag"></i> Edit tags
                                 </button>
                                 <label class="library-model-menu-visibility">
                                     <span><i data-lucide="eye"></i> Visibility</span>
                                     <select class="visibility-select" data-model-id="{{ model.id }}"
-                                            onclick="event.stopPropagation()"
-                                            onchange="event.stopPropagation(); updateModelVisibility('{{ model.id }}', this.value, this)"
+                                            data-action="stop"
+                                            data-action-change="updateModelVisibility" data-id="{{ model.id }}"
                                             title="Who can see this model. Public models can appear in Community.">
                                         <option value="private" {% if model.visibility == 'private' %}selected{% endif %}>Private</option>
                                         <option value="unlisted" {% if model.visibility == 'unlisted' %}selected{% endif %}>Unlisted (link only)</option>
@@ -310,7 +310,7 @@
                                 <button type="button" data-share-dialog data-model-id="{{ model.id }}" data-model-name="{{ model.display_name or model.original_filename }}" data-visibility="{{ model.visibility }}">
                                     <i data-lucide="share-2"></i> Share...
                                 </button>
-                                <button type="button" class="library-model-menu-danger" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')">
+                                <button type="button" class="library-model-menu-danger" data-action="deleteModel" data-id="{{ model.id }}">
                                     <i data-lucide="trash-2"></i> Move to trash
                                 </button>
                             </div>
@@ -319,11 +319,11 @@
                     </div>
                     <div class="library-card-actions">
                         {% if trash_view %}
-                        <button type="button" onclick="event.stopPropagation(); restoreModel('{{ model.id }}')" class="library-text-action">Restore</button>
-                        <button type="button" onclick="event.stopPropagation(); deleteForever('{{ model.id }}')" class="library-text-action library-text-action--danger">Delete forever</button>
+                        <button type="button" data-action="restoreModel" data-id="{{ model.id }}" class="library-text-action">Restore</button>
+                        <button type="button" data-action="deleteForever" data-id="{{ model.id }}" class="library-text-action library-text-action--danger">Delete forever</button>
                         {% else %}
-                        <button type="button" onclick="event.stopPropagation(); copyModelLink('{{ model.id }}')" class="library-text-action">Copy link</button>
-                        <button type="button" onclick="event.stopPropagation(); viewModel('{{ model.id }}')" class="library-text-action library-text-action--primary">Open Viewer <span>&rarr;</span></button>
+                        <button type="button" data-action="copyModelLink" data-id="{{ model.id }}" class="library-text-action">Copy link</button>
+                        <button type="button" data-action="viewModel" data-id="{{ model.id }}" class="library-text-action library-text-action--primary">Open Viewer <span>&rarr;</span></button>
                         {% endif %}
                     </div>
                     <p class="library-model-meta">
@@ -347,7 +347,7 @@
             {% endfor %}
         </div>
         <div class="library-load-more">
-            <button type="button" id="loadMoreBtn" class="library-btn hidden" onclick="revealNextBatch()">
+            <button type="button" id="loadMoreBtn" class="library-btn hidden" data-action="revealNextBatch">
                 <i data-lucide="chevrons-down"></i>
                 Load more
             </button>
@@ -376,9 +376,9 @@
     <div class="modal-content library-modal">
         <div class="modal-header">
             <h2>Create New Folder</h2>
-            <button type="button" class="library-icon-btn" onclick="hideCreateFolderModal()" aria-label="Close"><i data-lucide="x"></i></button>
+            <button type="button" class="library-icon-btn" data-action="hideCreateFolderModal" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
-        <form id="createFolderForm" onsubmit="createFolder(event)">
+        <form id="createFolderForm" data-action-submit="createFolder">
             <div class="modal-body">
                 <label for="folder_name" class="auth-label">Folder Name</label>
                 <input type="text" id="folder_name" name="folder_name" class="av-input auth-input" placeholder="Product renders" required>
@@ -388,7 +388,7 @@
                 {% endif %}
             </div>
             <div class="modal-footer">
-                <button type="button" class="library-btn" onclick="hideCreateFolderModal()">Cancel</button>
+                <button type="button" class="library-btn" data-action="hideCreateFolderModal">Cancel</button>
                 <button type="submit" class="btn-primary library-primary">Create Folder</button>
             </div>
         </form>
@@ -399,16 +399,16 @@
     <div class="modal-content library-modal">
         <div class="modal-header">
             <h2>Move Model</h2>
-            <button type="button" class="library-icon-btn" onclick="hideMoveToFolderModal()" aria-label="Close"><i data-lucide="x"></i></button>
+            <button type="button" class="library-icon-btn" data-action="hideMoveToFolderModal" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
             <div class="folder-list">
-                <button type="button" class="folder-option" onclick="moveModelToFolder(null)">
+                <button type="button" class="folder-option" data-action="moveModelToFolder">
                     <i data-lucide="folder"></i>
                     Root Folder
                 </button>
                 {% for folder in folders %}
-                <button type="button" class="folder-option" onclick="moveModelToFolder('{{ folder.id }}')">
+                <button type="button" class="folder-option" data-action="moveModelToFolder" data-id="{{ folder.id }}">
                     <i data-lucide="folder"></i>
                     {{ folder.name }}
                 </button>
@@ -416,7 +416,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="library-btn" onclick="hideMoveToFolderModal()">Cancel</button>
+            <button type="button" class="library-btn" data-action="hideMoveToFolderModal">Cancel</button>
         </div>
     </div>
 </div>
@@ -425,26 +425,26 @@
     <div class="modal-content library-modal">
         <div class="modal-header">
             <h2>Set Visibility</h2>
-            <button type="button" class="library-icon-btn" onclick="hideBulkVisibilityModal()" aria-label="Close"><i data-lucide="x"></i></button>
+            <button type="button" class="library-icon-btn" data-action="hideBulkVisibilityModal" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
             <div class="folder-list">
-                <button type="button" class="folder-option" onclick="applyBulkVisibility('private')">
+                <button type="button" class="folder-option" data-action="applyBulkVisibility" data-value="private">
                     <i data-lucide="lock"></i>
                     Private
                 </button>
-                <button type="button" class="folder-option" onclick="applyBulkVisibility('unlisted')">
+                <button type="button" class="folder-option" data-action="applyBulkVisibility" data-value="unlisted">
                     <i data-lucide="link"></i>
                     Unlisted
                 </button>
-                <button type="button" class="folder-option" onclick="applyBulkVisibility('public')">
+                <button type="button" class="folder-option" data-action="applyBulkVisibility" data-value="public">
                     <i data-lucide="globe"></i>
                     Public
                 </button>
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="library-btn" onclick="hideBulkVisibilityModal()">Cancel</button>
+            <button type="button" class="library-btn" data-action="hideBulkVisibilityModal">Cancel</button>
         </div>
     </div>
 </div>
@@ -453,15 +453,15 @@
     <div class="modal-content library-modal">
         <div class="modal-header">
             <h2>Add Tag to Selected</h2>
-            <button type="button" class="library-icon-btn" onclick="hideBulkTagModal()" aria-label="Close"><i data-lucide="x"></i></button>
+            <button type="button" class="library-icon-btn" data-action="hideBulkTagModal" aria-label="Close"><i data-lucide="x"></i></button>
         </div>
-        <form id="bulkTagForm" onsubmit="applyBulkTags(event)">
+        <form id="bulkTagForm" data-action-submit="applyBulkTags">
             <div class="modal-body">
                 <label for="bulk_tags" class="auth-label">Tags (comma-separated)</label>
                 <input type="text" id="bulk_tags" name="bulk_tags" class="av-input auth-input" placeholder="furniture, blue, sale" required>
             </div>
             <div class="modal-footer">
-                <button type="button" class="library-btn" onclick="hideBulkTagModal()">Cancel</button>
+                <button type="button" class="library-btn" data-action="hideBulkTagModal">Cancel</button>
                 <button type="submit" class="btn-primary library-primary">Add Tags</button>
             </div>
         </form>

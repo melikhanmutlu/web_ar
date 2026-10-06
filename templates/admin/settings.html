@@ -48,7 +48,7 @@
         </h3>
         {% if deletable %}
         <button type="submit" form="del-{{ p.slug }}" class="admin-btn admin-btn--danger"
-                onclick="return confirm('Delete plan {{ p.slug }}? Plans that still have users on them can't be deleted.');">delete</button>
+                data-confirm-submit="Delete plan {{ p.slug }}? Plans that still have users on them can't be deleted.">delete</button>
         {% endif %}
     </div>
     {% if not p %}

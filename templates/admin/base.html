@@ -105,7 +105,7 @@
             <input type="text" id="adminConfirmInput" class="av-input" style="display:none;" autocomplete="off">
             <div id="adminConfirmResult" class="admin-confirm-result" style="display:none;">
                 <p class="admin-confirm-result-label">temporary password (shown once):</p>
-                <input type="text" id="adminConfirmResultValue" class="av-input" readonly onclick="this.select()">
+                <input type="text" id="adminConfirmResultValue" class="av-input" readonly data-action="selectSelf">
             </div>
         </div>
         <div class="modal-footer">
@@ -116,7 +116,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
-<script>if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();</script>
+<script src="{{ url_for('static', filename='js/lucide-init.js') }}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

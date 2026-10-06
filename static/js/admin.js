@@ -7,6 +7,7 @@
  * Buttons opt in via data attributes:
  *   data-action-url="/admin/..."   POST target (required)
  *   data-confirm="text"            open the shared confirm modal first
+ *   data-confirm-submit="text"     (form submit buttons) arConfirm, then submit
  *   data-confirm-typed="value"     additionally require typing `value`
  *   data-show-password             display response.temp_password instead of reloading
  *   data-redirect="/admin/..."     navigate there on success instead of reloading
@@ -37,6 +38,15 @@
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     }
+
+    // Row thumbnail 404 -> placeholder icon (data-action-error on the <img>).
+    window.arActions.adminThumbFailed = (e, img) => {
+        const fallback = document.createElement('div');
+        fallback.className = 'admin-thumb-fallback';
+        fallback.innerHTML = '<i data-lucide="box"></i>';
+        img.replaceWith(fallback);
+        if (window.lucide) lucide.createIcons();
+    };
 
     async function adminPost(url, body) {
         const init = { method: 'POST' };
@@ -162,9 +172,9 @@
             if (skippedCount > 0) {
                 displayToast(`Done, but ${skippedCount} selected item(s) were skipped (already changed or excluded).`, 'info');
             }
-            // window.alert (not the toast) because the page reloads right
+            // A blocking dialog (not a toast) because the page reloads right
             // after -- a toast would vanish before the admin could read it.
-            if (data.warning) window.alert(data.warning);
+            if (data.warning) await window.arConfirm(data.warning, { confirmLabel: 'OK', cancelLabel: 'Dismiss' });
             if (redirect) window.location.href = redirect;
             else window.location.reload();
         } catch (err) {
@@ -174,7 +184,7 @@
             // dead-ending on an error toast.
             if (err.data && err.data.requires_force) {
                 closeModal();
-                if (window.confirm(err.message + '\n\nProceed anyway?')) {
+                if (await window.arConfirm(err.message + '\n\nProceed anyway?', { confirmLabel: 'Proceed', danger: true })) {
                     runAction(url, showPassword, redirect, Object.assign({}, body, { force: true }));
                     return;
                 }
@@ -193,6 +203,17 @@
             runAction(url, showPassword, redirect, body);
         });
     }
+
+    // <button type="submit" form="f" data-confirm-submit="Question?">: ask via
+    // the shared dialog, then submit the form.
+    document.addEventListener('click', async (e) => {
+        const button = e.target.closest('[data-confirm-submit]');
+        if (!button) return;
+        e.preventDefault();
+        if (await window.arConfirm(button.getAttribute('data-confirm-submit'), { confirmLabel: 'Delete', danger: true })) {
+            if (button.form) button.form.requestSubmit(button);
+        }
+    });
 
     document.addEventListener('click', (e) => {
         const button = e.target.closest('[data-action-url]');

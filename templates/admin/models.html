@@ -81,7 +81,7 @@
                     <td>
                         <img class="admin-thumb" src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id, v=(model.asset_version or 0)) }}" alt=""
                              loading="lazy"
-                             onerror="this.outerHTML='<div class=&quot;admin-thumb-fallback&quot;><i data-lucide=&quot;box&quot;></i></div>'; if (window.lucide) lucide.createIcons();">
+                             data-action-error="adminThumbFailed">
                     </td>
                     <td class="admin-row-title" title="{{ model.display_name or model.original_filename }}">
                         <a href="{{ url_for('admin.model_detail', model_id=model.id) }}">{{ model.display_name or model.original_filename }}</a>

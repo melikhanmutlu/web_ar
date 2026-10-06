@@ -993,7 +993,7 @@
                 <div class="showcase-header">
                     <div style="flex:1;min-width:0;">
                         {% if is_owner %}
-                        <h2 class="showcase-title" id="modelTitle" title="Click to edit" style="cursor:pointer;" onclick="startEditTitle(this)">{{ display_name }}</h2>
+                        <h2 class="showcase-title" id="modelTitle" title="Click to edit" style="cursor:pointer;" data-action="startEditTitle">{{ display_name }}</h2>
                         {% else %}
                         <h2 class="showcase-title">{{ display_name }}</h2>
                         {% endif %}
@@ -1003,12 +1003,12 @@
                         <span class="showcase-publisher">Published by {{ owner_username }}</span>
                         {% endif %}
                         {% if is_owner %}
-                        <p class="showcase-description" id="modelDescription" title="Click to edit" style="cursor:pointer;" onclick="startEditDescription(this)">{{ model.description if model.description else 'Click to add a description...' }}</p>
+                        <p class="showcase-description" id="modelDescription" title="Click to edit" style="cursor:pointer;" data-action="startEditDescription">{{ model.description if model.description else 'Click to add a description...' }}</p>
                         {% else %}
                         <p class="showcase-description">{{ model.description if model.description else '' }}</p>
                         {% endif %}
                     </div>
-                    <button class="showcase-close" type="button" aria-label="Collapse info box" onclick="window.toggleShowcaseCollapse?.()">
+                    <button class="showcase-close" type="button" aria-label="Collapse info box" data-action="toggleShowcaseCollapse">
                         <i data-lucide="x"></i>
                     </button>
                 </div>
@@ -1025,7 +1025,8 @@
                                         alt="{{ om.original_filename }}"
                                         class="gallery-thumbnail"
                                         loading="lazy"
-                                        onerror="this.onerror=null; var c=this.dataset.color||'#667eea'; this.parentElement.innerHTML='<div class=gallery-fallback style=background:linear-gradient(135deg,'+c+' 0%,'+c+'cc 100%);><span class=gallery-filename>{{ om.original_filename[:18] }}{{ '...' if om.original_filename|length > 18 else '' }}</span></div>';"
+                                        data-action-error="galleryThumbFailed"
+                                        data-label="{{ om.original_filename[:18] }}{{ '...' if om.original_filename|length > 18 else '' }}"
                                         data-color="{{ om.color or '' }}"
                                     >
                                 </div>
@@ -1233,14 +1234,14 @@
                     <div class="tp-field">
                         <label class="tp-label">Texture</label>
                         <input type="file" id="textureUpload" accept="image/*" class="hidden">
-                        <button onclick="document.getElementById('textureUpload').click()" class="tp-btn-full">Upload Texture</button>
+                        <button data-action="uploadTexture" class="tp-btn-full">Upload Texture</button>
                         <div id="texturePreview" class="hidden" style="margin-top:0.35rem;">
                             <img id="texturePreviewImg" style="width:100%;height:3.5rem;object-fit:cover;border:1px solid var(--color-gray-700);">
                             <p id="textureUvNote" class="hidden" style="margin:0.3rem 0 0;font-size:0.68rem;line-height:1.4;color:#fbbf24;">
                                 This model has no UV map, so the live preview is approximate.
                                 Click Save Changes — proper texture coordinates are generated automatically.
                             </p>
-                            <button onclick="removeTexture()" class="tp-btn-full" style="margin-top:0.25rem;color:var(--color-gray-400);">Remove Texture</button>
+                            <button data-action="removeTexture" class="tp-btn-full" style="margin-top:0.25rem;color:var(--color-gray-400);">Remove Texture</button>
                         </div>
                     </div>
                     {% endif %}
@@ -1438,7 +1439,7 @@
                     {% if viewer_settings.section_presets %}
                     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
                         {% for preset in viewer_settings.section_presets %}
-                        <button type="button" class="tp-btn-full" style="width:auto;padding:4px 7px;" onclick="window.applySectionPreset('{{ preset.axis }}', {{ preset.value }}, '{{ preset.side }}')">{{ preset.name }}</button>
+                        <button type="button" class="tp-btn-full" style="width:auto;padding:4px 7px;" data-action="applySectionPreset" data-axis="{{ preset.axis }}" data-value="{{ preset.value }}" data-side="{{ preset.side }}">{{ preset.name }}</button>
                         {% endfor %}
                     </div>
                     {% endif %}
@@ -1647,7 +1648,7 @@
             {% endif %}
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i><span class="tb-label">AR</span></button>
             <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i><span class="tb-label">Scan</span></button>
-            <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i><span class="tb-label">VR</span></button>
+            <button id="vrButton" class="tb-btn" title="View in VR" data-action="openVr" data-href="/vr/{{ model_id }}"><i data-lucide="eye"></i><span class="tb-label">VR</span></button>
             {% if is_owner %}
             <button id="shareButton" class="tb-btn" type="button" title="Share" data-share-dialog data-model-id="{{ model.id }}" data-model-name="{{ display_name }}" data-visibility="{{ model.visibility }}"><i data-lucide="share-2"></i><span class="tb-label">Share</span></button>
             {% endif %}
@@ -1894,6 +1895,7 @@
     <script defer src="{{ url_for('static', filename='js/viewer/lod-swap.js') }}"></script>
     {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/chrome.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/viewer/actions.js') }}"></script>
 </body>
 </html>
 

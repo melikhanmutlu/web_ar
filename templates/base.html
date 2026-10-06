@@ -50,35 +50,10 @@
     </div>
     {% endif %}
 
-    <script>
-        function closeFlashMessage(flashMessage) {
-            if (!flashMessage) return;
-            flashMessage.style.opacity = '0';
-            flashMessage.style.transform = 'translateY(-20px)';
-            flashMessage.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-            setTimeout(() => flashMessage.remove(), 300);
-        }
-
-        document.addEventListener('click', (event) => {
-            const btn = event.target.closest('[data-flash-close]');
-            if (btn) closeFlashMessage(btn.closest('.av-flash'));
-        });
-
-        // Success/info messages auto-dismiss; errors stay until closed (WCAG 2.2.1).
-        document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('.av-flash:not([data-flash-category="error"])').forEach((el) => {
-                setTimeout(() => closeFlashMessage(el), 5000);
-            });
-        });
-    </script>
-
     {% block extra_scripts %}{% endblock %}
 
     <script src="{{ url_for('static', filename='js/site.js') }}"></script>
-    <script>
-        document.documentElement.classList.remove('dark');
-        localStorage.theme = 'light';
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-    </script>
+    <script src="{{ url_for('static', filename='js/light-theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lucide-init.js') }}"></script>
 </body>
 </html>

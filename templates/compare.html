@@ -4,15 +4,10 @@
     <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Model comparison — ARVision</title>
     <script type="module" src="{{ url_for('static', filename='js/model-viewer.min.js') }}"></script>
-    <script>
-        customElements.whenDefined('model-viewer').then(() => {
-            customElements.get('model-viewer').meshoptDecoderLocation =
-                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
-            // Self-hosted DRACO / KTX2 decoders (model-viewer defaults to www.gstatic.com).
-            customElements.get('model-viewer').dracoDecoderLocation = "{{ url_for('static', filename='vendor/draco/') }}";
-            customElements.get('model-viewer').ktx2TranscoderLocation = "{{ url_for('static', filename='vendor/basis/') }}";
-        });
-    </script>
+    <script src="{{ url_for('static', filename='js/viewer/decoders.js') }}"
+            data-meshopt="{{ url_for('static', filename='js/meshopt_decoder.js') }}"
+            data-draco="{{ url_for('static', filename='vendor/draco/') }}"
+            data-ktx2="{{ url_for('static', filename='vendor/basis/') }}"></script>
     <style>
         *{box-sizing:border-box}body{margin:0;background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif}
         header{padding:14px 20px;display:flex;justify-content:space-between;border-bottom:1px solid #334155}
@@ -30,9 +25,5 @@
     <model-viewer id="{{ side }}" src="{{ url_for('model_files.serve_converted_file', unique_id=model.id, filename=filename, v=(model.asset_version or 0)) }}" camera-controls environment-image="neutral" shadow-intensity="1" interaction-prompt="none"></model-viewer></section>
     {% endfor %}
 </main>
-<script>
-const left=document.getElementById('left'),right=document.getElementById('right'),sync=document.getElementById('sync');let updating=false;
-function bind(source,target){source.addEventListener('camera-change',()=>{if(!sync.checked||updating)return;updating=true;const o=source.getCameraOrbit();target.cameraOrbit=o.theta+'rad '+o.phi+'rad auto';requestAnimationFrame(()=>updating=false);});}
-bind(left,right);bind(right,left);
-</script>
+<script src="{{ url_for('static', filename='js/compare.js') }}"></script>
 </body></html>

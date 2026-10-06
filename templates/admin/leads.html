@@ -53,7 +53,7 @@
             <td>
                 <form method="POST" action="{{ url_for('admin.set_lead_status', lead_id=lead.id, status=status, q=q) }}" style="margin:0;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <select name="status" onchange="this.form.submit()">
+                    <select name="status" data-action-change="submitForm">
                         {% for s in statuses %}
                         <option value="{{ s }}" {% if lead.status == s %}selected{% endif %}>{{ s }}</option>
                         {% endfor %}

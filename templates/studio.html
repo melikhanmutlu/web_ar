@@ -12,10 +12,7 @@
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     <script src="{{ url_for('static', filename='vendor/lucide/lucide-1.17.0.min.js') }}"></script>
-    <script>
-        document.documentElement.classList.remove('dark');
-        localStorage.theme = 'light';
-    </script>
+    <script src="{{ url_for('static', filename='js/light-theme.js') }}"></script>
 </head>
 <body class="av-home">
     {% include "_site_header.html" %}
@@ -425,11 +422,8 @@
     {% include "_site_footer.html" %}
 
     <script src="{{ url_for('static', filename='js/site.js') }}"></script>
-    <script>
-        document.documentElement.classList.remove('dark');
-        localStorage.theme = 'light';
-        if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
-    </script>
+    <script src="{{ url_for('static', filename='js/light-theme.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lucide-init.js') }}"></script>
 
     <script type="application/json" id="studio-config">{{ {
         "uploadExtensions": upload_extensions,

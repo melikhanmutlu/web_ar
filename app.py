@@ -1,6 +1,7 @@
 from datetime import timedelta
 from services.time_utils import datetime
 import os
+import secrets
 from flask import (
     Flask,
     request,
@@ -109,6 +110,54 @@ except ValueError:
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_PROXY_HOPS, x_proto=1, x_host=1)
 
 
+def csp_nonce():
+    """Per-request CSP nonce for the few inline <script> tags that must stay
+    inline (use ``nonce="{{ csp_nonce() }}"``). Generated in before_request and
+    emitted in script-src by build_csp()."""
+    if not hasattr(g, "csp_nonce"):
+        g.csp_nonce = secrets.token_urlsafe(16)
+    return g.csp_nonce
+
+
+app.jinja_env.globals["csp_nonce"] = csp_nonce
+
+
+def build_csp(frame_ancestors):
+    # 'wasm-unsafe-eval' is REQUIRED: model-viewer's decoders (meshopt,
+    # and the self-hosted DRACO/KTX2 decoders) compile WebAssembly. Without it the
+    # decoder's WebAssembly.instantiate() is refused, the loader's
+    # decoder promise rejects, and EVERY model load fails -- blank
+    # viewer, dead AR/fullscreen buttons on all devices.
+    script_src = "'self' 'wasm-unsafe-eval'"
+    connect_src = "'self' https: blob:"
+    if getattr(g, "csp_nonce", None):
+        script_src += f" 'nonce-{g.csp_nonce}'"
+    if getattr(g, "csp_allow_unsafe_eval", False):
+        # VR route only: the vendored A-Frame bundle compiles code strings at
+        # runtime (new Function), which needs 'unsafe-eval'.
+        script_src += " 'unsafe-eval'"
+        connect_src += " data:"
+    # No 'unsafe-inline' in script-src: every inline on*= handler was moved to
+    # delegated listeners and inline scripts are external files or carry the
+    # nonce. style-src keeps 'unsafe-inline' because inline style="" attributes
+    # and <style> blocks are used throughout the templates and by the viewer
+    # libraries; style injection cannot execute script.
+    # All scripts, styles and fonts are self-hosted (no CDN hosts needed).
+    return (
+        "default-src 'self'; "
+        f"script-src {script_src}; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        # GLTFLoader turns images embedded in a GLB binary chunk into blob:
+        # URLs and fetches them before uploading to WebGL. blob: therefore
+        # belongs in connect-src as well as img-src; without it every embedded
+        # material texture is blocked and model-viewer renders a white mesh.
+        f"img-src 'self' data: blob: https:; connect-src {connect_src}; "
+        "worker-src 'self' blob:; "
+        f"frame-ancestors {frame_ancestors}"
+    )
+
+
 # Baseline security headers on every response. X-Frame-Options is only sent for
 # non-embed pages because /embed/<id> is designed to be iframed by third parties.
 @app.after_request
@@ -140,25 +189,7 @@ def after_request(response):
             # allowlist is configured for the model.
             # (EMBED_DEFAULT_FRAME_ANCESTORS can narrow this default.)
             frame_ancestors = os.environ.get("EMBED_DEFAULT_FRAME_ANCESTORS", "*").strip() or "*"
-    response.headers.setdefault(
-        "Content-Security-Policy",
-        "default-src 'self'; "
-        # 'wasm-unsafe-eval' is REQUIRED: model-viewer's decoders (meshopt,
-        # and the self-hosted DRACO/KTX2 decoders) compile WebAssembly. Without it the
-        # decoder's WebAssembly.instantiate() is refused, the loader's
-        # decoder promise rejects, and EVERY model load fails -- blank
-        # viewer, dead AR/fullscreen buttons on all devices.
-        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
-        # GLTFLoader turns images embedded in a GLB binary chunk into blob:
-        # URLs and fetches them before uploading to WebGL. blob: therefore
-        # belongs in connect-src as well as img-src; without it every embedded
-        # material texture is blocked and model-viewer renders a white mesh.
-        "img-src 'self' data: blob: https:; connect-src 'self' https: blob:; "
-        "worker-src 'self' blob:; "
-        f"frame-ancestors {frame_ancestors}",
-    )
+    response.headers.setdefault("Content-Security-Policy", build_csp(frame_ancestors))
     if request.endpoint != "viewer.embed_view":
         # Clickjacking fallback for browsers without CSP frame-ancestors, and
         # popup isolation that still lets payment/OAuth popups work.
@@ -183,6 +214,9 @@ def attach_request_context():
     supplied = request.headers.get("X-Request-ID", "")
     g.request_id = supplied[:128] if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", supplied) else str(uuid.uuid4())
     g.request_started_at = time.perf_counter()
+    # Fresh CSP state per request (g can outlive a request under a reused app context).
+    g.csp_nonce = secrets.token_urlsafe(16)
+    g.csp_allow_unsafe_eval = False
 
 
 @app.before_request

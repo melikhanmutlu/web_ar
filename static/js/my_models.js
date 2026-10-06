@@ -803,7 +803,7 @@ function updateDeleteButtonVisibility() {
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // Note: createFolderForm submits via its inline onsubmit="createFolder(event)";
+    // Note: createFolderForm submits via its data-action-submit="createFolder";
     // a second submit listener here would double-POST and create duplicate folders.
 
     // Folder Checkbox Listeners
@@ -830,7 +830,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Note: .model-checkbox selection is handled by its inline onclick only;
+    // Note: .model-checkbox selection is handled by its data-action handler only;
     // adding a change listener here would double-toggle and cancel the selection.
 
     // Initialize color picker checkbox
@@ -1032,6 +1032,43 @@ document.addEventListener('click', (event) => {
     });
 })();
 
-// Drag & drop handlers are wired via inline attributes in the template
+// Drag & drop handlers are wired via data-action-* attributes in the template
 // (ondragstart/ondragend on cards, ondragover/ondragleave/ondrop on folders).
 // Registering them again here would fire each drop twice (double POST/toast).
+
+// Delegated handlers for the data-action* attributes in my_models.html (see
+// the arActions dispatcher in security-head.js). The CSP forbids inline on*=.
+(function () {
+    const A = window.arActions;
+    // Handlers that take no arguments.
+    ['toggleSelectMode', 'showCreateFolderModal', 'showUploadModal', 'showBulkMoveModal',
+     'showBulkVisibilityModal', 'showBulkTagModal', 'deleteSelectedModels', 'restoreSelectedModels',
+     'deleteForeverSelected', 'navigateBack', 'revealNextBatch', 'hideCreateFolderModal',
+     'hideMoveToFolderModal', 'hideBulkVisibilityModal', 'hideBulkTagModal'
+    ].forEach(name => { A[name] = () => window[name](); });
+    // Card-menu / folder actions on a model or folder id (data-id); they must
+    // not bubble up to the card's own click handler.
+    ['startRenameFolder', 'deleteFolder', 'startRenameModel', 'showMoveToFolderModal', 'startEditTags',
+     'deleteModel', 'restoreModel', 'deleteForever', 'copyModelLink', 'viewModel'
+    ].forEach(name => { A[name] = (e, el) => { e.stopPropagation(); window[name](el.dataset.id); }; });
+    A.stop = e => e.stopPropagation();
+    A.toggleModelSelection = (e, el) => toggleModelSelection(e, el.dataset.id, el);
+    A.toggleModelCheckbox = (e, el) => {
+        e.stopPropagation();
+        toggleModelSelection(e, el.dataset.id, el.closest('.model-card'));
+    };
+    A.toggleSelectAll = (e, el) => toggleSelectAll(el.checked);
+    A.updateModelVisibility = (e, el) => {
+        e.stopPropagation();
+        updateModelVisibility(el.dataset.id, el.value, el);
+    };
+    A.moveModelToFolder = (e, el) => moveModelToFolder(el.dataset.id || null);
+    A.applyBulkVisibility = (e, el) => applyBulkVisibility(el.dataset.value);
+    A.createFolder = e => createFolder(e);
+    A.applyBulkTags = e => applyBulkTags(e);
+    A.handleDragStart = e => handleDragStart(e);
+    A.handleDragEnd = e => handleDragEnd(e);
+    A.handleDragOver = e => handleDragOver(e);
+    A.handleDragLeave = e => handleDragLeave(e);
+    A.handleDrop = e => handleDrop(e);
+})();

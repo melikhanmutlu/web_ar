@@ -23,12 +23,12 @@
         {% set model_name = (model.display_name or model.original_filename or 'Model') %}
         <article class="model-card library-model community-model" data-model-id="{{ model.id }}"
                  role="link" tabindex="0"
-                 onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'"
-                 onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'; }">
+                 data-action="navigate" data-action-keydown="navigateKey"
+                 data-href="{{ url_for('viewer.view_model', model_id=model.id) }}">
             <div class="library-preview">
                 <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id, v=(model.asset_version or 0)) }}"
                      alt="{{ model_name }} preview" loading="lazy" decoding="async"
-                     onerror="this.closest('.library-preview').classList.add('is-empty'); this.remove();">
+                     data-action-error="previewFailed">
                 <div class="library-preview-fallback">
                     <i data-lucide="box"></i>
                     <span>No screenshot yet</span>

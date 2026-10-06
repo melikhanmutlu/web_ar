@@ -3,7 +3,7 @@ and side-by-side compare pages."""
 
 import os
 
-from flask import Blueprint, abort, flash, jsonify, make_response, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, make_response, redirect, render_template, request, url_for
 from flask_login import current_user
 
 from config import SEO_INDEX_MODEL_PAGES
@@ -489,21 +489,11 @@ def vr_view(model_id):
     ))
     response.headers["Cache-Control"] = "no-store"
     # A-Frame needs 'unsafe-eval' (it compiles code strings at runtime); the
-    # app-wide CSP only allows 'wasm-unsafe-eval', so without this override the
-    # A-Frame bundle throws "Refused to evaluate a string as JavaScript",
-    # AFRAME never initializes, and the VR page renders pitch black. Set a
-    # VR-only CSP here (the global after_request uses setdefault, so this
-    # wins). Everything the page needs is same-origin/vendored now.
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "font-src 'self' data:; "
-        "img-src 'self' data: blob: https:; "
-        "connect-src 'self' https: blob: data:; "
-        "worker-src 'self' blob:; "
-        "frame-ancestors 'self'"
-    )
+    # app-wide CSP only allows 'wasm-unsafe-eval', so without it the A-Frame
+    # bundle throws "Refused to evaluate a string as JavaScript", AFRAME never
+    # initializes, and the VR page renders pitch black. The flag makes the
+    # global after_request add 'unsafe-eval' to this route's script-src only.
+    g.csp_allow_unsafe_eval = True
     return response
 
 

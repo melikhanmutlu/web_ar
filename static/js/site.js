@@ -185,3 +185,26 @@
         updateCapabilityControls();
     }
 })();
+
+// Flash messages (base.html): close button + auto-dismiss.
+(function () {
+    function closeFlashMessage(flashMessage) {
+        if (!flashMessage) return;
+        flashMessage.style.opacity = '0';
+        flashMessage.style.transform = 'translateY(-20px)';
+        flashMessage.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+        setTimeout(() => flashMessage.remove(), 300);
+    }
+
+    document.addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-flash-close]');
+        if (btn) closeFlashMessage(btn.closest('.av-flash'));
+    });
+
+    // Success/info messages auto-dismiss; errors stay until closed (WCAG 2.2.1).
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.av-flash:not([data-flash-category="error"])').forEach((el) => {
+            setTimeout(() => closeFlashMessage(el), 5000);
+        });
+    });
+})();

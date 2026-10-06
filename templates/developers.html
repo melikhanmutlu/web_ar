@@ -219,23 +219,6 @@ def verify(raw_body: bytes, header: str, secret: str) -> bool:
 
     <script src="{{ url_for('static', filename='js/site.js') }}"></script>
 
-    <script>
-    (function () {
-        document.querySelectorAll(".docs-content pre").forEach(function (pre) {
-            var btn = document.createElement("button");
-            btn.className = "docs-copy";
-            btn.type = "button";
-            btn.textContent = "Copy";
-            btn.addEventListener("click", function () {
-                var code = pre.querySelector("code");
-                navigator.clipboard.writeText(code ? code.innerText : pre.innerText).then(function () {
-                    btn.textContent = "Copied";
-                    setTimeout(function () { btn.textContent = "Copy"; }, 1500);
-                });
-            });
-            pre.appendChild(btn);
-        });
-    })();
-    </script>
+    <script src="{{ url_for('static', filename='js/docs_copy.js') }}"></script>
 </body>
 </html>

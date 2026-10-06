@@ -278,7 +278,7 @@ def test_expired_or_revoked_link_cannot_be_opened(client, env):
     _share_link(model, "dead-1", expires_at=datetime.utcnow() - timedelta(seconds=1))
     _share_link(model, "dead-2", revoked_at=datetime.utcnow())
     for token in ("dead-1", "dead-2"):
-        assert client.get(f"/s/{token}").status_code == 404
+        assert client.get(f"/s/{token}").status_code == 410  # branded "link expired/revoked" page
     assert client.get(f"/converted_files/{model.id}/model.glb").status_code == 404
 
 

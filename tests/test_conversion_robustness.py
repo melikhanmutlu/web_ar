@@ -102,7 +102,7 @@ def test_viewer_does_not_500_on_empty_model(client):
 def test_pipeline_fails_clearly_when_source_missing():
     """A requeued job whose staged temp file was cleaned up must fail with a
     clear message, not cascade into assimp/FBX2glTF crashes."""
-    from app import _run_upload_pipeline
+    from services.upload_pipeline import _run_upload_pipeline
     import pytest
 
     payload = {

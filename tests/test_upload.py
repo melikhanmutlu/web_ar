@@ -2,11 +2,12 @@ import io
 from pathlib import Path
 
 import app as app_module
+from services import upload_pipeline
 import trimesh
 from models import ConversionJob, Folder, User, UserModel, db
 
 def test_upload_without_login_creates_trackable_job(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     data = {
         'file': (io.BytesIO(b"dummy stl content"), 'test.stl')
     }
@@ -24,7 +25,7 @@ def test_upload_without_login_creates_trackable_job(client, monkeypatch):
 
 
 def test_glb_upload_completes_the_real_pipeline(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
     response = client.post(
         '/upload_model',
@@ -35,7 +36,7 @@ def test_glb_upload_completes_the_real_pipeline(client, monkeypatch):
     payload = response.get_json()
     job = db.session.get(ConversionJob, payload['job_id'])
 
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
     db.session.refresh(job)
     assert job.status == 'completed'
     model = db.session.get(UserModel, payload['job_id'])

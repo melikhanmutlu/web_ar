@@ -7,6 +7,7 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 import app as app_module
+from services import upload_pipeline
 from models import ConversionJob
 from services import UploadStagingError, UploadStagingService
 
@@ -100,7 +101,7 @@ def test_stage_archive_models_fans_out_each_model(tmp_path):
 
 def test_upload_multi_model_zip_returns_batch_response(client, monkeypatch):
     import trimesh
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -126,7 +127,7 @@ def test_upload_multi_model_zip_returns_batch_response(client, monkeypatch):
 
 def test_upload_single_model_zip_still_returns_one_job(client, monkeypatch):
     import trimesh
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
 
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -145,7 +146,7 @@ def test_upload_single_model_zip_still_returns_one_job(client, monkeypatch):
 
 
 def test_batch_upload_creates_independent_trackable_jobs(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     response = client.post(
         "/api/uploads/batch",
         data={
@@ -171,7 +172,7 @@ def test_batch_upload_applies_shared_color_and_dimension_to_every_job(client, mo
     same upload form, so silently ignoring them for multi-file batches would
     be a footgun (user sets a color/size limit, uploads 3 files, none of them
     get it)."""
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     response = client.post(
         "/api/uploads/batch",
         data={

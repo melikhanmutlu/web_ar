@@ -6,6 +6,7 @@ import pytest
 import trimesh
 
 import app as app_module
+from services import upload_pipeline
 import services.email as email_service
 from models import ConversionJob, Organization, OrganizationMember, User, db
 from services.email import send_email
@@ -90,7 +91,7 @@ def test_send_email_swallows_smtp_errors(email_enabled):
 def test_conversion_pipeline_emails_owner_on_completion(client, logged_in, email_enabled, monkeypatch):
     # Otherwise /upload_model's own inline background thread races this
     # test's explicit run_conversion_job call against the same job row.
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
     response = client.post(
         "/upload_model",
@@ -99,7 +100,7 @@ def test_conversion_pipeline_emails_owner_on_completion(client, logged_in, email
     )
     job = db.session.get(ConversionJob, response.get_json()["job_id"])
 
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
 
     assert len(_FakeSMTP.sent) == 1
     assert _FakeSMTP.sent[0]["To"] == "mailuser@test.com"

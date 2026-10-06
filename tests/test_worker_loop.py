@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import app as app_module
+from services import upload_pipeline
 import worker
 from models import ConversionJob, WorkerHeartbeat, db
 from services.time_utils import datetime
@@ -52,7 +53,7 @@ def test_run_once_claims_processes_and_completes_job(client, monkeypatch):
         seen["status"] = _fresh("job-1").status
         return "model-1"
 
-    monkeypatch.setattr(app_module, "_run_upload_pipeline", fake_pipeline)
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline", fake_pipeline)
     job = worker.run_once()
 
     assert job.id == "job-1"
@@ -89,7 +90,7 @@ def test_failed_job_is_rescheduled_with_backoff_not_reclaimed_immediately(client
     def boom(payload, progress_callback=None):
         raise RuntimeError("converter crashed")
 
-    monkeypatch.setattr(app_module, "_run_upload_pipeline", boom)
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline", boom)
     assert worker.run_once().id == "flaky"
     job = _fresh("flaky")
     assert job.status == "pending" and job.attempts == 1
@@ -101,7 +102,7 @@ def test_failed_job_is_rescheduled_with_backoff_not_reclaimed_immediately(client
 
 def test_job_dead_letters_after_max_attempts(client, monkeypatch):
     _job("doomed", max_attempts=1)
-    monkeypatch.setattr(app_module, "_run_upload_pipeline",
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline",
                         lambda payload, progress_callback=None: (_ for _ in ()).throw(
                             RuntimeError("bad input")))
     worker.run_once()

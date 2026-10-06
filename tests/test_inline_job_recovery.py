@@ -5,6 +5,7 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 import app as app_module
+from services import upload_pipeline
 from models import ConversionJob, db
 from services.time_utils import datetime
 
@@ -33,7 +34,7 @@ def _poll(client, job_id):
 
 def test_stale_inline_job_with_staging_is_restarted(client, monkeypatch, tmp_path):
     restarted = []
-    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
     job = _stale_job("stale-restartable", payload={"temp_dir": str(tmp_path)})
 
     response = _poll(client, job.id)
@@ -46,7 +47,7 @@ def test_stale_inline_job_with_staging_is_restarted(client, monkeypatch, tmp_pat
 
 def test_stale_inline_job_without_staging_fails(client, monkeypatch):
     restarted = []
-    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
     job = _stale_job(
         "stale-lost", payload={"temp_dir": str(Path(".does-not-exist").resolve())}
     )
@@ -60,7 +61,7 @@ def test_stale_inline_job_without_staging_fails(client, monkeypatch):
 
 def test_fresh_processing_job_is_left_alone(client, monkeypatch):
     restarted = []
-    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
     now = datetime.utcnow()
     job = _stale_job(
         "fresh-job", started_at=now, last_heartbeat_at=now, payload={"temp_dir": "x"}
@@ -74,8 +75,8 @@ def test_fresh_processing_job_is_left_alone(client, monkeypatch):
 
 def test_queue_mode_defers_to_worker(client, monkeypatch):
     restarted = []
-    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     job = _stale_job("queued-stale", payload={"temp_dir": "x"})
 
     response = _poll(client, job.id)

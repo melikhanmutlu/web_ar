@@ -16,6 +16,7 @@ from models import ModelHotspot, UserModel, db
 from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from services import usdz as usdz_service
+from services import upload_pipeline
 from services.request_json import json_dict
 from version_manager import bump_asset_version, create_version
 
@@ -47,7 +48,7 @@ def _invalidate_thumbnail(app_module, model):
     try:
         if os.path.exists(thumbnail_path):
             os.remove(thumbnail_path)
-        app_module._enqueue_internal_job("thumbnail", model.id, {
+        upload_pipeline._enqueue_internal_job("thumbnail", model.id, {
             "kind": "thumbnail", "color": model.color, "user_id": model.user_id,
         })
     except Exception as e:

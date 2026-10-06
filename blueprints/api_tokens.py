@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 
 from services.time_utils import datetime
 from datetime import timedelta
+from services import upload_pipeline
 from services.request_json import json_dict
 from models import ApiToken, ConversionJob, ModelAnalyticsEvent, OrganizationMember, User, UserModel, db
 from services import UploadStagingError
@@ -367,8 +368,8 @@ def api_v1_create_model():
     )
     db.session.add(job)
     db.session.commit()
-    if not app_module.JOB_QUEUE_ENABLED:
-        app_module._start_local_conversion(job_id)
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
+        upload_pipeline._start_local_conversion(job_id)
     return jsonify({"data": {
         "job_id": job_id,
         "model_id": job_id,  # the job id becomes the model id on success

@@ -8,6 +8,7 @@ from PIL import Image
 from pygltflib import GLTF2
 
 import app as app_module
+from services import upload_pipeline
 from converters.texture_upscale import upscale_embedded_textures
 from models import ConversionJob, User, UserModel, db
 
@@ -45,7 +46,7 @@ def test_derived_asset_api_queues_retopology_and_upscale(client, monkeypatch):
     )
     db.session.add(model); db.session.commit()
     client.post("/login", data={"username": owner.username, "password": "password"})
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     first = client.post(f"/api/models/{model.id}/derivatives", json={
         "kind": "retopology", "ratio": 0.6,
     })

@@ -9,6 +9,7 @@ from itsdangerous import URLSafeTimedSerializer
 
 import ai_generator
 import app as app_module
+from services import upload_pipeline
 from app import limiter
 from models import AIGenerationJob, User, UserModel, db
 from services import email_verification as ev
@@ -266,9 +267,9 @@ def test_private_default_owner_can_view_others_cannot(client, monkeypatch, tmp_p
     owner = _make_user("vown", verified=True)
     glb = tmp_path / "src.glb"
     trimesh.creation.box().export(str(glb))
-    model = app_module.register_glb_as_model(str(glb), user_id=owner.id, source="ai-text", prompt="box")
+    model = upload_pipeline.register_glb_as_model(str(glb), user_id=owner.id, source="ai-text", prompt="box")
     assert model.visibility == "private"
-    anon_model = app_module.register_glb_as_model(str(glb), user_id=None, source="ai-text", prompt="box")
+    anon_model = upload_pipeline.register_glb_as_model(str(glb), user_id=None, source="ai-text", prompt="box")
     assert anon_model.visibility == "unlisted"
 
     assert client.get(f"/view/{model.id}").status_code in (403, 404)

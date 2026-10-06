@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import app as app_module
+from services import upload_pipeline
 import trimesh
 from models import ConversionJob, UserModel, db
 
@@ -78,7 +79,7 @@ def test_text_assets_are_compressed(client):
 
 
 def test_glb_and_event_stream_are_not_compressed(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
     response = client.post(
         "/upload_model",
@@ -87,7 +88,7 @@ def test_glb_and_event_stream_are_not_compressed(client, monkeypatch):
     )
     payload = response.get_json()
     job = db.session.get(ConversionJob, payload["job_id"])
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
     db.session.refresh(job)
     assert job.status == "completed"
 

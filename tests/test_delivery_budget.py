@@ -8,7 +8,9 @@ import pytest
 import trimesh
 
 import app as app_module
-from app import app, db, run_conversion_job
+from services import upload_pipeline
+from app import app, db
+from services.upload_pipeline import run_conversion_job
 from converters.glb_optimizer import _resolve_gltfpack, glb_needs_decompression
 from models import ConversionJob, ModelVersion, User, UserModel
 from services.time_utils import datetime
@@ -67,7 +69,7 @@ def test_owner_sees_budget_warning_and_others_do_not(client):
 
 
 def test_optimize_endpoint_rejects_non_owner(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     owner = _user("opt_owner")
     model_id, glb_path = _heavy_model(owner.id)
     _user("opt_intruder")
@@ -81,7 +83,7 @@ def test_optimize_endpoint_rejects_non_owner(client, monkeypatch):
 
 def test_optimize_endpoint_compresses_bumps_version_and_snapshots(client, monkeypatch):
     # Queue mode: the endpoint only enqueues, we run the job ourselves.
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     owner = _user("opt_owner2")
     model_id, glb_path = _heavy_model(owner.id)
     size_before = os.path.getsize(glb_path)

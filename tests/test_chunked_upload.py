@@ -3,6 +3,7 @@
 import trimesh
 
 import app as app_module
+from services import upload_pipeline
 from models import ConversionJob, db
 
 
@@ -33,7 +34,7 @@ def test_init_rejects_zip(client):
 
 
 def test_full_chunked_upload_completes_pipeline(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     data = _glb_bytes()
     mid = len(data) // 2
     chunks = [data[:mid], data[mid:]]

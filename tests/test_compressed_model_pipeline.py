@@ -14,7 +14,9 @@ import pytest
 import trimesh
 
 import app as app_module
-from app import app, db, run_conversion_job
+from services import upload_pipeline
+from app import app, db
+from services.upload_pipeline import run_conversion_job
 from models import ConversionJob, UserModel
 from converters.glb_optimizer import _resolve_gltfpack, glb_needs_decompression
 
@@ -28,7 +30,7 @@ pytestmark = pytest.mark.skipif(
 def _upload_compressed(client, monkeypatch):
     # Queue mode so /upload_model doesn't spawn a background conversion thread.
     # monkeypatch (not direct assignment) so this never leaks into other tests.
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     # icosphere has enough geometry that meshopt compression actually engages
     mesh = trimesh.creation.icosphere(subdivisions=3)  # ~2 m diameter -> 200 cm
     resp = client.post(
@@ -90,7 +92,7 @@ def test_compressed_model_can_be_sliced(client, monkeypatch):
 
 
 def _upload(client, monkeypatch, compression):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     mesh = trimesh.creation.icosphere(subdivisions=3)
     resp = client.post(
         "/upload_model",

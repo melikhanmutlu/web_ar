@@ -8,6 +8,7 @@ import pytest
 import trimesh
 
 import app as app_module
+from services import upload_pipeline
 import services.webhooks as webhooks_service
 from models import ConversionJob, User, WebhookSubscription, db
 from services.webhooks import dispatch_webhook_event
@@ -150,8 +151,8 @@ def test_dispatch_noop_for_unknown_event_or_missing_user(client, logged_in, monk
 
 def test_conversion_pipeline_fires_completed_webhook(client, logged_in, monkeypatch):
     fired = []
-    monkeypatch.setattr(app_module, "dispatch_webhook_event", lambda *a: fired.append(a))
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "dispatch_webhook_event", lambda *a: fired.append(a))
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
     response = client.post(
         "/upload_model",
@@ -160,7 +161,7 @@ def test_conversion_pipeline_fires_completed_webhook(client, logged_in, monkeypa
     )
     job = db.session.get(ConversionJob, response.get_json()["job_id"])
 
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
 
     assert len(fired) == 1
     event_type, user_id, payload = fired[0]
@@ -173,11 +174,11 @@ def test_conversion_pipeline_fires_completed_webhook(client, logged_in, monkeypa
 
 def test_conversion_pipeline_fires_failed_webhook(client, logged_in, monkeypatch):
     fired = []
-    monkeypatch.setattr(app_module, "dispatch_webhook_event", lambda *a: fired.append(a))
+    monkeypatch.setattr(upload_pipeline, "dispatch_webhook_event", lambda *a: fired.append(a))
 
     def _boom(payload, progress_callback=None):
         raise RuntimeError("conversion exploded")
-    monkeypatch.setattr(app_module, "_run_upload_pipeline", _boom)
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline", _boom)
 
     job = ConversionJob(
         id="webhook-fail-job", job_type="upload", status="pending",
@@ -186,7 +187,7 @@ def test_conversion_pipeline_fires_failed_webhook(client, logged_in, monkeypatch
     db.session.add(job)
     db.session.commit()
 
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
 
     assert len(fired) == 1
     event_type, user_id, payload = fired[0]

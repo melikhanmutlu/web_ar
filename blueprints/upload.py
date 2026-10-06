@@ -25,6 +25,7 @@ from config import (
     SIZE_LIMIT_MAX_CM,
     SIZE_LIMIT_MIN_CM,
 )
+from services import upload_pipeline
 from services.request_json import json_dict
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -212,8 +213,6 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
     """Create one ConversionJob per staged model (used when a single ZIP
     contained several models) and return a batch-style response the frontend
     renders as a progress list -- mirroring /api/uploads/batch."""
-    import app as app_module
-
     user_id = current_user.id if current_user.is_authenticated else None
     jobs = []
     for index, (job_id, staged) in enumerate(staged_models):
@@ -242,8 +241,8 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
         )
         db.session.add(job)
         db.session.commit()
-        if not app_module.JOB_QUEUE_ENABLED:
-            app_module._start_local_conversion(job_id)
+        if not upload_pipeline.JOB_QUEUE_ENABLED:
+            upload_pipeline._start_local_conversion(job_id)
         jobs.append({
             "job_id": job_id,
             "filename": staged["client_filename"],
@@ -290,12 +289,12 @@ def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimensio
     db.session.add(job)
     db.session.commit()
 
-    if not app_module.JOB_QUEUE_ENABLED:
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
         def run_local_job(job_id):
             with app_module.app.app_context():
                 queued_job = db.session.get(ConversionJob, job_id)
                 if queued_job:
-                    app_module.run_conversion_job(queued_job, allow_retry=False)
+                    upload_pipeline.run_conversion_job(queued_job, allow_retry=False)
 
         threading.Thread(target=run_local_job, args=(unique_id,), daemon=True).start()
 
@@ -834,8 +833,8 @@ def batch_upload_models():
                 "edit_token": edit_token,
                 "status_url": url_for("upload.upload_job_status", job_id=job_id),
             })
-            if not app_module.JOB_QUEUE_ENABLED:
-                app_module._start_local_conversion(job_id)
+            if not upload_pipeline.JOB_QUEUE_ENABLED:
+                upload_pipeline._start_local_conversion(job_id)
         except UploadStagingError as exc:
             errors.append({"filename": item.filename, "error": str(exc), "index": index})
         except Exception:
@@ -864,7 +863,7 @@ def _check_job_status_auth(job):
 def _build_job_status_payload(job):
     import app as app_module
 
-    app_module._recover_interrupted_inline_job(job)
+    upload_pipeline._recover_interrupted_inline_job(job)
 
     # Inline conversions run in a gunicorn worker thread. If that worker is
     # OOM-killed mid-conversion (large/complex FBX), the row is orphaned in
@@ -872,7 +871,7 @@ def _build_job_status_payload(job):
     # worker.py in inline mode to requeue it, so fail it here once it's clearly
     # stalled — the frontend already renders job.status == 'failed'. In queue
     # mode, worker.py's own requeue_stale_jobs() reconciliation owns this.
-    if not app_module.JOB_QUEUE_ENABLED and job.status == "processing":
+    if not upload_pipeline.JOB_QUEUE_ENABLED and job.status == "processing":
         # Measure staleness from the last heartbeat, not job start: the pipeline
         # bumps last_heartbeat_at on every progress step, so a legitimately long
         # conversion (large FBX: FBX2glTF alone can take ~300s, plus optimize/
@@ -956,7 +955,7 @@ def upload_job_status_stream(job_id):
             "error": "Too many active status streams; falling back to polling.",
         }), 503
 
-    poll_interval = app_module.WORKER_POLL_INTERVAL if app_module.JOB_QUEUE_ENABLED else 1
+    poll_interval = app_module.WORKER_POLL_INTERVAL if upload_pipeline.JOB_QUEUE_ENABLED else 1
 
     def generate():
         try:
@@ -1014,9 +1013,9 @@ def retry_upload_job(job_id):
     job.next_attempt_at = datetime.utcnow()
     db.session.commit()
     app_module.conversion_jobs.record(job, "manually_requeued", "Job manually returned to queue")
-    if not app_module.JOB_QUEUE_ENABLED:
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
         # No worker is polling in inline mode; the retry must start its own run.
-        app_module._start_local_conversion(job.id)
+        upload_pipeline._start_local_conversion(job.id)
     return jsonify({"success": True, "status": job.status}), 202
 
 

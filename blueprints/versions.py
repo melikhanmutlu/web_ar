@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, jsonify, send_from_directory
 
 from models import ModelVersion
+from services import usdz as usdz_service
 from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import (
     check_model_history_allowed, check_model_mutation_allowed,
@@ -136,7 +137,7 @@ def restore_model_version(model_id, version_number):
             glb_path = os.path.join(
                 app_module.app.config["CONVERTED_FOLDER"], model_id, "model.glb"
             )
-            app_module.refresh_usdz_after_edit(model_id, glb_path)
+            usdz_service.refresh_usdz_after_edit(model_id, glb_path)
             # The library card must not keep showing the pre-restore render.
             from blueprints.model_editing import _invalidate_thumbnail
 

@@ -15,6 +15,7 @@ from pygltflib import (
 )
 
 import app as app_module
+from services import upload_pipeline
 from models import UserModel
 
 
@@ -37,14 +38,14 @@ def run_pipeline(tmp_path, filename, data, extra_files=None, **opts):
         "compression": "none",
     }
     payload.update(opts)
-    mid = app_module._run_upload_pipeline(payload)
+    mid = upload_pipeline._run_upload_pipeline(payload)
     model = app_module.db.session.get(UserModel, mid)
     return model, model.filename
 
 
 @pytest.fixture(autouse=True)
 def _no_background_jobs(monkeypatch):
-    monkeypatch.setattr(app_module, "_enqueue_internal_job", lambda *a, **k: None)
+    monkeypatch.setattr(upload_pipeline, "_enqueue_internal_job", lambda *a, **k: None)
 
 
 def glb_extents_m(path):
@@ -183,7 +184,7 @@ def test_resolved_unit_reported_in_job_status(client, tmp_path):
                         payload=payload, status_token_hash=generate_password_hash("tok"))
     db.session.add(job)
     db.session.commit()
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
     r = client.get(f"/api/upload-jobs/{job.id}", headers={"X-Job-Status-Token": "tok"})
     body = r.get_json()
     assert body["status"] == "completed", body
@@ -298,7 +299,7 @@ def stage_and_convert(tmp_path, upload, **kwargs):
     job_id = "j-" + uuid.uuid4().hex[:8]
     staged = service.stage(job_id, upload, **kwargs)
     payload = {"unique_id": job_id, "compression": "none", **staged}
-    mid = app_module._run_upload_pipeline(payload)
+    mid = upload_pipeline._run_upload_pipeline(payload)
     model = app_module.db.session.get(UserModel, mid)
     return staged, model
 
@@ -461,7 +462,7 @@ def test_obj_zip_texture_with_spaces_is_kept(client, tmp_path):
     assert "-s 1 1 1" in mtl
     assert "mtllib my_chair.mtl" in open(staged["temp_file_path"]).read()
     payload = {"unique_id": "t-" + uuid.uuid4().hex[:8], "compression": "none", **staged}
-    model = app_module.db.session.get(UserModel, app_module._run_upload_pipeline(payload))
+    model = app_module.db.session.get(UserModel, upload_pipeline._run_upload_pipeline(payload))
     assert _glb_images(model.filename) == 1
 
 
@@ -496,7 +497,7 @@ def test_obj_usemtl_before_vertices_keeps_mtl_colour(client, tmp_path, unit):
     (tmp_path / "st").mkdir()
     staged = service.stage("j-" + uuid.uuid4().hex[:8], _zip_upload("c.zip", entries))
     payload = {"unique_id": "t-" + uuid.uuid4().hex[:8], "compression": "none", **staged, **extra}
-    model = app_module.db.session.get(UserModel, app_module._run_upload_pipeline(payload))
+    model = app_module.db.session.get(UserModel, upload_pipeline._run_upload_pipeline(payload))
     gltf = GLTF2().load(model.filename)
     primitive = gltf.meshes[0].primitives[0]
     material = gltf.materials[primitive.material]

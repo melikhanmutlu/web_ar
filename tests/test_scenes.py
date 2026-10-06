@@ -48,7 +48,8 @@ def test_build_scene_requires_at_least_two_items(client):
 
 def test_build_scene_combines_two_models(client, monkeypatch):
     import app as app_module
-    monkeypatch.setattr(app_module, "_enqueue_internal_job", lambda *a, **k: None)
+    from services import upload_pipeline
+    monkeypatch.setattr(upload_pipeline, "_enqueue_internal_job", lambda *a, **k: None)
 
     owner = User(username="scnowner2", email="scnowner2@test.com")
     owner.set_password("testpassword123")

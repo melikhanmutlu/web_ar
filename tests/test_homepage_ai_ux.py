@@ -113,7 +113,7 @@ def test_register_glb_as_model_sets_source(client, logged_in, monkeypatch, tmp_p
     glb_path = tmp_path / "src.glb"
     trimesh.creation.box().export(str(glb_path))
 
-    from app import register_glb_as_model
+    from services.upload_pipeline import register_glb_as_model
     model = register_glb_as_model(str(glb_path), user_id=logged_in.id,
                                   source="ai-text", prompt="a box")
     assert model.source == "ai-text"

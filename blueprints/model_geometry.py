@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash
 
 from converters.glb_optimizer import readable_glb
 from converters.glb_quality import finalize_glb
+from services import upload_pipeline
 from services.request_json import json_dict
 from models import ConversionJob, ModelDerivedAsset, ModelLOD, db
 from services.model_permissions import (
@@ -129,8 +130,6 @@ def get_model_validation(model_id):
 
 @model_geometry_bp.route("/api/models/<model_id>/lods", methods=["GET", "POST"])
 def model_lods(model_id):
-    import app as app_module
-
     model = get_live_model(model_id)
     if not model:
         return jsonify({"success": False, "error": "Model not found"}), 404
@@ -176,8 +175,8 @@ def model_lods(model_id):
     )
     db.session.add(job)
     db.session.commit()
-    if not app_module.JOB_QUEUE_ENABLED:
-        app_module._start_local_conversion(job_id)
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
+        upload_pipeline._start_local_conversion(job_id)
     return jsonify({
         "success": True, "job_id": job_id, "status": "pending",
         "status_token": status_token,
@@ -191,7 +190,6 @@ def optimize_model_for_mobile(model_id):
 
     Runs as a background job (worker queue or inline thread) so a large model
     cannot block the request."""
-    import app as app_module
     from converters.glb_optimizer import glb_compression_mode
 
     model = get_live_model(model_id)
@@ -214,8 +212,8 @@ def optimize_model_for_mobile(model_id):
         max_attempts=1,
     ))
     db.session.commit()
-    if not app_module.JOB_QUEUE_ENABLED:
-        app_module._start_local_conversion(job_id)
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
+        upload_pipeline._start_local_conversion(job_id)
     return jsonify({
         "success": True, "job_id": job_id, "status": "pending",
         "status_token": status_token,
@@ -304,8 +302,6 @@ def model_exploded_asset(model_id):
 
 @model_geometry_bp.route("/api/models/<model_id>/derivatives", methods=["GET", "POST"])
 def model_derivatives(model_id):
-    import app as app_module
-
     model = get_live_model(model_id)
     if not model:
         return jsonify({"success": False, "error": "Model not found"}), 404
@@ -349,8 +345,8 @@ def model_derivatives(model_id):
         user_id=model.user_id, status_token_hash=generate_password_hash(status_token),
     ))
     db.session.commit()
-    if not app_module.JOB_QUEUE_ENABLED:
-        app_module._start_local_conversion(job_id)
+    if not upload_pipeline.JOB_QUEUE_ENABLED:
+        upload_pipeline._start_local_conversion(job_id)
     return jsonify({
         "success": True, "job_id": job_id, "status_token": status_token,
         "status_url": url_for("upload.upload_job_status", job_id=job_id),

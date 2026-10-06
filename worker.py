@@ -24,10 +24,8 @@ from datetime import timedelta
 from services.time_utils import datetime
 from sqlalchemy import or_
 
-from app import (
-    app, db, run_conversion_job, _advance_ai_job,
-    _claim_ai_stage,
-)
+from app import app, db, _advance_ai_job, _claim_ai_stage
+from services.upload_pipeline import run_conversion_job
 from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
 from models import AIGenerationJob, ConversionJob, User, WorkerHeartbeat
 from services.plans import DEFAULT_PLAN, get_plan_config

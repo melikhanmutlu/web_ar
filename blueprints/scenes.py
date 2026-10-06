@@ -15,6 +15,7 @@ from flask_login import current_user, login_required
 
 from converters.glb_optimizer import readable_glb
 from blueprints.upload import _check_model_count_limit, _check_storage_quota
+from services import upload_pipeline
 from services.request_json import json_dict
 from models import UserModel
 
@@ -109,7 +110,7 @@ def build_scene():
         quota_guard = _check_storage_quota(incoming_bytes=os.path.getsize(tmp_path))
         if quota_guard:
             return quota_guard
-        new_model = app_module.register_glb_as_model(
+        new_model = upload_pipeline.register_glb_as_model(
             tmp_path, user_id=current_user.id, source="scene", prompt=name,
         )
     finally:

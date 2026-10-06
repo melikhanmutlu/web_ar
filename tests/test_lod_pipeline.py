@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import trimesh
 
 import app as app_module
+from services import upload_pipeline
 from converters import glb_optimizer
 from converters import lod_generator
 from models import ConversionJob, ModelLOD, User, UserModel, db
@@ -45,7 +46,7 @@ def test_lod_api_queues_job_and_returns_manifest(client, monkeypatch):
     db.session.add(model)
     db.session.commit()
     client.post("/login", data={"username": owner.username, "password": "password"})
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     response = client.post(f"/api/models/{model.id}/lods", json={
         "ratios": [0.6, 0.3], "meshopt": True,
     })

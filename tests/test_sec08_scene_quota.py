@@ -39,8 +39,9 @@ def _payload(m1, m2):
 
 def test_build_scene_respects_model_count_limit(client, monkeypatch):
     import app as app_module
+    from services import upload_pipeline
     from blueprints import upload as upload_module
-    monkeypatch.setattr(app_module, "_enqueue_internal_job", lambda *a, **k: None)
+    monkeypatch.setattr(upload_pipeline, "_enqueue_internal_job", lambda *a, **k: None)
     monkeypatch.setattr(upload_module, "plan_limit",
                         lambda user, key: 2 if key == "max_models" else None)
     owner, m1, m2 = _setup(client, "scnlimit1")
@@ -53,8 +54,9 @@ def test_build_scene_respects_model_count_limit(client, monkeypatch):
 
 def test_build_scene_respects_storage_quota(client, monkeypatch):
     import app as app_module
+    from services import upload_pipeline
     from blueprints import upload as upload_module
-    monkeypatch.setattr(app_module, "_enqueue_internal_job", lambda *a, **k: None)
+    monkeypatch.setattr(upload_pipeline, "_enqueue_internal_job", lambda *a, **k: None)
     monkeypatch.setattr(upload_module, "effective_storage_quota_mb", lambda user, default: 1)
     owner, m1, m2 = _setup(client, "scnquota1")
     UserModel.query.filter_by(id=m1).update({"file_size": 1024 * 1024})

@@ -20,6 +20,7 @@ import trimesh
 from pygltflib import GLTF2
 
 import app as app_module
+from services import upload_pipeline
 from services import usdz as usdz_service
 from app import app, db
 from models import User, UserModel, WebhookSubscription
@@ -365,7 +366,7 @@ def test_run_upload_pipeline_short_circuits_when_model_already_exists(client, mo
     was retried after a later step crashed), re-running the whole pipeline
     must return the existing model id instead of redoing the conversion and
     crashing on the duplicate primary key."""
-    from app import _run_upload_pipeline
+    from services.upload_pipeline import _run_upload_pipeline
 
     model_id = "dup-" + uuid.uuid4().hex[:8]
     model_dir = os.path.join(app.config["CONVERTED_FOLDER"], model_id)
@@ -400,7 +401,7 @@ def test_save_modifications_invalidates_stale_thumbnail(client, monkeypatch):
         f.write(b"stale-thumbnail-bytes")
 
     enqueued = []
-    monkeypatch.setattr(app_module, "_enqueue_internal_job",
+    monkeypatch.setattr(upload_pipeline, "_enqueue_internal_job",
                         lambda job_type, mid, payload: enqueued.append((job_type, mid, payload)))
 
     resp = client.post("/save_modifications", json={

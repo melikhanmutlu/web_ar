@@ -39,7 +39,8 @@ def test_upload_creates_job_scoped_to_token(client, monkeypatch):
     # Don't actually run the (heavy) conversion in-process; just verify the job
     # is created and correctly scoped. The pipeline itself is covered elsewhere.
     import app as app_module
-    monkeypatch.setattr(app_module, "_start_local_conversion", lambda job_id: None)
+    from services import upload_pipeline
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", lambda job_id: None)
 
     owner, token = _owner_with_token(client, ["models:read", "models:write"])
     response = client.post(

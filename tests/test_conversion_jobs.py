@@ -50,8 +50,9 @@ def test_worker_claim_respects_retry_schedule_and_records_heartbeat(client):
 
 def test_dead_letter_can_be_manually_requeued_with_status_token(client, monkeypatch):
     import app as app_module
+    from services import upload_pipeline
     restarted = []
-    monkeypatch.setattr(app_module, "_start_local_conversion", restarted.append)
+    monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
     staged = Path(".test-dead-letter").resolve()
     staged.mkdir(exist_ok=True)
     job = ConversionJob(

@@ -3,6 +3,7 @@
 import io
 
 import app as app_module
+from services import upload_pipeline
 import trimesh
 from models import ConversionJob, db
 
@@ -18,7 +19,7 @@ def _parse_sse_payloads(body_text):
 def test_stream_requires_valid_token(client, monkeypatch):
     # Queue mode so /upload_model doesn't spawn a background thread that
     # outlives (and races with the teardown of) this test's in-memory DB.
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(file_type="glb")
     response = client.post(
         '/upload_model',
@@ -32,7 +33,7 @@ def test_stream_requires_valid_token(client, monkeypatch):
 
 
 def test_stream_emits_terminal_status_and_closes(client, monkeypatch):
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.2, 0.3)).export(file_type="glb")
     response = client.post(
         '/upload_model',
@@ -45,7 +46,7 @@ def test_stream_emits_terminal_status_and_closes(client, monkeypatch):
     # Complete the job before streaming so the generator's first iteration
     # already sees a terminal state and returns immediately (no real-time
     # waiting needed in the test).
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
     db.session.refresh(job)
     assert job.status == 'completed'
 
@@ -84,7 +85,7 @@ def test_stream_caps_concurrent_connections_and_releases_after_close(client, mon
     releases its slot so a later request succeeds again."""
     import blueprints.upload as upload_module
 
-    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
     source = trimesh.creation.box(extents=(0.1, 0.1, 0.1)).export(file_type="glb")
     response = client.post(
         '/upload_model',
@@ -93,7 +94,7 @@ def test_stream_caps_concurrent_connections_and_releases_after_close(client, mon
     )
     payload = response.get_json()
     job = db.session.get(ConversionJob, payload['job_id'])
-    app_module.run_conversion_job(job, allow_retry=False)
+    upload_pipeline.run_conversion_job(job, allow_retry=False)
 
     # Exhaust the slot pool.
     for _ in range(upload_module.MAX_CONCURRENT_JOB_STREAMS):

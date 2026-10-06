@@ -323,6 +323,13 @@ def delete_plan(slug):
         return False
     if plan.is_system:
         raise ValueError("System plans can't be deleted.")
+    from models import User
+    in_use = User.query.filter_by(plan=slug).count()
+    if in_use:
+        raise ValueError(
+            f"Plan '{slug}' still has {in_use} user(s) on it. Move them to another "
+            "plan before deleting it."
+        )
     db.session.delete(plan)
     db.session.commit()
     invalidate_plan_cache()

@@ -332,6 +332,22 @@ def test_admin_can_create_and_delete_custom_plan(client, admin_user):
     assert "studio" not in public_plan_slugs()
 
 
+def test_plan_with_users_cannot_be_deleted(client, admin_user):
+    from services.plans import public_plan_slugs
+    login(client, "adminuser", "adminpassword")
+    form = _full_plan_form("new", "business")
+    form["new__slug"] = "studio"
+    client.post("/admin/settings?tab=plans", data=form)
+    payer = make_user("studiopayer", plan="studio")
+    resp = client.post("/admin/settings?tab=plans", data={
+        "plan_action": "delete", "plan_slug": "studio",
+    }, follow_redirects=True)
+    assert b"still has 1 user" in resp.data
+    assert "studio" in public_plan_slugs()
+    db.session.refresh(payer)
+    assert payer.plan == "studio"
+
+
 def test_system_plan_cannot_be_deleted(client, admin_user):
     from services.plans import public_plan_slugs
     login(client, "adminuser", "adminpassword")

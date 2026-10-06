@@ -30,7 +30,7 @@ from app import (
 )
 from config import WORKER_POLL_INTERVAL as POLL_INTERVAL, WORKER_STALE_MINUTES as STALE_PROCESSING_MINUTES
 from models import AIGenerationJob, ConversionJob, User, WorkerHeartbeat
-from services.plans import DEFAULT_PLAN
+from services.plans import DEFAULT_PLAN, get_plan_config
 from services import send_email
 from services.lifecycle_emails import run_onboarding_sweep, run_renewal_sweep
 from services.weekly_report import send_weekly_report
@@ -160,14 +160,14 @@ def expire_stale_plans():
     ).all()
     for user in expired:
         logger.info(f"Plan expired for user {user.id}: {user.plan} -> {DEFAULT_PLAN}")
-        previous = user.plan
+        previous = get_plan_config(user.plan).get("display_name") or user.plan
         user.plan = DEFAULT_PLAN
         user.plan_expires_at = None
         if user.email:
             try:
                 send_email(
                     user.email, "Your ARVision plan has ended",
-                    f"Your {previous} plan has expired and your account is back on the "
+                    f"Your ARVision {previous} plan has expired and your account is back on the "
                     f"Free plan. Renew any time from your billing page to restore your "
                     f"paid features.",
                 )

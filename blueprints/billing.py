@@ -354,6 +354,10 @@ def _apply_successful_payment(payment):
                 f"account — your balance is now {user.ai_credit_balance}.\n\n"
                 f"Amount: {payment.amount} {payment.currency}",
             )
+        # Credit packs are sales too: same best-effort e-invoice path as plans.
+        if user is not None:
+            from services.invoicing import issue_invoice
+            issue_invoice(payment, user)
         return
 
     cfg = get_plan_config(payment.plan)

@@ -20,31 +20,21 @@
     <button type="submit" class="admin-filter-submit">filter</button>
 </form>
 
-<div class="admin-bulk-scope">
-    <div class="admin-bulk-bar" data-bulk-bar>
-        <span data-bulk-count>0 selected</span>
-        <button type="button" class="admin-btn admin-btn--danger"
-                data-bulk-action="{{ url_for('admin.bulk_delete_audit_log') }}"
-                data-bulk-confirm="Permanently delete {n} selected log entr(y/ies)? This cannot be undone."
-                data-bulk-confirm-typed="DELETE">delete</button>
-    </div>
+<div>
     <div class="admin-table-wrap">
         <table class="admin-table">
             <thead>
                 <tr>
-                    <th class="select-col"><input type="checkbox" data-select-all aria-label="select all"></th>
                     <th>when</th>
                     <th>admin</th>
                     <th>action</th>
                     <th>target</th>
                     <th>detail</th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for username, entry in page.items %}
                 <tr>
-                    <td class="select-col"><input type="checkbox" data-row-select value="{{ entry.id }}" aria-label="select entry"></td>
                     <td class="muted" title="{{ entry.created_at }}">{{ entry.created_at | localdt('%Y-%m-%d %H:%M:%S') if entry.created_at else '—' }}</td>
                     <td>
                         {% if entry.actor_id %}
@@ -73,16 +63,9 @@
                         </details>
                         {% else %}<span class="muted">—</span>{% endif %}
                     </td>
-                    <td class="actions">
-                        <button type="button" class="admin-icon-btn admin-icon-btn--danger" title="delete entry"
-                                aria-label="delete entry"
-                                data-action-url="{{ url_for('admin.delete_audit_log_entry', entry_id=entry.id) }}"
-                                data-confirm="Permanently delete this log entry? This cannot be undone."
-                                data-confirm-typed="DELETE"><i data-lucide="x"></i></button>
-                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="muted">no admin actions recorded yet</td></tr>
+                <tr><td colspan="5" class="muted">no admin actions recorded yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>

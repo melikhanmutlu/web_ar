@@ -19,6 +19,7 @@ silently marked done.
 """
 
 import logging
+import math
 from datetime import timedelta
 
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +29,7 @@ from sqlalchemy import func, or_
 from config import SITE_URL
 from models import LifecycleEmail, ModelShareLink, Payment, User, UserModel, db
 from services import send_email
-from services.plans import DEFAULT_PLAN, get_plan_config
+from services.plans import DEFAULT_PLAN, get_plan_config, plan_summary
 from services.time_utils import datetime
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,9 @@ _BILLING_URL = f"{SITE_URL}/billing"
 def _send_once(user, kind, dedupe_key, subject, body):
     """Send one lifecycle email unless the same (kind, dedupe_key) already
     went out to this user. Returns True when an email was actually sent."""
+    # Never market to an account an admin deactivated (e.g. for abuse).
+    if not user.is_active_flag:
+        return False
     already = LifecycleEmail.query.filter_by(
         user_id=user.id, kind=kind, dedupe_key=dedupe_key
     ).first()
@@ -82,17 +86,27 @@ def _remind_expiring_plans(now):
             if kind == "renewal_t1":
                 when = "tomorrow"
             else:
-                days_left = max(2, (user.plan_expires_at - now).days)
+                days_left = max(2, math.ceil((user.plan_expires_at - now).total_seconds() / 86400))
                 when = f"in {days_left} days"
-            if _send_once(
-                user, kind, user.plan_expires_at.isoformat(),
-                f"Your ARVision {display} plan expires {when}",
-                f"Your {display} plan is active until {expires_on}. Renew from "
-                f"your billing page to keep your paid features without "
-                f"interruption:\n\n{_BILLING_URL}\n\n"
-                f"If you let it lapse, your account simply drops back to the "
-                f"Free plan — your models stay safe.",
-            ):
+            if plan_summary(user)["is_trial"]:
+                # A trial has nothing to "renew": the call to action is choosing a plan.
+                subject = f"Your ARVision {display} trial ends {when}"
+                body = (
+                    f"Your {display} trial runs until {expires_on}. Choose a plan "
+                    f"to keep the features you've been using:\n\n{_BILLING_URL}\n\n"
+                    f"If you do nothing, your account simply drops back to the "
+                    f"Free plan — your models stay safe."
+                )
+            else:
+                subject = f"Your ARVision {display} plan expires {when}"
+                body = (
+                    f"Your {display} plan is active until {expires_on}. Renew from "
+                    f"your billing page to keep your paid features without "
+                    f"interruption:\n\n{_BILLING_URL}\n\n"
+                    f"If you let it lapse, your account simply drops back to the "
+                    f"Free plan — your models stay safe."
+                )
+            if _send_once(user, kind, user.plan_expires_at.isoformat(), subject, body):
                 sent += 1
     return sent
 

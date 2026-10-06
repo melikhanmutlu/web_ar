@@ -97,7 +97,15 @@ def issue_invoice(payment, user):
     if provider is None:
         return InvoiceResult(issued=False, error="No invoicing provider active.")
     try:
-        return provider.issue_invoice(payment, user)
+        result = provider.issue_invoice(payment, user)
     except Exception as exc:  # defensive: invoicing must never break billing
         logger.warning("Invoice issue failed: %s", exc)
-        return InvoiceResult(issued=False, provider=provider.name, error=str(exc))
+        result = InvoiceResult(issued=False, provider=provider.name, error=str(exc))
+    # The outcome is recorded in the log (one line per payment, whatever its
+    # kind) so un-invoiced payments can be found and reconciled.
+    logger.info(
+        "invoice outcome: payment=%s kind=%s provider=%s issued=%s external_id=%s error=%s",
+        getattr(payment, "id", None), getattr(payment, "kind", None),
+        result.provider, result.issued, result.external_id, result.error,
+    )
+    return result

@@ -53,18 +53,19 @@ def test_self_referral_is_blocked(client):
     assert db.session.get(User, user.id).ai_credit_balance == 0
 
 
-def test_monthly_reward_cap_limits_referrer_only(client, monkeypatch):
+def test_monthly_reward_cap_limits_both_sides(client, monkeypatch):
     monkeypatch.setattr(referrals, "MONTHLY_REWARD_CAP", 2)
     referrer = _user("ref_cap", credits=0)
     code = referrals.get_or_create_code(referrer)
 
-    # First two referrals reward the referrer; the third does not (cap=2).
+    # First two referrals reward both sides; past the cap (the third) neither
+    # side is rewarded, so one referrer can't mint credits per throwaway account.
     for i in range(3):
         invitee = _user(f"ref_cap_i{i}", credits=0)
         referrals.apply_referral(invitee, code)
         db.session.commit()
-        # The invitee always gets their bonus regardless of the cap.
-        assert db.session.get(User, invitee.id).ai_credit_balance == referrals.INVITEE_CREDITS
+        expected = referrals.INVITEE_CREDITS if i < 2 else 0
+        assert db.session.get(User, invitee.id).ai_credit_balance == expected
 
     assert db.session.get(User, referrer.id).ai_credit_balance == 2 * referrals.REFERRER_CREDITS
 
@@ -110,3 +111,20 @@ def test_referral_rewards_skipped_until_verified_and_for_unverified_referrer(cli
     # Invitee is rewarded; the unverified referrer is skipped (no error).
     assert db.session.get(User, invitee.id).ai_credit_balance == referrals.INVITEE_CREDITS
     assert db.session.get(User, unverified_referrer.id).ai_credit_balance == 0
+
+
+def test_alias_of_referrers_own_mailbox_is_not_a_referral(client):
+    referrer = User(username="ref_alias_r", email="john.doe@gmail.com",
+                    email_verified_at=datetime.utcnow())
+    referrer.set_password("testpassword123")
+    db.session.add(referrer)
+    db.session.commit()
+    code = referrals.get_or_create_code(referrer)
+    sock = User(username="ref_alias_s", email="johndoe+farm1@googlemail.com",
+                email_verified_at=datetime.utcnow())
+    sock.set_password("testpassword123")
+    db.session.add(sock)
+    db.session.commit()
+    assert referrals.apply_referral(sock, code) is None
+    assert db.session.get(User, sock.id).referred_by_id is None
+    assert db.session.get(User, sock.id).ai_credit_balance == 0

@@ -53,6 +53,16 @@ def _rewards_this_month(referrer_id, now):
     ).count()
 
 
+def _canonical_mailbox(email):
+    """Collapse the cheap aliasing tricks (+tag, gmail dots, googlemail) so
+    'me+1@gmail.com' and 'm.e@googlemail.com' are recognised as one mailbox."""
+    local, _, domain = (email or "").strip().lower().partition("@")
+    local = local.split("+", 1)[0]
+    if domain in ("gmail.com", "googlemail.com"):
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}"
+
+
 def apply_referral(new_user, code, now=None):
     """Link `new_user` to the owner of `code`. No-op for an unknown code or a
     self-referral. Rewards need a verified email: granted immediately here if
@@ -63,6 +73,9 @@ def apply_referral(new_user, code, now=None):
         return None
     referrer = User.query.filter_by(referral_code=code).first()
     if referrer is None or referrer.id == new_user.id:
+        return None
+    # Self-referral through an alias of the referrer's own mailbox.
+    if _canonical_mailbox(new_user.email) == _canonical_mailbox(referrer.email):
         return None
 
     new_user.referred_by_id = referrer.id
@@ -81,8 +94,12 @@ def grant_referral_rewards(new_user, now=None):
     if referrer is None:
         return
     now = now or datetime.utcnow()
-    grant_ai_credits(new_user, INVITEE_CREDITS)
     # _rewards_this_month counts new_user too (already linked), so compare
-    # against cap+1 - i.e. reward the referrer while they're at/under the cap.
-    if is_verified(referrer) and _rewards_this_month(referrer.id, now) <= MONTHLY_REWARD_CAP:
+    # against cap+1 - i.e. reward while the referrer is at/under the cap. Past
+    # the cap NEITHER side is rewarded: capping only the referrer would still
+    # let one referrer mint 3 free credits per throwaway account.
+    if _rewards_this_month(referrer.id, now) > MONTHLY_REWARD_CAP:
+        return
+    grant_ai_credits(new_user, INVITEE_CREDITS)
+    if is_verified(referrer):
         grant_ai_credits(referrer, REFERRER_CREDITS)

@@ -68,10 +68,16 @@ def test_ai_quota_rejection_carries_upgrade_hint(client, monkeypatch):
     _assert_upgrade(resp, "ai_credits", 429)
 
 
-def test_pricing_marks_ui_less_features_as_set_up_on_request(client):
+def test_pricing_org_features_are_self_serve(client):
     html = client.get("/pricing").get_data(as_text=True)
-    # Teams/organizations, custom domains, white-label: in the compare table
-    # and the Business card each carry the note (webhooks etc. do not).
-    assert html.count("(set up on request)") >= 3
-    assert "Webhooks <small" not in html
-    assert "Webhooks</th>" in html
+    # Organizations / custom domains / white-label now have a Workspace UI, so
+    # pricing must not describe them as set up by hand.
+    assert "set up on request" not in html
+    assert "Workspace" in html
+
+
+def test_pro_plan_has_no_org_seats():
+    from services.plans import PLAN_CONFIG
+    pro = PLAN_CONFIG["pro"]
+    assert pro["features"]["organizations"] is False
+    assert not pro["limits"]["max_org_members"]

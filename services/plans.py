@@ -79,7 +79,7 @@ PLAN_CONFIG = {
             "max_upload_mb": 100,
             "batch_size": 10,
             "analytics_retention_days": 90,
-            "max_org_members": 3,
+            "max_org_members": None,
         },
         "features": {
             "api_access": True,

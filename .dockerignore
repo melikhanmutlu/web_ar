@@ -21,3 +21,13 @@ temp/*
 qr_codes/*
 *.db
 tests/
+
+# Not needed at runtime
+docs/
+skills/
+skills-extra/
+agents/
+rules/
+workflows/
+*.pdf
+.env.example

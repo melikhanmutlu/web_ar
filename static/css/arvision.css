@@ -3,7 +3,7 @@
    v35: tokens + marketing components adapted from the
    arvision-cgptsites (Next.js) design; functional component styles
    below retain their original --color-gray-* token names, remapped
-   onto the new neutral ramp. See DESIGN.md.
+   onto the new neutral ramp. See docs/DESIGN.md.
    =================================================================== */
 
 /* Geist Mono — used only for the brand wordmark (CG source update). */

@@ -80,7 +80,7 @@ organizations, and analytics.
   Flask-Migrate (Alembic), Flask-Limiter.
 - **DB:** PostgreSQL in production (`DATABASE_URL`), SQLite locally & in tests.
 - **Frontend:** Vanilla JS + Jinja2 templates, `<model-viewer>`, Tailwind
-  (prebuilt CSS — see `rebuild_css.py`), some A-Frame for the VR page.
+  (Play CDN in `templates/base.html`, no build step), some A-Frame for the VR page.
 - **Conversion:** trimesh, pygltflib, shapely/scipy/networkx; Node
   `obj2gltf` / `gltfpack` / `@gltf-transform/cli`; `FBX2glTF` (binary in
   `tools/`); Blender & Assimp (via nixpacks) for USDZ / STEP.
@@ -124,7 +124,7 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
 ### Run & test
 - **Dev:** `python app.py` → http://localhost:5000
 - **Prod:** `gunicorn app:app` + a `worker.py` process; migrations run on boot
-  (`flask db upgrade`). See `nixpacks.toml` / `Dockerfile` / `RAILWAY_DEPLOYMENT.md`.
+  (`flask db upgrade`). See `nixpacks.toml` / `Dockerfile` / `docs/deploy.md`.
 - **Tests:** `pytest` (suite in `tests/`, `pytest.ini` sets `pythonpath=.`;
   `conftest.py` points the app at a throwaway SQLite DB). E2E: Playwright
   (`npm run test:e2e`) — Chromium is preinstalled, do not run `playwright install`.

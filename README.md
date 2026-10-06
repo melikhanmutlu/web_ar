@@ -62,12 +62,12 @@ The test suite includes a real GLB upload and conversion happy path, access-poli
 
 - Set `FLASK_ENV=production` and a strong, unique `SECRET_KEY`.
 - Set `DATABASE_URL` to PostgreSQL.
-- Mount persistent storage and configure the `WEB_AR_*_DIR` variables.
-- Set `JOB_QUEUE=true` and run `worker.py` as a separate process.
+- Attach one persistent volume. On Railway, leave the `WEB_AR_*_DIR` variables unset so the volume mount is used (see [docs/deploy.md](docs/deploy.md)).
+- Set `JOB_QUEUE=true` and run `worker.py` next to the web process (the provided start command does this in the same container).
 - Configure `METRICS_TOKEN` before exposing `/metrics` (enforced in every environment once set).
 - Embeds: a model without an `embed_allowed_domains` allowlist is served with `frame-ancestors *` so it can be iframed anywhere — this is the intended default for public embeds. Set the per-model allowlist to restrict which sites may embed it.
 - Use Redis through `RATELIMIT_STORAGE_URI` when running multiple web instances.
-- Apply `flask db upgrade` before accepting traffic.
+- `flask db upgrade` runs at the start of the start command and aborts the boot if it fails.
 - Set `SMTP_HOST` (+ `SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM_EMAIL`) to enable email notifications (conversion completed, share link created, org invite). Left unset, notifications are silently skipped — no dev/test SMTP server needed.
 
-Railway/Nixpacks and Docker configurations are included. See [ARCHITECTURE.md](ARCHITECTURE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) for additional details.
+Railway/Nixpacks and Docker configurations are included. See [docs/deploy.md](docs/deploy.md) (deployment, env vars, backups) and [ARCHITECTURE.md](ARCHITECTURE.md).

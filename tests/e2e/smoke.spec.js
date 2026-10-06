@@ -22,3 +22,21 @@ test('authentication shell is usable on mobile', async ({ page }) => {
   await expect(page.locator('input[name="username"]')).toBeVisible();
   await expect(page.locator('input[name="password"]')).toBeVisible();
 });
+
+test('wrong password shows a visible, uncovered error message', async ({ page }) => {
+  await page.goto('/login');
+  await page.locator('input[name="username"]').fill('nobody-here');
+  await page.locator('input[name="password"]').fill('wrong-password');
+  await page.getByRole('button', { name: /login/i }).click();
+  const alert = page.locator('#login-error');
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText(/invalid username/i);
+  await expect(page.locator('input[name="username"]')).toHaveValue('nobody-here');
+  // Nothing (e.g. the decorative aurora background) may paint over the message.
+  const covered = await alert.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return !(top === el || el.contains(top));
+  });
+  expect(covered).toBe(false);
+});

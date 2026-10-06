@@ -223,6 +223,17 @@ a { color: inherit; }
     color: var(--error);
     font-size: 0.8rem;
 }
+.auth-error--form {
+    margin: 0;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--error);
+    font-size: 0.875rem;
+}
+.auth-notice {
+    margin: 0;
+    color: var(--color-gray-600);
+    font-size: 0.875rem;
+}
 .auth-alt {
     margin: 0;
     text-align: center;
@@ -1148,7 +1159,7 @@ body.selection-mode .model-card { cursor: default; }
 .av-note { margin-top: var(--spacing-sm); padding: var(--spacing-sm); border: 1px solid var(--color-gray-300); font-size: 0.75rem; color: var(--color-gray-500); }
 .dark .av-note { border-color: var(--color-gray-700); color: var(--color-gray-400); }
 
-.av-flash { max-width: 36rem; margin: 0 auto var(--spacing-lg); padding: var(--spacing-md) var(--spacing-lg); border: 1px solid var(--color-gray-300); font-size: 0.9rem; background: var(--color-white); }
+.av-flash { max-width: 36rem; margin: 0 auto var(--spacing-lg); padding: var(--spacing-md) var(--spacing-lg); border: 1px solid var(--color-gray-300); font-size: 0.9rem; background: var(--color-white); position: relative; z-index: 10; }
 body > .av-flash { margin-top: 5.5rem; }
 .av-flash--error { border-color: var(--error); color: var(--error); }
 .dark .av-flash--error { border-color: var(--error-dark); color: var(--error-dark); }

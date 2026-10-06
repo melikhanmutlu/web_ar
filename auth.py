@@ -73,8 +73,8 @@ auth = Blueprint('auth', __name__)
 @auth.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
-    
+        return redirect(_safe_next(request.args.get('next')) or url_for('main.index'))
+
     form = LoginForm(request.form)
     if request.method == 'POST' and form.validate():
         user = User.query.filter(
@@ -85,26 +85,26 @@ def login():
         # unknown-user branches so the response can't be used to enumerate which
         # accounts exist (a distinct "locked" message would reveal existence).
         invalid_msg = ('Invalid username/email or password, or the account is '
-                       'temporarily locked after too many failed attempts.')
+                       'temporarily locked after too many failed attempts. If you have tried '
+                       'several times, wait 15 minutes before trying again.')
 
         if user is not None and user.is_locked:
-            flash(invalid_msg, 'error')
-            return redirect(url_for('auth.login'))
+            return render_template('login.html', form=form, auth_error=invalid_msg)
 
         if user is None or not user.check_password(form.password.data):
             if user is not None:
                 user.register_failed_login()
                 db.session.commit()
-            flash(invalid_msg, 'error')
-            return redirect(url_for('auth.login'))
+            return render_template('login.html', form=form, auth_error=invalid_msg)
 
         user.register_successful_login()
         db.session.commit()
 
         if not login_user(user, remember=form.remember.data):
             # login_user refuses inactive (admin-deactivated) accounts
-            flash('This account has been deactivated.', 'error')
-            return redirect(url_for('auth.login'))
+            return render_template(
+                'login.html', form=form, auth_error='This account has been deactivated.'
+            )
         next_page = _safe_next(request.args.get('next')) or url_for('main.index')
         return redirect(next_page)
     
@@ -113,7 +113,7 @@ def login():
 @auth.route('/register', methods=['GET', 'POST'])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for('main.index'))
+        return redirect(_safe_next(request.args.get('next')) or url_for('main.index'))
 
     if not setting_bool('registration_enabled', True):
         flash('Registration is currently disabled.', 'error')
@@ -139,9 +139,10 @@ def register():
             apply_referral(user, ref_code)
             db.session.commit()
         send_verification(user)
+        login_user(user)
         flash('Registration successful! We sent a verification link to your email - '
-              'verify it to unlock free AI trials. You can log in now.', 'success')
-        return redirect(url_for('auth.login'))
+              'verify it to unlock free AI trials.', 'success')
+        return redirect(_safe_next(request.args.get('next')) or url_for('main.index'))
 
     ref_code = (request.args.get('ref') or '').strip()[:16]
     return render_template('register.html', form=form, ref_code=ref_code)

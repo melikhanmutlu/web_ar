@@ -94,10 +94,10 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
-                <div id="flash-message" class="av-flash {% if category == 'error' %}av-flash--error{% endif %}" role="alert">
+                <div class="av-flash {% if category == 'error' %}av-flash--error{% endif %}" data-flash-category="{{ category }}" role="alert">
                     <div class="flex justify-between items-center">
                         <span>{{ message }}</span>
-                        <button onclick="closeFlashMessage()" type="button" class="ml-auto -mx-1.5 -my-1.5 rounded-lg p-1.5 inline-flex items-center justify-center h-8 w-8 
+                        <button data-flash-close type="button" class="ml-auto -mx-1.5 -my-1.5 rounded-lg p-1.5 inline-flex items-center justify-center h-8 w-8 
                             {% if category == 'error' %}
                                 hover:bg-red-700 text-red-100 hover:text-white
                             {% else %}
@@ -124,26 +124,24 @@
     {% endif %}
 
     <script>
-        function closeFlashMessage() {
-            const flashMessage = document.getElementById('flash-message');
-            if (flashMessage) {
-                flashMessage.style.opacity = '0';
-                flashMessage.style.transform = 'translateY(-20px)';
-                flashMessage.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
-                setTimeout(() => {
-                    flashMessage.remove();
-                }, 300);
-            }
+        function closeFlashMessage(flashMessage) {
+            if (!flashMessage) return;
+            flashMessage.style.opacity = '0';
+            flashMessage.style.transform = 'translateY(-20px)';
+            flashMessage.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            setTimeout(() => flashMessage.remove(), 300);
         }
 
-        // Otomatik kapanma için zamanlayıcı (opsiyonel)
+        document.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-flash-close]');
+            if (btn) closeFlashMessage(btn.closest('.av-flash'));
+        });
+
+        // Success/info messages auto-dismiss; errors stay until closed (WCAG 2.2.1).
         document.addEventListener('DOMContentLoaded', () => {
-            const flashMessage = document.getElementById('flash-message');
-            if (flashMessage) {
-                setTimeout(() => {
-                    closeFlashMessage();
-                }, 5000); // 5 saniye sonra otomatik kapanır
-            }
+            document.querySelectorAll('.av-flash:not([data-flash-category="error"])').forEach((el) => {
+                setTimeout(() => closeFlashMessage(el), 5000);
+            });
         });
     </script>
 

@@ -17,6 +17,12 @@ _AI_TOPOLOGY_CHOICES = {"quad", "triangle"}
 _AI_SYMMETRY_CHOICES = {"off", "auto", "on"}
 _AI_POSE_MODE_CHOICES = {"a-pose", "t-pose"}
 _AI_ORIGIN_AT_CHOICES = {"bottom", "center"}
+# Options gated by the plan's advanced_ai_options feature. moderation and
+# should_texture are the Studio panel's always-sent defaults, so they stay open.
+_AI_ADVANCED_OPTION_KEYS = {
+    "negative_prompt", "seed", "topology", "target_polycount", "symmetry_mode",
+    "pose_mode", "origin_at", "remove_lighting", "texture_prompt",
+}
 
 
 def _parse_ai_options(raw):
@@ -64,6 +70,19 @@ def generate_3d():
     if not ai_generator.is_configured():
         return jsonify({"success": False,
                         "error": "AI generation is not configured on this server."}), 503
+
+    # Advanced generation options are a plan feature: refuse (before any
+    # allowance/credit is consumed) rather than silently dropping them.
+    from services.plans import plan_allows
+    requested = _parse_ai_options((request.get_json(silent=True) or {}).get("options"))
+    if _AI_ADVANCED_OPTION_KEYS & set(requested) and not plan_allows(current_user, "advanced_ai_options"):
+        from services.upgrade import upgrade_hint
+        return jsonify({
+            "success": False,
+            "error": "Advanced generation options (topology, polycount, seed, negative prompt, ...) "
+                     "require a Pro or Business plan. Clear the Advanced options panel to continue.",
+            "upgrade": upgrade_hint("advanced_ai_options"),
+        }), 403
 
     # Serialize quota checks per user on PostgreSQL so concurrent requests
     # cannot each observe the same remaining credit and overspend it.

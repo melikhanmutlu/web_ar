@@ -67,8 +67,10 @@ def _check_upload_size_limit():
     return None
 
 
-def _check_model_count_limit():
+def _check_model_count_limit(incoming=1):
     """Per-user model-count cap from the user's plan (None => unlimited).
+    `incoming` is how many models this request would add (batch / multi-model
+    ZIP), so the cap can't be overshot by one big request.
 
     Unlike the storage quota (which counts trashed models still on disk), this
     excludes soft-deleted models (deleted_at IS NULL) so a user can't be
@@ -86,12 +88,33 @@ def _check_model_count_limit():
         .filter(UserModel.user_id == current_user.id, UserModel.deleted_at.is_(None))
         .scalar()
     )
-    if count >= cap:
+    if count + incoming > cap:
         return jsonify(
             {"error": f"Model limit reached ({cap}). Delete some models or upgrade your plan.",
              "upgrade": upgrade_hint("model_limit")}
         ), 413
     return None
+
+
+def _batch_size_cap():
+    """Most files one batch/ZIP may carry: the plan's batch_size, never above
+    the global BATCH_UPLOAD_MAX_FILES safety cap."""
+    plan_cap = plan_limit(current_user, "batch_size")
+    return min(plan_cap, BATCH_UPLOAD_MAX_FILES) if plan_cap else BATCH_UPLOAD_MAX_FILES
+
+
+def _check_multi_model_limits(count):
+    """Plan limits for a request that adds `count` models at once (batch
+    upload, multi-model ZIP): batch_size and max_models. Returns a response
+    tuple or None."""
+    cap = _batch_size_cap()
+    if count > cap:
+        return jsonify({
+            "success": False,
+            "error": f"Your plan allows {cap} files per batch upload.",
+            "upgrade": upgrade_hint("batch_size"),
+        }), 400
+    return _check_model_count_limit(count)
 
 
 def _check_storage_quota():
@@ -378,6 +401,11 @@ def upload_model():
                 file, lambda: str(uuid.uuid4())
             )
             if len(staged_models) > 1:
+                multi_guard = _check_multi_model_limits(len(staged_models))
+                if multi_guard is not None:
+                    for _job_id, staged in staged_models:
+                        shutil.rmtree(staged["temp_dir"], ignore_errors=True)
+                    return multi_guard
                 return _finalize_multi_staged(
                     staged_models,
                     use_color=use_color, color=color, max_dimension=max_dimension,
@@ -728,17 +756,15 @@ def batch_upload_models():
     quota_guard = _check_storage_quota()
     if quota_guard is not None:
         return quota_guard
-    # Blocks the batch when the user is already at their model cap. A precise
-    # "count + len(files) > cap" partial check is out of scope for now.
-    count_guard = _check_model_count_limit()
-    if count_guard is not None:
-        return count_guard
-
     files = [item for item in request.files.getlist("files") if item and item.filename]
     if not files:
         return jsonify({"success": False, "error": "No files uploaded"}), 400
     if len(files) > BATCH_UPLOAD_MAX_FILES:
         return jsonify({"success": False, "error": f"Maximum {BATCH_UPLOAD_MAX_FILES} files per batch"}), 400
+    # Plan batch_size and max_models (count + len(files), not just the current count).
+    multi_guard = _check_multi_model_limits(len(files))
+    if multi_guard is not None:
+        return multi_guard
 
     compression = request.form.get("compression")
     if compression not in (None, "none", "meshopt", "draco"):

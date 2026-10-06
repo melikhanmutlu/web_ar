@@ -17,7 +17,7 @@ TINY_PNG_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
 
 @pytest.fixture
 def logged_in(client):
-    user = User(username="aiopts", email="aiopts@test.com")
+    user = User(username="aiopts", email="aiopts@test.com", plan="pro")
     user.set_password("testpassword")
     db.session.add(user)
     db.session.commit()

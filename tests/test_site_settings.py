@@ -77,7 +77,7 @@ def test_registration_enabled_by_default(client):
 
 
 def test_ai_monthly_limit_setting_overrides_config(client, init_database):
-    from app import _ai_quota_state
+    from services.ai_jobs import _ai_quota_state
 
     site_settings.set_setting("ai_monthly_limit", "1")
     db.session.add(

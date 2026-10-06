@@ -179,7 +179,7 @@ def test_refine_stage_uses_stashed_texture_reference(client, logged_in, meshy_co
                           prompt="vase", stage="preview", meshy_preview_id="prev-1",
                           status="generating", progress=49,
                           options={"texture_prompt": None, "moderation": True})
-    from app import _stash_texture_reference
+    from services.ai_jobs import _stash_texture_reference
     job.texture_ref = _stash_texture_reference(job.id, TINY_PNG_URI)
     db.session.add(job)
     db.session.commit()

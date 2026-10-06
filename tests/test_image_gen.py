@@ -183,7 +183,7 @@ def _make_text_job(user, stage="preview"):
 
 
 def test_claim_stage_is_atomic(client, logged_in):
-    from app import _claim_ai_stage
+    from services.ai_jobs import _claim_ai_stage
     job = _make_text_job(logged_in)
     assert _claim_ai_stage(job.id, "preview", "refining") is True
     # a second concurrent poll loses the claim

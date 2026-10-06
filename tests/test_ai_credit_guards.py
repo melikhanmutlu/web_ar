@@ -5,6 +5,7 @@ import pytest
 
 import ai_generator
 import app as app_module
+from services import ai_jobs
 from models import User, db
 
 TINY_PNG_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=="
@@ -24,7 +25,7 @@ def user(client, monkeypatch):
 @pytest.fixture
 def quota_exhausted(monkeypatch):
     # Monthly quota used up, so each allowed request is paid from credits.
-    monkeypatch.setattr(app_module, "_ai_quota_state", lambda user_id: (True, 0, 0))
+    monkeypatch.setattr(ai_jobs, "_ai_quota_state", lambda user_id: (True, 0, 0))
 
 
 def _balance(u):
@@ -104,13 +105,13 @@ def test_failed_job_refunds_credit_exactly_once(client, user, quota_exhausted, m
     # Re-polling, or running the refund path again, must not refund twice.
     client.get(f"/api/generate-3d/{job_id}/status")
     job = db.session.get(app_module.AIGenerationJob, job_id)
-    app_module._refund_ai_job_credit(job)
+    ai_jobs._refund_ai_job_credit(job)
     assert _balance(user) == 3
 
 
 def test_failed_job_without_credit_spent_is_not_refunded(client, user, monkeypatch):
     # Within the monthly quota: no credit consumed, so nothing to give back.
-    monkeypatch.setattr(app_module, "_ai_quota_state", lambda user_id: (False, 0, 5))
+    monkeypatch.setattr(ai_jobs, "_ai_quota_state", lambda user_id: (False, 0, 5))
     monkeypatch.setattr(ai_generator, "start_text_to_3d", lambda *a, **k: "task-1")
     job_id = client.post("/api/generate-3d", json={"mode": "text", "prompt": "chair"}).get_json()["job_id"]
     _fail_task(monkeypatch)
@@ -126,7 +127,7 @@ def test_failed_jobs_do_not_count_toward_monthly_quota(client, user):
             id=f"quota-{i}", user_id=user.id, kind="text", status=status))
     db.session.commit()
 
-    _, count, _ = app_module._ai_quota_state(user.id)
+    _, count, _ = ai_jobs._ai_quota_state(user.id)
 
     assert count == 2
 

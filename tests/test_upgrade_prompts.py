@@ -58,10 +58,11 @@ def test_password_share_gate_carries_upgrade_hint(client):
 
 def test_ai_quota_rejection_carries_upgrade_hint(client, monkeypatch):
     import app as app_module
+    from services import ai_jobs
     import ai_generator
 
     monkeypatch.setattr(ai_generator, "is_configured", lambda: True)
-    monkeypatch.setattr(app_module, "_consume_ai_allowance", lambda user: (False, 5, 5))
+    monkeypatch.setattr(ai_jobs, "_consume_ai_allowance", lambda user: (False, 5, 5))
     _login_free_user(client, "hint_ai")
     resp = client.post("/api/generate-3d", json={"mode": "text", "prompt": "a chair"})
     _assert_upgrade(resp, "ai_credits", 429)

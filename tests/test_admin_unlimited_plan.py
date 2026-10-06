@@ -7,6 +7,7 @@ assigned to anyone.
 import uuid
 
 import app as app_module
+from services import ai_jobs
 from app import db
 from models import AIGenerationJob, User
 from services.plans import (
@@ -59,9 +60,9 @@ def test_admin_bypasses_ai_monthly_quota(client):
         ))
     db.session.commit()
 
-    exceeded, count, limit = app_module._ai_quota_state(admin.id)
+    exceeded, count, limit = ai_jobs._ai_quota_state(admin.id)
     assert exceeded is False
-    allowed, _, _ = app_module._consume_ai_allowance(db.session.get(User, admin.id))
+    allowed, _, _ = ai_jobs._consume_ai_allowance(db.session.get(User, admin.id))
     assert allowed is True
 
 
@@ -70,7 +71,7 @@ def test_non_admin_free_still_limited(client):
     a free user keeps a real, finite plan limit far below the admin sentinel."""
     free = _make_user("ufree3")
     admin = _make_user("uadmin4", is_admin=True)
-    _, _, free_limit = app_module._ai_quota_state(free.id)
-    _, _, admin_limit = app_module._ai_quota_state(admin.id)
+    _, _, free_limit = ai_jobs._ai_quota_state(free.id)
+    _, _, admin_limit = ai_jobs._ai_quota_state(admin.id)
     assert free_limit < 1_000_000
     assert admin_limit >= 1_000_000

@@ -18,6 +18,7 @@ def _safe_next(next_page):
     return next_page
 from models import User, UserModel, Payment, db
 from site_settings import setting_bool
+from services import ai_jobs
 from services.password_reset import send_reset_link, user_for_token
 from services.email_verification import is_verified, mark_verified, read_token, send_verification
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
@@ -317,7 +318,6 @@ def _claims_admin_email(new_email):
     return new in {e.lower() for e in admin_emails()}
 
 def _render_profile(profile_form, password_form):
-    import app as app_module
     from services.plans import plan_limit, plan_summary
     from services.storage_quota import _storage_usage_for, _storage_quota_bytes
 
@@ -333,7 +333,7 @@ def _render_profile(profile_form, password_form):
         .scalar()
     )
     model_limit = plan_limit(current_user, "max_models")  # None => unlimited
-    _, ai_used, ai_limit = app_module._ai_quota_state(current_user.id)
+    _, ai_used, ai_limit = ai_jobs._ai_quota_state(current_user.id)
 
     usage = {
         "storage_used_mb": round(storage_used / (1024 * 1024), 1),

@@ -3,6 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from services import ai_jobs
 from services.request_json import json_dict, json_text
 
 ai_image_bp = Blueprint("ai_image", __name__)
@@ -27,9 +28,9 @@ def generate_image():
         return jsonify({"success": False,
                         "error": "AI generation is not configured on this server."}), 503
 
-    exceeded, _count, limit = app_module._ai_quota_state(current_user.id)
+    exceeded, _count, limit = ai_jobs._ai_quota_state(current_user.id)
     if exceeded and (current_user.ai_credit_balance or 0) <= 0:
-        if app_module.ai_trial_needs_verification(current_user):
+        if ai_jobs.ai_trial_needs_verification(current_user):
             return jsonify({"success": False,
                             "error": "Verify your email to get free AI generations. "
                                      "Check your inbox, or resend the link from your profile."}), 403

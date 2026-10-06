@@ -9,6 +9,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user
 
 from config import WORKER_POLL_INTERVAL
+from services import ai_jobs
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -210,7 +211,7 @@ def studio():
     ai_remove_lighting_supported = ai_generator.supports_remove_lighting()
     ai_quota = None
     if current_user.is_authenticated:
-        ai_quota = app_module.ai_quota_summary(current_user)
+        ai_quota = ai_jobs.ai_quota_summary(current_user)
     # Render the limit this visitor will actually be held to (admin setting /
     # plan), not just the global hard ceiling, so the client rejects oversized
     # files with the same number the server enforces.

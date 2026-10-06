@@ -1397,7 +1397,7 @@ def mark_ai_job_failed(job_id):
     job.error = "Marked as failed by an admin (job was stuck)."
     log_action("ai_job.mark_failed", "ai_job", job_id)
     db.session.commit()
-    from app import _refund_ai_job_credit
+    from services.ai_jobs import _refund_ai_job_credit
     _refund_ai_job_credit(job)
     return jsonify({"success": True})
 

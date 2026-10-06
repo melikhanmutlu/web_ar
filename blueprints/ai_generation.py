@@ -9,6 +9,7 @@ from sqlalchemy import or_
 
 from blueprints.ai_image import _IMAGE_GEN_KINDS, _resolve_image_task
 from blueprints.material_presets import _resolve_prompt_preset
+from services import ai_jobs
 from services.request_json import json_dict, json_text
 from models import AIGenerationJob, User, db
 
@@ -89,10 +90,10 @@ def generate_3d():
     # cannot each observe the same remaining credit and overspend it.
     user = db.session.query(User).filter_by(id=current_user.id).with_for_update().one()
     balance_before = user.ai_credit_balance or 0
-    allowed, count, limit = app_module._consume_ai_allowance(user)
+    allowed, count, limit = ai_jobs._consume_ai_allowance(user)
     if not allowed:
         db.session.rollback()
-        if app_module.ai_trial_needs_verification(user):
+        if ai_jobs.ai_trial_needs_verification(user):
             return jsonify({"success": False,
                             "error": "Verify your email to get free AI generations. "
                                      "Check your inbox, or resend the link from your profile."}), 403
@@ -112,7 +113,7 @@ def generate_3d():
         # Every non-starting exit must hand the early-committed credit back.
         db.session.rollback()
         if credit_spent:
-            app_module._refund_ai_credit(current_user.id)
+            ai_jobs._refund_ai_credit(current_user.id)
         return jsonify({"success": False, "error": error}), status
 
     data = json_dict()
@@ -155,7 +156,7 @@ def generate_3d():
                                   credit_spent=credit_spent)
             # Persist the source image (decoded from the inline data URI) for
             # admin audit -- see _persist_ai_source_image.
-            job.source_image_ref = app_module._persist_ai_source_image(job_id, image)
+            job.source_image_ref = ai_jobs._persist_ai_source_image(job_id, image)
         else:
             prompt = json_text(data, "prompt")
             if not prompt and parent_job_id:
@@ -179,7 +180,7 @@ def generate_3d():
         texture_image_url = (data.get("options") or {}).get("texture_image_url") \
             if isinstance(data.get("options"), dict) else None
         if texture_image_url:
-            job.texture_ref = app_module._stash_texture_reference(job_id, texture_image_url)
+            job.texture_ref = ai_jobs._stash_texture_reference(job_id, texture_image_url)
         db.session.add(job)
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
@@ -209,7 +210,7 @@ def generate_3d_status(job_id):
 
     if job.status not in ("ready", "failed"):
         try:
-            app_module._advance_ai_job(job)
+            ai_jobs._advance_ai_job(job)
         except ai_generator.MeshyError as e:
             return jsonify({"success": False, "error": str(e)}), 502
         except Exception as e:
@@ -255,7 +256,7 @@ def meshy_webhook():
         return jsonify({"ok": True}), 200
 
     try:
-        app_module._advance_ai_job(job)
+        ai_jobs._advance_ai_job(job)
     except Exception as e:
         app_module.logger.warning(f"[meshy-webhook] advance failed for job {job.id}: {e}")
     return jsonify({"ok": True}), 200

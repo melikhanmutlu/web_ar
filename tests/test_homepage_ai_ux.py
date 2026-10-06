@@ -51,7 +51,8 @@ def test_homepage_shows_quota_for_logged_in_user(client, logged_in):
 
 def test_homepage_quota_reflects_existing_jobs_today(client, logged_in, monkeypatch):
     import app as app_module
-    monkeypatch.setattr(app_module, "setting_int", lambda key, default: 10)
+    from services import ai_jobs
+    monkeypatch.setattr(ai_jobs, "setting_int", lambda key, default: 10)
     for _ in range(3):
         db.session.add(AIGenerationJob(id=str(uuid.uuid4()), user_id=logged_in.id,
                                        kind="text", prompt="x", stage="preview",

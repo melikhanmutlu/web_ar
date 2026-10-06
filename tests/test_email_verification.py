@@ -9,6 +9,7 @@ from itsdangerous import URLSafeTimedSerializer
 
 import ai_generator
 import app as app_module
+from services import ai_jobs
 from services import upload_pipeline
 from app import limiter
 from models import AIGenerationJob, User, UserModel, db
@@ -224,7 +225,7 @@ def test_trial_is_lifetime_not_monthly(client, ai_free):
             id=str(uuid.uuid4()), user_id=u.id, kind="text", stage="preview",
             status="done", progress=100, created_at=datetime.utcnow() - timedelta(days=90)))
     db.session.commit()
-    exceeded, used, limit = app_module._ai_quota_state(u.id)
+    exceeded, used, limit = ai_jobs._ai_quota_state(u.id)
     assert (exceeded, used, limit) == (True, 3, 3)
 
 
@@ -232,14 +233,14 @@ def test_trial_count_is_admin_configurable(client, ai_free):
     from site_settings import set_setting
     set_setting("free_ai_trial_count", "1")
     u = _make_user("aic", verified=True)
-    assert app_module._ai_quota_state(u.id) == (False, 0, 1)
+    assert ai_jobs._ai_quota_state(u.id) == (False, 0, 1)
 
 
 def test_paid_plan_quota_unchanged(client, ai_free):
     u = _make_user("aip", verified=False, plan="pro")
-    exceeded, _used, limit = app_module._ai_quota_state(u.id)
+    exceeded, _used, limit = ai_jobs._ai_quota_state(u.id)
     assert limit != 3 or not exceeded  # plan limit applies, not the trial
-    assert app_module.ai_trial_needs_verification(u) is False
+    assert ai_jobs.ai_trial_needs_verification(u) is False
 
 
 # --- default visibility -----------------------------------------------------
@@ -291,6 +292,6 @@ def test_failed_generations_do_not_use_up_free_trials(client, monkeypatch):
         db.session.add(AIGenerationJob(id=f"trialfail-{i}", user_id=u.id, kind="text", status=status))
     db.session.commit()
 
-    exceeded, used, trial = app_module._ai_quota_state(u.id)
+    exceeded, used, trial = ai_jobs._ai_quota_state(u.id)
 
     assert (exceeded, used, trial) == (False, 1, 3)

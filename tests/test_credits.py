@@ -3,7 +3,8 @@ quota, and the admin grant endpoint."""
 
 import uuid
 
-from app import _consume_ai_allowance, db
+from app import db
+from services.ai_jobs import _consume_ai_allowance
 from models import AIGenerationJob, User
 from services.credits import grant_ai_credits
 

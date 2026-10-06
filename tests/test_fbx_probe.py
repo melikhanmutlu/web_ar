@@ -32,10 +32,10 @@ def test_run_isolated_tiny_memcap_does_not_crash_caller():
     assert isinstance(m, dict) and m.get("error"), m
 
 
-def test_run_isolated_cleans_up_workdir():
-    """No fbxprobe_* temp dirs should leak after a run."""
-    before = set(os.listdir(tempfile.gettempdir()))
+def test_run_isolated_cleans_up_workdir(tmp_path, monkeypatch):
+    """No fbxprobe_* temp dirs should leak after a run. Uses a private temp
+    root so concurrent test processes sharing /tmp can't be mistaken for leaks."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     fbx_probe.run_isolated("/no/such/file.fbx", timeout=60)
-    after = set(os.listdir(tempfile.gettempdir()))
-    leaked = [d for d in (after - before) if d.startswith("fbxprobe_")]
+    leaked = [d for d in os.listdir(tmp_path) if d.startswith("fbxprobe_")]
     assert not leaked, leaked

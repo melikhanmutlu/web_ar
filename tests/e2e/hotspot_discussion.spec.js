@@ -17,16 +17,32 @@ test('clicking a hotspot opens its discussion thread and a comment can be posted
   await page.locator('#annotationsContainer .tp-section-header').click();
   await page.locator('#toggleHotspotMode').click();
 
-  // positionAndNormalFromPoint can miss depending on camera framing/GPU
-  // rendering (app.js's own handler no-ops silently on a miss); retry a
-  // few nearby points instead of one exact click.
+  // positionAndNormalFromPoint raycasts against the rendered scene, so clicks
+  // made before model-viewer has loaded and drawn a frame silently miss. Wait
+  // for `loaded` (the `load` event has fired) and two animation frames first.
+  await page.waitForFunction(() => {
+    const mv = document.querySelector('model-viewer');
+    return !!(mv && mv.loaded);
+  }, null, { timeout: 30_000 });
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  }));
+
+  // A hit can still miss depending on camera framing/GPU rendering (app.js's
+  // own handler no-ops silently), so retry a few nearby points -- waiting for
+  // the prompt dialog to appear rather than sleeping a fixed time.
   const box = await page.locator('model-viewer').boundingBox();
-  const candidates = [[0, 0], [0.1, 0], [-0.1, 0], [0, 0.1], [0, -0.1]];
+  const candidates = [[0, 0], [0.1, 0], [-0.1, 0], [0, 0.1], [0, -0.1], [0.05, 0.05], [-0.05, -0.05]];
   for (const [dx, dy] of candidates) {
     if (await page.locator('.hotspot-dot').count() > 0) break;
     await page.mouse.click(box.x + box.width * (0.5 + dx), box.y + box.height * (0.5 + dy));
-    await page.waitForTimeout(500);
-    if (await page.locator('.ar-dialog').count() > 0) await answerPrompt(page, 'Corner detail');
+    const dialogShown = await page.locator('.ar-dialog').first()
+      .waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false);
+    if (dialogShown) {
+      await answerPrompt(page, 'Corner detail');
+      await page.locator('.hotspot-dot').first()
+        .waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
+    }
   }
 
   // A hit can still fail to register in this sandbox's rendering setup

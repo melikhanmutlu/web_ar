@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 from models import ConversionJob, ModelAnalyticsEvent, ModelDerivedAsset, ModelLOD, ModelLike, ModelSave, User, UserModel, db
@@ -48,13 +47,13 @@ def test_worker_claim_respects_retry_schedule_and_records_heartbeat(client):
     assert heartbeat.current_job_id == "due-job"
 
 
-def test_dead_letter_can_be_manually_requeued_with_status_token(client, monkeypatch):
+def test_dead_letter_can_be_manually_requeued_with_status_token(client, monkeypatch, tmp_path):
     import app as app_module
     from services import upload_pipeline
     restarted = []
     monkeypatch.setattr(upload_pipeline, "_start_local_conversion", restarted.append)
-    staged = Path(".test-dead-letter").resolve()
-    staged.mkdir(exist_ok=True)
+    staged = tmp_path / "dead-letter"
+    staged.mkdir()
     job = ConversionJob(
         id="dead-job",
         status="dead_letter",
@@ -76,7 +75,6 @@ def test_dead_letter_can_be_manually_requeued_with_status_token(client, monkeypa
     # Inline mode has no worker polling for pending jobs; the retry endpoint
     # must kick off the run itself.
     assert restarted == [job.id]
-    staged.rmdir()
 
 
 def test_progress_refreshes_job_heartbeat(client):

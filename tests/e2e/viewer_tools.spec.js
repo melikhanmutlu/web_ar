@@ -256,8 +256,11 @@ test('viewer page wires meshoptDecoderLocation to the static decoder', async ({ 
   const viewerUrl = await uploadCubeAndGetViewerUrl(page);
   const resp = await page.request.get(viewerUrl);
   const html = await resp.text();
-  expect(html).toContain('meshoptDecoderLocation');
-  expect(html).toContain('/static/js/meshopt_decoder.js');
+  // The page passes the decoder URL to static/js/viewer/decoders.js via data-meshopt.
+  expect(html).toContain('/static/js/viewer/decoders.js');
+  expect(html).toContain('data-meshopt="/static/js/meshopt_decoder.js"');
+  const decoders = await (await page.request.get('/static/js/viewer/decoders.js')).text();
+  expect(decoders).toContain('meshoptDecoderLocation');
 });
 
 test('camera overlay button toggles the no-anchor camera mode', async ({ page, context }) => {

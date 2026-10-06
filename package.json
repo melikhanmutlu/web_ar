@@ -7,7 +7,7 @@
     "start": "python app.py",
     "test": "python -m pytest -q",
     "check": "python -m py_compile app.py models.py worker.py",
-    "lint": "node --check static/viewer.js && node --check static/js/my_models.js && python scripts/check_inline_js.py",
+    "lint": "node --check static/viewer.js && node scripts/check_static_js.js && python scripts/check_inline_js.py",
     "test:e2e": "node node_modules/@playwright/test/cli.js test",
     "security": "python scripts/npm_audit_check.py",
     "build:css": "tailwindcss -c tailwind/base.config.js -i tailwind/base.css -o static/css/tailwind-base.min.css --minify && tailwindcss -c tailwind/view.config.js -i tailwind/view.css -o static/css/tailwind-view.min.css --minify",

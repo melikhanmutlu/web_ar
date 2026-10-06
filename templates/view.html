@@ -22,15 +22,10 @@
          decoder registered before model-viewer loads one, or the model silently
          never renders -- model-viewer ships a DRACO decoder default but has no
          meshopt default, unlike DRACO. -->
-    <script>
-        customElements.whenDefined('model-viewer').then(() => {
-            customElements.get('model-viewer').meshoptDecoderLocation =
-                "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
-            // Self-hosted DRACO / KTX2 decoders (model-viewer defaults to www.gstatic.com).
-            customElements.get('model-viewer').dracoDecoderLocation = "{{ url_for('static', filename='vendor/draco/') }}";
-            customElements.get('model-viewer').ktx2TranscoderLocation = "{{ url_for('static', filename='vendor/basis/') }}";
-        });
-    </script>
+    <script src="{{ url_for('static', filename='js/viewer/decoders.js') }}"
+            data-meshopt="{{ url_for('static', filename='js/meshopt_decoder.js') }}"
+            data-draco="{{ url_for('static', filename='vendor/draco/') }}"
+            data-ktx2="{{ url_for('static', filename='vendor/basis/') }}"></script>
 
     <!-- QR Code library -->
     <script defer src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
@@ -843,43 +838,22 @@
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 
-    <script>
-      // Bridges server-rendered (Jinja) values into the split-out
-      // static/js/viewer/*.js files, which cannot contain Jinja themselves.
-      window.VIEWER_CONFIG = {
-        modelId: {{ model_unique_id | tojson }},
-        modelDbId: {{ model.id | tojson }},
-        // Mirrors the backend's check_model_mutation_allowed: owner, or an
-        // anonymous model. Mutating UI (version restore/delete etc.) is only
-        // built when the server would actually accept the mutation.
-        canEdit: {{ can_edit | tojson }},
-        isOwner: {{ is_owner | tojson }},
-        hiddenLayerCount: {{ hidden_layer_count | default(0) | tojson }},
-        isAuthenticated: {{ current_user.is_authenticated | tojson }},
-        currentUserId: {{ (current_user.id if current_user.is_authenticated else None) | tojson }},
-        cumulativeScale: {{ (model.cumulative_scale if model.cumulative_scale else None) | tojson }},
-        downloadFilename: {{ (display_name ~ '.glb') | tojson }},
-        isMarketingDemo: {{ marketing_demo | default(false) | tojson }},
-        openToolsOnDesktop: {{ marketing_demo | default(false) | tojson }},
-        initialToolsSection: {{ initial_tools_section | default(none) | tojson }},
-      };
-    </script>
-    <script>
-      // The anonymous uploader's edit_token arrives in the URL once (the session
-      // keeps the capability). Drop it from the address bar right away and make
-      // every shareable link (QR, copy) the canonical token-free URL.
-      window.canonicalViewerUrl = function () { return location.origin + location.pathname; };
-      (function () {
-        try {
-          var params = new URLSearchParams(location.search);
-          if (params.has('edit_token')) {
-            params.delete('edit_token');
-            var qs = params.toString();
-            history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
-          }
-        } catch (e) { /* non-critical */ }
-      })();
-    </script>
+    {# Server-rendered values for the static/js/viewer/*.js files (see viewer/bootstrap.js). #}
+    <script type="application/json" id="viewer-config">{{ {
+        "modelId": model_unique_id,
+        "modelDbId": model.id,
+        "canEdit": can_edit,
+        "isOwner": is_owner,
+        "hiddenLayerCount": hidden_layer_count | default(0),
+        "isAuthenticated": current_user.is_authenticated,
+        "currentUserId": (current_user.id if current_user.is_authenticated else None),
+        "cumulativeScale": (model.cumulative_scale if model.cumulative_scale else None),
+        "downloadFilename": (display_name ~ '.glb'),
+        "isMarketingDemo": marketing_demo | default(false),
+        "openToolsOnDesktop": marketing_demo | default(false),
+        "initialToolsSection": initial_tools_section | default(none)
+    } | tojson }}</script>
+    <script src="{{ url_for('static', filename='js/viewer/bootstrap.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>
     <!-- Layers (visibility / color / explode) + slicer. Not loaded on the
          read-only homepage demo, which ships no editing JS; all mutating
@@ -923,7 +897,7 @@
 
     {% if anon_edit_token %}
     {# Top-left under the header and below the viewer controls (z 33): at the bottom with z 60 it covered the toolbar on phones. #}
-    <div id="anonOwnerBanner" role="region" aria-label="Save your edit access" hidden
+    <div id="anonOwnerBanner" data-model-id="{{ model.id }}" data-edit-token="{{ anon_edit_token }}" role="region" aria-label="Save your edit access" hidden
          style="position:fixed;left:12px;top:calc(env(safe-area-inset-top, 0px) + 64px);z-index:33;max-width:min(26rem,calc(100vw - 24px));padding:.85rem 1rem;border-radius:12px;border:1px solid var(--color-gray-300);background:var(--color-white);color:var(--color-gray-900);box-shadow:0 8px 28px rgba(0,0,0,.18);font-size:.85rem;line-height:1.4;">
         <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;">
             <strong>Save your edit link</strong>
@@ -935,27 +909,7 @@
             <a href="{{ url_for('auth.register', next='/view/' ~ model.id) }}" class="btn-primary" style="padding:.4rem .75rem;text-decoration:none;width:auto;">Create an account to keep this model</a>
         </div>
     </div>
-    <script>
-      (function () {
-        var banner = document.getElementById('anonOwnerBanner');
-        var key = 'anonBannerDismissed:' + {{ model.id | tojson }};
-        var token = {{ anon_edit_token | tojson }};
-        try { if (sessionStorage.getItem(key)) return; } catch (e) {}
-        banner.hidden = false;
-        document.getElementById('anonBannerDismiss').addEventListener('click', function () {
-          banner.hidden = true;
-          try { sessionStorage.setItem(key, '1'); } catch (e) {}
-        });
-        document.getElementById('anonCopyEditLink').addEventListener('click', function () {
-          var link = location.origin + location.pathname + '?edit_token=' + encodeURIComponent(token);
-          var btn = this;
-          function ok() { btn.textContent = 'Edit link copied'; }
-          if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(link).then(ok, function () { window.arPrompt('Copy your private edit link', { defaultValue: link, label: 'Private edit link', confirmLabel: 'Done' }); });
-          } else { window.arPrompt('Copy your private edit link', { defaultValue: link, label: 'Private edit link', confirmLabel: 'Done' }); }
-        });
-      })();
-    </script>
+    <script src="{{ url_for('static', filename='js/viewer/anon-banner.js') }}"></script>
     {% endif %}
 
     <!-- QR Modal -->
@@ -1930,98 +1884,7 @@
     <script defer src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>
     {% endif %}
     <script defer src="{{ url_for('static', filename='js/viewer/panel-ui.js') }}"></script>
-    <script>
-        // Mobile hamburger toggle (site.js isn't loaded on the viewer page).
-        (function () {
-            var nav = document.getElementById('siteNav');
-            var burger = document.getElementById('navBurger');
-            var mobileMenu = document.getElementById('mobileMenu');
-            if (nav && burger && mobileMenu) {
-                burger.addEventListener('click', function () {
-                    var open = nav.classList.toggle('menu-open');
-                    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
-                    mobileMenu.hidden = !open;
-                });
-            }
-        })();
-        // Signed-in avatar dropdown toggle (mirrors site.js).
-        (function () {
-            var userMenu = document.getElementById('userMenu');
-            var userMenuToggle = document.getElementById('userMenuToggle');
-            var userMenuDropdown = document.getElementById('userMenuDropdown');
-            if (!userMenu || !userMenuToggle || !userMenuDropdown) return;
-            var setUserMenuOpen = function (open) {
-                userMenu.classList.toggle('is-open', open);
-                userMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-                userMenuDropdown.hidden = !open;
-            };
-            userMenuToggle.addEventListener('click', function (e) {
-                e.stopPropagation();
-                setUserMenuOpen(userMenuDropdown.hidden);
-            });
-            document.addEventListener('click', function (e) {
-                if (!userMenuDropdown.hidden && !userMenu.contains(e.target)) {
-                    setUserMenuOpen(false);
-                }
-            });
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && !userMenuDropdown.hidden) {
-                    setUserMenuOpen(false);
-                    userMenuToggle.focus();
-                }
-            });
-        })();
-        // Stage background switcher: client-side only, remembered per-browser
-        // via localStorage. Independent of the owner-only, DB-persisted
-        // viewer_settings.background_color used by the Embed panel.
-        (function () {
-            var STORAGE_KEY = 'arvision.viewerBg';
-            var BG_COLORS = { white: '#ffffff', dark: '#111318', black: '#0b0c10' };
-            var stage = document.querySelector('.viewer-stage');
-            var switcher = document.getElementById('bgSwitcher');
-            var button = document.getElementById('bgSwitcherButton');
-            var panel = document.getElementById('bgSwitcherPanel');
-            if (!stage || !switcher || !button || !panel) return;
-            var persistBackground = {{ (not marketing_demo|default(false)) | tojson }};
-
-            var swatches = panel.querySelectorAll('.bg-swatch');
-            var applyBg = function (key) {
-                if (!BG_COLORS[key]) return;
-                stage.style.background = BG_COLORS[key];
-                document.body.classList.toggle('viewer-stage-dark', key === 'dark' || key === 'black');
-                swatches.forEach(function (sw) {
-                    sw.classList.toggle('is-active', sw.getAttribute('data-bg') === key);
-                });
-            };
-            applyBg(persistBackground ? (localStorage.getItem(STORAGE_KEY) || 'dark') : 'dark');
-
-            var setPanelOpen = function (open) {
-                button.setAttribute('aria-expanded', open ? 'true' : 'false');
-                panel.hidden = !open;
-            };
-            button.addEventListener('click', function (e) {
-                e.stopPropagation();
-                setPanelOpen(panel.hidden);
-            });
-            swatches.forEach(function (sw) {
-                sw.addEventListener('click', function () {
-                    var key = sw.getAttribute('data-bg');
-                    applyBg(key);
-                    if (persistBackground) localStorage.setItem(STORAGE_KEY, key);
-                    setPanelOpen(false);
-                });
-            });
-            document.addEventListener('click', function (e) {
-                if (!panel.hidden && !switcher.contains(e.target)) setPanelOpen(false);
-            });
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape' && !panel.hidden) {
-                    setPanelOpen(false);
-                    button.focus();
-                }
-            });
-        })();
-    </script>
+    <script src="{{ url_for('static', filename='js/viewer/chrome.js') }}"></script>
 </body>
 </html>
 

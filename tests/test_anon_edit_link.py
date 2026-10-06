@@ -24,7 +24,10 @@ def test_viewer_strips_token_from_url_and_keeps_session_edit_access(client):
     assert first.status_code == 200
     html = first.get_data(as_text=True)
     # Client strips the param and QR/copy use the canonical URL.
-    assert "history.replaceState" in html and "canonicalViewerUrl" in html
+    assert "js/viewer/bootstrap.js" in html
+    from pathlib import Path
+    boot = Path("static/js/viewer/bootstrap.js").read_text()
+    assert "history.replaceState" in boot and "canonicalViewerUrl" in boot
     # Banner with the explicit save/claim actions.
     assert 'id="anonOwnerBanner"' in html
     assert "Save your edit link" in html

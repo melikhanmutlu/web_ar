@@ -806,6 +806,16 @@
         body.viewer-stage-dark .tagline-line,
         body.viewer-stage-dark .tagline-main { color: var(--color-white); }
         body.viewer-stage-dark .nav-viewer .nav-burger span { background: var(--color-white); }
+        /* Phone/tablet: the header strip sits ABOVE the stage (stage top:52px)
+           on the page body, not over the 3D scene, so the stage-dependent
+           light/dark header colours left a white logo + burger on white.
+           Give the strip its own dark bar with light controls. */
+        @media (max-width: 1024px) {
+            .nav.nav-viewer { background: var(--color-gray-900, #111318); }
+            .nav-viewer .brand,
+            .nav-viewer .nav-auth-link { color: var(--color-white, #fff); }
+            .nav-viewer .nav-burger span { background: var(--color-white, #fff); }
+        }
         body.viewer-stage-dark .tb-btn { color: var(--color-gray-200); }
         body.viewer-stage-dark .tb-btn:hover {
             background: rgba(255, 255, 255, 0.12);

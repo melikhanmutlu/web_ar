@@ -108,15 +108,39 @@
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             let usdzReady = true;
 
-            // Event Listeners
-            arButton?.addEventListener('click', () => {
+            function sendViewerEvent(eventType, metadata) {
                 fetch('/api/models/' + window.VIEWER_CONFIG.modelDbId + '/events', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({event_type: 'ar_launch'})
+                    body: JSON.stringify(metadata ? {event_type: eventType, metadata: metadata} : {event_type: eventType})
                 }).catch(() => {});
+            }
+
+            // `ar_launch` counts real AR sessions only (analytics + the
+            // "Open it in AR on your phone" onboarding step). A click on an
+            // AR-capable device is counted once the session starts
+            // ('session-started'), or after a short grace period if no
+            // failure was reported (iOS Quick Look hands off to the OS and
+            // may not emit a status). Unsupported devices instead get the QR
+            // modal and a separate `qr_shown` event.
+            let arLaunchPending = false;
+            let arLaunchTimer = null;
+            function flushArLaunch() {
+                clearTimeout(arLaunchTimer);
+                if (!arLaunchPending) return;
+                arLaunchPending = false;
+                sendViewerEvent('ar_launch');
+            }
+
+            // Event Listeners
+            arButton?.addEventListener('click', () => {
                 if (!isARSupported()) {
-                    showArModal(isIOS && !usdzReady ? 'usdz_not_ready' : 'unsupported');
+                    const reason = isIOS && !usdzReady ? 'usdz_not_ready' : 'unsupported';
+                    sendViewerEvent('qr_shown', {reason: reason});
+                    showArModal(reason);
                 } else {
+                    arLaunchPending = true;
+                    clearTimeout(arLaunchTimer);
+                    arLaunchTimer = setTimeout(flushArLaunch, 1500);
                     modelViewer.activateAR();
                 }
             });
@@ -125,7 +149,11 @@
             // covers a denied camera permission and any other session start
             // failure the browser doesn't expose a more specific reason for.
             modelViewer?.addEventListener('ar-status', (event) => {
-                if (event.detail && event.detail.status === 'failed') {
+                const status = event.detail && event.detail.status;
+                if (status === 'session-started') flushArLaunch();
+                if (status === 'failed') {
+                    arLaunchPending = false;
+                    clearTimeout(arLaunchTimer);
                     showArModal('session_failed');
                 }
             });
@@ -135,43 +163,47 @@
             closeQrModal?.addEventListener('click', hideQRModal);
 
             // ===== USDZ STATUS CHECK (iOS AR) =====
+            // Only iOS Quick Look needs the USDZ, so the readiness indicator is
+            // shown to iOS visitors only; on desktop/Android it was an
+            // unexplained alarm-coloured dot about someone else's platform.
             (function checkUsdzStatus() {
                 // Static marketing demos have no persisted model or AR asset.
-                if (!window.VIEWER_CONFIG?.modelId) return;
-                fetch('/api/models/' + window.VIEWER_CONFIG.modelId + '/usdz_status')
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success && !data.usdz_ready) {
-                        usdzReady = false;
-                        // Show subtle indicator on AR button
-                        const arBtn = document.getElementById('arButton');
-                        if (arBtn) {
-                            arBtn.title = 'View in AR (iOS AR converting...)';
-                            const badge = document.createElement('span');
-                            badge.id = 'usdzBadge';
-                            badge.style.cssText = 'position:absolute;top:-2px;right:-2px;width:8px;height:8px;background:#f59e0b;border-radius:50%;border:1.5px solid var(--color-gray-900);';
-                            badge.title = 'iOS AR (USDZ) is still being prepared';
-                            arBtn.style.position = 'relative';
-                            arBtn.appendChild(badge);
-                            // Re-check after 30 seconds
-                            setTimeout(() => {
-                                fetch('/api/models/' + window.VIEWER_CONFIG.modelId + '/usdz_status')
-                                .then(r => r.json())
-                                .then(d => {
-                                    if (d.success && d.usdz_ready) {
-                                        usdzReady = true;
-                                        document.getElementById('usdzBadge')?.remove();
-                                        arBtn.title = 'View in AR';
-                                    } else if (d.success && !d.usdz_ready) {
-                                        const b = document.getElementById('usdzBadge');
-                                        if (b) { b.style.background = '#ef4444'; b.title = 'iOS AR (USDZ) conversion may have failed'; }
-                                        arBtn.title = 'View in AR (iOS AR may not be available)';
-                                    }
-                                }).catch(() => {});
-                            }, 30000);
-                        }
+                if (!window.VIEWER_CONFIG?.modelId || !isIOS) return;
+                const url = '/api/models/' + window.VIEWER_CONFIG.modelId + '/usdz_status';
+                const arBtn = document.getElementById('arButton');
+                if (!arBtn) return;
+                const setBadge = (state) => {
+                    let badge = document.getElementById('usdzBadge');
+                    if (state === 'ready') { badge?.remove(); arBtn.title = 'View in AR'; arBtn.removeAttribute('aria-description'); return; }
+                    const text = state === 'failed'
+                        ? 'iOS AR is not available for this model yet (USDZ conversion failed)'
+                        : 'iOS AR is being prepared…';
+                    if (!badge) {
+                        badge = document.createElement('span');
+                        badge.id = 'usdzBadge';
+                        badge.setAttribute('role', 'status');
+                        arBtn.style.position = 'relative';
+                        arBtn.appendChild(badge);
                     }
-                }).catch(() => {});
+                    badge.style.cssText = 'position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--color-gray-900);background:' + (state === 'failed' ? '#ef4444' : '#f59e0b') + ';';
+                    badge.title = text;
+                    badge.setAttribute('aria-label', text);
+                    arBtn.title = 'View in AR (' + text + ')';
+                };
+                // Re-check a few times at growing intervals: the USDZ can be
+                // ready well after the first 30 seconds.
+                const delays = [15000, 30000, 60000, 120000];
+                const poll = (attempt) => {
+                    fetch(url).then(r => r.json()).then(data => {
+                        if (!data.success) return;
+                        if (data.usdz_ready) { usdzReady = true; setBadge('ready'); return; }
+                        usdzReady = false;
+                        const last = attempt >= delays.length;
+                        setBadge(last ? 'failed' : 'pending');
+                        if (!last) setTimeout(() => poll(attempt + 1), delays[attempt]);
+                    }).catch(() => {});
+                };
+                poll(0);
             })();
 
             // ===== MULTI-AXIS SLICER (Panel-based, 3 independent axes) =====

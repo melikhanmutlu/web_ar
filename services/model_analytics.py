@@ -8,7 +8,9 @@ from flask import current_app, request, session
 
 from models import ModelAnalyticsEvent, db
 
-ANALYTICS_EVENT_TYPES = {"view", "embed_view", "ar_launch", "download", "share", "qr_open"}
+# `ar_launch` = an AR session actually started; `qr_shown` = the "AR not
+# supported here, scan the QR" fallback was displayed (not an AR launch).
+ANALYTICS_EVENT_TYPES = {"view", "embed_view", "ar_launch", "download", "share", "qr_open", "qr_shown"}
 
 
 def record_model_event(model_id, event_type, metadata=None):

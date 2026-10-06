@@ -53,10 +53,12 @@ def _bearer_token(required_scope):
     if owner is None or not owner.is_active_flag:
         return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
     if token.organization_id is not None:
-        still_member = OrganizationMember.query.filter_by(
+        # Org tokens can only be minted by owners/admins; demoting the creator
+        # must disable the token, not leave it with the old role's reach.
+        membership = OrganizationMember.query.filter_by(
             organization_id=token.organization_id, user_id=token.user_id
         ).first()
-        if still_member is None:
+        if membership is None or membership.role not in {"owner", "admin"}:
             return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
     if not token.has_scope(required_scope):
         return None, (jsonify({"success": False, "error": f"Missing scope: {required_scope}"}), 403)
@@ -371,6 +373,9 @@ def api_v1_update_model(model_id):
     if "visibility" in data:
         if data["visibility"] not in {"private", "unlisted", "public"}:
             return jsonify({"error": "Invalid visibility"}), 400
+        # Same rule as the session UI: only the model's owner changes who can see it.
+        if model.user_id != token.user_id:
+            return jsonify({"error": "Only the model owner can change visibility"}), 403
         model.visibility = data["visibility"]
     db.session.commit()
     return jsonify({"data": {
@@ -388,6 +393,8 @@ def api_v1_delete_model(model_id):
     model = _token_model_query(token).filter(UserModel.id == model_id).first()
     if not model:
         return jsonify({"error": "Model not found"}), 404
+    if model.user_id != token.user_id:
+        return jsonify({"error": "Only the model owner can delete it"}), 403
     model.deleted_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"data": {"id": model.id, "deleted": True}})

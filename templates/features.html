@@ -57,6 +57,24 @@
                 </div>
             </div>
         </section>
+
+        <section class="integration-strip" id="compare-convert">
+            <div class="shell">
+                <div class="reveal" data-reveal>
+                    <span>Convert &amp; compare</span>
+                    <div>
+                        <b><a href="{{ url_for('main.convert_page', pair='stl-to-ar') }}">STL to AR</a></b>
+                        <b><a href="{{ url_for('main.convert_page', pair='stl-to-glb') }}">STL to GLB</a></b>
+                        <b><a href="{{ url_for('main.convert_page', pair='obj-to-glb') }}">OBJ to GLB</a></b>
+                        <b><a href="{{ url_for('main.convert_page', pair='fbx-to-glb') }}">FBX to GLB</a></b>
+                        <b><a href="{{ url_for('main.convert_page', pair='step-to-glb') }}">STEP to GLB</a></b>
+                        <b><a href="{{ url_for('main.vs_page', competitor='sketchfab') }}">ARVision vs Sketchfab</a></b>
+                        <b><a href="{{ url_for('main.vs_page', competitor='meshy') }}">vs Meshy</a></b>
+                        <b><a href="{{ url_for('main.vs_page', competitor='model-viewer') }}">vs model-viewer</a></b>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
 
     {% include "_site_footer.html" %}

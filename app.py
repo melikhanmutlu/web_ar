@@ -2277,7 +2277,9 @@ def inject_seo_defaults():
     """Site-wide SEO context (SITE_URL for absolute canonical/OG URLs,
     GOOGLE_SITE_VERIFICATION for the GSC verification meta tag) — available
     in every template without each route passing them explicitly."""
-    return {"SITE_URL": SITE_URL, "GOOGLE_SITE_VERIFICATION": GOOGLE_SITE_VERIFICATION}
+    from urllib.parse import urlparse
+    return {"SITE_URL": SITE_URL, "SITE_HOST": urlparse(SITE_URL).netloc,
+            "GOOGLE_SITE_VERIFICATION": GOOGLE_SITE_VERIFICATION}
 
 
 # ========== MODEL VERSION MANAGEMENT ==========

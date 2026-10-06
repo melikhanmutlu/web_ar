@@ -23,9 +23,8 @@
                       when unset — a page must explicitly opt in to being
                       indexed.
     seo_og_type      Open Graph type. Defaults to 'website'.
-    seo_og_image     Absolute image URL. When unset, og:image/twitter:image
-                      are omitted and the Twitter card falls back to
-                      'summary' instead of 'summary_large_image'.
+    seo_og_image     Absolute image URL. When unset, falls back to the
+                      default 1200x630 marketing image.
 
   SITE_URL and GOOGLE_SITE_VERIFICATION come from inject_seo_defaults() in
   app.py and are always in scope.
@@ -35,6 +34,7 @@
 {% set _seo_canonical = seo_canonical or (SITE_URL + request.path) %}
 {% set _seo_robots = seo_robots or 'noindex, nofollow' %}
 {% set _seo_og_type = seo_og_type or 'website' %}
+{% set _seo_og_image = seo_og_image or (SITE_URL + url_for('static', filename='marketing/og-default.jpg')) %}
 
 <meta name="description" content="{{ _seo_description }}">
 <meta name="robots" content="{{ _seo_robots }}">
@@ -48,12 +48,8 @@
 <meta property="og:title" content="{{ _seo_title }}">
 <meta property="og:description" content="{{ _seo_description }}">
 <meta property="og:url" content="{{ _seo_canonical }}">
-{% if seo_og_image %}
-<meta property="og:image" content="{{ seo_og_image }}">
+<meta property="og:image" content="{{ _seo_og_image }}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="{{ seo_og_image }}">
-{% else %}
-<meta name="twitter:card" content="summary">
-{% endif %}
+<meta name="twitter:image" content="{{ _seo_og_image }}">
 <meta name="twitter:title" content="{{ _seo_title }}">
 <meta name="twitter:description" content="{{ _seo_description }}">

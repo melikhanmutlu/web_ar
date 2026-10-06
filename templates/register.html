@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Register - arvision{% endblock %}
+{% block title %}Create account — ARVision{% endblock %}
 
 {% block content %}
 <div class="aurora-bg aurora-bg--static" aria-hidden="true"></div>
@@ -17,7 +17,7 @@
             {% if ref_code %}<input type="hidden" name="ref" value="{{ ref_code }}">{% endif %}
             <div>
                 <label for="username" class="auth-label">Username</label>
-                {{ form.username(class="av-input auth-input", autocomplete="username", placeholder="melikhan") }}
+                {{ form.username(class="av-input auth-input", autocomplete="username", placeholder="e.g. studio_name") }}
                 {% if form.username.errors %}
                     {% for error in form.username.errors %}
                         <p class="auth-error">{{ error }}</p>

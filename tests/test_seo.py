@@ -120,3 +120,32 @@ def test_every_sitemap_url_renders_with_indexable_robots(client):
         m = re.search(r'<meta name="robots" content="([^"]*)"', html)
         assert m, f"{path} has no robots meta"
         assert "noindex" not in m.group(1) and "nofollow" not in m.group(1), (path, m.group(1))
+
+
+def test_pages_have_default_og_image_and_large_twitter_card(client):
+    html = client.get("/pricing").get_data(as_text=True)
+    assert 'property="og:image" content="' in html
+    assert "marketing/og-default.jpg" in html
+    assert 'name="twitter:card" content="summary_large_image"' in html
+
+
+def test_old_community_url_redirects_and_vs_convert_pages_are_linked(client):
+    assert client.get("/community").status_code == 301
+    html = client.get("/features").get_data(as_text=True)
+    for path in ("/vs/sketchfab", "/vs/meshy", "/vs/model-viewer", "/convert/stl-to-glb",
+                 "/convert/step-to-glb", "/convert/stl-to-ar"):
+        assert f'href="{path}"' in html, path
+    assert "#compare-convert" in client.get("/").get_data(as_text=True)
+
+
+def test_mockup_url_uses_site_host_not_hardcoded_domain(client):
+    html = client.get("/").get_data(as_text=True)
+    assert "arvision.app" not in html
+    assert "webar.up.railway.app/viewer" in html
+
+
+def test_register_placeholder_and_titles_are_consistent(client):
+    reg = client.get("/register").get_data(as_text=True)
+    assert "melikhan" not in reg and 'placeholder="e.g. studio_name"' in reg
+    assert "<title>Create account — ARVision</title>" in reg
+    assert "<title>Sign in — ARVision</title>" in client.get("/login").get_data(as_text=True)

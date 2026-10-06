@@ -3634,3 +3634,7 @@ footer { border-top: 1px solid #e2e5ea; background: #fff; }
 .legal-table th, .legal-table td { padding: 10px 12px; border: 1px solid var(--line, #e3e6eb); text-align: left; vertical-align: top; }
 .legal-table th { background: var(--soft, #f6f7f9); }
 @media (max-width: 640px) { .legal-doc { overflow-x: auto; } }
+
+.integration-strip .reveal>div { flex-wrap: wrap; }
+.integration-strip a { color: inherit; text-decoration: none; }
+.integration-strip a:hover { text-decoration: underline; }

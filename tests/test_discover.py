@@ -8,16 +8,18 @@ def _model(id_, **kwargs):
     return UserModel(id=id_, **defaults)
 
 
-def test_community_is_the_canonical_public_gallery_route(client):
-    response = client.get("/community")
-    body = response.get_data(as_text=True)
+def test_discover_is_the_canonical_gallery_and_community_redirects(client):
+    # /community used to duplicate /discover; old links 301 to it.
+    old = client.get("/community?q=chair&page=2")
+    assert old.status_code == 301
+    assert old.headers["Location"].endswith("/discover?q=chair&page=2")
 
+    response = client.get("/discover")
+    body = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "<title>Community - arvision</title>" in body
+    assert "<title>Community — ARVision</title>" in body
     assert "Community library" not in body
     assert "Most liked" not in body
-    # Retain the previous public URL for existing shared links.
-    assert client.get("/discover").status_code == 200
 
 
 def test_discover_lists_only_public_models(client):

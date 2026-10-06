@@ -1,5 +1,5 @@
 """Public gallery: browse community models that owners made public."""
-from flask import Blueprint, render_template, request
+from flask import Blueprint, redirect, render_template, request, url_for
 
 from models import UserModel, db
 
@@ -8,8 +8,14 @@ discover_bp = Blueprint("discover", __name__)
 PAGE_SIZE = 24
 
 
-@discover_bp.route("/discover")
 @discover_bp.route("/community")
+def community_redirect():
+    """/community used to serve the same page as /discover (duplicate URLs);
+    permanently redirect it, keeping any ?q=/?page= parameters."""
+    return redirect(url_for("discover.discover", **request.args), code=301)
+
+
+@discover_bp.route("/discover")
 def discover():
     query = UserModel.query.filter(
         UserModel.visibility == "public", UserModel.deleted_at.is_(None)

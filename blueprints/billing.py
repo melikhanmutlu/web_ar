@@ -32,7 +32,7 @@ def _client_ip():
     forwarded = request.headers.get("X-Forwarded-For", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    return request.remote_addr or "0.0.0.0"
+    return request.remote_addr or "0.0.0.0"  # nosec B104 - placeholder client IP string, not a socket bind
 
 
 @billing_bp.route("/billing")

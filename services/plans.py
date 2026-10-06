@@ -18,6 +18,7 @@ Value conventions (shared with the enforcement sites):
 """
 
 import os
+from decimal import ROUND_HALF_UP, Decimal
 from datetime import datetime, timedelta
 
 # Seed / self-serve identity. The Plan table is seeded from these on first boot
@@ -325,8 +326,8 @@ def format_money(amount, currency=DEFAULT_CURRENCY):
     """List-price display: "$19" for USD, "19 EUR" etc. otherwise."""
     if amount is None:
         return "\u2014"
-    amount = float(amount)
-    text = f"{amount:.0f}" if amount == int(amount) else f"{amount:.2f}"
+    amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    text = f"{amount:.0f}" if amount == amount.to_integral_value() else f"{amount:.2f}"
     if (currency or DEFAULT_CURRENCY) == "USD":
         return f"${text}"
     return f"{text} {currency}"

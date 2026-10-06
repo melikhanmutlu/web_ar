@@ -395,3 +395,44 @@ def test_plan_expiry_falls_back_to_free(client):
     active.plan_expires_at = datetime.utcnow() + timedelta(days=1)
     db.session.commit()
     assert plan_name(active) == "business"
+
+
+def test_fractional_plan_price_round_trips(client, admin_user):
+    from decimal import Decimal
+    from models import Plan
+    from services.plans import format_money, get_plan_config
+    login(client, "adminuser", "adminpassword")
+    form = _full_plan_form("pro", "pro")
+    form["plan_slug"] = "pro"
+    form["pro__price"] = "19.99"
+    form["pro__currency"] = "USD"
+    resp = client.post("/admin/settings?tab=plans", data=form)
+    assert resp.status_code == 302
+
+    assert Plan.query.filter_by(slug="pro").one().price == Decimal("19.99")
+    price = get_plan_config("pro")["price"]
+    assert price == Decimal("19.99")
+    assert format_money(price, "USD") == "$19.99"
+    assert "$19.99" in client.get("/pricing").get_data(as_text=True)
+
+
+def test_whole_plan_price_stays_whole(client):
+    from decimal import Decimal
+    from models import Plan
+    from services.plans import format_money
+    price = Plan.query.filter_by(slug="pro").one().price
+    assert price == Decimal("19")
+    assert format_money(price, "USD") == "$19"
+    assert format_money(Decimal("19.90"), "EUR") == "19.90 EUR"
+
+
+def test_plan_price_with_sub_cent_precision_is_rejected(client, admin_user):
+    from decimal import Decimal
+    from models import Plan
+    login(client, "adminuser", "adminpassword")
+    for bad in ("19.999", "abc", "NaN", "1e3x"):
+        form = _full_plan_form("pro", "pro")
+        form["plan_slug"] = "pro"
+        form["pro__price"] = bad
+        client.post("/admin/settings?tab=plans", data=form)
+        assert Plan.query.filter_by(slug="pro").one().price == Decimal("19"), bad

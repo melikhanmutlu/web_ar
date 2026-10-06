@@ -19,6 +19,7 @@ import base64
 import hashlib
 import hmac
 import json
+from decimal import ROUND_HALF_UP, Decimal
 
 import requests
 
@@ -57,7 +58,7 @@ class PayTRProvider(PaymentProvider):
         # price -> TRY); otherwise the list price is already in TRY.
         charge = payment.charge_amount if payment.charge_amount is not None else payment.amount
         currency = payment.charge_currency or payment.currency
-        amount_kurus = int(round(float(charge) * 100))
+        amount_kurus = int((Decimal(str(charge)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         basket = base64.b64encode(
             json.dumps([[item_name, str(charge), 1]]).encode()
         ).decode()

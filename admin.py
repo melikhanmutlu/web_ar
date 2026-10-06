@@ -1902,11 +1902,13 @@ def _parse_plan_fields(prefix, slug):
     price_raw = (request.form.get(f"{prefix}__price") or "").strip()
     if price_raw:
         try:
-            price = int(price_raw)
-            if not 0 <= price <= 10_000_000:
+            price = Decimal(price_raw)
+            # Finite, non-negative, at most 2 decimals (Numeric(10, 2)).
+            if not price.is_finite() or not 0 <= price <= 10_000_000 or price != price.quantize(Decimal("0.01")):
                 raise ValueError
-        except ValueError:
-            raise ValueError(f"{display_name}: price must be a non-negative whole number.")
+            price = price.quantize(Decimal("0.01"))
+        except (ValueError, ArithmeticError):
+            raise ValueError(f"{display_name}: price must be a non-negative amount with at most 2 decimals (e.g. 19.99).")
     currency = ((request.form.get(f"{prefix}__currency") or "USD").strip().upper() or "USD")[:3]
     if currency not in ("USD", "TRY", "EUR"):
         raise ValueError(f"{display_name}: currency must be one of USD, TRY, EUR.")

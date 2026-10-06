@@ -61,7 +61,7 @@
         <div class="admin-field"><label class="field-label">name</label>
             <input type="text" name="{{ prefix }}__display_name" class="av-input" maxlength="60" value="{{ p.display_name if p else '' }}"></div>
         <div class="admin-field"><label class="field-label">price ({{ p.currency if p else 'USD' }}/period)</label>
-            <input type="number" name="{{ prefix }}__price" class="av-input" min="0" step="1" value="{{ p.price if p and p.price is not none else '' }}" placeholder="free"></div>
+            <input type="number" name="{{ prefix }}__price" class="av-input" min="0" step="0.01" value="{{ p.price if p and p.price is not none else '' }}" placeholder="free"></div>
         <div class="admin-field"><label class="field-label">currency</label>
             <select name="{{ prefix }}__currency" class="av-input">
                 {% for cur in ('USD', 'TRY', 'EUR') %}

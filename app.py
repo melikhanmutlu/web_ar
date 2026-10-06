@@ -458,6 +458,9 @@ app.view_functions["upload.upload_file"] = limiter.limit(
 app.view_functions["upload.upload_model"] = limiter.limit(
     "30 per hour"
 )(app.view_functions["upload.upload_model"])
+app.view_functions["upload.init_chunked_upload"] = limiter.limit(
+    "30 per hour"
+)(app.view_functions["upload.init_chunked_upload"])
 app.view_functions["upload.batch_upload_models"] = limiter.limit(
     "10 per hour"
 )(app.view_functions["upload.batch_upload_models"])

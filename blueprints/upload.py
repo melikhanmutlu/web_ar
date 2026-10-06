@@ -45,8 +45,9 @@ def _effective_max_upload_mb():
     imposes one. The env-derived MAX_CONTENT_LENGTH stays the hard ceiling
     enforced by Werkzeug regardless."""
     caps = [setting_int("max_upload_mb", 0)]
-    if current_user.is_authenticated:
-        caps.append(plan_limit(current_user, "max_upload_mb"))
+    # Anonymous uploads get the default (Free) plan's cap; without it the
+    # chunked path accepted any declared size from logged-out clients.
+    caps.append(plan_limit(current_user if current_user.is_authenticated else None, "max_upload_mb"))
     positive = [c for c in caps if c]
     return min(positive) if positive else 0
 

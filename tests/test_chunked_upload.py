@@ -82,3 +82,12 @@ def test_reputting_same_chunk_index_is_idempotent(client):
     resp = client.put(f"/api/uploads/chunked/{upload_id}/chunks/0", data=data)
     assert resp.status_code == 200
     assert resp.get_json()["received_count"] == 1
+
+
+def test_anonymous_init_is_capped_at_free_plan_upload_limit(client):
+    """Logged-out clients used to be able to declare any size (e.g. 50 GiB)."""
+    resp = _init(client, "huge.stl", 50 * 1024 ** 3, 10)
+    assert resp.status_code == 413
+
+    small = _init(client, "ok.stl", 10 * 1024 * 1024, 2)
+    assert small.status_code == 201

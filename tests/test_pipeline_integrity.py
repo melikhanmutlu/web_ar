@@ -386,6 +386,23 @@ def _animated_gltf_files():
     return entries
 
 
+def _gltf_transform_works():
+    import shutil
+    import subprocess
+    from converters.glb_optimizer import _resolve_gltf_transform
+    cmd = _resolve_gltf_transform()
+    if not cmd or (cmd[0].endswith("npx") and not shutil.which("gltf-transform")
+                   and not os.path.isdir(os.path.join(os.path.dirname(app_module.__file__),
+                                                      "node_modules", "@gltf-transform"))):
+        return False
+    try:
+        return subprocess.run(cmd + ["--version"], capture_output=True, timeout=60).returncode == 0
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _gltf_transform_works(),
+                    reason="gltf-transform unavailable; .gltf input falls back to trimesh, which drops animations")
 def test_gltf_animations_survive_packing(client, tmp_path):
     from pygltflib import GLTF2
 

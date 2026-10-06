@@ -16,6 +16,7 @@ from werkzeug.exceptions import NotFound
 from services.time_utils import datetime
 from models import Folder, UserModel, db
 from model_cleanup import purge_model_completely
+from services.org_membership import _organization_membership
 from services.storage_quota import (
     TRASH_RETENTION_DAYS,
     _purge_expired_trash,
@@ -473,9 +474,21 @@ def create_folder():
         return redirect(url_for("models_crud.my_models"))
 
 
+def _org_folder_denied(folder):
+    """True when `folder` is an organization folder and the current user is not
+    (still) an owner/admin/editor of that organization. Personal folders -> False."""
+    if folder.organization_id is None:
+        return False
+    return not _organization_membership(
+        folder.organization_id, {"owner", "admin", "editor"}
+    )
+
+
 def delete_folder_recursive(folder):
-    # First, recursively delete all subfolders
-    for subfolder in Folder.query.filter_by(parent_id=folder.id).all():
+    # First, recursively delete all subfolders (never crossing organization scope)
+    for subfolder in Folder.query.filter_by(
+        parent_id=folder.id, organization_id=folder.organization_id
+    ).all():
         delete_folder_recursive(subfolder)
 
     # Delete all models in this folder
@@ -491,8 +504,9 @@ def delete_folder(folder_id):
     try:
         folder = Folder.query.get_or_404(folder_id)
 
-        # Check if folder belongs to current user
-        if folder.user_id != current_user.id:
+        # Check if folder belongs to current user (and, for org folders, that
+        # the user is still an editor+ member of that organization)
+        if folder.user_id != current_user.id or _org_folder_denied(folder):
             return jsonify({"error": "Unauthorized"}), 403
 
         # Recursively delete folder and its contents
@@ -539,7 +553,7 @@ def move_model():
         # If folder_id is provided, check if the folder exists and belongs to the user
         if folder_id:
             folder = Folder.query.get_or_404(folder_id)
-            if folder.user_id != current_user.id:
+            if folder.user_id != current_user.id or _org_folder_denied(folder):
                 return jsonify({"success": False, "error": "Unauthorized"}), 403
 
         # Update model's folder
@@ -627,7 +641,7 @@ def restore_selected_models():
 def rename_folder(folder_id):
     try:
         folder = Folder.query.get_or_404(folder_id)
-        if folder.user_id != current_user.id:
+        if folder.user_id != current_user.id or _org_folder_denied(folder):
             return jsonify({"success": False, "error": "Unauthorized"}), 403
 
         data = request.get_json(silent=True) or {}
@@ -674,7 +688,7 @@ def move_selected_models():
         # Verify folder exists and belongs to user if folder_id is provided
         if folder_id:
             folder = Folder.query.get_or_404(folder_id)
-            if folder.user_id != current_user.id:
+            if folder.user_id != current_user.id or _org_folder_denied(folder):
                 return jsonify({"success": False, "error": "Unauthorized"}), 403
 
         # Move all selected models

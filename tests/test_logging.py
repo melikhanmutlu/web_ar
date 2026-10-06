@@ -1,4 +1,5 @@
 import json
+import os
 import logging
 
 from services.observability import JsonLogFormatter, initialize_external_observability
@@ -56,3 +57,19 @@ def test_json_formatter_escapes_unicode_for_legacy_consoles():
     record = logging.LogRecord("test", logging.INFO, __file__, 1, "✅ ready", (), None)
     rendered = JsonLogFormatter().format(record)
     assert "\\u2705" in rendered
+
+
+def test_importing_app_does_not_write_app_log(tmp_path):
+    """Logs go to stdout/stderr only; no unbounded app.log in the CWD."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    env = dict(os.environ, PYTHONPATH=str(repo), SECRET_KEY="test-secret",
+               DATABASE_URL=f"sqlite:///{tmp_path / 'log.db'}", SKIP_DB_BOOTSTRAP="1",
+               STORAGE_ROOT=str(tmp_path))
+    result = subprocess.run([sys.executable, "-c", "import app"], cwd=tmp_path,
+                            env=env, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert not (tmp_path / "app.log").exists()

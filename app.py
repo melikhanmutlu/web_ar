@@ -541,7 +541,7 @@ app.view_functions["main.contact_sales"] = limiter.limit(
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("app.log"), logging.StreamHandler()],
+    handlers=[logging.StreamHandler()],  # stdout/stderr only; the platform collects it
 )
 logger = logging.getLogger(__name__)
 configure_json_logging()

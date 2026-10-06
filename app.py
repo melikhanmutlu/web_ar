@@ -619,13 +619,10 @@ def make_admin_command(email):
 
 # Promote ADMIN_EMAILS (comma-separated) on boot — idempotent, covers deploys
 # where a shell isn't handy. Wrapped defensively: on a legacy DB the is_admin
-# column may not exist until `flask db upgrade` has run. The project owner is
-# always promoted so the panel has an admin out of the box; add more via the
-# ADMIN_EMAILS env var.
-_DEFAULT_ADMIN_EMAILS = ["melikhanmutlu@gmail.com"]
-_admin_emails = _DEFAULT_ADMIN_EMAILS + [
-    e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
-]
+# column may not exist until `flask db upgrade` has run. There is no built-in
+# default: an address in code would let anyone who registers (or renames their
+# account to) it become admin. auth.py refuses switching to a listed address.
+_admin_emails = admin_emails()
 if _admin_emails and os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
     "1",
     "true",

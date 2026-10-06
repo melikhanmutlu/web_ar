@@ -222,6 +222,11 @@ GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')
 # noindex regardless of this flag (see _seo_robots_for_model_page in app.py).
 SEO_INDEX_MODEL_PAGES = os.getenv('SEO_INDEX_MODEL_PAGES', 'false').lower() == 'true'
 
+def admin_emails():
+    """Addresses promoted to admin on boot (ADMIN_EMAILS, comma-separated)."""
+    return [e.strip() for e in os.environ.get('ADMIN_EMAILS', '').split(',') if e.strip()]
+
+
 # Klasörleri oluştur
 def create_directories():
     """Create necessary directories if they don't exist."""

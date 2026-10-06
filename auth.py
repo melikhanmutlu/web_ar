@@ -166,11 +166,14 @@ def profile():
 def update_profile():
     profile_form = ProfileForm(current_user.id, request.form)
     if profile_form.validate():
-        current_user.username = profile_form.username.data
-        current_user.email = profile_form.email.data
-        db.session.commit()
-        flash('Profile updated.', 'success')
-        return redirect(url_for('auth.profile'))
+        if _claims_admin_email(profile_form.email.data):
+            profile_form.email.errors.append('This email address is reserved.')
+        else:
+            current_user.username = profile_form.username.data
+            current_user.email = profile_form.email.data
+            db.session.commit()
+            flash('Profile updated.', 'success')
+            return redirect(url_for('auth.profile'))
 
     flash('Please fix the errors below.', 'error')
     return _render_profile(profile_form, ChangePasswordForm())
@@ -191,6 +194,18 @@ def change_password():
     flash('Please fix the errors below.', 'error')
     profile_form = ProfileForm(current_user.id, username=current_user.username, email=current_user.email)
     return _render_profile(profile_form, password_form)
+
+def _claims_admin_email(new_email):
+    """True if the user is switching to an ADMIN_EMAILS address.
+
+    Boot promotes those addresses to admin, so without email verification a
+    rename to one of them would be a privilege escalation.
+    """
+    from config import admin_emails
+    new = (new_email or '').strip().lower()
+    if new == (current_user.email or '').lower():
+        return False
+    return new in {e.lower() for e in admin_emails()}
 
 def _render_profile(profile_form, password_form):
     import app as app_module

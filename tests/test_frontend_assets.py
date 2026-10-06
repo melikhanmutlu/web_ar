@@ -50,7 +50,10 @@ def test_every_model_viewer_page_self_hosts_draco():
     for path in TEMPLATES.glob("*.html"):
         text = path.read_text(encoding="utf-8")
         if "js/model-viewer.min.js" in text:
-            assert "dracoDecoderLocation" in text, path.name
+            # view.html -> js/viewer/decoders.js, studio.html -> js/studio/generate.js (checked below).
+            assert "dracoDecoderLocation" in text or "js/viewer/decoders.js" in text or '"dracoDecoder"' in text, path.name
+    assert "dracoDecoderLocation" in (ROOT / "static/js/viewer/decoders.js").read_text(encoding="utf-8")
+    assert "dracoDecoderLocation" in (ROOT / "static/js/studio/generate.js").read_text(encoding="utf-8")
     vr = (TEMPLATES / "vr.html").read_text(encoding="utf-8")
     assert "dracoDecoderPath" in vr
     assert re.search(r"dracoDecoderLocation\s*=\s*'/static/vendor/draco/'", (ROOT / "static/js/my_models.js").read_text(encoding="utf-8"))

@@ -5,28 +5,28 @@ Flask-SQLAlchemy==3.1.1
 # Pinned explicitly: Flask-SQLAlchemy only requires >=2.0.16, so fresh builds
 # pulled SQLAlchemy 2.1, whose default postgresql:// driver is psycopg (v3) —
 # not installed here — and every web/worker boot crashed on import.
-SQLAlchemy==2.0.54
+SQLAlchemy==2.1.3
 Flask-Login==0.6.3
-Flask-Migrate==4.0.5
+Flask-Migrate==4.1.0
 Werkzeug==3.1.9
 trimesh==4.0.5
-cascadio==0.0.17
+cascadio==0.1.1
 mapbox-earcut>=1.1.0
 shapely==2.1.2
-scipy==1.11.4
-networkx==3.2.1
-pygltflib==1.16.1
+scipy==1.17.1
+networkx==3.7
+pygltflib==1.16.5
 # trimesh 4.0.5 still uses ndarray.ptp(), removed by NumPy 2.0.
 numpy>=1.26.4,<2
 Pillow==12.3.0
 python-slugify==8.0.1
 gunicorn==23.0.0
-psycopg2-binary==2.9.9
-WTForms==3.1.1
-Flask-WTF==1.2.1
-email-validator==2.1.0.post1
-requests==2.33.0
-python-dotenv==1.2.2
+psycopg2-binary==2.9.13
+WTForms==3.2.2
+Flask-WTF==1.3.0
+email-validator==2.3.0
+requests==2.34.2
+python-dotenv==1.2.4
 Flask-Limiter==3.8.0
 Flask-Compress==1.25
 sentry-sdk[flask]==2.71.0

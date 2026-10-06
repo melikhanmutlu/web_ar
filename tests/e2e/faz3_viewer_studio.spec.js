@@ -4,7 +4,9 @@ const { uploadCubeAndGetViewerUrl } = require('./helpers/upload');
 
 // Faz 3 viewer & studio fixes (UIA-06, 07, 13, 15).
 
-test('Escape cancels an inline title edit and nothing is saved', async ({ page }) => {
+test('Escape cancels an inline title edit and nothing is saved', async ({ page, isMobile }) => {
+  // On phones the title sits in the collapsed info sheet; the inline editor is desktop UI.
+  test.skip(isMobile, 'title editor is in the collapsed info sheet on mobile');
   test.setTimeout(60_000);
   await registerAndLogin(page, 'titleesc');
   await uploadCubeAndGetViewerUrl(page);
@@ -25,7 +27,9 @@ test('Escape cancels an inline title edit and nothing is saved', async ({ page }
   expect(patched).toBe(false);
 });
 
-test('a failed title save restores the old value and shows an error toast', async ({ page }) => {
+test('a failed title save restores the old value and shows an error toast', async ({ page, isMobile }) => {
+  // On phones the title sits in the collapsed info sheet; the inline editor is desktop UI.
+  test.skip(isMobile, 'title editor is in the collapsed info sheet on mobile');
   test.setTimeout(60_000);
   await registerAndLogin(page, 'titlefail');
   await uploadCubeAndGetViewerUrl(page);

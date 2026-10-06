@@ -16,6 +16,23 @@
         </div>
     </section>
 
+    {% if not email_verified or user.pending_email %}
+    <section class="profile-panel" id="verifyEmailNotice">
+        <h2 class="av-card-title">Verify your email</h2>
+        <p class="av-card-desc">
+            {% if user.pending_email %}
+            We sent a verification link to <strong>{{ user.pending_email }}</strong>. Your email changes once you open it.
+            {% else %}
+            Verify <strong>{{ user.email }}</strong> to unlock free AI trial generations, the Business trial and referral rewards.
+            {% endif %}
+        </p>
+        <form method="POST" action="{{ url_for('auth.resend_verification') }}" class="profile-form av-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-primary profile-submit">Resend verification email</button>
+        </form>
+    </section>
+    {% endif %}
+
     <section class="profile-overview">
         <div class="profile-plan-copy">
             <p class="profile-eyebrow">Current plan</p>

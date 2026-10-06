@@ -13,6 +13,7 @@ import secrets
 from config import SITE_URL
 from models import User, db
 from services.credits import grant_ai_credits
+from services.email_verification import is_verified
 from services.time_utils import datetime
 
 REFERRER_CREDITS = int(os.getenv("REFERRAL_REFERRER_CREDITS", 5))
@@ -53,9 +54,10 @@ def _rewards_this_month(referrer_id, now):
 
 
 def apply_referral(new_user, code, now=None):
-    """Link `new_user` to the owner of `code` and grant both sides credits
-    (referrer only while under the monthly cap). No-op for an unknown code or
-    a self-referral. The caller owns the surrounding transaction/commit.
+    """Link `new_user` to the owner of `code`. No-op for an unknown code or a
+    self-referral. Rewards need a verified email: granted immediately here if
+    the new user already is, otherwise when they verify (grant_referral_rewards).
+    The caller owns the surrounding transaction/commit.
     Returns the referrer User or None."""
     if not code:
         return None
@@ -63,11 +65,24 @@ def apply_referral(new_user, code, now=None):
     if referrer is None or referrer.id == new_user.id:
         return None
 
-    now = now or datetime.utcnow()
     new_user.referred_by_id = referrer.id
-    grant_ai_credits(new_user, INVITEE_CREDITS)
-    # _rewards_this_month counts new_user too (already linked above), so compare
-    # against cap+1 — i.e. reward the referrer while they're at/under the cap.
-    if _rewards_this_month(referrer.id, now) <= MONTHLY_REWARD_CAP:
-        grant_ai_credits(referrer, REFERRER_CREDITS)
+    if is_verified(new_user):
+        grant_referral_rewards(new_user, now)
     return referrer
+
+
+def grant_referral_rewards(new_user, now=None):
+    """Grant both sides their credits for a referred, now-verified user. The
+    referrer is rewarded only while under the monthly cap and only if their own
+    email is verified; otherwise that side is skipped (no error). Caller commits."""
+    if not new_user.referred_by_id:
+        return
+    referrer = db.session.get(User, new_user.referred_by_id)
+    if referrer is None:
+        return
+    now = now or datetime.utcnow()
+    grant_ai_credits(new_user, INVITEE_CREDITS)
+    # _rewards_this_month counts new_user too (already linked), so compare
+    # against cap+1 - i.e. reward the referrer while they're at/under the cap.
+    if is_verified(referrer) and _rewards_this_month(referrer.id, now) <= MONTHLY_REWARD_CAP:
+        grant_ai_credits(referrer, REFERRER_CREDITS)

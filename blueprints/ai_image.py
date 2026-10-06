@@ -27,6 +27,10 @@ def generate_image():
 
     exceeded, _count, limit = app_module._ai_quota_state(current_user.id)
     if exceeded and (current_user.ai_credit_balance or 0) <= 0:
+        if app_module.ai_trial_needs_verification(current_user):
+            return jsonify({"success": False,
+                            "error": "Verify your email to get free AI generations. "
+                                     "Check your inbox, or resend the link from your profile."}), 403
         from services.upgrade import upgrade_hint
         return jsonify({"success": False,
                         "error": f"Monthly generation limit reached ({limit}) and no AI credits left. "

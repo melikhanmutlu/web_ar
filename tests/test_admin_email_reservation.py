@@ -32,7 +32,10 @@ def test_profile_update_to_other_email_still_works(client, init_database, monkey
     resp = client.post('/profile/update', data=dict(username='testuser', email='new@example.com'))
 
     assert resp.status_code == 302
-    assert db.session.get(User, init_database.id).email == 'new@example.com'
+    # Takes effect only after the new address is verified.
+    user = db.session.get(User, init_database.id)
+    assert user.email == 'test@test.com'
+    assert user.pending_email == 'new@example.com'
 
 
 def test_admin_can_keep_own_listed_email(client, init_database, monkeypatch):

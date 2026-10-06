@@ -58,7 +58,11 @@
                     <div>
                         <p>&#10003; {{ (limits.storage_mb // 1024 ~ ' GB' if limits.storage_mb else '1 GB') }} storage</p>
                         <p>&#10003; {{ limits.max_models if limits.max_models else 'Unlimited' }} models</p>
+                        {% if plan == 'free' and not limits.ai_monthly and free_ai_trial_count %}
+                        <p>&#10003; {{ free_ai_trial_count }} trial AI generations (verified email)</p>
+                        {% else %}
                         <p>&#10003; {{ limits.ai_monthly if limits.ai_monthly else 0 }} AI generations / month</p>
+                        {% endif %}
                         <p>&#10003; Up to {{ limits.max_upload_mb }} MB per file</p>
                         <p>&#10003; {{ limits.batch_size }} files per batch upload</p>
                         <p>&#10003; {{ limits.analytics_retention_days }}-day analytics history</p>

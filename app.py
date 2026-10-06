@@ -105,6 +105,7 @@ from services.storage_quota import (
     _storage_quota_bytes,
 )
 from services.org_membership import _organization_membership
+from services.email_verification import is_verified
 
 app = Flask(__name__)
 app.config.from_object("config")
@@ -422,6 +423,9 @@ app.view_functions["auth.login"] = limiter.limit(
 app.view_functions["auth.register"] = limiter.limit(
     "5 per hour", methods=["POST"]
 )(app.view_functions["auth.register"])
+app.view_functions["auth.resend_verification"] = limiter.limit(
+    "5 per hour", methods=["POST"]
+)(app.view_functions["auth.resend_verification"])
 app.view_functions["sharing.open_model_share_link"] = limiter.limit(
     "30 per minute"
 )(app.view_functions["sharing.open_model_share_link"])
@@ -634,22 +638,31 @@ def make_admin_command(email):
 # column may not exist until `flask db upgrade` has run. There is no built-in
 # default: an address in code would let anyone who registers (or renames their
 # account to) it become admin. auth.py refuses switching to a listed address.
-_admin_emails = admin_emails()
-if _admin_emails and os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
-    "1",
-    "true",
-    "yes",
-):
+def _promote_admin_emails():
+    """Promote verified users whose address is listed in ADMIN_EMAILS. Only a
+    verified mailbox qualifies: a listed address registered by someone else
+    must not become admin."""
+    emails = admin_emails()
+    if not emails:
+        return
     with app.app_context():
         try:
-            for _user in User.query.filter(User.email.in_(_admin_emails)).all():
-                if not _user.is_admin:
+            for _user in User.query.filter(User.email.in_(emails)).all():
+                if not _user.is_admin and _user.email_verified_at is not None:
                     _user.is_admin = True
                     logger.info(f"ADMIN_EMAILS: promoted {_user.email} to admin")
             db.session.commit()
         except Exception as e:
             db.session.rollback()
             logger.warning(f"ADMIN_EMAILS promotion skipped: {e}")
+
+
+if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in (
+    "1",
+    "true",
+    "yes",
+):
+    _promote_admin_emails()
 
 # Seed the Plan table from PLAN_CONFIG on first boot so admins have editable
 # Free/Pro/Business/Unlimited rows. Idempotent (no-op once any plan exists) and
@@ -2737,12 +2750,38 @@ def _ai_quota_state(user_id):
     global_default_limit = setting_int("ai_monthly_limit", app.config.get("AI_GEN_MONTHLY_LIMIT", 0))
     user = db.session.get(User, user_id) if user_id else None
     limit = effective_ai_monthly_limit(user, global_default_limit)
+    trial = _free_ai_trial_allowance(user, limit)
+    if trial and is_verified(user):
+        # Free trial: a lifetime (not monthly) allowance, so count every job.
+        used = AIGenerationJob.query.filter(AIGenerationJob.user_id == user_id).count()
+        return (used >= trial), used, trial
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,
         AIGenerationJob.status != "failed",  # failed generations don't use up the quota
     ).count()
     return (count >= limit), count, limit
+
+
+def _free_ai_trial_allowance(user, monthly_limit):
+    """Lifetime trial generations a Free account gets when its plan monthly AI
+    limit is 0 (admin setting free_ai_trial_count, default 3); 0 otherwise.
+    Using it additionally requires a verified email (see is_verified)."""
+    from services.plans import plan_name
+    if user is None or monthly_limit != 0 or plan_name(user) != "free":
+        return 0
+    return max(0, setting_int("free_ai_trial_count", 3))
+
+
+def ai_trial_needs_verification(user):
+    """True when `user` would get Free AI trial generations if only their
+    email were verified -- drives the "verify your email" 403 message."""
+    if user is None or is_verified(user):
+        return False
+    from services.plans import effective_ai_monthly_limit
+    global_default_limit = setting_int("ai_monthly_limit", app.config.get("AI_GEN_MONTHLY_LIMIT", 0))
+    return _free_ai_trial_allowance(
+        user, effective_ai_monthly_limit(user, global_default_limit)) > 0
 
 
 def _consume_ai_allowance(user):

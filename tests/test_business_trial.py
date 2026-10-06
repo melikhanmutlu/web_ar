@@ -8,7 +8,8 @@ from services.time_utils import datetime
 
 
 def _user(username, plan="free", is_admin=False):
-    user = User(username=username, email=f"{username}@test.com", plan=plan, is_admin=is_admin)
+    user = User(username=username, email=f"{username}@test.com", plan=plan, is_admin=is_admin,
+                email_verified_at=datetime.utcnow())
     user.set_password("testpassword123")
     db.session.add(user)
     db.session.commit()

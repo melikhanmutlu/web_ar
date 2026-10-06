@@ -72,6 +72,10 @@ def generate_3d():
     allowed, count, limit = app_module._consume_ai_allowance(user)
     if not allowed:
         db.session.rollback()
+        if app_module.ai_trial_needs_verification(user):
+            return jsonify({"success": False,
+                            "error": "Verify your email to get free AI generations. "
+                                     "Check your inbox, or resend the link from your profile."}), 403
         from services.upgrade import upgrade_hint
         return jsonify({"success": False,
                         "error": f"Monthly generation limit reached ({limit}) and no AI credits left. "

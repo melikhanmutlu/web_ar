@@ -152,6 +152,10 @@ def start_trial():
     if getattr(user, "is_admin", False):
         flash("Admin accounts already have full access.", "error")
         return redirect(url_for("billing.billing_home"))
+    from services.email_verification import is_verified, VERIFY_REQUIRED_MESSAGE
+    if not is_verified(user):
+        flash(VERIFY_REQUIRED_MESSAGE, "error")
+        return redirect(url_for("billing.billing_home"))
     if user.business_trial_used_at is not None:
         flash("You've already used your free Business trial.", "error")
         return redirect(url_for("billing.billing_home"))

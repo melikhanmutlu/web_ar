@@ -18,6 +18,7 @@ def _safe_next(next_page):
     return next_page
 from models import User, UserModel, Payment, db
 from site_settings import setting_bool
+from services.email_verification import is_verified, mark_verified, read_token, send_verification
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
 
@@ -137,7 +138,9 @@ def register():
             from services.referrals import apply_referral
             apply_referral(user, ref_code)
             db.session.commit()
-        flash('Registration successful! You can now log in.', 'success')
+        send_verification(user)
+        flash('Registration successful! We sent a verification link to your email - '
+              'verify it to unlock free AI trials. You can log in now.', 'success')
         return redirect(url_for('auth.login'))
 
     ref_code = (request.args.get('ref') or '').strip()[:16]
@@ -169,14 +172,72 @@ def update_profile():
         if _claims_admin_email(profile_form.email.data):
             profile_form.email.errors.append('This email address is reserved.')
         else:
-            current_user.username = profile_form.username.data
-            current_user.email = profile_form.email.data
-            db.session.commit()
-            flash('Profile updated.', 'success')
+            user = current_user._get_current_object()
+            user.username = profile_form.username.data
+            new_email = profile_form.email.data.strip()
+            if new_email.lower() != (user.email or '').lower():
+                # The address only takes effect once the new mailbox is verified.
+                user.pending_email = new_email
+                db.session.commit()
+                send_verification(user, new_email)
+                flash(f'Profile updated. We sent a verification link to {new_email}; '
+                      'your email changes once you open it.', 'success')
+            else:
+                user.pending_email = None
+                db.session.commit()
+                flash('Profile updated.', 'success')
             return redirect(url_for('auth.profile'))
 
     flash('Please fix the errors below.', 'error')
     return _render_profile(profile_form, ChangePasswordForm())
+
+@auth.route('/verify-email/<token>')
+def verify_email(token):
+    """Open the signed link from the verification email. Works logged-in or
+    not: the token itself proves control of the mailbox."""
+    dest = url_for('auth.profile') if current_user.is_authenticated else url_for('auth.login')
+    payload, error = read_token(token)
+    if error == 'expired':
+        flash('This verification link has expired. Log in and resend it from your profile.', 'error')
+        return redirect(dest)
+    user = db.session.get(User, payload.get('uid')) if payload else None
+    email = (payload or {}).get('email')
+    if user is None or not email:
+        flash('This verification link is invalid.', 'error')
+        return redirect(dest)
+
+    if email == user.email:
+        mark_verified(user)
+    elif user.pending_email and email == user.pending_email:
+        taken = User.query.filter(User.email == email, User.id != user.id).first()
+        if taken:
+            user.pending_email = None
+            db.session.commit()
+            flash('That email address is already registered to another account.', 'error')
+            return redirect(dest)
+        user.email = email
+        user.pending_email = None
+        mark_verified(user)
+    else:
+        flash('This verification link is no longer valid.', 'error')
+        return redirect(dest)
+    db.session.commit()
+    flash('Email verified. Thank you!', 'success')
+    return redirect(dest)
+
+@auth.route('/verify-email/resend', methods=['POST'])
+@login_required
+def resend_verification():
+    user = current_user._get_current_object()
+    if user.pending_email:
+        send_verification(user, user.pending_email)
+        flash(f'Verification link sent to {user.pending_email}.', 'success')
+    elif is_verified(user):
+        flash('Your email is already verified.', 'info')
+    else:
+        send_verification(user)
+        flash(f'Verification link sent to {user.email}.', 'success')
+    return redirect(url_for('auth.profile'))
 
 @auth.route('/profile/password', methods=['POST'])
 @login_required
@@ -247,6 +308,7 @@ def _render_profile(profile_form, password_form):
     return render_template(
         'profile.html',
         user=current_user,
+        email_verified=is_verified(current_user),
         plan=plan,
         plan_display=plan_display,
         usage=usage,

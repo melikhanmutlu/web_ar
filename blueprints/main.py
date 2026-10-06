@@ -344,6 +344,7 @@ def pricing():
     from services.plans import public_plan_slugs, plan_name, all_plan_configs
 
     from services.credits import CREDIT_PACKS
+    from site_settings import setting_int
 
     # Admins resolve to the internal "unlimited" plan (not public), so it
     # highlights nothing on the tier grid -- the template shows a note instead.
@@ -355,4 +356,5 @@ def pricing():
         plan_config=all_plan_configs(),
         credit_packs=CREDIT_PACKS,
         current_plan=current_plan,
+        free_ai_trial_count=max(0, setting_int("free_ai_trial_count", 3)),
     )

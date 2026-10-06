@@ -97,6 +97,30 @@ def _restore_compression(app_module, glb_path, mode, where):
         app_module.logger.warning(f"[{where}] Re-compression skipped: {e}")
 
 
+MAX_MODIFIED_DOWNLOADS = 3
+
+
+def _prune_modified_downloads(model_dir, newest, keep=MAX_MODIFIED_DOWNLOADS):
+    """Delete all but the `keep` newest modified_*.glb preview/download files
+    in `model_dir` (always including `newest`, the one just written) so
+    repeated Apply clicks can't pile up unbounded copies (they aren't counted
+    against the storage quota)."""
+    try:
+        files = [
+            os.path.join(model_dir, n) for n in os.listdir(model_dir)
+            if n.startswith("modified_") and n.endswith(".glb")
+            and os.path.join(model_dir, n) != newest
+        ]
+        files.sort(key=os.path.getmtime, reverse=True)
+        for stale in files[max(keep - 1, 0):]:
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 @model_editing_bp.route("/apply_modifications", methods=["POST"])
 def apply_modifications():
     """Apply material and transform modifications to GLB model"""
@@ -156,6 +180,7 @@ def apply_modifications():
         success = modify_glb(original_path, output_path, modifications)
 
         if success:
+            _prune_modified_downloads(os.path.dirname(output_path), output_path)
             download_url = f"/download_modified/{model_id}/{output_filename}"
             app_module.logger.info(f"[apply_modifications] Success! Download URL: {download_url}")
             return jsonify(

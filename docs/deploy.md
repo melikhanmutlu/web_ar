@@ -68,6 +68,8 @@ Every variable the code reads is documented in [`.env.example`](../.env.example)
 | Variable | Notes |
 |---|---|
 | `SECRET_KEY` | **Required.** The app refuses to boot in production without it. |
+| `APP_ENV` | `production`, `development` or `test`. Optional: when unset, production is inferred from `FLASK_ENV=production`, `RAILWAY_ENVIRONMENT` or `DATABASE_URL`, so existing deploys behave as before. When set it wins, e.g. `APP_ENV=development` lets a local checkout use a `DATABASE_URL` without Secure cookies or the `SECRET_KEY` requirement. Set `APP_ENV=production` explicitly on real deploys. |
+| `SESSION_COOKIE_SECURE` | Optional override (`true`/`false`) of the Secure flag on session and remember cookies; defaults to on in production. Use `false` only to try a production-mode build over plain `http://localhost`. |
 | `DATABASE_URL` | Provided by the Railway Postgres plugin. |
 | `ADMIN_EMAILS` | Comma-separated emails promoted to admin on every boot. No built-in default, so without it there is no admin account. |
 | `SITE_URL` | Canonical public URL (sitemap, canonical links, emails). |

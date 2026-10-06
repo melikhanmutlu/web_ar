@@ -1,8 +1,6 @@
 from datetime import timedelta
 from services.time_utils import datetime
 import os
-import json
-import base64
 from flask import (
     Flask,
     request,
@@ -17,7 +15,6 @@ from flask import (
     make_response,
     abort,
     g,
-    has_app_context,
 )
 from flask_wtf.csrf import CSRFError, CSRFProtect
 from flask_login import (
@@ -32,7 +29,6 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import logging
 import shutil
 import subprocess
-import threading
 from models import db, User, UserModel, Folder, Organization, OrganizationMember, OrganizationDomain, ApiToken, PromptPreset, MaterialPreset, ModelVersion, ModelLOD, ModelDerivedAsset, ModelLike, ModelSave, ModelHotspot, ModelShareLink, ModelAnalyticsEvent, CameraView, AIGenerationJob, ConversionJob, WorkerHeartbeat
 from auth import auth
 from admin import admin_bp
@@ -60,11 +56,10 @@ from blueprints.discover import discover_bp
 from blueprints.scenes import scenes_bp
 from blueprints.billing import billing_bp
 from model_cleanup import purge_model_completely
-from site_settings import get_setting, setting_bool, setting_int
+from site_settings import get_setting, setting_bool
 import re
 import traceback
 import uuid
-import secrets
 import hashlib
 from urllib.parse import urlparse, urlsplit
 from flask_compress import Compress
@@ -73,22 +68,17 @@ from config import *
 from sqlalchemy.orm import Session
 from slugify import slugify
 import trimesh
-from converters.glb_quality import finalize_glb
-import numpy as np
-from glb_modifier import modify_glb, normalize_model_to_center
-from pygltflib import GLTF2
+from glb_modifier import modify_glb
 import time
 from version_manager import (
-    create_version,
     get_version_history,
     restore_version,
     delete_version,
     version_path,
 )
-from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability, dispatch_webhook_event, send_email
+from services import AssetQualityService, ConversionJobService, ConversionService, ModelAccessService, StorageService, UploadStagingService, configure_json_logging, initialize_external_observability
 from services.model_permissions import (
     model_access,
-    get_live_model,
     check_model_mutation_allowed,
     check_model_view_allowed,
     _active_share_grant,
@@ -103,7 +93,6 @@ from services.storage_quota import (
     _storage_quota_bytes,
 )
 from services.org_membership import _organization_membership, org_allows
-from services.email_verification import is_verified
 from services import upload_pipeline
 
 app = Flask(__name__)

@@ -41,14 +41,44 @@ FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
 
 # SECRET_KEY signs session cookies and CSRF tokens — a known/default value lets
 # anyone forge sessions and impersonate users. Fail fast in production rather
-# than silently falling back to a public dev key. Production is detected via
-# FLASK_ENV, Railway's injected env, or the presence of a managed DATABASE_URL.
+# than silently falling back to a public dev key.
+#
+# Environment: set APP_ENV=production|development|test to state it explicitly.
+# When APP_ENV is unset, production is inferred from FLASK_ENV, Railway's
+# injected env, or the presence of a managed DATABASE_URL (so existing
+# deployments are unchanged). The explicit value always wins, which lets a
+# developer point a local checkout at a Postgres/SQLite DATABASE_URL without
+# getting Secure cookies and the SECRET_KEY requirement.
+_APP_ENVS = ('production', 'development', 'test')
+
+
+def _detect_production(environ, flask_env):
+    """True when this process should behave as a production deployment."""
+    app_env = (environ.get('APP_ENV') or '').strip().lower()
+    if app_env:
+        if app_env not in _APP_ENVS:
+            raise RuntimeError(
+                f"APP_ENV must be one of {', '.join(_APP_ENVS)} (got {app_env!r})."
+            )
+        return app_env == 'production'
+    return (
+        flask_env == 'production'
+        or bool(environ.get('RAILWAY_ENVIRONMENT'))
+        or bool(environ.get('DATABASE_URL'))
+    )
+
+
+def _env_flag(environ, name, default):
+    """Boolean env var (true/1/yes/on, false/0/no/off); `default` when unset."""
+    value = (environ.get(name) or '').strip().lower()
+    if not value:
+        return default
+    return value in ('1', 'true', 'yes', 'on')
+
+
+APP_ENV = (os.environ.get('APP_ENV') or '').strip().lower() or None
 _SECRET_KEY = os.getenv('SECRET_KEY') or os.getenv('WEB_AR_SECRET_KEY')
-_IS_PRODUCTION = (
-    FLASK_ENV == 'production'
-    or bool(os.environ.get('RAILWAY_ENVIRONMENT'))
-    or bool(os.environ.get('DATABASE_URL'))
-)
+_IS_PRODUCTION = _detect_production(os.environ, FLASK_ENV)
 if not _SECRET_KEY:
     if _IS_PRODUCTION:
         raise RuntimeError(
@@ -61,12 +91,15 @@ SECRET_KEY = _SECRET_KEY
 # Cookies must carry the Secure flag in production so the session/remember
 # tokens are never sent over plain HTTP. Keyed off the same production
 # detection as the SECRET_KEY guard — the real Railway deploy sets
-# RAILWAY_ENVIRONMENT/DATABASE_URL rather than FLASK_ENV.
+# RAILWAY_ENVIRONMENT/DATABASE_URL rather than FLASK_ENV. The
+# SESSION_COOKIE_SECURE env var overrides it (e.g. =false to try a
+# production-mode build over plain http://localhost).
+_COOKIE_SECURE = _env_flag(os.environ, 'SESSION_COOKIE_SECURE', _IS_PRODUCTION)
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SECURE = _IS_PRODUCTION
+SESSION_COOKIE_SECURE = _COOKIE_SECURE
 SESSION_COOKIE_SAMESITE = 'Lax'
 REMEMBER_COOKIE_HTTPONLY = True
-REMEMBER_COOKIE_SECURE = _IS_PRODUCTION
+REMEMBER_COOKIE_SECURE = _COOKIE_SECURE
 REMEMBER_COOKIE_SAMESITE = 'Lax'
 # Cap credential lifetime instead of Flask-Login's 365-day "remember me"
 # default, which is a very long-lived token on shared devices.

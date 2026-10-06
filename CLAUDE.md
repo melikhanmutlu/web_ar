@@ -88,9 +88,13 @@ organizations, and analytics.
 ### Architecture (this changed — read this before editing `app.py`)
 Routes are **not** in `app.py` anymore. `app.py` is the app factory: config,
 extensions, ~24 `register_blueprint(...)` calls, `before/after_request` hooks,
-error handlers, security headers, and a large body of **shared conversion
-helpers** (thumbnail/USDZ/QR/GLB pipeline) that blueprints and `worker.py`
-import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
+error handlers, security headers, limiter wiring, CLI commands, and the shared
+service singletons (`conversion_jobs`, `upload_staging`, `asset_quality`,
+`conversion_service`). The conversion/AI helper bodies that used to live here
+are in `services/` (below); import them from there (`from services import
+upload_pipeline`, `ai_jobs`, `usdz`) and call them through the module so tests
+can `monkeypatch.setattr(upload_pipeline, "X", ...)`. When adding an endpoint,
+add it to the relevant blueprint, not `app.py`.
 
 - **`blueprints/`** — all HTTP routes, one module per domain
   (`upload.py`, `viewer.py`, `models_crud.py`, `model_editing.py`,
@@ -104,7 +108,11 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
   `storage.py` (`StorageService` root-containment), `conversion.py`
   (`ConversionService`), `conversion_jobs.py` (job state/retry/heartbeat),
   `upload_staging.py`, `asset_quality.py`, `observability.py` (JSON logging),
-  `webhooks.py`, `email.py`, `storage_quota.py`, `plans.py`.
+  `webhooks.py`, `email.py`, `storage_quota.py`, `plans.py`,
+  `upload_pipeline.py` (`run_conversion_job`, the upload/LOD/derived pipelines,
+  `register_glb_as_model`; singletons injected via `configure()`),
+  `ai_jobs.py` (Meshy quota/credits + job advance/finalize/refund),
+  `usdz.py`, `thumbnails.py`, `qr.py`.
 - **`converters/`** — per-format → GLB (`stl_converter`, `obj_converter`,
   `fbx_converter` + `fbx_*` helpers, `step_converter`) plus `glb_optimizer`,
   `glb_quality`, `lod_generator`, `texture_upscale`, `thumbnail_render`, and
@@ -118,7 +126,9 @@ import. When adding an endpoint, add it to the relevant blueprint, not `app.py`.
 - **`glb_modifier.py`, `mesh_slicer.py`, `version_manager.py`** — GLB transform,
   slicing, and version snapshots.
 - **`ai_generator.py`** — Meshy AI text/image → 3D client (server-side only).
-- **`config.py`** — config + volume-aware storage paths.
+- **`config.py`** — config + volume-aware storage paths. `APP_ENV`
+  (production|development|test) states the environment explicitly; unset, it is
+  inferred from `FLASK_ENV` / `RAILWAY_ENVIRONMENT` / `DATABASE_URL`.
 - **`auth.py`** — login/register/logout blueprint.
 
 ### Run & test
@@ -156,7 +166,8 @@ These reflect existing conventions — follow them, don't reinvent them:
   `<form>` POST needs `{{ csrf_token() }}` and any raw `XMLHttpRequest` needs
   the header set manually.
 - **`SECRET_KEY` is required in production** — `config.py` refuses to boot
-  without it. Keep it set in the deploy env.
+  without it. Keep it set in the deploy env (set `APP_ENV=development` locally
+  if you use a `DATABASE_URL`, otherwise it counts as production).
 - **Converters ingest untrusted uploads.** Sanitize any file path derived from
   model contents (`safe_join_within` / `assert_safe_obj_references` in
   `converters/`). Never honor absolute or `..` references from a model file.

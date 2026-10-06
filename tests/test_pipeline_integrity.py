@@ -354,6 +354,49 @@ def test_loose_gltf_and_bin_companions_convert(client, tmp_path):
     assert glb_extents_m(model.filename).max() == pytest.approx(0.2, abs=1e-3)
 
 
+def _animated_gltf_files():
+    """A .gltf + .bins whose first node is animated (translation channel)."""
+    import numpy as np
+
+    files = _gltf_files()
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    doc = json.loads(files[gltf_name])
+    times = np.array([0.0, 1.0], dtype=np.float32).tobytes()
+    moves = np.array([[0, 0, 0], [1, 0, 0]], dtype=np.float32).tobytes()
+    doc["buffers"].append({"uri": "anim.bin", "byteLength": len(times) + len(moves)})
+    buffer_index = len(doc["buffers"]) - 1
+    doc["bufferViews"] += [
+        {"buffer": buffer_index, "byteOffset": 0, "byteLength": len(times)},
+        {"buffer": buffer_index, "byteOffset": len(times), "byteLength": len(moves)},
+    ]
+    view = len(doc["bufferViews"]) - 2
+    doc["accessors"] += [
+        {"bufferView": view, "componentType": 5126, "count": 2, "type": "SCALAR",
+         "min": [0.0], "max": [1.0]},
+        {"bufferView": view + 1, "componentType": 5126, "count": 2, "type": "VEC3"},
+    ]
+    doc["animations"] = [{
+        "name": "slide",
+        "samplers": [{"input": len(doc["accessors"]) - 2, "output": len(doc["accessors"]) - 1}],
+        "channels": [{"sampler": 0, "target": {"node": 0, "path": "translation"}}],
+    }]
+    entries = {n: d for n, d in files.items() if n != gltf_name}
+    entries[gltf_name] = json.dumps(doc)
+    entries["anim.bin"] = times + moves
+    return entries
+
+
+def test_gltf_animations_survive_packing(client, tmp_path):
+    from pygltflib import GLTF2
+
+    staged, model = stage_and_convert(tmp_path, _zip_upload("anim.zip", _animated_gltf_files()))
+    assert staged["file_extension"] == ".gltf"
+    gltf = GLTF2().load(model.filename)
+    assert len(gltf.animations or []) == 1
+    assert gltf.animations[0].name == "slide"
+    assert glb_extents_m(model.filename).max() == pytest.approx(0.2, abs=1e-3)
+
+
 @pytest.mark.parametrize("uri", ["/etc/passwd", "../../outside.bin", "file:///etc/passwd", "http://x/y.bin"])
 def test_gltf_unsafe_uris_are_rejected(client, tmp_path, uri):
     from services import UploadStagingError

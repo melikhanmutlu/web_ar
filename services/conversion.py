@@ -1,13 +1,16 @@
 import logging
 import os
 import shutil
+import subprocess
 
 import trimesh
 from pygltflib import GLTF2
 
 from converters.base_converter import scale_glb_in_place
 from converters import FBXConverter, OBJConverter, STLConverter, STEPConverter
-from converters.glb_optimizer import glb_needs_decompression, optimize_glb, readable_glb
+from converters.glb_optimizer import (
+    _resolve_gltf_transform, glb_needs_decompression, optimize_glb, readable_glb,
+)
 from converters.glb_quality import finalize_glb
 from glb_modifier import normalize_model_to_center
 from services.conversion_errors import UserFacingConversionError, friendly_conversion_error
@@ -145,8 +148,22 @@ class ConversionService:
     def _copy_or_pack_gltf(source_path, output_path, extension):
         if extension == ".glb":
             shutil.copy2(source_path, output_path)
-        else:
-            trimesh.load(source_path).export(output_path, file_type="glb")
+            return
+        # Pack with gltf-transform: a trimesh round-trip drops animations,
+        # skins and extensions. Fall back to it only if packing fails.
+        command = _resolve_gltf_transform()
+        if command:
+            try:
+                result = subprocess.run(
+                    command + ["copy", source_path, output_path],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode == 0 and os.path.isfile(output_path) and os.path.getsize(output_path) > 0:
+                    return
+                logger.warning("gltf-transform could not pack %s: %s", source_path, (result.stderr or "")[:300])
+            except Exception as exc:
+                logger.warning("gltf-transform failed to run for %s: %s", source_path, exc)
+        trimesh.load(source_path).export(output_path, file_type="glb")
 
     @staticmethod
     def _limit_dimension(path, maximum):

@@ -283,8 +283,17 @@ login_manager.login_view = "auth.login"
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = db.session.get(User, int(user_id))
-    if user is not None and not user.is_active:
+    # "<id>:<session_version>" (User.get_id); a bare id is a pre-versioning
+    # cookie and counts as version 0, so it dies at the first password change.
+    raw_id, _, version = str(user_id).partition(":")
+    try:
+        user = db.session.get(User, int(raw_id))
+        version = int(version or 0)
+    except ValueError:
+        return None
+    if user is None or (user.session_version or 0) != version:
+        return None
+    if not user.is_active:
         # Deactivated accounts lose their live sessions on the next request.
         return None
     return user

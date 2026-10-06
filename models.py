@@ -49,6 +49,9 @@ class User(UserMixin, db.Model):
     # (services/credits.py::grant_ai_credits); a payment provider will call the
     # same seam later. No expiry -- purchased credits don't reset monthly.
     ai_credit_balance = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Part of the Flask-Login id (get_id) so session and remember-me cookies
+    # carry it; bumping it (on every password set) invalidates all of them.
+    session_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     # When a paid plan is bought it's granted until this instant; past it the
     # effective plan falls back to Free (services/plans.py::_plan_name) and the
     # worker's expire_stale_plans() sweep resets the stored plan. NULL = no
@@ -93,6 +96,10 @@ class User(UserMixin, db.Model):
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
+        self.session_version = (self.session_version or 0) + 1
+
+    def get_id(self):
+        return f"{self.id}:{self.session_version or 0}"
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)

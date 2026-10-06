@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, current_app, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 from urllib.parse import urlparse
 
@@ -186,8 +186,12 @@ def change_password():
         if not current_user.check_password(password_form.current_password.data):
             password_form.current_password.errors.append('Current password is incorrect.')
         else:
-            current_user.set_password(password_form.new_password.data)
+            user = current_user._get_current_object()
+            user.set_password(password_form.new_password.data)
             db.session.commit()
+            # The bump signed out every other session and remember-me cookie;
+            # re-issue this browser's so the user who changed it stays in.
+            login_user(user, remember=bool(request.cookies.get(current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'))))
             flash('Password changed.', 'success')
             return redirect(url_for('auth.profile'))
 

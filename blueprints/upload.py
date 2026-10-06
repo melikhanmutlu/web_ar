@@ -31,6 +31,7 @@ from models import ConversionJob, UserModel, db
 from services import UploadStagingError
 from services.model_permissions import check_model_view_allowed, get_live_model
 from services.plans import effective_storage_quota_mb, plan_limit
+from services.storage_quota import _storage_usage_for
 from services.upgrade import upgrade_hint
 from services.time_utils import datetime
 from site_settings import setting_int
@@ -136,11 +137,7 @@ def _check_storage_quota(incoming_bytes=None):
     quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
     if not quota_mb:
         return None
-    used = (
-        db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-        .filter(UserModel.user_id == current_user.id)
-        .scalar()
-    )
+    used = _storage_usage_for(current_user.id)
     incoming = (request.content_length or 0) if incoming_bytes is None else incoming_bytes
     if used + incoming > quota_mb * 1024 * 1024:
         return jsonify(
@@ -546,11 +543,7 @@ def init_chunked_upload():
         global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
         quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
         if quota_mb:
-            used = (
-                db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-                .filter(UserModel.user_id == current_user.id)
-                .scalar()
-            )
+            used = _storage_usage_for(current_user.id)
             if used + total_size > quota_mb * 1024 * 1024:
                 return jsonify({"success": False, "error": "Storage quota exceeded",
                                 "upgrade": upgrade_hint("storage_quota")}), 413
@@ -712,11 +705,7 @@ def complete_chunked_upload(upload_id):
             global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
             quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
             if quota_mb:
-                used = (
-                    db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-                    .filter(UserModel.user_id == current_user.id)
-                    .scalar()
-                )
+                used = _storage_usage_for(current_user.id)
                 if used + assembled_size > quota_mb * 1024 * 1024:
                     return jsonify({"success": False, "error": "Storage quota exceeded",
                                     "upgrade": upgrade_hint("storage_quota")}), 413

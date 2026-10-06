@@ -38,6 +38,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import and_, func, or_
 
 from model_cleanup import purge_model_completely
+from services.storage_quota import _storage_usage_for
 from models import (
     AdminAuditLog,
     AIGenerationJob,
@@ -306,22 +307,15 @@ def dashboard():
         func.coalesce(func.sum(UserModel.share_count), 0),
     ).first()
 
-    # Each ModelVersion row is a full on-disk GLB copy — without it, "storage
-    # used" undercounts real disk usage on heavily-edited models.
-    version_storage_bytes = db.session.query(
-        func.coalesce(func.sum(ModelVersion.file_size), 0)
-    ).scalar()
-
     stats = {
         "users": db.session.query(func.count(User.id)).scalar() or 0,
         "active_models": UserModel.query.filter(UserModel.deleted_at.is_(None)).count(),
         "trashed_models": UserModel.query.filter(
             UserModel.deleted_at.isnot(None)
         ).count(),
-        "storage_bytes": (
-            db.session.query(func.coalesce(func.sum(UserModel.file_size), 0)).scalar()
-            + version_storage_bytes
-        ),
+        # Quota-counted bytes only (ADM-31): version files are not billed to
+        # users, see services/storage_quota._storage_usage_for.
+        "storage_bytes": db.session.query(func.coalesce(func.sum(UserModel.file_size), 0)).scalar(),
         "views": engagement[0],
         "downloads": engagement[1],
         "shares": engagement[2],
@@ -402,25 +396,9 @@ def _users_query():
         .group_by(UserModel.user_id)
         .subquery()
     )
-    # Version file bytes summed separately (own subquery) to avoid a join
-    # fan-out: joining ModelVersion directly into stats_sq would multiply
-    # model_count/file_size by each model's version count.
-    version_sq = (
-        db.session.query(
-            UserModel.user_id.label("uid"),
-            func.coalesce(func.sum(ModelVersion.file_size), 0).label("version_bytes"),
-        )
-        .join(ModelVersion, ModelVersion.model_id == UserModel.id)
-        .group_by(UserModel.user_id)
-        .subquery()
-    )
-    total_storage = func.coalesce(stats_sq.c.storage_bytes, 0) + func.coalesce(
-        version_sq.c.version_bytes, 0
-    )
     query = (
-        db.session.query(User, stats_sq.c.model_count, total_storage.label("storage_bytes"))
+        db.session.query(User, stats_sq.c.model_count, func.coalesce(stats_sq.c.storage_bytes, 0).label("storage_bytes"))
         .outerjoin(stats_sq, User.id == stats_sq.c.uid)
-        .outerjoin(version_sq, User.id == version_sq.c.uid)
     )
 
     if q:
@@ -432,7 +410,7 @@ def _users_query():
     elif sort == "models":
         query = query.order_by(func.coalesce(stats_sq.c.model_count, 0).desc())
     elif sort == "storage":
-        query = query.order_by(total_storage.desc())
+        query = query.order_by(func.coalesce(stats_sq.c.storage_bytes, 0).desc())
     else:
         sort = "newest"
         query = query.order_by(User.created_at.desc())
@@ -479,18 +457,7 @@ def user_detail(user_id):
         .all()
     )
     model_count = UserModel.query.filter_by(user_id=user.id).count()
-    storage_bytes = (
-        db.session.query(func.coalesce(func.sum(UserModel.file_size), 0))
-        .filter(UserModel.user_id == user.id)
-        .scalar()
-    )
-    version_bytes = (
-        db.session.query(func.coalesce(func.sum(ModelVersion.file_size), 0))
-        .join(UserModel, ModelVersion.model_id == UserModel.id)
-        .filter(UserModel.user_id == user.id)
-        .scalar()
-    )
-    storage_bytes = (storage_bytes or 0) + (version_bytes or 0)
+    storage_bytes = _storage_usage_for(user.id)
 
     since = datetime.utcnow() - timedelta(days=30)
     ai_used_month = AIGenerationJob.query.filter(

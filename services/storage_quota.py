@@ -33,7 +33,16 @@ def _purge_expired_trash(user_id):
 
 
 def _storage_usage_for(user_id):
-    """Bytes used across all of a user's models, including trash (still on disk)."""
+    """Bytes counted against a user's storage quota.
+
+    Product decision (ADM-31): ModelVersion files do NOT count toward the
+    quota. Version history is bounded by keep_last_n, so it is a capped
+    overhead we absorb rather than bill. The quota is the sum of the models'
+    own files, including trashed ones (still on disk until purged). This is
+    the one source of truth: upload/API quota checks, the profile, the
+    library and the admin screens all call it (admin builds the same sum in
+    SQL for per-user listings and must not add version bytes).
+    """
     return (
         db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
         .filter(UserModel.user_id == user_id)

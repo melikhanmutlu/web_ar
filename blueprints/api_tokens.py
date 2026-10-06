@@ -18,6 +18,7 @@ from models import ApiToken, ConversionJob, ModelAnalyticsEvent, OrganizationMem
 from services import UploadStagingError
 from services.org_membership import _organization_membership
 from services.plans import effective_storage_quota_mb, plan_allows, plan_limit
+from services.storage_quota import _storage_usage_for
 from site_settings import setting_int
 
 api_tokens_bp = Blueprint("api_tokens", __name__)
@@ -314,11 +315,7 @@ def _token_quota_error(token, user, incoming_bytes):
     global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
     quota_mb = effective_storage_quota_mb(user, global_default_mb)
     if quota_mb:
-        used = (
-            db.session.query(db.func.coalesce(db.func.sum(UserModel.file_size), 0))
-            .filter(UserModel.user_id == token.user_id)
-            .scalar()
-        )
+        used = _storage_usage_for(token.user_id)
         if used + incoming_bytes > quota_mb * 1024 * 1024:
             return f"Storage quota exceeded ({quota_mb} MB limit)."
     return None

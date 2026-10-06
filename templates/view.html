@@ -949,8 +949,8 @@
           var btn = this;
           function ok() { btn.textContent = 'Edit link copied'; }
           if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(link).then(ok, function () { window.prompt('Copy your private edit link', link); });
-          } else { window.prompt('Copy your private edit link', link); }
+            navigator.clipboard.writeText(link).then(ok, function () { window.arPrompt('Copy your private edit link', { defaultValue: link, label: 'Private edit link', confirmLabel: 'Done' }); });
+          } else { window.arPrompt('Copy your private edit link', { defaultValue: link, label: 'Private edit link', confirmLabel: 'Done' }); }
         });
       })();
     </script>

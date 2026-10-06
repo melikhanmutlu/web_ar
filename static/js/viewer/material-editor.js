@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 } catch (err) {
                     console.error('Texture upload error:', err);
-                    alert('Failed to apply texture.');
+                    window.arToast('Failed to apply texture.', 'error');
                 }
             });
 

@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { uploadCubeAndGetViewerUrl } = require('./helpers/upload');
+const { answerPrompt } = require('./helpers/dialogs');
 
 test('measure tool draws line, XYZ breakdown, and saves', async ({ page }) => {
   await uploadCubeAndGetViewerUrl(page); // /view/<id>?edit_token=... (canEdit)
@@ -8,9 +9,6 @@ test('measure tool draws line, XYZ breakdown, and saves', async ({ page }) => {
     const mv = document.getElementById('modelViewer');
     return mv && mv.loaded;
   }, { timeout: 20000 });
-
-  // Auto-confirm the "name this measurement" prompt.
-  page.on('dialog', d => d.accept('my-measure'));
 
   await page.click('#measureToolButton');
   await expect(page.locator('#measureToolResult')).toBeVisible();
@@ -44,6 +42,7 @@ test('measure tool draws line, XYZ breakdown, and saves', async ({ page }) => {
 
   // Save -> appears in the saved list, and reload shows it persisted.
   await page.locator('#mtSave').click();
+  await answerPrompt(page, 'my-measure'); // the "name this measurement" dialog
   await expect(page.locator('.mt-saved-load')).toContainText('my-measure', { timeout: 5000 });
 
   await page.reload();

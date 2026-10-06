@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleHotspotMode?.addEventListener('click', () => {
             if (!hotspotMode && window._slicerClippingActive?.()) {
-                alert('Hotspots can\'t be placed while a slice preview is active — reset the slicer first.');
+                window.arToast('Hotspots can\'t be placed while a slice preview is active — reset the slicer first.', 'info');
                 return;
             }
             // Mutual exclusion with the measure tool (static/js/viewer/measure-tool.js)
@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
             _hotspotPointerDown = { x: e.clientX, y: e.clientY };
         });
 
-        modelViewer?.addEventListener('click', (e) => {
+        modelViewer?.addEventListener('click', async (e) => {
             if (!hotspotMode || window._isMeasureModeActive?.()) return;
             if (_hotspotPointerDown) {
                 const dx = e.clientX - _hotspotPointerDown.x;
@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             hotspotCount++;
             const name = 'hotspot-' + Date.now();
-            const label = prompt('Hotspot label:', 'Point ' + hotspotCount);
+            const label = await window.arPrompt('Name this hotspot', { label: 'Hotspot label', defaultValue: 'Point ' + hotspotCount, confirmLabel: 'Add hotspot' });
             if (!label) { hotspotCount--; return; }
 
             const pos = hit.position;
@@ -374,8 +374,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loadHotspotsFromDB();
         });
 
-        clearAnnotations?.addEventListener('click', () => {
-            if (!confirm('Clear all annotations and hotspots?')) return;
+        clearAnnotations?.addEventListener('click', async () => {
+            if (!await window.arConfirm('Clear all annotations and hotspots?', { confirmLabel: 'Clear all', danger: true })) return;
             // Camera views only have a per-id DELETE route; clearing them just
             // client-side made them reappear on the next page load.
             const viewDeletes = savedViews

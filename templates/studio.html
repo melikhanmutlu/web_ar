@@ -1315,7 +1315,7 @@
         aiImage?.addEventListener('change', (e) => {
             const f = e.target.files[0];
             if (!f) return;
-            if (f.size > 10 * 1024 * 1024) { alert('Image too large (max 10MB).'); return; }
+            if (f.size > 10 * 1024 * 1024) { window.arToast('Image too large (max 10MB).', 'error'); return; }
             const reader = new FileReader();
             reader.onload = () => {
                 imageDataUri = reader.result;
@@ -1413,7 +1413,7 @@
         document.getElementById('visualizeBtn')?.addEventListener('click', async () => {
             const visualizeBtn = document.getElementById('visualizeBtn');
             const p = document.getElementById('aiPrompt').value.trim();
-            if (!p) { alert('Please enter a prompt.'); return; }
+            if (!p) { window.arToast('Please enter a prompt.', 'info'); return; }
             // Unlike transformBtn/genBtn, this button wasn't disabled during
             // its task -- a double click started two Meshy image-gen tasks
             // (both burning AI quota) racing on the shared progress bar.
@@ -1470,8 +1470,8 @@
 
         transformBtn?.addEventListener('click', async () => {
             const p = document.getElementById('i2iPrompt').value.trim();
-            if (!originalDataUri) { alert('Please choose an image first.'); return; }
-            if (!p) { alert('Describe how to transform the image.'); return; }
+            if (!originalDataUri) { window.arToast('Please choose an image first.', 'info'); return; }
+            if (!p) { window.arToast('Describe how to transform the image.', 'info'); return; }
             errBox.classList.add('hidden'); errBox.textContent = '';
             transformBtn.disabled = true;
             statusDiv.classList.remove('hidden');
@@ -1600,14 +1600,14 @@
                     body.image_task = t2iSelection;
                 } else {
                     const p = document.getElementById('aiPrompt').value.trim();
-                    if (!p) { alert('Please enter a prompt.'); return; }
+                    if (!p) { window.arToast('Please enter a prompt.', 'info'); return; }
                     body.prompt = p;
                 }
             } else {
                 if (i2iSelection) {
                     body.image_task = i2iSelection;
                 } else {
-                    if (!imageDataUri) { alert('Please choose an image.'); return; }
+                    if (!imageDataUri) { window.arToast('Please choose an image.', 'info'); return; }
                     body.image = imageDataUri;
                 }
             }

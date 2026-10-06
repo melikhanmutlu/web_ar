@@ -47,6 +47,120 @@
         setTimeout(function () { t.remove(); }, opts.duration || (opts.actionLabel ? 8000 : 4000));
         return t;
     };
+    // arConfirm(message, {confirmLabel, cancelLabel, danger}) -> Promise<boolean>
+    // arPrompt(message, {defaultValue, label, confirmLabel, cancelLabel, placeholder, maxLength})
+    //   -> Promise<string|null>   (null = cancelled)
+    // Accessible replacements for window.confirm/prompt: role=dialog +
+    // aria-modal, focus trapped inside and restored on close, Esc cancels,
+    // Enter confirms, backdrop click cancels. Destructive confirms pass
+    // {danger:true}: red confirm button and initial focus on Cancel.
+    var _dlgSeq = 0;
+    function arDialog(kind, message, opts) {
+        opts = opts || {};
+        return new Promise(function (resolve) {
+            var id = 'arDlg' + (++_dlgSeq);
+            var prevFocus = document.activeElement;
+            var overlay = document.createElement('div');
+            overlay.className = 'ar-dialog-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:100001;display:flex;align-items:center;' +
+                'justify-content:center;padding:16px;background:rgba(17,19,24,.55);';
+            var box = document.createElement('div');
+            box.className = 'ar-dialog' + (opts.danger ? ' ar-dialog--danger' : '');
+            box.setAttribute('role', opts.danger ? 'alertdialog' : 'dialog');
+            box.setAttribute('aria-modal', 'true');
+            box.setAttribute('aria-labelledby', id + 'm');
+            box.style.cssText = 'width:min(100%,420px);background:#fff;color:#111318;border-radius:14px;' +
+                'padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.35);font:14px/1.5 Arial,Helvetica,sans-serif;';
+            var msg = document.createElement('p');
+            msg.id = id + 'm';
+            msg.style.cssText = 'margin:0 0 14px;font-size:15px;font-weight:600;white-space:pre-line;';
+            msg.textContent = message;
+            box.appendChild(msg);
+            var input = null;
+            if (kind === 'prompt') {
+                input = document.createElement('input');
+                input.type = 'text';
+                input.id = id + 'i';
+                input.className = 'ar-dialog-input';
+                input.value = opts.defaultValue == null ? '' : String(opts.defaultValue);
+                if (opts.placeholder) input.placeholder = opts.placeholder;
+                if (opts.maxLength) input.maxLength = opts.maxLength;
+                if (opts.label) {
+                    var lab = document.createElement('label');
+                    lab.htmlFor = input.id;
+                    lab.textContent = opts.label;
+                    lab.style.cssText = 'display:block;margin:0 0 6px;font-size:12px;color:#5b6370;';
+                    box.appendChild(lab);
+                } else {
+                    input.setAttribute('aria-labelledby', id + 'm');
+                }
+                input.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #c4c9d1;' +
+                    'border-radius:8px;font:inherit;margin-bottom:16px;color:#111318;background:#fff;';
+                box.appendChild(input);
+            }
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+            var btnCss = 'min-height:40px;padding:8px 16px;border-radius:9px;font:600 14px Arial,Helvetica,sans-serif;cursor:pointer;';
+            var cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.setAttribute('data-ar-dialog-cancel', '');
+            cancel.textContent = opts.cancelLabel || 'Cancel';
+            cancel.style.cssText = btnCss + 'background:#fff;color:#111318;border:1px solid #c4c9d1;';
+            var ok = document.createElement('button');
+            ok.type = 'button';
+            ok.setAttribute('data-ar-dialog-confirm', '');
+            ok.textContent = opts.confirmLabel || (kind === 'prompt' ? 'Save' : (opts.danger ? 'Delete' : 'OK'));
+            ok.style.cssText = btnCss + 'color:#fff;border:1px solid transparent;background:' + (opts.danger ? '#b91c1c' : '#111318') + ';';
+            row.appendChild(cancel);
+            row.appendChild(ok);
+            box.appendChild(row);
+            overlay.appendChild(box);
+
+            var done = false;
+            function close(value) {
+                if (done) return;
+                done = true;
+                document.removeEventListener('keydown', onKey, true);
+                overlay.remove();
+                try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
+                resolve(value);
+            }
+            function accept() { close(kind === 'prompt' ? input.value : true); }
+            function dismiss() { close(kind === 'prompt' ? null : false); }
+            function onKey(e) {
+                if (!overlay.contains(document.activeElement)) {
+                    // Focus escaped to the page behind: pull it back, swallow the key.
+                    e.stopPropagation();
+                    if (e.key === 'Escape') { e.preventDefault(); dismiss(); }
+                    else (input || ok).focus();
+                    return;
+                }
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dismiss(); }
+                else if (e.key === 'Enter') {
+                    if (e.target && e.target.tagName === 'BUTTON') return; // native click on the focused button
+                    e.preventDefault(); e.stopPropagation(); accept();
+                } else if (e.key === 'Tab') {
+                    var f = Array.prototype.slice.call(box.querySelectorAll('input,button'));
+                    var first = f[0], last = f[f.length - 1];
+                    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+                } else if (!(e.target && e.target.tagName === 'INPUT')) {
+                    e.stopPropagation(); // keep page shortcuts from firing underneath
+                }
+            }
+            cancel.addEventListener('click', dismiss);
+            ok.addEventListener('click', accept);
+            overlay.addEventListener('mousedown', function (e) { if (e.target === overlay) dismiss(); });
+            document.addEventListener('keydown', onKey, true);
+            document.body.appendChild(overlay);
+            // Destructive confirms start on Cancel so a stray Enter can't delete.
+            var initial = input || (opts.danger ? cancel : ok);
+            initial.focus();
+            if (input) input.select();
+        });
+    }
+    window.arConfirm = function (message, opts) { return arDialog('confirm', message, opts); };
+    window.arPrompt = function (message, opts) { return arDialog('prompt', message, opts); };
     window.withBusy = async function (btn, fn, busyText) {
         if (btn && btn.disabled) return;
         var label = btn ? btn.textContent : '';

@@ -1300,7 +1300,7 @@ void main() {
             // Apply slice - sends each enabled axis as a separate slice operation
             document.getElementById('slicerApply')?.addEventListener('click', async () => {
                 const enabledAxes = ['x', 'y', 'z'].filter(a => slicerAxes[a].enabled);
-                if (enabledAxes.length === 0) { alert('Enable at least one axis to slice.'); return; }
+                if (enabledAxes.length === 0) { window.arToast('Enable at least one axis to slice.', 'info'); return; }
 
                 const applyBtn = document.getElementById('slicerApply');
                 const spinner = document.getElementById('slicerSpinner');
@@ -1328,16 +1328,16 @@ void main() {
                     });
                     const result = await response.json();
                     if (!result.success) {
-                        alert('Slice failed: ' + (result.error || result.message || 'Unknown error'));
+                        window.arToast('Slice failed: ' + (result.error || result.message || 'Unknown error'), 'error');
                         return;
                     }
                     if (result.warning) {
-                        alert(result.warning);
+                        window.arToast(result.warning, 'info', { duration: 7000 });
                     }
                     window.location.reload();
                 } catch (error) {
                     console.error('[Slicer] Error:', error);
-                    alert('An error occurred while slicing.');
+                    window.arToast('An error occurred while slicing.', 'error');
                 } finally {
                     applyBtn.disabled = false;
                     applyBtn.classList.remove('opacity-50');

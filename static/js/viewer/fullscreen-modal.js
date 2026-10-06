@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (modelViewer.webkitRequestFullscreen) {
                 await modelViewer.webkitRequestFullscreen();
             } else {
-                alert('Fullscreen is not supported by this browser. On iPhone, rotate to landscape for a larger view.');
+                window.arToast('Fullscreen is not supported by this browser. On iPhone, rotate to landscape for a larger view.', 'info', { duration: 6000 });
             }
         } catch (error) {
             console.error('Fullscreen error:', error);
@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch('/api/models/' + window.VIEWER_CONFIG.modelDbId + '/track-download', { method: 'POST' }).catch(() => {});
         } catch (error) {
             console.error('Download error:', error);
-            alert('Failed to download model. Please try again.');
+            window.arToast('Failed to download model. Please try again.', 'error');
         }
     }
 

@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // "something to save" too, independent of `modifications`.
             const pendingCamera = window._pendingPresetCamera;
             if (!hasModifications && !pendingCamera) {
-                alert('No changes to save.');
+                window.arToast('No changes to save.', 'info');
                 return;
             }
 
@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     const result = await response.json();
                     if (!result.success) {
-                        alert('Save failed: ' + (result.error || 'Unknown error'));
+                        window.arToast('Save failed: ' + (result.error || 'Unknown error'), 'error');
                         return;
                     }
                 }
@@ -169,14 +169,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Persisting the prepared framing failed — warn the user
                         // rather than silently reloading and losing the view.
                         console.error('Camera framing save error:', e);
-                        alert('Your changes were saved, but the prepared camera view could not be applied. Try setting it again.');
+                        window.arToast('Your changes were saved, but the prepared camera view could not be applied. Try setting it again.', 'error', { duration: 6000 });
+                        // The reload below would wipe the toast; give it time to be read.
+                        await new Promise(r => setTimeout(r, 3000));
                     }
                     window._pendingPresetCamera = null;
                 }
                 window.location.reload();
             } catch (err) {
                 console.error('Save error:', err);
-                alert('Failed to save changes.');
+                window.arToast('Failed to save changes.', 'error');
             } finally {
                 saveChangesBtn.disabled = false;
                 saveChangesBtn.innerHTML = defaultSaveButtonMarkup;
@@ -198,10 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
         saveExplodedBtn?.addEventListener('click', async () => {
             const explodeMods = window._layersGatherExplodeMods?.();
             if (!explodeMods) {
-                alert('Drag Explode above 0% first, then save the layout.');
+                window.arToast('Drag Explode above 0% first, then save the layout.', 'info');
                 return;
             }
-            if (!confirm('This permanently moves the exploded parts in the saved model, including in AR. Continue?')) {
+            if (!await window.arConfirm('This permanently moves the exploded parts in the saved model, including in AR. Continue?', { confirmLabel: 'Save layout', danger: true })) {
                 return;
             }
 
@@ -215,7 +217,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // save first.
             const rot = modifications.transform?.rotation;
             if (rot && (rot.x !== 0 || rot.y !== 0 || rot.z !== 0)) {
-                alert('Save the rotation first (Save & Apply to AR), then save the exploded layout — combining them in one save would misplace the exploded parts.');
+                window.arToast('Save the rotation first (Save & Apply to AR), then save the exploded layout — combining them in one save would misplace the exploded parts.', 'info', { duration: 7000 });
                 return;
             }
 
@@ -247,11 +249,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (result.success) {
                     window.location.reload();
                 } else {
-                    alert('Save failed: ' + (result.error || 'Unknown error'));
+                    window.arToast('Save failed: ' + (result.error || 'Unknown error'), 'error');
                 }
             } catch (err) {
                 console.error('Save exploded layout error:', err);
-                alert('Failed to save exploded layout.');
+                window.arToast('Failed to save exploded layout.', 'error');
             } finally {
                 saveExplodedBtn.disabled = false;
                 saveExplodedBtn.innerHTML = defaultExplodeButtonMarkup;

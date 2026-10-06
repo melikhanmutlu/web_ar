@@ -59,13 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         async function restoreVersion(versionNumber) {
-            if (!confirm('Restore to version ' + versionNumber + '? Current model will be replaced.')) return;
+            if (!await window.arConfirm('Restore to version ' + versionNumber + '? Current model will be replaced.', { confirmLabel: 'Restore', danger: true })) return;
             try {
                 const res = await fetch('/api/versions/' + modelId + '/restore/' + versionNumber, { method: 'POST' });
                 const result = await res.json();
                 if (result.success) window.location.reload();
-                else alert('Restore failed: ' + (result.error || ''));
-            } catch (e) { alert('Restore failed.'); }
+                else window.arToast('Restore failed: ' + (result.error || ''), 'error');
+            } catch (e) { window.arToast('Restore failed.', 'error'); }
         }
 
         function updateCompareButton() {
@@ -162,13 +162,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
 
                         div.querySelector('.restore-btn')?.addEventListener('click', async () => {
-                            if (!confirm('Restore to version ' + v.version_number + '? Current model will be replaced.')) return;
+                            if (!await window.arConfirm('Restore to version ' + v.version_number + '? Current model will be replaced.', { confirmLabel: 'Restore', danger: true })) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/restore/' + v.version_number, { method: 'POST' });
                                 const result = await res.json();
                                 if (result.success) window.location.reload();
-                                else alert('Restore failed: ' + (result.error || ''));
-                            } catch (e) { alert('Restore failed.'); }
+                                else window.arToast('Restore failed: ' + (result.error || ''), 'error');
+                            } catch (e) { window.arToast('Restore failed.', 'error'); }
                         });
 
                         div.querySelector('.preview-btn').addEventListener('click', () => {
@@ -181,13 +181,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
 
                         div.querySelector('.delete-btn')?.addEventListener('click', async () => {
-                            if (!confirm('Delete version ' + v.version_number + '?')) return;
+                            if (!await window.arConfirm('Delete version ' + v.version_number + '?', { confirmLabel: 'Delete', danger: true })) return;
                             try {
                                 const res = await fetch('/api/versions/' + modelId + '/delete/' + v.version_number, { method: 'DELETE' });
                                 const result = await res.json();
                                 if (result.success) loadVersions();
-                                else alert('Delete failed: ' + (result.error || ''));
-                            } catch (e) { alert('Delete failed.'); }
+                                else window.arToast('Delete failed: ' + (result.error || ''), 'error');
+                            } catch (e) { window.arToast('Delete failed.', 'error'); }
                         });
 
                         versionList.appendChild(div);

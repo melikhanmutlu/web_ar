@@ -123,14 +123,14 @@
                     document.getElementById("tokenName").value = "";
                     loadTokens();
                 } else {
-                    alert(r.body.error || "Could not create token.");
+                    window.arToast(r.body.error || "Could not create token.", "error");
                 }
             });
         });
-        tokenList.addEventListener("click", function (e) {
+        tokenList.addEventListener("click", async function (e) {
             var id = e.target.getAttribute("data-revoke");
             if (!id) return;
-            if (!confirm("Revoke this token? Apps using it will stop working.")) return;
+            if (!await window.arConfirm("Revoke this token? Apps using it will stop working.", { confirmLabel: "Revoke", danger: true })) return;
             jsonFetch("/api/tokens/" + id, { method: "DELETE" }).then(loadTokens);
         });
         loadTokens();
@@ -174,15 +174,15 @@
                     document.getElementById("webhookUrl").value = "";
                     loadWebhooks();
                 } else {
-                    alert(r.body.error || "Could not add webhook.");
+                    window.arToast(r.body.error || "Could not add webhook.", "error");
                 }
             });
         });
-        webhookList.addEventListener("click", function (e) {
+        webhookList.addEventListener("click", async function (e) {
             var del = e.target.getAttribute("data-delhook");
             var rot = e.target.getAttribute("data-rotate");
             if (del) {
-                if (!confirm("Delete this webhook?")) return;
+                if (!await window.arConfirm("Delete this webhook?", { confirmLabel: "Delete", danger: true })) return;
                 jsonFetch("/api/webhooks/" + del, { method: "DELETE" }).then(loadWebhooks);
             } else if (rot) {
                 jsonFetch("/api/webhooks/" + rot + "/rotate-secret", { method: "POST" }).then(function (r) {

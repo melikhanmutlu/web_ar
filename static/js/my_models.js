@@ -149,7 +149,7 @@ window.clearSelection = function() {
 
 // Model Management Functions
 async function deleteModel(modelId) {
-    const confirmed = confirm('Move this model to trash? You can restore it later from the Trash section.');
+    const confirmed = await window.arConfirm('Move this model to trash? You can restore it later from the Trash section.', { confirmLabel: 'Move to trash', danger: true });
     if (!confirmed) return;
 
     try {
@@ -185,7 +185,7 @@ async function restoreModel(modelId) {
 }
 
 async function deleteForever(modelId) {
-    const confirmed = confirm('Permanently delete this model? This cannot be undone.');
+    const confirmed = await window.arConfirm('Permanently delete this model? This cannot be undone.', { confirmLabel: 'Delete forever', danger: true });
     if (!confirmed) return;
 
     try {
@@ -206,7 +206,7 @@ async function deleteForever(modelId) {
 async function deleteSelectedModels() {
     if (selectedModels.size === 0) return;
 
-    const confirmed = confirm(`Move ${selectedModels.size} selected model(s) to trash?`);
+    const confirmed = await window.arConfirm(`Move ${selectedModels.size} selected model(s) to trash?`, { confirmLabel: 'Move to trash', danger: true });
     if (!confirmed) return;
 
     let successCount = 0;
@@ -276,7 +276,7 @@ async function restoreSelectedModels() {
 async function deleteForeverSelected() {
     if (selectedModels.size === 0) return;
 
-    const confirmed = confirm(`Permanently delete ${selectedModels.size} selected model(s)? This cannot be undone.`);
+    const confirmed = await window.arConfirm(`Permanently delete ${selectedModels.size} selected model(s)? This cannot be undone.`, { confirmLabel: 'Delete forever', danger: true });
     if (!confirmed) return;
 
     try {
@@ -300,8 +300,8 @@ function viewModel(modelId) {
 }
 
 // Folder Management Functions
-function deleteFolder(folderId) {
-    if (!confirm('Are you sure you want to delete this folder and all its contents?')) {
+async function deleteFolder(folderId) {
+    if (!await window.arConfirm('Are you sure you want to delete this folder and all its contents?', { confirmLabel: 'Delete folder', danger: true })) {
         return;
     }
 
@@ -326,7 +326,7 @@ function deleteFolder(folderId) {
     });
 }
 
-function deleteSelectedFolders() {
+async function deleteSelectedFolders() {
     const selectedFolders = Array.from(document.querySelectorAll('.folder-checkbox:checked')).map(cb => cb.value);
     
     if (selectedFolders.length === 0) {
@@ -334,7 +334,7 @@ function deleteSelectedFolders() {
         return;
     }
 
-    if (!confirm(`Are you sure you want to delete ${selectedFolders.length} folder${selectedFolders.length > 1 ? 's' : ''}? All models in these folders will be moved to the root folder.`)) {
+    if (!await window.arConfirm(`Are you sure you want to delete ${selectedFolders.length} folder${selectedFolders.length > 1 ? 's' : ''}? All models in these folders will be moved to the root folder.`, { confirmLabel: 'Delete', danger: true })) {
         return;
     }
 
@@ -411,7 +411,7 @@ function createFolder(event) {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Failed to create folder');
+        displayToast('Failed to create folder', 'error');
     });
 }
 
@@ -672,11 +672,11 @@ function startRenameFolder(folderId) {
 }
 
 // ── Edit tags (comma-separated, PATCH to the same metadata endpoint) ──
-function startEditTags(modelId) {
+async function startEditTags(modelId) {
     const card = document.querySelector(`.model-card[data-model-id="${modelId}"]`);
     if (!card) return;
     const current = (card.dataset.tags || '').split(',').filter(Boolean).join(', ');
-    const input = window.prompt('Tags (comma-separated):', current);
+    const input = await window.arPrompt('Edit tags', { label: 'Tags (comma-separated)', defaultValue: current, confirmLabel: 'Save tags' });
     if (input === null) return; // cancelled
     const tags = input.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
     fetch(`/api/models/${modelId}/metadata`, {

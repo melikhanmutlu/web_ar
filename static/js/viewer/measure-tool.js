@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // slicer already blocks hotspot mode the same way (see
             // annotations.js); measure mode needs the identical guard.
             if (window._slicerClippingActive?.()) {
-                alert('Measurements can\'t be placed while a slice preview is active — reset the slicer first.');
+                window.arToast('Measurements can\'t be placed while a slice preview is active — reset the slicer first.', 'info');
                 return;
             }
             window._disableHotspotMode?.();
@@ -332,14 +332,15 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch(() => {});
     }
 
-    function saveCurrent() {
+    async function saveCurrent() {
         if (!current || !MODEL_ID) return;
-        const label = (prompt('Name this measurement (optional):', '') || '').trim();
+        const measurement = current;
+        const label = ((await window.arPrompt('Name this measurement (optional)', { label: 'Measurement name', defaultValue: '', confirmLabel: 'Save' })) || '').trim();
         const status = panel.querySelector('#mtSaveStatus');
         fetch('/api/models/' + MODEL_ID + '/measurements', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ a: current.a, b: current.b, distance_cm: current.total, label }),
+            body: JSON.stringify({ a: measurement.a, b: measurement.b, distance_cm: measurement.total, label }),
         })
             .then(r => r.json())
             .then(data => {

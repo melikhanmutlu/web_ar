@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndLogin } = require('./helpers/auth');
 const { uploadCubeAndGetViewerUrl } = require('./helpers/upload');
+const { answerPrompt } = require('./helpers/dialogs');
 
 test('clicking a hotspot opens its discussion thread and a comment can be posted', async ({ page }) => {
   test.setTimeout(60_000);
@@ -8,11 +9,10 @@ test('clicking a hotspot opens its discussion thread and a comment can be posted
   await uploadCubeAndGetViewerUrl(page);
 
   // Places the hotspot through the real in-page UI (hotspot mode + click +
-  // native prompt()), staying on the page that already finished loading
+  // the in-page arPrompt dialog), staying on the page that already finished loading
   // rather than reloading -- a reload re-fetches model-viewer's bundle from
   // its CDN, which this sandbox's outbound proxy can intermittently stall
   // or block, adding tens of seconds of unrelated network jitter.
-  page.once('dialog', (dialog) => dialog.accept('Corner detail'));
   await page.locator('#toolsPanelToggle').click();
   await page.locator('#annotationsContainer .tp-section-header').click();
   await page.locator('#toggleHotspotMode').click();
@@ -26,6 +26,7 @@ test('clicking a hotspot opens its discussion thread and a comment can be posted
     if (await page.locator('.hotspot-dot').count() > 0) break;
     await page.mouse.click(box.x + box.width * (0.5 + dx), box.y + box.height * (0.5 + dy));
     await page.waitForTimeout(500);
+    if (await page.locator('.ar-dialog').count() > 0) await answerPrompt(page, 'Corner detail');
   }
 
   // A hit can still fail to register in this sandbox's rendering setup

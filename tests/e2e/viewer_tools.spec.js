@@ -264,12 +264,9 @@ test('camera overlay button toggles the no-anchor camera mode', async ({ page, c
   // Free-placement mode: live rear camera behind the transparent model
   // canvas, no AR surface lock (static/js/viewer/camera-overlay.js). In
   // environments without a (fake) camera, the button must explain itself
-  // via an alert instead of failing silently.
+  // via a toast instead of failing silently.
   await context.grantPermissions(['camera']);
   await uploadCubeAndGetViewerUrl(page);
-
-  let alerted = null;
-  page.on('dialog', (dialog) => { alerted = dialog.message(); dialog.accept(); });
 
   await page.locator('#cameraOverlayButton').click({ force: true });
   await page.waitForTimeout(1500);
@@ -282,6 +279,6 @@ test('camera overlay button toggles the no-anchor camera mode', async ({ page, c
     await page.locator('#cameraOverlayButton').click({ force: true });
     await expect(page.locator('#cameraOverlayVideo')).not.toBeAttached();
   } else {
-    expect(alerted, 'no camera -> a clear alert must explain why').toContain('amera');
+    await expect(page.locator('.ar-toast--error'), 'no camera -> a clear toast must explain why').toContainText('amera');
   }
 });

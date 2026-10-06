@@ -55,9 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } catch (err) {
             entering = false;
-            alert(err && err.name === 'NotAllowedError'
+            window.arToast(err && err.name === 'NotAllowedError'
                 ? 'Camera permission was denied — allow camera access for this site and try again.'
-                : 'No camera could be opened on this device, so overlay mode is unavailable.');
+                : 'No camera could be opened on this device, so overlay mode is unavailable.', 'error', { duration: 6000 });
             return;
         }
         stream = openedStream;

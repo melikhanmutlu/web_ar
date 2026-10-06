@@ -1329,6 +1329,8 @@
                     <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Hidden layers are left out of the viewer and AR but stay inside the saved file, so they can be restored. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
                     {% if hidden_layer_count %}
                     <button id="restoreHiddenLayers" class="tp-btn-full" style="margin-top:0.35rem;">Restore {{ hidden_layer_count }} hidden layer{{ '' if hidden_layer_count == 1 else 's' }}</button>
+                    <button id="purgeHiddenLayers" class="tp-btn-full" style="margin-top:0.35rem;color:#f87171;">Remove hidden layers permanently</button>
+                    <p class="tp-note">Removing deletes the hidden parts from the file and makes it smaller. A version is saved, so you can still go back from the History tab.</p>
                     {% endif %}
                     {% else %}
                     <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>

@@ -281,6 +281,201 @@ def restore_hidden_layers(gltf):
     return gltf
 
 
+def purge_hidden_layers(gltf):
+    """Permanently delete the layers apply_layer_modifications detached (flagged
+    in their extras): the hidden nodes and their subtrees, plus the meshes,
+    accessors and buffer bytes only they used. Returns the number of nodes
+    removed. Nodes still reachable from a scene or a skin are never removed.
+    Materials/textures are left for a follow-up prune_unused_resources().
+    """
+    nodes = gltf.nodes or []
+    flagged = [
+        i for i, n in enumerate(nodes)
+        if isinstance(n.extras, dict) and HIDDEN_LAYER_EXTRAS_KEY in n.extras
+    ]
+    if not flagged:
+        return 0
+
+    def subtree(roots):
+        seen, stack = set(), list(roots)
+        while stack:
+            i = stack.pop()
+            if i in seen or not 0 <= i < len(nodes):
+                continue
+            seen.add(i)
+            stack.extend(nodes[i].children or [])
+        return seen
+
+    live_roots = [r for sc in (gltf.scenes or []) for r in (sc.nodes or [])]
+    for skin in gltf.skins or []:
+        live_roots.extend(skin.joints or [])
+        if skin.skeleton is not None:
+            live_roots.append(skin.skeleton)
+    live = subtree(live_roots)
+    drop = subtree(flagged) - live
+    for i in flagged:
+        if i in live:  # still visible: just clear the stale flag
+            del nodes[i].extras[HIDDEN_LAYER_EXTRAS_KEY]
+    if not drop:
+        return 0
+
+    node_map = {}
+    for i in range(len(nodes)):
+        if i not in drop:
+            node_map[i] = len(node_map)
+    kept_mesh_users = {n.mesh for i, n in enumerate(nodes) if i not in drop and n.mesh is not None}
+    dropped_meshes = {n.mesh for i, n in enumerate(nodes) if i in drop and n.mesh is not None} - kept_mesh_users
+    mesh_map = {}
+    for i in range(len(gltf.meshes or [])):
+        if i not in dropped_meshes:
+            mesh_map[i] = len(mesh_map)
+
+    gltf.nodes = [n for i, n in enumerate(nodes) if i not in drop]
+    for n in gltf.nodes:
+        if n.children:
+            n.children = [node_map[c] for c in n.children if c in node_map]
+        if n.mesh is not None:
+            n.mesh = mesh_map[n.mesh]
+    for sc in gltf.scenes or []:
+        sc.nodes = [node_map[c] for c in (sc.nodes or []) if c in node_map]
+    for skin in gltf.skins or []:
+        skin.joints = [node_map[j] for j in skin.joints]
+        if skin.skeleton is not None:
+            skin.skeleton = node_map.get(skin.skeleton)
+    gltf.meshes = [m for i, m in enumerate(gltf.meshes or []) if i in mesh_map]
+
+    for anim in gltf.animations or []:
+        anim.channels = [c for c in (anim.channels or []) if c.target.node is None or c.target.node in node_map]
+        used = sorted({c.sampler for c in anim.channels})
+        smap = {old: new for new, old in enumerate(used)}
+        anim.samplers = [anim.samplers[o] for o in used]
+        for c in anim.channels:
+            c.sampler = smap[c.sampler]
+            if c.target.node is not None:
+                c.target.node = node_map[c.target.node]
+    if gltf.animations:
+        gltf.animations = [a for a in gltf.animations if a.channels]
+
+    _compact_buffers(gltf)
+    logger.info(f"Purged {len(drop)} hidden node(s) permanently")
+    return len(drop)
+
+
+def _compact_buffers(gltf):
+    """Drop accessors/bufferViews no remaining mesh/skin/animation/image uses
+    and rewrite the single GLB buffer without them. Skipped for multi-buffer or
+    compressed (Draco/meshopt) files, whose references this does not track."""
+    used_ext = set(gltf.extensionsUsed or [])
+    if (len(gltf.buffers or []) != 1 or gltf.buffers[0].uri
+            or used_ext & {"KHR_draco_mesh_compression", "EXT_meshopt_compression"}):
+        return
+    blob = gltf.binary_blob()
+    if blob is None:
+        return
+
+    acc_used = set()
+    for mesh in gltf.meshes or []:
+        for prim in mesh.primitives or []:
+            acc_used.update(v for v in vars(prim.attributes).values() if isinstance(v, int))
+            if prim.indices is not None:
+                acc_used.add(prim.indices)
+            for target in prim.targets or []:
+                acc_used.update(v for v in target.values() if isinstance(v, int))
+    for skin in gltf.skins or []:
+        if skin.inverseBindMatrices is not None:
+            acc_used.add(skin.inverseBindMatrices)
+    for anim in gltf.animations or []:
+        for smp in anim.samplers or []:
+            acc_used.update((smp.input, smp.output))
+    acc_order = sorted(acc_used)
+    acc_map = {old: new for new, old in enumerate(acc_order)}
+
+    new_accessors = [gltf.accessors[i] for i in acc_order]
+    bv_used = set()
+    for acc in new_accessors:
+        if acc.bufferView is not None:
+            bv_used.add(acc.bufferView)
+        if acc.sparse is not None:
+            bv_used.add(acc.sparse.indices.bufferView)
+            bv_used.add(acc.sparse.values.bufferView)
+    for img in gltf.images or []:
+        if img.bufferView is not None:
+            bv_used.add(img.bufferView)
+    bv_order = sorted(bv_used)
+    bv_map = {old: new for new, old in enumerate(bv_order)}
+
+    out = bytearray()
+    new_views = []
+    for old in bv_order:
+        view = gltf.bufferViews[old]
+        start = view.byteOffset or 0
+        chunk = blob[start:start + view.byteLength]
+        out.extend(b"\x00" * (-len(out) % 4))
+        view.byteOffset = len(out)
+        view.buffer = 0
+        out.extend(chunk)
+        new_views.append(view)
+
+    for acc in new_accessors:
+        if acc.bufferView is not None:
+            acc.bufferView = bv_map[acc.bufferView]
+        if acc.sparse is not None:
+            acc.sparse.indices.bufferView = bv_map[acc.sparse.indices.bufferView]
+            acc.sparse.values.bufferView = bv_map[acc.sparse.values.bufferView]
+    for img in gltf.images or []:
+        if img.bufferView is not None:
+            img.bufferView = bv_map[img.bufferView]
+    for mesh in gltf.meshes or []:
+        for prim in mesh.primitives or []:
+            for key, val in list(vars(prim.attributes).items()):
+                if isinstance(val, int):
+                    setattr(prim.attributes, key, acc_map[val])
+            if prim.indices is not None:
+                prim.indices = acc_map[prim.indices]
+            for target in prim.targets or []:
+                for key, val in list(target.items()):
+                    if isinstance(val, int):
+                        target[key] = acc_map[val]
+    for skin in gltf.skins or []:
+        if skin.inverseBindMatrices is not None:
+            skin.inverseBindMatrices = acc_map[skin.inverseBindMatrices]
+    for anim in gltf.animations or []:
+        for smp in anim.samplers or []:
+            smp.input, smp.output = acc_map[smp.input], acc_map[smp.output]
+
+    gltf.accessors = new_accessors
+    gltf.bufferViews = new_views
+    gltf.buffers[0].byteLength = len(out)
+    gltf.set_binary_blob(bytes(out))
+
+
+def prune_unused_resources(glb_path, timeout=180):
+    """Best-effort `gltf-transform prune` (drops now-unused materials, textures
+    and images) in place. Never raises; the file is untouched on any failure."""
+    import subprocess
+    from converters.glb_optimizer import _resolve_gltf_transform
+
+    cmd_base = _resolve_gltf_transform()
+    if not cmd_base:
+        return False
+    tmp_out = glb_path + ".prune.glb"
+    try:
+        result = subprocess.run(
+            cmd_base + ["prune", glb_path, tmp_out, "--keep-leaves", "true"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode == 0 and os.path.exists(tmp_out) and os.path.getsize(tmp_out) > 0:
+            os.replace(tmp_out, glb_path)
+            return True
+        logger.warning(f"gltf-transform prune failed: {result.stderr[-300:]}")
+    except Exception as e:
+        logger.warning(f"gltf-transform prune skipped: {e}")
+    finally:
+        if os.path.exists(tmp_out):
+            os.remove(tmp_out)
+    return False
+
+
 def apply_layer_modifications(gltf, layer_mods):
     """
     Apply per-layer (per-mesh-node) visibility and color overrides baked
@@ -361,6 +556,9 @@ def apply_layer_modifications(gltf, layer_mods):
             if scene.nodes:
                 scene.nodes = [n for n in scene.nodes if n not in hidden_targets]
         logger.info(f"Hid {len(hidden_targets)} layer node(s): {sorted(hidden_targets)}")
+
+    if layer_mods.get('purge_hidden'):
+        purge_hidden_layers(gltf)
 
     return gltf
 
@@ -1429,6 +1627,8 @@ def modify_glb(input_path, output_path, modifications, transform_info=None):
         # Export modified GLB
         logger.info(f"Exporting modified GLB to {output_path}")
         gltf.save(output_path)
+        if isinstance(modifications.get('layers'), dict) and modifications['layers'].get('purge_hidden'):
+            prune_unused_resources(output_path)
         
         # Verify output file exists
         if Path(output_path).exists():

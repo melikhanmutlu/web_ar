@@ -998,6 +998,32 @@ void main() {
                 btn.disabled = false;
             });
 
+            document.getElementById('purgeHiddenLayers')?.addEventListener('click', async (e) => {
+                if (!window.confirm('Permanently delete the hidden layers from this model? You can still restore an earlier version from the History tab.')) return;
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                try {
+                    const response = await fetch('/save_modifications', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model_id: window.VIEWER_CONFIG.modelDbId,
+                            modifications: { layers: { purge_hidden: true } }
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        window.location.reload();
+                        return;
+                    }
+                    window.arToast('Remove failed: ' + (result.error || 'Unknown error'), 'error');
+                } catch (err) {
+                    console.error('Purge hidden layers error:', err);
+                    window.arToast('Failed to remove hidden layers.', 'error');
+                }
+                btn.disabled = false;
+            });
+
             document.getElementById('resetLayers')?.addEventListener('click', () => {
                 modelLayers.forEach(layer => {
                     layer.node.visible = layer.origVisible;

@@ -1867,7 +1867,7 @@ def _system_status():
     config_summary = {
         "site_url": _config.SITE_URL,
         "payment_provider": _config.PAYMENT_PROVIDER,
-        "billing_currency": _config.BILLING_CURRENCY,
+        "price_currency": "USD (PayTR charges TRY at the daily TCMB rate)",
         "paytr_test_mode": str(_config.PAYTR_TEST_MODE) == "1",
         "upload_hard_ceiling_mb": _max_upload_ceiling_mb(),
         "seo_index_model_pages_env": _config.SEO_INDEX_MODEL_PAGES,

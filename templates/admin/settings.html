@@ -153,7 +153,7 @@
         <dl class="admin-dl">
             <div><dt>site url</dt><dd class="settings-mono">{{ system.config_summary.site_url }}</dd></div>
             <div><dt>payment provider</dt><dd>{{ system.config_summary.payment_provider }}{% if system.config_summary.paytr_test_mode %} <span class="status-badge status-badge--processing">test mode</span>{% endif %}</dd></div>
-            <div><dt>billing currency</dt><dd>{{ system.config_summary.billing_currency }}</dd></div>
+            <div><dt>price currency</dt><dd>{{ system.config_summary.price_currency }}</dd></div>
             <div><dt>upload hard ceiling</dt><dd>{{ system.config_summary.upload_hard_ceiling_mb }} MB</dd></div>
             <div><dt>seo index env default</dt><dd>{{ 'on' if system.config_summary.seo_index_model_pages_env else 'off' }}</dd></div>
         </dl>

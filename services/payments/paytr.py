@@ -53,14 +53,17 @@ class PayTRProvider(PaymentProvider):
         if not self.is_configured():
             raise RuntimeError("PayTR is not configured.")
         merchant_oid = payment.provider_ref
-        amount_kurus = int(round(float(payment.amount) * 100))
+        # Charge the converted amount when checkout stored one (USD list
+        # price -> TRY); otherwise the list price is already in TRY.
+        charge = payment.charge_amount if payment.charge_amount is not None else payment.amount
+        currency = payment.charge_currency or payment.currency
+        amount_kurus = int(round(float(charge) * 100))
         basket = base64.b64encode(
-            json.dumps([[item_name, str(payment.amount), 1]]).encode()
+            json.dumps([[item_name, str(charge), 1]]).encode()
         ).decode()
         test_mode = "1" if str(config.PAYTR_TEST_MODE) == "1" else "0"
         no_installment = "0"
         max_installment = "0"
-        currency = payment.currency or config.BILLING_CURRENCY
 
         # The token hash covers this exact field order (PayTR spec).
         token_str = (

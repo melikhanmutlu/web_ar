@@ -1,16 +1,16 @@
-"""USD -> TRY exchange rate for PayTR checkout.
+"""Price-currency -> TRY exchange rate for PayTR checkout.
 
-Plan prices are USD-denominated (services/plans.py), but PayTR settles in
-TRY, so a PayTR checkout must convert the USD price to TRY at the current
-rate before creating the payment. The rate is cached in SiteSetting so a
-live lookup only happens once per CACHE_SECONDS; a failed lookup falls back
-to the last known cached rate, and finally to USD_TRY_FALLBACK_RATE if
-nothing has ever been cached -- a checkout must never hard-fail just
-because the FX API had a bad moment.
+Plan and credit-pack prices are listed in USD (services/plans.py), but PayTR
+settles in TRY, so a PayTR checkout converts the list price at the day's
+Central Bank of Turkey (TCMB) selling rate, with open.er-api.com as a backup
+source. Rates are cached in SiteSetting for CACHE_SECONDS. When no source
+answers, a cached rate up to MAX_STALE_SECONDS old is still used; past that
+FxUnavailable is raised and the checkout is refused -- charging a real card at
+a guessed rate is worse than asking the customer to retry.
 """
 
 import logging
-import os
+import re
 import time
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -19,57 +19,80 @@ import requests
 logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 6 * 3600
+MAX_STALE_SECONDS = 72 * 3600
 REQUEST_TIMEOUT = 5
-FALLBACK_RATE = float(os.getenv("USD_TRY_FALLBACK_RATE", "34.0"))
-_RATE_URL = "https://open.er-api.com/v6/latest/USD"
-_RATE_KEY = "fx_usd_try_rate"
-_RATE_AT_KEY = "fx_usd_try_rate_at"
+_TCMB_URL = "https://www.tcmb.gov.tr/kurlar/today.xml"
+_BACKUP_URL = "https://open.er-api.com/v6/latest/{code}"
 
 
-def get_usd_try_rate():
-    """Current USD->TRY rate, refreshed at most once every CACHE_SECONDS."""
+class FxUnavailable(RuntimeError):
+    """No trustworthy exchange rate is available right now."""
+
+
+def _rate_from_tcmb_xml(xml_text, code):
+    """ForexSelling / Unit for `code` from TCMB's today.xml, or None."""
+    block = re.search(
+        rf'<Currency\b[^>]*\bCurrencyCode="{re.escape(code)}"[^>]*>(.*?)</Currency>',
+        xml_text, re.S,
+    )
+    if not block:
+        return None
+    selling = re.search(r"<ForexSelling>\s*([\d.]+)\s*</ForexSelling>", block.group(1))
+    unit = re.search(r"<Unit>\s*(\d+)\s*</Unit>", block.group(1))
+    if not selling:
+        return None
+    return float(selling.group(1)) / (int(unit.group(1)) if unit else 1)
+
+
+def _fetch_tcmb(code):
+    resp = requests.get(_TCMB_URL, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    return _rate_from_tcmb_xml(resp.text, code)
+
+
+def _fetch_backup(code):
+    resp = requests.get(_BACKUP_URL.format(code=code), timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    return float(resp.json()["rates"]["TRY"])
+
+
+def get_try_rate(code="USD"):
+    """How many TRY one unit of `code` costs today."""
     from site_settings import get_setting, set_setting
 
-    cached = get_setting(_RATE_KEY)
-    cached_at = get_setting(_RATE_AT_KEY)
+    code = code.upper()
+    if code == "TRY":
+        return 1.0
+    rate_key, at_key = f"fx_{code.lower()}_try_rate", f"fx_{code.lower()}_try_rate_at"
     now = time.time()
-    if cached and cached_at:
-        try:
-            if now - float(cached_at) < CACHE_SECONDS and float(cached) > 0:
-                return float(cached)
-        except (TypeError, ValueError):
-            pass
-
     try:
-        resp = requests.get(_RATE_URL, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        rate = float(resp.json()["rates"]["TRY"])
-        if rate > 0:
-            set_setting(_RATE_KEY, rate)
-            set_setting(_RATE_AT_KEY, now)
-            return rate
-    except Exception as e:
-        logger.warning(f"USD->TRY rate fetch failed, using cached/fallback rate: {e}")
+        cached, cached_at = float(get_setting(rate_key)), float(get_setting(at_key))
+    except (TypeError, ValueError):
+        cached, cached_at = None, None
+    if cached and cached > 0 and now - cached_at < CACHE_SECONDS:
+        return cached
 
-    if cached:
+    for source in (_fetch_tcmb, _fetch_backup):
         try:
-            if float(cached) > 0:
-                return float(cached)
-        except (TypeError, ValueError):
-            pass
-    # API is down AND no valid rate has ever been cached: this hardcoded rate
-    # is about to convert a real charge. Surface it so ops can catch a
-    # cold-cache + API-outage window.
-    logger.warning(
-        "USD->TRY: API unavailable and no valid cached rate; using hardcoded "
-        "fallback rate %s for a live charge", FALLBACK_RATE
-    )
-    return FALLBACK_RATE
+            rate = source(code)
+        except Exception as e:
+            logger.warning(f"{code}->TRY rate from {source.__name__} failed: {e}")
+            continue
+        if rate and rate > 0:
+            set_setting(rate_key, rate)
+            set_setting(at_key, now)
+            return rate
+
+    if cached and cached > 0 and now - cached_at < MAX_STALE_SECONDS:
+        logger.warning(f"{code}->TRY: all sources down, using rate cached {int(now - cached_at)}s ago")
+        return cached
+    raise FxUnavailable(f"No current {code}->TRY exchange rate available.")
 
 
-def usd_to_try(usd_amount):
-    """Convert a USD amount to a TRY Decimal, rounded to 2 places."""
-    rate = get_usd_try_rate()
-    return (Decimal(str(usd_amount)) * Decimal(str(rate))).quantize(
+def to_try(amount, code="USD"):
+    """(TRY amount rounded to kuruş, rate used) for `amount` in `code`."""
+    rate = get_try_rate(code)
+    try_amount = (Decimal(str(amount)) * Decimal(str(rate))).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
+    return try_amount, rate

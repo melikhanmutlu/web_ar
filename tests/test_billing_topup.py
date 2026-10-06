@@ -49,6 +49,7 @@ def _pending_topup(user, oid, credits=50, amount=39):
 
 def test_topup_checkout_creates_pending_topup_payment(client, monkeypatch):
     _configure_paytr(monkeypatch)
+    monkeypatch.setattr("services.fx.get_try_rate", lambda code="USD": 40.0)
     monkeypatch.setattr(
         PayTRProvider, "create_checkout",
         lambda self, payment, user, **kw: CheckoutSession(iframe_url="https://pay.example/x"),

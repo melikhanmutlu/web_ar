@@ -810,6 +810,12 @@ class Payment(db.Model):
     credits = db.Column(db.Integer, nullable=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     currency = db.Column(db.String(3), nullable=False, default='USD', server_default='USD')
+    # What the gateway actually charged when it settles in another currency
+    # (PayTR: TRY at the day's rate). amount/currency stay the list price the
+    # customer saw; NULL charge_* means it was charged as listed.
+    charge_amount = db.Column(db.Numeric(12, 2), nullable=True)
+    charge_currency = db.Column(db.String(3), nullable=True)
+    fx_rate = db.Column(db.Numeric(14, 6), nullable=True)
     status = db.Column(db.String(20), nullable=False, default='paid', server_default='paid', index=True)
     method = db.Column(db.String(40), nullable=True)
     # Which gateway this came through ('paytr', …) and its transaction id

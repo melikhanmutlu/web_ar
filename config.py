@@ -204,8 +204,6 @@ PARASUT_CLIENT_SECRET = os.getenv('PARASUT_CLIENT_SECRET', '')
 PARASUT_USERNAME = os.getenv('PARASUT_USERNAME', '')
 PARASUT_PASSWORD = os.getenv('PARASUT_PASSWORD', '')
 PARASUT_COMPANY_ID = os.getenv('PARASUT_COMPANY_ID', '')
-# Currency plans are priced/charged in (PayTR supports TL/USD/EUR/GBP).
-BILLING_CURRENCY = os.getenv('BILLING_CURRENCY', 'TRY')
 
 # SEO / canonical site config. SITE_URL is env-var-driven (never derived from
 # the request Host header) because the production domain is expected to move

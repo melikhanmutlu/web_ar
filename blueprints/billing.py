@@ -18,6 +18,7 @@ from services.time_utils import datetime
 from models import Payment, User, db
 from services import send_email
 from services.credits import CREDIT_PACKS, grant_ai_credits
+from services.fx import FxUnavailable, to_try
 from services.payments import get_active_provider
 from services.plans import DEFAULT_CURRENCY, get_plan_config, plan_name, public_plan_slugs
 
@@ -65,6 +66,25 @@ def billing_home():
     )
 
 
+_FX_DOWN_MESSAGE = "Online payment is briefly unavailable. Please try again in a few minutes."
+
+
+def _new_checkout_payment(provider, list_price, list_currency, **fields):
+    """A pending Payment at the list price the customer saw. PayTR settles in
+    TRY, so for it the TRY amount at the day's rate is stored alongside as the
+    charge (raises FxUnavailable when no current rate exists)."""
+    payment = Payment(
+        amount=Decimal(str(list_price)), currency=list_currency, status="pending",
+        method=provider.name, provider=provider.name,
+        provider_ref="arv" + secrets.token_hex(12), **fields,
+    )
+    if provider.name == "paytr" and list_currency != "TRY":
+        payment.charge_amount, rate = to_try(list_price, list_currency)
+        payment.charge_currency = "TRY"
+        payment.fx_rate = Decimal(str(rate))
+    return payment
+
+
 @billing_bp.route("/billing/checkout/<plan_slug>", methods=["POST"])
 @login_required
 def checkout(plan_slug):
@@ -81,28 +101,15 @@ def checkout(plan_slug):
         flash("Online payment isn't available right now. Please contact us.", "error")
         return redirect(url_for("billing.billing_home"))
 
-    charge_amount = Decimal(str(price))
-    charge_currency = cfg.get("currency", DEFAULT_CURRENCY)
-    # Plan prices are USD-denominated, but PayTR (our Turkish gateway)
-    # settles in TRY -- convert at the current rate so the amount PayTR
-    # actually charges the card matches what's displayed as USD on
-    # /pricing, instead of charging the raw USD number mislabeled as TRY.
-    if provider.name == "paytr" and charge_currency != "TRY":
-        from services.fx import usd_to_try
-        charge_amount = usd_to_try(price)
-        charge_currency = "TRY"
-
-    merchant_oid = "arv" + secrets.token_hex(12)
-    payment = Payment(
-        user_id=current_user.id,
-        plan=plan_slug,
-        amount=charge_amount,
-        currency=charge_currency,
-        status="pending",
-        method="paytr",
-        provider=provider.name,
-        provider_ref=merchant_oid,
-    )
+    try:
+        payment = _new_checkout_payment(
+            provider, price, cfg.get("currency", DEFAULT_CURRENCY),
+            user_id=current_user.id, plan=plan_slug,
+        )
+    except FxUnavailable as exc:
+        logger.error("Checkout refused for %s: %s", plan_slug, exc)
+        flash(_FX_DOWN_MESSAGE, "error")
+        return redirect(url_for("billing.billing_home"))
     db.session.add(payment)
     db.session.commit()
 
@@ -176,28 +183,16 @@ def topup(pack):
         flash("Online payment isn't available right now. Please contact us.", "error")
         return redirect(url_for("billing.billing_home"))
 
-    charge_amount = Decimal(str(pack_cfg["price"]))
-    charge_currency = DEFAULT_CURRENCY
-    # Same USD -> TRY conversion as the plan checkout above: credit pack
-    # prices are USD-denominated, PayTR settles in TRY.
-    if provider.name == "paytr" and charge_currency != "TRY":
-        from services.fx import usd_to_try
-        charge_amount = usd_to_try(pack_cfg["price"])
-        charge_currency = "TRY"
-
-    merchant_oid = "arv" + secrets.token_hex(12)
-    payment = Payment(
-        user_id=current_user.id,
-        plan="credits",
-        kind="topup",
-        credits=pack_cfg["credits"],
-        amount=charge_amount,
-        currency=charge_currency,
-        status="pending",
-        method="paytr",
-        provider=provider.name,
-        provider_ref=merchant_oid,
-    )
+    try:
+        payment = _new_checkout_payment(
+            provider, pack_cfg["price"], DEFAULT_CURRENCY,
+            user_id=current_user.id, plan="credits", kind="topup",
+            credits=pack_cfg["credits"],
+        )
+    except FxUnavailable as exc:
+        logger.error("Top-up checkout refused for %s: %s", pack, exc)
+        flash(_FX_DOWN_MESSAGE, "error")
+        return redirect(url_for("billing.billing_home"))
     db.session.add(payment)
     db.session.commit()
 

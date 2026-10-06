@@ -75,7 +75,7 @@ def generate_3d():
     # Advanced generation options are a plan feature: refuse (before any
     # allowance/credit is consumed) rather than silently dropping them.
     from services.plans import plan_allows
-    requested = _parse_ai_options((request.get_json(silent=True) or {}).get("options"))
+    requested = _parse_ai_options(json_dict().get("options"))
     if _AI_ADVANCED_OPTION_KEYS & set(requested) and not plan_allows(current_user, "advanced_ai_options"):
         from services.upgrade import upgrade_hint
         return jsonify({

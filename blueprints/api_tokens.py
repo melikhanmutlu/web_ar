@@ -153,48 +153,78 @@ def _token_model_query(token):
 def _openapi_spec():
     from config import SITE_URL
     bearer = [{"bearerAuth": []}]
+    error_schema = {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+
+    def err(description):
+        return {"description": description, **error_schema}
+
+    common = {
+        "401": err("Missing, invalid, expired or revoked token"),
+        "403": err("Missing scope, plan without API access, or owner-only action"),
+        "429": err("Rate limit exceeded"),
+    }
+
+    def op(summary, ok_code, ok_description, scope, extra=None, **kwargs):
+        responses = {ok_code: {"description": ok_description}, **common, **(extra or {})}
+        return {"summary": summary, "security": bearer, "x-required-scope": scope,
+                "responses": responses, **kwargs}
+
+    not_found = {"404": err("Not found (or not visible to this token)")}
     return {
         "openapi": "3.0.3",
         "info": {
             "title": "ARVision API",
             "version": "1.0.0",
-            "description": "Upload/convert 3D models, read analytics, and manage models programmatically.",
+            "description": "Upload/convert 3D models, read analytics, and manage models programmatically. "
+                           "Organization tokens act within their organization; visibility changes and "
+                           "deletes are owner-only.",
         },
         "servers": [{"url": f"{SITE_URL}/api/v1"}],
         "components": {
             "securitySchemes": {
                 "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "arv_ token"}
-            }
+            },
+            "schemas": {
+                "Error": {"type": "object", "properties": {
+                    "error": {"type": "string"}, "success": {"type": "boolean"},
+                }, "required": ["error"]},
+            },
         },
         "security": bearer,
         "paths": {
             "/models": {
-                "get": {
-                    "summary": "List models",
-                    "security": bearer,
-                    "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100}}],
-                    "responses": {"200": {"description": "A list of models"}},
-                },
-                "post": {
-                    "summary": "Upload and convert a model",
-                    "security": bearer,
-                    "requestBody": {"content": {"multipart/form-data": {"schema": {"type": "object", "properties": {
-                        "file": {"type": "string", "format": "binary"},
-                        "name": {"type": "string"},
-                    }, "required": ["file"]}}}},
-                    "responses": {"202": {"description": "Conversion job accepted"}},
-                },
+                "get": op("List models", "200", "A list of models, wrapped in {\"data\": [...]}", "models:read",
+                          parameters=[{"name": "limit", "in": "query", "description": "Clamped to 1-100 (default 50).",
+                                       "schema": {"type": "integer", "minimum": 1, "maximum": 100}}]),
+                "post": op("Upload and convert a model", "202", "Conversion job accepted", "models:write",
+                           {"400": err("Missing file or file type not allowed"),
+                            "413": err("File too large, model limit or storage quota exceeded")},
+                           requestBody={"required": True, "content": {"multipart/form-data": {"schema": {
+                               "type": "object", "properties": {
+                                   "file": {"type": "string", "format": "binary"},
+                                   "name": {"type": "string"},
+                               }, "required": ["file"]}}}}),
             },
             "/models/{id}": {
-                "get": {"summary": "Get a model", "security": bearer, "responses": {"200": {"description": "Model detail"}}},
-                "patch": {"summary": "Update a model", "security": bearer, "responses": {"200": {"description": "Updated"}}},
-                "delete": {"summary": "Soft-delete a model", "security": bearer, "responses": {"200": {"description": "Deleted"}}},
+                "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                "get": op("Get a model", "200", "Model detail", "models:read", not_found),
+                "patch": op("Update a model (visibility: owner only)", "200", "Updated", "models:write",
+                            {**not_found, "400": err("Invalid visibility")},
+                            requestBody={"content": {"application/json": {"schema": {
+                                "type": "object", "properties": {
+                                    "name": {"type": "string", "maxLength": 255},
+                                    "description": {"type": "string", "maxLength": 2000},
+                                    "visibility": {"type": "string", "enum": ["private", "unlisted", "public"]},
+                                }}}}}),
+                "delete": op("Soft-delete a model (owner only)", "200", "Deleted", "models:write", not_found),
             },
             "/models/{id}/analytics": {
-                "get": {"summary": "Model analytics totals", "security": bearer, "responses": {"200": {"description": "Totals by event type"}}},
+                "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                "get": op("Model analytics totals", "200", "Totals by event type", "analytics:read", not_found),
             },
             "/jobs/{id}": {
-                "get": {"summary": "Poll a conversion job", "security": bearer, "responses": {"200": {"description": "Job status"}}},
+                "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string"}}],
+                "get": op("Poll a conversion job", "200", "Job status", "models:read", not_found),
             },
         },
     }
@@ -375,7 +405,9 @@ def api_v1_update_model(model_id):
     model = _token_model_query(token).filter(UserModel.id == model_id).first()
     if not model:
         return jsonify({"error": "Model not found"}), 404
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A JSON object body is required"}), 400
     if "name" in data:
         model.display_name = str(data["name"])[:255] or None
     if "description" in data:
@@ -408,3 +440,9 @@ def api_v1_delete_model(model_id):
     model.deleted_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"data": {"id": model.id, "deleted": True}})
+
+
+@api_tokens_bp.route("/api/v1/<path:_unused>", methods=["GET", "POST", "PATCH", "PUT", "DELETE"])
+def api_v1_not_found(_unused):
+    """Unknown /api/v1 paths answer in JSON like the rest of the API."""
+    return jsonify({"error": "Unknown API endpoint"}), 404

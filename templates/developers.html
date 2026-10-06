@@ -80,7 +80,7 @@ form.append(<strong>"file"</strong>, modelFile);
 
             <article class="docs-content">
                 <h2 id="overview">Overview</h2>
-                <p>The ARVision API is a small REST API over HTTPS. Requests and responses are JSON, except uploads (multipart) and the CSV analytics export. Successful responses wrap data in a <code>{"data": …}</code> envelope; errors return <code>{"error": "message"}</code> with a 4xx/5xx status.</p>
+                <p>The ARVision API is a small REST API over HTTPS. Requests and responses are JSON, except uploads (multipart). Successful responses wrap data in a <code>{"data": …}</code> envelope; errors return <code>{"error": "message"}</code> with a 4xx/5xx status (authentication and rate-limit errors also carry <code>"success": false</code>).</p>
                 <p>API access requires a <strong>Pro</strong> or <strong>Business</strong> plan; webhooks require <strong>Business</strong>. Manage your plan on the <a href="{{ url_for('main.pricing') }}">pricing page</a>.</p>
 
                 <h2 id="auth">Authentication</h2>
@@ -119,7 +119,7 @@ form.append(<strong>"file"</strong>, modelFile);
   -H "Authorization: Bearer $TOKEN"</code></pre>
 
                 <h2 id="upload">Upload &amp; convert <span class="docs-endpoint"><span class="docs-method">POST</span> /models</span></h2>
-                <p>Upload a model file (STL, OBJ, FBX, GLB/glTF, or a ZIP) as multipart <code>file</code>, with an optional <code>name</code>. Scope <code>models:write</code>. Conversion runs in the background — you get a job to poll. Returns <code>202</code>.</p>
+                <p>Upload a model file (STL, OBJ, FBX, STEP/STP, GLB/glTF, or a ZIP) as multipart <code>file</code>, with an optional <code>name</code>. Scope <code>models:write</code>. Conversion runs in the background — you get a job to poll. Returns <code>202</code>.</p>
                 <pre><code>curl -X POST {{ site_url }}/api/v1/models \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@chair.stl" \
@@ -203,7 +203,7 @@ def verify(raw_body: bytes, header: str, secret: str) -> bool:
                     <tr><th>Status</th><th>Meaning</th></tr>
                     <tr><td>400</td><td>Bad request (invalid file type, bad JSON)</td></tr>
                     <tr><td>401</td><td>Missing or invalid token</td></tr>
-                    <tr><td>403</td><td>Token lacks the required scope</td></tr>
+                    <tr><td>403</td><td>Token lacks the required scope, your plan no longer includes API access, or only the model owner may do this (change visibility, delete)</td></tr>
                     <tr><td>404</td><td>Model or job not found (or not yours)</td></tr>
                     <tr><td>413</td><td>File too large or quota exceeded</td></tr>
                     <tr><td>429</td><td>Rate limit exceeded — back off</td></tr>

@@ -1558,6 +1558,9 @@ def analytics():
     )
 
 
+DAY_DETAIL_LIST_LIMIT = 100
+
+
 @admin_bp.route("/analytics/day/<date_str>")
 @admin_required
 def analytics_day(date_str):
@@ -1578,24 +1581,19 @@ def analytics_day(date_str):
     def _in_day(col):
         return and_(col >= day_start, col < day_end)
 
-    registrations = User.query.filter(_in_day(User.created_at)).order_by(
-        User.created_at.desc()
-    ).all()
-    uploads = (
-        UserModel.query.filter(_in_day(UserModel.upload_date))
-        .order_by(UserModel.upload_date.desc())
-        .all()
-    )
-    ai_jobs = (
-        AIGenerationJob.query.filter(_in_day(AIGenerationJob.created_at))
-        .order_by(AIGenerationJob.created_at.desc())
-        .all()
-    )
+    # Lists are capped (a campaign day can have thousands of rows); the KPI
+    # counts below stay exact.
+    reg_query = User.query.filter(_in_day(User.created_at))
+    upload_query = UserModel.query.filter(_in_day(UserModel.upload_date))
+    ai_query = AIGenerationJob.query.filter(_in_day(AIGenerationJob.created_at))
+    registrations = reg_query.order_by(User.created_at.desc()).limit(DAY_DETAIL_LIST_LIMIT).all()
+    uploads = upload_query.order_by(UserModel.upload_date.desc()).limit(DAY_DETAIL_LIST_LIMIT).all()
+    ai_jobs = ai_query.order_by(AIGenerationJob.created_at.desc()).limit(DAY_DETAIL_LIST_LIMIT).all()
 
     counts = {
-        "registrations": len(registrations),
-        "uploads": len(uploads),
-        "ai_jobs": len(ai_jobs),
+        "registrations": reg_query.count(),
+        "uploads": upload_query.count(),
+        "ai_jobs": ai_query.count(),
         "likes": ModelLike.query.filter(_in_day(ModelLike.created_at)).count(),
         "saves": ModelSave.query.filter(_in_day(ModelSave.created_at)).count(),
     }
@@ -1614,6 +1612,7 @@ def analytics_day(date_str):
         next_day=(day + timedelta(days=1)).isoformat(),
         is_today=(day == local_today),
         counts=counts,
+        list_limit=DAY_DETAIL_LIST_LIMIT,
         registrations=registrations,
         uploads=uploads,
         ai_jobs=ai_jobs,

@@ -57,6 +57,7 @@
             {% else %}
             <li><span class="muted">no uploads this day</span></li>
             {% endfor %}
+            {% if counts.uploads > list_limit %}<li><span class="muted">showing the latest {{ list_limit }} of {{ counts.uploads }} — see <a href="{{ url_for('admin.models') }}">models</a></span></li>{% endif %}
         </ul>
     </div>
     <div class="admin-card">
@@ -70,6 +71,7 @@
             {% else %}
             <li><span class="muted">no registrations this day</span></li>
             {% endfor %}
+            {% if counts.registrations > list_limit %}<li><span class="muted">showing the latest {{ list_limit }} of {{ counts.registrations }} — see <a href="{{ url_for('admin.users') }}">users</a></span></li>{% endif %}
         </ul>
     </div>
 </div>
@@ -86,6 +88,7 @@
             {% else %}
             <li><span class="muted">no ai generations this day</span></li>
             {% endfor %}
+            {% if counts.ai_jobs > list_limit %}<li><span class="muted">showing the latest {{ list_limit }} of {{ counts.ai_jobs }} — see <a href="{{ url_for('admin.ai_jobs') }}">ai jobs</a></span></li>{% endif %}
         </ul>
     </div>
 </div>

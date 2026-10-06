@@ -425,6 +425,12 @@ app.view_functions["auth.login"] = limiter.limit(
 app.view_functions["auth.register"] = limiter.limit(
     "5 per hour", methods=["POST"]
 )(app.view_functions["auth.register"])
+app.view_functions["auth.forgot_password"] = limiter.limit(
+    "5 per hour", methods=["POST"]
+)(app.view_functions["auth.forgot_password"])
+app.view_functions["auth.reset_password"] = limiter.limit(
+    "10 per hour", methods=["POST"]
+)(app.view_functions["auth.reset_password"])
 app.view_functions["auth.resend_verification"] = limiter.limit(
     "5 per hour", methods=["POST"]
 )(app.view_functions["auth.resend_verification"])

@@ -18,6 +18,7 @@ def _safe_next(next_page):
     return next_page
 from models import User, UserModel, Payment, db
 from site_settings import setting_bool
+from services.password_reset import send_reset_link, user_for_token
 from services.email_verification import is_verified, mark_verified, read_token, send_verification
 from wtforms import Form, StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
@@ -44,6 +45,13 @@ class RegistrationForm(Form):
         user = User.query.filter_by(email=email.data).first()
         if user:
             raise ValidationError('This email is already registered.')
+
+class ForgotPasswordForm(Form):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+
+class ResetPasswordForm(Form):
+    password = PasswordField('New password', validators=[DataRequired(), Length(min=8)])
+    confirm_password = PasswordField('Confirm new password', validators=[DataRequired(), EqualTo('password')])
 
 class ProfileForm(Form):
     username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
@@ -146,6 +154,41 @@ def register():
 
     ref_code = (request.args.get('ref') or '').strip()[:16]
     return render_template('register.html', form=form, ref_code=ref_code)
+
+FORGOT_PASSWORD_MESSAGE = ('If an account exists for that email, we sent a link to reset the '
+                           'password. It is valid for 1 hour.')
+
+@auth.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('auth.profile'))
+    form = ForgotPasswordForm(request.form)
+    if request.method == 'POST' and form.validate():
+        email = form.email.data.strip()
+        user = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+        if user is not None and user.is_active:
+            send_reset_link(user)
+        # Same response whether or not the account exists (no enumeration).
+        return render_template('forgot_password.html', form=form, sent=True,
+                               message=FORGOT_PASSWORD_MESSAGE)
+    return render_template('forgot_password.html', form=form, sent=False)
+
+@auth.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    user, error = user_for_token(token)
+    if user is None:
+        message = ('This reset link has expired. Request a new one.' if error == 'expired'
+                   else 'This reset link is invalid or has already been used. Request a new one.')
+        return render_template('reset_password.html', form=None, invalid_message=message), 400
+    form = ResetPasswordForm(request.form)
+    if request.method == 'POST' and form.validate():
+        user.set_password(form.password.data)  # bumps session_version: kills this link and other sessions
+        user.register_successful_login()
+        db.session.commit()
+        login_user(user)
+        flash('Your password has been reset. You are now signed in.', 'success')
+        return redirect(url_for('main.index'))
+    return render_template('reset_password.html', form=form, invalid_message=None)
 
 @auth.route('/logout', methods=['POST'])
 @login_required

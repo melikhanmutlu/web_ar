@@ -814,84 +814,6 @@ def generate_unique_filename(original_filename):
     return f"{uuid.uuid4()}{ext}"
 
 
-def apply_color_to_mesh(mesh, color_hex):
-    """Apply color to a single mesh using face_colors."""
-    try:
-        # Convert hex color to RGBA (0-255 range)
-        hex_color = color_hex.lstrip("#")
-        # Ensure hex string is valid (6 digits)
-        if len(hex_color) != 6:
-            logger.error(f"Invalid hex color format: {color_hex}")
-            return False
-        try:
-            rgb_255 = [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)]
-        except ValueError:
-            logger.error(f"Invalid characters in hex color: {color_hex}")
-            return False
-
-        rgba_255 = rgb_255 + [255]  # Add Alpha channel (fully opaque)
-        logger.info(f"Applying RGBA(0-255) values: {rgba_255}")
-
-        # Ensure the mesh has faces
-        if not hasattr(mesh, "faces") or mesh.faces is None or len(mesh.faces) == 0:
-            logger.warning("Mesh has no faces, cannot apply face colors.")
-            # Depending on workflow, might want to return True or False
-            # If color should always be applied if possible, False is better
-            return False
-
-        # Ensure the mesh has a visual component, creating one if necessary
-        if not hasattr(mesh, "visual") or mesh.visual is None:
-            # If no visual exists, create a basic ColorVisuals
-            mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh)
-            logger.info("Created new ColorVisuals for mesh.")
-        elif not isinstance(mesh.visual, trimesh.visual.ColorVisuals):
-            # If visual exists but isn't ColorVisuals, overwrite it cautiously
-            # This might discard existing texture/material info, which is intended here
-            logger.warning(
-                "Overwriting existing non-ColorVisuals visual data with ColorVisuals."
-            )
-            # Create new ColorVisuals, potentially losing old visual data
-            mesh.visual = trimesh.visual.ColorVisuals(mesh=mesh)
-
-        # Apply the color to all faces
-        # Assigning a single color array will broadcast it to all faces
-        mesh.visual.face_colors = rgba_255
-
-        logger.info("Color applied successfully to mesh face_colors")
-        return True
-    except Exception as e:
-        logger.error(f"Error applying color to mesh face_colors: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return False
-
-
-def apply_color_to_scene(scene, color_hex):
-    """Apply color to all meshes in a scene."""
-    try:
-        success = True
-        # Get all meshes from the scene
-        if isinstance(scene, trimesh.Scene):
-            logger.info("Processing scene with multiple geometries")
-            for name, geometry in scene.geometry.items():
-                logger.info(f"Processing geometry: {name}")
-                if isinstance(geometry, trimesh.Trimesh):
-                    if not apply_color_to_mesh(geometry, color_hex):
-                        success = False
-                        logger.warning(f"Failed to apply color to geometry: {name}")
-        elif isinstance(scene, trimesh.Trimesh):
-            logger.info("Processing single mesh")
-            success = apply_color_to_mesh(scene, color_hex)
-        else:
-            logger.error(f"Unsupported scene type: {type(scene)}")
-            return False
-
-        return success
-    except Exception as e:
-        logger.error(f"Error applying color to scene: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return False
-
-
 def normalize_texture_name(filename):
     """Normalize texture filename for comparison by removing common variations."""
     # Convert to lowercase
@@ -1029,12 +951,6 @@ def validate_color(color):
     return color
 
 
-def hex_to_rgb(hex_color):
-    """Convert hex color string to RGB values (0-1 range)."""
-    hex_color = hex_color.lstrip("#")
-    return [int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4)]
-
-
 def cleanup_files(*file_paths):
     """Clean up temporary files."""
     for file_path in file_paths:
@@ -1048,55 +964,6 @@ def cleanup_files(*file_paths):
 
 def generate_unique_id():
     return str(uuid.uuid4())
-
-
-def cleanup_missing_models():
-    """Clean up database records for models whose files no longer exist."""
-    try:
-        # Get all models from database
-        session = Session(db.engine)
-        models = session.query(UserModel).all()
-        deleted_count = 0
-
-        for model in models:
-            # Check if the original uploaded file exists
-            if not model.filename or not os.path.exists(model.filename):
-                logger.info(
-                    f"Model {model.id} ({model.original_filename}) file not found at: {model.filename}"
-                )
-                try:
-                    # Also try to delete the converted file if it exists
-                    converted_path = os.path.join(
-                        app.config["CONVERTED_FOLDER"], f"{model.id}.glb"
-                    )
-                    if os.path.exists(converted_path):
-                        os.remove(converted_path)
-                        logger.info(f"Deleted converted file: {converted_path}")
-                except Exception as e:
-                    logger.warning(
-                        f"Error deleting converted file for model {model.id}: {str(e)}"
-                    )
-
-                # Delete from database
-                session.delete(model)
-                deleted_count += 1
-                logger.info(f"Deleted model {model.id} from database")
-
-        if deleted_count > 0:
-            db.session.commit()
-            logger.info(
-                f"Cleaned up {deleted_count} missing model records from database"
-            )
-            flash(
-                f"{deleted_count} missing model(s) were cleaned up from the database",
-                "info",
-            )
-
-    except Exception as e:
-        logger.error(f"Error cleaning up missing models: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        db.session.rollback()
-        flash("Error cleaning up missing models", "error")
 
 
 def check_node_installed():

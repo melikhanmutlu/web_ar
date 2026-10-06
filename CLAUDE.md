@@ -112,7 +112,7 @@ add it to the relevant blueprint, not `app.py`.
   `upload_pipeline.py` (`run_conversion_job`, the upload/LOD/derived pipelines,
   `register_glb_as_model`; singletons injected via `configure()`),
   `ai_jobs.py` (Meshy quota/credits + job advance/finalize/refund),
-  `usdz.py`, `thumbnails.py`, `qr.py`.
+  `usdz.py`, `thumbnails.py`.
 - **`converters/`** — per-format → GLB (`stl_converter`, `obj_converter`,
   `fbx_converter` + `fbx_*` helpers, `step_converter`) plus `glb_optimizer`,
   `glb_quality`, `lod_generator`, `texture_upscale`, `thumbnail_render`, and

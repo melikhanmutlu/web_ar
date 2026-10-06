@@ -184,7 +184,8 @@ class FBXConverter(BaseConverter, FBXPostProcessMixin):
                     # request time.
                     try:
                         if not os.access(self.fbx2gltf_path, os.X_OK):
-                            os.chmod(self.fbx2gltf_path, 0o755)
+                            # Bundled converter binary needs the exec bit; 0o755 is the normal mode for it.
+                            os.chmod(self.fbx2gltf_path, 0o755)  # nosec B103
                             self.log_operation(
                                 f"Set execute permissions for {self.fbx2gltf_path}"
                             )

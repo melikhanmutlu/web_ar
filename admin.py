@@ -186,7 +186,13 @@ def _daily_series(date_col, days=CHART_DAYS, extra_filter=None):
     local_now = datetime.utcnow() + _DISPLAY_TZ_OFFSET
     start_local = datetime(local_now.year, local_now.month, local_now.day) - timedelta(days=days - 1)
     start_utc = start_local - _DISPLAY_TZ_OFFSET
-    shifted_col = date_col + _DISPLAY_TZ_OFFSET
+    if db.engine.dialect.name == "sqlite":
+        # SQLite has no interval arithmetic: `col + timedelta` compiles to a
+        # numeric add and date() of it is garbage (every bucket read 0).
+        hours = int(_DISPLAY_TZ_OFFSET.total_seconds() // 3600)
+        shifted_col = func.datetime(date_col, f"{hours:+d} hours")
+    else:
+        shifted_col = date_col + _DISPLAY_TZ_OFFSET
     query = (
         db.session.query(func.date(shifted_col), func.count())
         .filter(date_col >= start_utc)
@@ -1538,7 +1544,7 @@ def analytics():
         charts=charts,
         days=days,
         day_choices=DAY_RANGE_CHOICES,
-        today=datetime.utcnow().date().isoformat(),
+        today=(datetime.utcnow() + _DISPLAY_TZ_OFFSET).date().isoformat(),
     )
 
 

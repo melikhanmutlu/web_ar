@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from admin import _daily_series
+from admin import _DISPLAY_TZ_OFFSET, _daily_series
 from app import db
 from models import AIGenerationJob, User, UserModel
 
@@ -29,6 +29,12 @@ def owner(client):
     return user
 
 
+def local_today():
+    """The admin pages bucket by the display timezone (UTC+3 by default), so
+    "today" is the local date -- not UTC's, which differs 21:00-24:00 UTC."""
+    return (datetime.utcnow() + _DISPLAY_TZ_OFFSET).date()
+
+
 def login(client, username, password):
     return client.post("/login", data={"username": username, "password": password},
                        follow_redirects=False)
@@ -49,11 +55,11 @@ def test_daily_series_includes_iso_field(client):
     for point in series:
         assert "iso" in point
         datetime.strptime(point["iso"], "%Y-%m-%d")
-    assert series[-1]["iso"] == datetime.utcnow().strftime("%Y-%m-%d")
+    assert series[-1]["iso"] == local_today().isoformat()
 
 
 def test_analytics_day_requires_admin(client, owner):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = local_today().isoformat()
     resp = client.get(f"/admin/analytics/day/{today}")
     assert resp.status_code == 302
 
@@ -68,7 +74,7 @@ def test_analytics_day_rejects_malformed_date(client, admin_user, bad):
 
 
 def test_analytics_day_rejects_future_date(client, admin_user):
-    future = (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d")
+    future = (local_today() + timedelta(days=1)).isoformat()
     login(client, "dayadmin", "adminpassword")
     assert client.get(f"/admin/analytics/day/{future}").status_code == 404
 
@@ -88,18 +94,18 @@ def test_analytics_day_shows_that_days_activity_only(client, admin_user, owner):
     db.session.commit()
 
     login(client, "dayadmin", "adminpassword")
-    resp = client.get(f"/admin/analytics/day/{today.strftime('%Y-%m-%d')}")
+    resp = client.get(f"/admin/analytics/day/{local_today().isoformat()}")
     assert resp.status_code == 200
     assert today_model.id.encode() in resp.data
     assert b"today job" in resp.data
 
 
 def test_analytics_day_prev_next_links(client, admin_user):
-    today = datetime.utcnow()
+    today = local_today()
     login(client, "dayadmin", "adminpassword")
-    resp = client.get(f"/admin/analytics/day/{today.strftime('%Y-%m-%d')}")
-    prev_day = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-    next_day = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+    resp = client.get(f"/admin/analytics/day/{today.isoformat()}")
+    prev_day = (today - timedelta(days=1)).isoformat()
+    next_day = (today + timedelta(days=1)).isoformat()
     assert f"/admin/analytics/day/{prev_day}".encode() in resp.data
     # today has no "next day" link (future dates are rejected)
     assert f"/admin/analytics/day/{next_day}".encode() not in resp.data
@@ -110,3 +116,13 @@ def test_analytics_charts_render(client, admin_user):
     resp = client.get("/admin/analytics")
     assert resp.status_code == 200
     assert b"data-drill-base=" in resp.data
+
+
+def test_daily_series_counts_rows_in_local_day_buckets(client, owner):
+    """The bucket arithmetic used to break on SQLite and report 0 every day."""
+    make_model(owner.id, upload_date=datetime.utcnow())
+    make_model(owner.id, upload_date=datetime.utcnow() - timedelta(days=1))
+
+    series = _daily_series(UserModel.upload_date, days=3)
+
+    assert [p["v"] for p in series][-2:] == [1, 1]

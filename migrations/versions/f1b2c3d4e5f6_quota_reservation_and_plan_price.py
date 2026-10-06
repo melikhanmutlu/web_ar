@@ -7,13 +7,13 @@
   Existing whole-number prices are preserved (19 -> 19.00).
 
 Revision ID: f1b2c3d4e5f6
-Revises: c7d8e9f0a1b2
+Revises: d9e0f1a2b3c4
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "f1b2c3d4e5f6"
-down_revision = "c7d8e9f0a1b2"
+down_revision = "d9e0f1a2b3c4"
 branch_labels = None
 depends_on = None
 

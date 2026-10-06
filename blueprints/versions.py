@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, jsonify, send_from_directory
 
 from models import ModelVersion
+from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import (
     check_model_history_allowed, check_model_mutation_allowed,
     check_model_view_allowed, get_live_model,
@@ -115,11 +116,15 @@ def restore_model_version(model_id, version_number):
     """Restore model to a specific version"""
     import app as app_module
 
+    edit_lock = None
     try:
         guard = check_model_mutation_allowed(model_id)
         if guard:
             return guard
 
+        edit_lock = ModelEditLock(
+            os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
+        ).acquire()
         success = restore_version(model_id, version_number)
         if success:
             # The restored GLB replaced model.glb — rebuild the iOS USDZ too.
@@ -140,9 +145,15 @@ def restore_model_version(model_id, version_number):
             return jsonify(
                 {"success": False, "error": "Failed to restore version"}
             ), 500
+    except ModelBusyError:
+        return jsonify({"success": False,
+                        "error": "Another edit of this model is still in progress. Try again in a moment."}), 409
     except Exception as e:
         app_module.logger.error(f"Failed to restore version {version_number} for {model_id}: {e}")
         return jsonify({"success": False, "error": "Internal error"}), 500
+    finally:
+        if edit_lock:
+            edit_lock.release()
 
 
 @versions_bp.route("/api/versions/<model_id>/delete/<int:version_number>", methods=["DELETE"])

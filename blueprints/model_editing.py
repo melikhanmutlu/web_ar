@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import time
+import uuid
 
 import trimesh
 from flask import Blueprint, jsonify, request, send_from_directory
@@ -12,6 +13,7 @@ from flask import Blueprint, jsonify, request, send_from_directory
 from converters.glb_optimizer import glb_compression_mode, optimize_glb, readable_glb
 from glb_modifier import modify_glb
 from models import ModelHotspot, UserModel, db
+from services.model_lock import ModelBusyError, ModelEditLock
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from version_manager import bump_asset_version, create_version
 
@@ -67,6 +69,19 @@ def _make_editable(app_module, glb_path, model_id, where):
     return None
 
 
+def _lock_model(app_module, model_id):
+    """Serialize read-modify-write edits of one model's model.glb (raises
+    ModelBusyError if another edit holds it for too long)."""
+    return ModelEditLock(
+        os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
+    ).acquire()
+
+
+def _busy_response():
+    return jsonify({"success": False,
+                    "error": "Another edit of this model is still in progress. Try again in a moment."}), 409
+
+
 def _restore_compression(app_module, glb_path, mode, where):
     """Re-apply the compression (meshopt/draco) the model had before an edit
     decompressed it, so the first edit doesn't permanently bloat the file.
@@ -87,6 +102,7 @@ def apply_modifications():
     """Apply material and transform modifications to GLB model"""
     import app as app_module
 
+    edit_lock = None
     try:
         data = request.json
         model_id = data.get("model_id")
@@ -113,6 +129,7 @@ def apply_modifications():
             app_module.logger.error(f"Original GLB not found: {original_path}")
             return jsonify({"success": False, "error": "Original model not found"}), 404
 
+        edit_lock = _lock_model(app_module, model_id)
         refused = _make_editable(app_module, original_path, model_id, "apply_modifications")
         if refused:
             return refused
@@ -124,8 +141,7 @@ def apply_modifications():
             modifications["material"]["tint_textures"] = True
 
         # Create output filename with timestamp
-        timestamp = int(time.time())
-        output_filename = f"modified_{timestamp}.glb"
+        output_filename = f"modified_{int(time.time())}_{uuid.uuid4().hex[:8]}.glb"
         output_path = os.path.join(
             app_module.app.config["CONVERTED_FOLDER"], model_id, output_filename
         )
@@ -150,9 +166,14 @@ def apply_modifications():
             app_module.logger.error("[apply_modifications] Modification failed")
             return jsonify({"success": False, "error": "Failed to modify GLB"}), 500
 
+    except ModelBusyError:
+        return _busy_response()
     except Exception as e:
         app_module.logger.error(f"[apply_modifications] Error: {e}", exc_info=True)
         return jsonify({"success": False, "error": "Internal error"}), 500
+    finally:
+        if edit_lock:
+            edit_lock.release()
 
 
 @model_editing_bp.route("/download_modified/<model_id>/<filename>")
@@ -275,6 +296,7 @@ def save_modifications():
     """Save modifications to original GLB model (replaces model.glb)"""
     import app as app_module
 
+    edit_lock = None
     try:
         data = request.json
         model_id = data.get("model_id")
@@ -314,6 +336,7 @@ def save_modifications():
             app_module.logger.error(f"Current model.glb not found: {current_model_path}")
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
+        edit_lock = _lock_model(app_module, model_id)
         compression_mode = glb_compression_mode(current_model_path)
         refused = _make_editable(app_module, current_model_path, model_id, "save_modifications")
         if refused:
@@ -327,7 +350,7 @@ def save_modifications():
         backup_path = os.path.join(
             app_module.app.config["CONVERTED_FOLDER"],
             model_id,
-            f"model_backup_{int(time.time())}.glb",
+            f"model_backup_{int(time.time())}_{uuid.uuid4().hex[:8]}.glb",
         )
         shutil.copy2(current_model_path, backup_path)
         app_module.logger.info(f"[save_modifications] Created backup: {backup_path}")
@@ -335,7 +358,7 @@ def save_modifications():
 
         # Create temporary output path
         temp_output = os.path.join(
-            app_module.app.config["CONVERTED_FOLDER"], model_id, f"temp_{int(time.time())}.glb"
+            app_module.app.config["CONVERTED_FOLDER"], model_id, f"temp_{uuid.uuid4().hex}.glb"
         )
 
         app_module.logger.info(f"[save_modifications] Input: {current_model_path}")
@@ -501,6 +524,8 @@ def save_modifications():
                 os.remove(temp_output)
             return jsonify({"success": False, "error": "Failed to modify GLB"}), 500
 
+    except ModelBusyError:
+        return _busy_response()
     except Exception as e:
         app_module.logger.error(f"[save_modifications] Error: {e}", exc_info=True)
         # modify_glb writes to temp_output before any later step can raise;
@@ -508,6 +533,9 @@ def save_modifications():
         if 'temp_output' in locals() and os.path.exists(temp_output):
             os.remove(temp_output)
         return jsonify({"success": False, "error": "Internal error"}), 500
+    finally:
+        if edit_lock:
+            edit_lock.release()
 
 
 @model_editing_bp.route("/get_mesh_bounds/<model_id>")
@@ -561,6 +589,7 @@ def slice_model():
     import app as app_module
     from converters.glb_quality import finalize_glb
 
+    edit_lock = None
     try:
         from mesh_slicer import slice_mesh_multi, slicing_unsupported_reason
 
@@ -626,6 +655,7 @@ def slice_model():
                 {"success": False, "error": f"Model not found at {input_path}"}
             ), 404
 
+        edit_lock = _lock_model(app_module, model_id)
         compression_mode = glb_compression_mode(input_path)
         refused = _make_editable(app_module, input_path, model_id, "slice_model")
         if refused:
@@ -639,7 +669,7 @@ def slice_model():
         backup_path = os.path.join(
             app_module.app.config["CONVERTED_FOLDER"],
             model_id,
-            f"model_backup_{int(time.time())}.glb",
+            f"model_backup_{int(time.time())}_{uuid.uuid4().hex[:8]}.glb",
         )
         shutil.copy2(input_path, backup_path)
         app_module.logger.info(f"[slice_model] Created backup: {backup_path}")
@@ -649,7 +679,7 @@ def slice_model():
         temp_output = os.path.join(
             app_module.app.config["CONVERTED_FOLDER"],
             model_id,
-            f"temp_sliced_{int(time.time())}.glb",
+            f"temp_sliced_{uuid.uuid4().hex}.glb",
         )
 
         slice_result = slice_mesh_multi(
@@ -770,6 +800,8 @@ def slice_model():
                 os.remove(temp_output)
             return jsonify({"success": False, "error": "Failed to slice model"}), 500
 
+    except ModelBusyError:
+        return _busy_response()
     except Exception as e:
         app_module.logger.error(f"[slice_model] Error: {e}", exc_info=True)
         # slice_mesh_multi may have partially written temp_output before this
@@ -778,3 +810,6 @@ def slice_model():
         if 'temp_output' in locals() and os.path.exists(temp_output):
             os.remove(temp_output)
         return jsonify({"success": False, "error": "Internal error"}), 500
+    finally:
+        if edit_lock:
+            edit_lock.release()

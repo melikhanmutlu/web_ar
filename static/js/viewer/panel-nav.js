@@ -65,7 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 return Array.from(sectionsRoot.querySelectorAll(':scope > .tp-section'));
             }
 
+            // Sections that change nothing in the model file: the sticky
+            // "Save & Apply to AR" bar is hidden there so Embed keeps a single
+            // clear save action ("Save Embed Settings").
+            const NO_MODEL_SAVE = ['historyContainer', 'embedContainer', 'analyticsContainer'];
+            function syncSaveBar(sectionId) {
+                const bar = document.getElementById('saveChangesWrapper');
+                if (bar) bar.hidden = NO_MODEL_SAVE.includes(sectionId);
+            }
+
             function showToolsMenu() {
+                syncSaveBar('');
                 sectionsRoot.dataset.activeSection = '';
                 allSections().forEach(sec => {
                     sec.classList.remove('is-active');
@@ -78,6 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             function showToolsDetail(sectionEl) {
                 if (!sectionEl) return;
+                syncSaveBar(sectionEl.id);
                 sectionsRoot.dataset.activeSection = sectionEl.id || 'active';
                 allSections().forEach(sec => sec.classList.toggle('is-active', sec === sectionEl));
                 sectionEl.querySelector(':scope > .tp-section-header')?.classList.add('is-open');

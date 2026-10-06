@@ -43,7 +43,9 @@ def test_flash_markup_has_no_duplicate_ids_and_error_not_autodismissed(client, i
     assert 'id="flash-message"' not in html
     assert html.count('<button data-flash-close') == 2
     assert 'data-flash-category="error"' in html
-    assert ':not([data-flash-category="error"])' in html
+    # the auto-dismiss script lives in site.js (inline scripts are blocked by the CSP)
+    site_js = client.get('/static/js/site.js').get_data(as_text=True)
+    assert ':not([data-flash-category="error"])' in site_js
 
 
 def test_register_field_errors_are_aria_linked(client, init_database):

@@ -27,6 +27,11 @@
     --accent2: #8d62ff;
     --dark:    #15161c;
 
+    /* Card radius tokens: one pair shared by library / discover / pricing /
+       billing / profile cards (outer card, nested tile). */
+    --radius-card: 12px;
+    --radius-card-sm: 10px;
+
     /* Legacy gray ramp, remapped onto the CG neutrals so the existing
        functional components (library, forms, progress, modals) pick up
        the new look without a rewrite. */
@@ -284,7 +289,7 @@ a { color: inherit; }
 /* Compound selector outranks the later .btn-primary { width:100% } rule */
 .btn-primary.library-primary, .library-primary { width: auto; min-height: 2.45rem; padding: 0.55rem 0.9rem; font-size: 0.86rem; border-radius: 10px; }
 .library-main .btn-primary { border-radius: 10px; }
-.library-main .av-card { border-radius: 14px; }
+.library-main .av-card { border-radius: var(--radius-card); }
 .library-main .av-input, .library-main .auth-input { border-radius: 8px; }
 .library-danger { color: var(--error); border-color: rgba(220, 38, 38, 0.35); }
 .library-selection {
@@ -442,7 +447,7 @@ a { color: inherit; }
     background: var(--color-white);
     cursor: pointer;
     transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-    border-radius: 14px;
+    border-radius: var(--radius-card);
 }
 .library-model:hover {
     transform: translateY(-3px);
@@ -649,7 +654,7 @@ body.selection-mode .model-card { cursor: default; }
     background: var(--color-white);
     padding: var(--spacing-md) var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
-    border-radius: 14px;
+    border-radius: var(--radius-card);
 }
 .storage-head {
     display: flex;
@@ -788,7 +793,7 @@ body.selection-mode .model-card { cursor: default; }
    Profile page (account info / usage / billing / models)
    =================================================================== */
 .profile-usage-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-lg); margin-top: var(--spacing-lg); }
-.profile-stat { display: flex; flex-direction: column; gap: 0.2rem; padding: var(--spacing-md); background: var(--color-gray-100); border-radius: 10px; }
+.profile-stat { display: flex; flex-direction: column; gap: 0.2rem; padding: var(--spacing-md); background: var(--color-gray-100); border-radius: var(--radius-card-sm); }
 .profile-stat-label { font-size: 0.72rem; color: var(--color-gray-500); text-transform: uppercase; letter-spacing: 0.06em; }
 .profile-stat-value { font-size: 1.05rem; font-weight: 700; color: var(--color-gray-900); }
 .profile-stat-suffix { font-size: 0.82rem; font-weight: 400; color: var(--color-gray-500); }
@@ -803,7 +808,7 @@ body.selection-mode .model-card { cursor: default; }
 .profile-status-pill--void { background: #fdecec; color: #c0392b; }
 .profile-empty { font-size: 0.85rem; color: var(--color-gray-500); margin-top: var(--spacing-md); }
 .profile-model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--spacing-md); margin-top: var(--spacing-lg); }
-.profile-model-tile { padding: var(--spacing-md); background: var(--color-gray-100); border-radius: 10px; }
+.profile-model-tile { padding: var(--spacing-md); background: var(--color-gray-100); border-radius: var(--radius-card-sm); }
 .profile-model-name { font-size: 0.9rem; font-weight: 600; color: var(--color-gray-900); margin: 0 0 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-model-actions { display: flex; gap: 0.4rem; }
 @media (max-width: 640px) {
@@ -903,7 +908,7 @@ body.selection-mode .model-card { cursor: default; }
 
 .billing-hero { min-height:680px; }.current-plan-card { padding:38px; }.current-plan-top { display:flex; justify-content:space-between; align-items:center; }.current-plan-top i { padding:5px 8px; border-radius:5px; background:rgba(65,185,109,.14); color:#75d598; font-size:var(--fs-micro); font-style:normal; font-weight:800; letter-spacing:.1em; }.current-plan-card h2 { margin:24px 0 5px; font-size:48px; line-height:1; letter-spacing:-.06em; }.current-plan-card>p { margin:0; color:#a8acb9; font-size:12px; }.current-plan-meta { margin-top:32px; display:grid; grid-template-columns:1fr 1fr; border-top:1px solid rgba(255,255,255,.1); border-bottom:1px solid rgba(255,255,255,.1); }.current-plan-meta>div { padding:20px 0; }.current-plan-meta>div+div { padding-left:24px; border-left:1px solid rgba(255,255,255,.1); }.current-plan-meta span { display:block; margin-bottom:7px; color:#b4b8c8; font-size:var(--fs-micro); letter-spacing:.1em; }.current-plan-meta b { font-size:15px; }.current-plan-note { margin-top:18px!important; color:#b4b8c8!important; }.trial-action { margin-top:22px; }.trial-action>span { display:block; margin-top:8px; text-align:center; color:#b4b8c8; font-size:var(--fs-micro); }.account-notice { max-width:620px; margin-top:25px; padding:13px 15px; border-radius:9px; font-size:12px; font-weight:700; }.account-notice--success { color:#22683a; background:#e7f6ec; }.account-notice--error { color:#96362d; background:#fbecea; }
 .billing-section { padding:105px 0; }.billing-section--soft { background:var(--soft); }.billing-section--history { padding-top:40px; padding-bottom:110px; }.billing-heading { margin-bottom:50px; display:grid; grid-template-columns:1.15fr .85fr; gap:80px; align-items:end; }.billing-heading h2 { margin:0; font-size:clamp(42px,4.7vw,64px); line-height:1; letter-spacing:-.06em; }.billing-heading>p { margin:0; color:var(--muted); font-size:16px; line-height:1.7; }.billing-heading--compact { grid-template-columns:1fr; }
-.billing-plan-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }.billing-plan-grid article { min-height:390px; padding:29px; display:flex; flex-direction:column; border:1px solid #d3d7de; border-radius:18px; background:#fff; }.billing-plan-grid article.is-current { color:#fff; border-color:transparent; background:linear-gradient(145deg,#191a22,#34315b); box-shadow:0 28px 65px rgba(43,40,90,.22); }.billing-plan-head { min-height:30px; display:flex; justify-content:space-between; align-items:flex-start; color:#999faa; font-size:var(--fs-micro); }.billing-plan-head em { padding:5px 7px; border-radius:5px; background:rgba(255,255,255,.1); color:#bbb8ff; font-style:normal; font-weight:800; letter-spacing:.1em; }.billing-plan-grid h3 { margin:20px 0 18px; font-size:25px; letter-spacing:-.04em; }.billing-plan-grid strong { font-size:37px; line-height:1; letter-spacing:-.05em; }.billing-plan-grid strong small { margin-left:4px; color:var(--text-subtle); font-size:var(--fs-micro); letter-spacing:0; }.billing-plan-grid article>p { flex:1; margin:22px 0 30px; color:var(--muted); font-size:13px; line-height:1.65; }.billing-plan-grid .is-current>p { color:#aeb2bf; }.billing-plan-grid form { margin:0; }.billing-plan-label { margin-top:auto; padding:13px; text-align:center; border:1px solid var(--line); border-radius:9px; color:var(--text-subtle); font-size:var(--fs-micro); font-weight:700; }
+.billing-plan-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }.billing-plan-grid article { min-height:390px; padding:29px; display:flex; flex-direction:column; border:1px solid #d3d7de; border-radius:var(--radius-card); background:#fff; }.billing-plan-grid article.is-current { color:#fff; border-color:transparent; background:linear-gradient(145deg,#191a22,#34315b); box-shadow:0 28px 65px rgba(43,40,90,.22); }.billing-plan-head { min-height:30px; display:flex; justify-content:space-between; align-items:flex-start; color:#999faa; font-size:var(--fs-micro); }.billing-plan-head em { padding:5px 7px; border-radius:5px; background:rgba(255,255,255,.1); color:#bbb8ff; font-style:normal; font-weight:800; letter-spacing:.1em; }.billing-plan-grid h3 { margin:20px 0 18px; font-size:25px; letter-spacing:-.04em; }.billing-plan-grid strong { font-size:37px; line-height:1; letter-spacing:-.05em; }.billing-plan-grid strong small { margin-left:4px; color:var(--text-subtle); font-size:var(--fs-micro); letter-spacing:0; }.billing-plan-grid article>p { flex:1; margin:22px 0 30px; color:var(--muted); font-size:13px; line-height:1.65; }.billing-plan-grid .is-current>p { color:#aeb2bf; }.billing-plan-grid form { margin:0; }.billing-plan-label { margin-top:auto; padding:13px; text-align:center; border:1px solid var(--line); border-radius:9px; color:var(--text-subtle); font-size:var(--fs-micro); font-weight:700; }
 .credit-pack-grid { display:grid; grid-template-columns:repeat(3,1fr); border-top:1px solid var(--line); }.credit-pack-grid article { min-height:290px; padding:30px; border-right:1px solid var(--line); }.credit-pack-grid article:last-child { border:0; }.credit-pack-grid article>span { color:var(--text-subtle); font-size:var(--fs-micro); font-weight:800; letter-spacing:.12em; }.credit-pack-grid article>div { margin:32px 0 5px; display:flex; align-items:baseline; gap:8px; }.credit-pack-grid article>div strong { font-size:52px; line-height:1; letter-spacing:-.06em; }.credit-pack-grid article>div small { color:var(--text-subtle); font-size:var(--fs-micro); }.credit-pack-grid article>b { display:block; margin-bottom:30px; color:#505762; font-size:14px; }.credit-pack-grid form { margin:0; }.credit-pack-grid em { color:var(--text-subtle); font-size:var(--fs-micro); font-style:normal; }
 .billing-table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:14px; background:#fff; }.billing-history-table { width:100%; border-collapse:collapse; }.billing-history-table th,.billing-history-table td { padding:16px 20px; border-bottom:1px solid var(--line); text-align:left; }.billing-history-table th { color:var(--text-subtle); background:#f1f2f5; font-size:var(--fs-micro); letter-spacing:.1em; text-transform:uppercase; }.billing-history-table td { color:#4d5560; font-size:13px; }.billing-history-table tbody tr:last-child td { border:0; }.billing-empty { padding:65px; text-align:center; border:1px solid var(--line); border-radius:14px; background:#fff; }.billing-empty>span { width:48px; height:48px; margin:auto; display:grid; place-items:center; border-radius:14px; background:#e9e8ff; color:var(--accent); }.billing-empty h3 { margin:18px 0 5px; font-size:21px; }.billing-empty p { margin:0; color:var(--muted); font-size:12px; }
 
@@ -1877,7 +1882,7 @@ footer {
     padding:30px;
     border-top:3px solid #cfd3da;
     background:#fff;
-    border-radius:0 0 13px 13px;
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
     position:relative
 }
 .pricing-grid article.popular {
@@ -1937,7 +1942,7 @@ footer {
 .pricing-compare-wrap {
     overflow-x:auto;
     border:1px solid var(--line);
-    border-radius:14px;
+    border-radius: var(--radius-card);
     background:#fff
 }
 .pricing-compare-table {
@@ -2447,12 +2452,12 @@ footer {
 .community-model .model-tags { max-height: 1.55rem; overflow: hidden; }
 .community-model .model-tag-chip { padding: 0.18rem 0.42rem; font-size: 0.64rem; }
 .community-open-model { display: inline-flex; gap: 0.3rem; margin-top: 0.15rem; color: var(--accent); font-size: 0.7rem; font-weight: 700; }
-.discover-empty { border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); }
+.discover-empty { border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--paper); }
 .discover-empty .av-card-desc a { color: var(--accent); font-weight: 700; text-decoration: underline; }
 .library-storage {
     border: 0;
     background: var(--soft);
-    border-radius: 12px;
+    border-radius: var(--radius-card);
     box-shadow: none;
     padding: 1.15rem 1.25rem;
     margin-bottom: 1.25rem;
@@ -2539,7 +2544,7 @@ footer {
 .library-model {
     overflow: visible;
     border-color: transparent;
-    border-radius: 12px;
+    border-radius: var(--radius-card);
     box-shadow: 0 1px 2px rgba(17, 19, 24, 0.025);
 }
 .library-model:hover {
@@ -2698,7 +2703,7 @@ footer {
 .profile-stat {
     min-height: 6.5rem;
     padding: 0.9rem;
-    border-radius: 10px;
+    border-radius: var(--radius-card-sm);
     background: var(--soft);
 }
 .profile-stat-value { font-size: 1rem; letter-spacing: -0.02em; }
@@ -2711,7 +2716,7 @@ footer {
 .profile-panel {
     border: 1px solid var(--line);
     background: var(--paper);
-    border-radius: 12px;
+    border-radius: var(--radius-card);
     padding: 1.25rem;
 }
 .profile-form { margin-top: 1.25rem; }
@@ -2742,7 +2747,7 @@ footer {
     overflow: hidden;
     padding: 0;
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-card-sm);
     background: var(--paper);
 }
 .profile-model-preview {

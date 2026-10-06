@@ -135,12 +135,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function openDownloadFormatModal() {
         if (!downloadFormatModal || !downloadFormatModalOptions) return;
         downloadFormatModalOptions.innerHTML = '';
+        // Same labelled items as the desktop menu (format + what you get), cloned
+        // from #downloadMenu so the two surfaces can't drift apart.
         availableFormats.forEach((format) => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'btn-secondary';
-            btn.style.width = '100%';
-            btn.textContent = 'Download ' + format.toUpperCase();
+            const source = document.querySelector('.download-fanout-btn[data-format="' + format + '"]');
+            if (!source) return;
+            const btn = source.cloneNode(true);
+            btn.removeAttribute('role');
+            btn.classList.add('download-format-option');
             btn.addEventListener('click', () => {
                 downloadFormatModal.classList.add('hidden');
                 downloadFormat(format);

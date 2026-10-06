@@ -61,7 +61,7 @@ def test_dispatch_pins_dns_against_rebinding(client, monkeypatch):
     different address on each call, then asserting the real request -- which
     itself calls socket.getaddrinfo, like urllib3 would -- observes the
     pinned (first, validated-public) address, not the rebound one."""
-    user = User(username="pinner", email="pinner@test.com")
+    user = User(username="pinner", email="pinner@test.com", plan="business")
     user.set_password("testpassword")
     db.session.add(user)
     db.session.commit()

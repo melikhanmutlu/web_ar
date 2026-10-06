@@ -1,13 +1,13 @@
 """organization invites (email invitation + accept flow)
 
 Revision ID: d9e0f1a2b3c4
-Revises: c7d8e9f0a1b2
+Revises: e0f1a2b3c4d5
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "d9e0f1a2b3c4"
-down_revision = "c7d8e9f0a1b2"
+down_revision = "e0f1a2b3c4d5"
 branch_labels = None
 depends_on = None
 

@@ -233,9 +233,9 @@ def test_main_loop_isolates_maintenance_sweeps_and_processes_jobs(client, monkey
     def stop(_seconds):
         raise KeyboardInterrupt
 
-    # main() seeds its timers with 0.0 and compares against time.monotonic(),
-    # which is boot-relative; pin it so every sweep is due on the first pass.
-    monkeypatch.setattr(worker, "time", SimpleNamespace(monotonic=lambda: 1e6, sleep=stop))
+    # A just-booted host: monotonic() near 0 must still run every sweep on
+    # the first pass (timers are seeded with -inf).
+    monkeypatch.setattr(worker, "time", SimpleNamespace(monotonic=lambda: 5.0, sleep=stop))
 
     worker.main()  # first iteration runs everything, 2nd finds no job -> sleep -> stop
 

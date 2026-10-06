@@ -304,11 +304,13 @@ def main():
         f"Conversion worker started (poll {POLL_INTERVAL}s, "
         f"db {db.engine.dialect.name})"
     )
-    last_stale_sweep = 0.0
+    # -inf, not 0.0: time.monotonic() counts from host boot, so on a container
+    # up for less than an hour a 0.0 seed delayed the hourly sweeps until then.
+    last_stale_sweep = float("-inf")
     record_worker_heartbeat()
-    last_heartbeat = 0.0
-    last_ai_reconcile = 0.0
-    last_heartbeat_prune = 0.0
+    last_heartbeat = float("-inf")
+    last_ai_reconcile = float("-inf")
+    last_heartbeat_prune = float("-inf")
     while True:
         try:
             if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:

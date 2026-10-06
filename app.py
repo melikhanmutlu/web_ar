@@ -552,16 +552,23 @@ OBSERVABILITY_STATUS = initialize_external_observability(app)
 # migrations against an empty DB).
 if os.environ.get("SKIP_DB_BOOTSTRAP", "").lower() not in ("1", "true", "yes"):
     with app.app_context():
+        _inspection_failed = False
         try:
             from sqlalchemy import inspect as _sa_inspect
 
             _inspector = _sa_inspect(db.engine)
             _has_alembic = _inspector.has_table("alembic_version")
         except Exception as e:
-            logger.warning(f"DB inspection failed: {e}")
+            # Unknown state (e.g. a transient DB error): do NOT assume "no
+            # alembic_version" — create_all + stamp head on a schema that never
+            # ran its migrations would mask them forever.
+            logger.error(f"DB inspection failed; skipping schema bootstrap/stamp: {e}")
+            _inspection_failed = True
             _has_alembic = False
 
-        if _has_alembic:
+        if _inspection_failed:
+            pass
+        elif _has_alembic:
             logger.info("Alembic owns the schema (alembic_version found); skipping create_all")
         else:
             try:
@@ -2816,6 +2823,6 @@ if __name__ == "__main__":
         # threaded=True: a long-lived SSE connection (/api/upload-jobs/<id>/stream)
         # would otherwise tie up this dev server's single worker for its whole
         # duration, blocking every other request until it closes.
-        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False), threaded=True)
+        app.run(host="0.0.0.0", port=port, debug=app.config.get("DEBUG", False), threaded=True)  # nosec B104 - dev entrypoint only; must listen on all interfaces inside the container (prod runs gunicorn)
     else:
         app.logger.error("Failed to initialize dependencies")

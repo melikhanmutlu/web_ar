@@ -17,11 +17,11 @@ def test_homepage_renders_the_capability_carousel(client):
     )
     assert body.count('<a class="capability-card') == 5
     for asset in (
-        "capability-upload-convert.png",
-        "capability-build-scene.png",
-        "capability-review-viewer.png",
-        "capability-prepare-assets.png",
-        "capability-place-ar.png",
+        "capability-upload-convert.webp",
+        "capability-build-scene.webp",
+        "capability-review-viewer.webp",
+        "capability-prepare-assets.webp",
+        "capability-place-ar.webp",
     ):
         assert asset in body
     assert 'data-cap-prev' in body

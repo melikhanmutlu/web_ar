@@ -125,7 +125,8 @@ def generate_3d():
             job = AIGenerationJob(id=job_id, user_id=current_user.id, kind="image",
                                   stage="image", meshy_image_id=task_id,
                                   status="generating", progress=0, options=options,
-                                  parent_job_id=parent_job_id)
+                                  parent_job_id=parent_job_id,
+                                  credit_spent=credit_spent)
             # Persist the source image (decoded from the inline data URI) for
             # admin audit -- see _persist_ai_source_image.
             job.source_image_ref = app_module._persist_ai_source_image(job_id, image)
@@ -147,7 +148,8 @@ def generate_3d():
                                   prompt=prompt, stage="preview", meshy_preview_id=task_id,
                                   status="generating", progress=0, options=options,
                                   parent_job_id=parent_job_id,
-                                  preset_id=custom_preset_id)
+                                  preset_id=custom_preset_id,
+                                  credit_spent=credit_spent)
         texture_image_url = (data.get("options") or {}).get("texture_image_url") \
             if isinstance(data.get("options"), dict) else None
         if texture_image_url:

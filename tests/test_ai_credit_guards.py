@@ -84,3 +84,61 @@ def test_generate_image_allowed_with_credit_and_does_not_spend_it(client, user, 
 
     assert resp.status_code == 200
     assert _balance(user) == 3
+
+
+def _fail_task(monkeypatch):
+    monkeypatch.setattr(ai_generator, "get_task", lambda kind, tid: {
+        "id": tid, "status": ai_generator.FAILED, "progress": 10, "task_error": "boom"})
+
+
+def test_failed_job_refunds_credit_exactly_once(client, user, quota_exhausted, monkeypatch):
+    monkeypatch.setattr(ai_generator, "start_text_to_3d", lambda *a, **k: "task-1")
+    job_id = client.post("/api/generate-3d", json={"mode": "text", "prompt": "chair"}).get_json()["job_id"]
+    assert _balance(user) == 2
+    _fail_task(monkeypatch)
+
+    resp = client.get(f"/api/generate-3d/{job_id}/status")
+    assert resp.get_json()["status"] == "failed"
+    assert _balance(user) == 3
+
+    # Re-polling, or running the refund path again, must not refund twice.
+    client.get(f"/api/generate-3d/{job_id}/status")
+    job = db.session.get(app_module.AIGenerationJob, job_id)
+    app_module._refund_ai_job_credit(job)
+    assert _balance(user) == 3
+
+
+def test_failed_job_without_credit_spent_is_not_refunded(client, user, monkeypatch):
+    # Within the monthly quota: no credit consumed, so nothing to give back.
+    monkeypatch.setattr(app_module, "_ai_quota_state", lambda user_id: (False, 0, 5))
+    monkeypatch.setattr(ai_generator, "start_text_to_3d", lambda *a, **k: "task-1")
+    job_id = client.post("/api/generate-3d", json={"mode": "text", "prompt": "chair"}).get_json()["job_id"]
+    _fail_task(monkeypatch)
+
+    client.get(f"/api/generate-3d/{job_id}/status")
+
+    assert _balance(user) == 3
+
+
+def test_failed_jobs_do_not_count_toward_monthly_quota(client, user):
+    for i, status in enumerate(("failed", "ready", "generating")):
+        db.session.add(app_module.AIGenerationJob(
+            id=f"quota-{i}", user_id=user.id, kind="text", status=status))
+    db.session.commit()
+
+    _, count, _ = app_module._ai_quota_state(user.id)
+
+    assert count == 2
+
+
+def test_admin_mark_failed_refunds_credit(client, user):
+    user.is_admin = True
+    db.session.add(app_module.AIGenerationJob(
+        id="stuck-1", user_id=user.id, kind="text", status="generating", credit_spent=True))
+    db.session.commit()
+    before = _balance(user)
+
+    resp = client.post("/admin/ai-jobs/stuck-1/mark-failed")
+
+    assert resp.status_code == 200
+    assert _balance(user) == before + 1

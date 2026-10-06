@@ -679,6 +679,9 @@ class AIGenerationJob(db.Model):
     progress = db.Column(db.Integer, default=0)
     model_id = db.Column(db.String(36), nullable=True)     # UserModel.id once ready
     error = db.Column(db.Text, nullable=True)
+    # A prepaid overage credit was spent to start this job and hasn't been
+    # refunded yet (cleared by app._refund_ai_job_credit when the job fails).
+    credit_spent = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     # Advanced generation options chosen at request time (negative_prompt,
     # seed, topology, target_polycount, symmetry_mode, moderation,

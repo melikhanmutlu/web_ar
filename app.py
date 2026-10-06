@@ -2740,6 +2740,7 @@ def _ai_quota_state(user_id):
     count = AIGenerationJob.query.filter(
         AIGenerationJob.user_id == user_id,
         AIGenerationJob.created_at >= since,
+        AIGenerationJob.status != "failed",  # failed generations don't use up the quota
     ).count()
     return (count >= limit), count, limit
 
@@ -2781,6 +2782,22 @@ def _refund_ai_credit(user_id):
 
 
 
+def _refund_ai_job_credit(job):
+    """Give back the prepaid credit a failed job consumed, exactly once: the
+    job's credit_spent flag is claimed with a conditional UPDATE, so a poll,
+    webhook, sweep and admin action racing on the same job refund only once."""
+    if not job.credit_spent or not job.user_id:
+        return
+    claimed = AIGenerationJob.query.filter_by(id=job.id, credit_spent=True).update(
+        {"credit_spent": False}, synchronize_session=False)
+    if claimed:
+        user = db.session.query(User).filter_by(id=job.user_id).with_for_update().one_or_none()
+        if user is not None:
+            user.ai_credit_balance = (user.ai_credit_balance or 0) + 1
+    db.session.commit()
+    db.session.refresh(job)
+
+
 def _claim_ai_stage(job_id, expect_stage, new_stage):
     """Atomically move a job between stages with UPDATE ... WHERE stage=...
 
@@ -2818,6 +2835,7 @@ def _finalize_ai_job(job, task):
         job.status = "failed"
         job.error = "Generation finished but returned no GLB"
         db.session.commit()
+        _refund_ai_job_credit(job)
         dispatch_webhook_event("ai_generation.failed", job.user_id, {
             "job_id": job.id, "error": job.error,
         })
@@ -3009,6 +3027,7 @@ def _advance_ai_job(job):
 
     db.session.commit()
     if job.status == "failed":
+        _refund_ai_job_credit(job)
         dispatch_webhook_event("ai_generation.failed", job.user_id, {
             "job_id": job.id, "error": job.error,
         })

@@ -139,8 +139,11 @@ def get_usdz_status(model_id):
             # Also check the converted directory for usdz files
             converted_dir = os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
             if os.path.isdir(converted_dir):
+                # Only the final artifact: never an in-flight/leftover
+                # "model.tmp<pid>.usdz" from convert_to_usdz.
                 usdz_files = [
-                    f for f in os.listdir(converted_dir) if f.endswith(".usdz")
+                    f for f in os.listdir(converted_dir)
+                    if f.endswith(".usdz") and ".tmp" not in f
                 ]
                 if usdz_files:
                     usdz_ready = True

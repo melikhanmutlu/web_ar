@@ -1297,11 +1297,36 @@ def init_app_dependencies():
 # need a paginated sitemap index, which is future work.
 
 
+def _sweep_stale_usdz_temps(output_usdz_path, max_age_seconds=3600):
+    """Remove leftover USDZ temp files (new ``*.tmp<pid>.usdz`` and the legacy
+    ``*.usdz.tmp<pid>[.usdz]`` names) older than ``max_age_seconds``."""
+    directory = os.path.dirname(output_usdz_path) or "."
+    stem = os.path.splitext(os.path.basename(output_usdz_path))[0]
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return
+    now = time.time()
+    for name in names:
+        if not (name.startswith(f"{stem}.tmp") or name.startswith(f"{stem}.usdz.tmp")):
+            continue
+        path = os.path.join(directory, name)
+        try:
+            if now - os.path.getmtime(path) > max_age_seconds:
+                os.remove(path)
+        except OSError:
+            pass
+
+
 def convert_to_usdz(input_glb_path, output_usdz_path):
     """
     Convert GLB to USDZ using Blender script.
     Returns True if successful, False otherwise.
     """
+    # Must end in ".usdz": tools/blender_usdz_export.py appends ".usdz" to any
+    # other path, which would put the file somewhere we never look.
+    temp_usdz_path = f"{os.path.splitext(output_usdz_path)[0]}.tmp{os.getpid()}.usdz"
+    _sweep_stale_usdz_temps(output_usdz_path)
     try:
         logger.info(f"Starting USDZ conversion: {input_glb_path} -> {output_usdz_path}")
 
@@ -1337,8 +1362,6 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
         # refresh_usdz_after_edit) that can be killed mid-write by a deploy;
         # without this, a kill mid-export permanently corrupts an existing
         # model's USDZ with nothing to ever regenerate it.
-        temp_usdz_path = f"{output_usdz_path}.tmp{os.getpid()}"
-
         # Construct command
         cmd = [
             blender_exec,
@@ -1361,7 +1384,11 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             timeout=300,  # 5 minute timeout
         )
 
-        if process.returncode == 0 and os.path.exists(temp_usdz_path):
+        if (
+            process.returncode == 0
+            and os.path.isfile(temp_usdz_path)
+            and os.path.getsize(temp_usdz_path) > 0
+        ):
             os.replace(temp_usdz_path, output_usdz_path)
             logger.info(f"USDZ conversion successful: {output_usdz_path}")
             return True

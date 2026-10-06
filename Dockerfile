@@ -1,7 +1,7 @@
 # Mirrors nixpacks.toml (used by Railway) so platforms that build from a
 # Dockerfile instead of Nixpacks (e.g. Outplane) get the same runtime:
 # Python + Node 20 (obj2gltf/gltfpack) + Blender (USDZ export) + assimp (FBX).
-FROM python:3.11-bookworm
+FROM python:3.12-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir pip==26.2.1 \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY package*.json ./

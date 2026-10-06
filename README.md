@@ -13,7 +13,8 @@ ARVision converts, optimizes, hosts and presents 3D models in the browser and mo
 
 ```bash
 python -m venv venv
-pip install -r requirements.txt
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install --require-hashes -r requirements.txt
 npm ci
 flask db upgrade
 python app.py
@@ -24,11 +25,25 @@ Copy `.env.example` to `.env` and provide a development `SECRET_KEY`. Never use 
 To exercise the durable queue locally:
 
 ```bash
-set JOB_QUEUE=true
+export JOB_QUEUE=true   # Windows (cmd): set JOB_QUEUE=true
 python worker.py
 ```
 
 Run the web process in a second terminal.
+
+## Dependencies
+
+Direct Python dependencies live in `requirements.in`; `requirements.txt` is the
+hash-locked resolution for Python 3.12 / Linux x86_64 (it is what Docker, Railway
+and CI install). After editing `requirements.in`, regenerate it:
+
+```bash
+uv pip compile requirements.in --python-version 3.12 \
+  --python-platform x86_64-unknown-linux-gnu --generate-hashes -o requirements.txt
+```
+
+Install extra tools (pytest, pip-audit, ...) in a separate `pip install` command;
+a hash-locked install cannot be mixed with unhashed packages.
 
 ## Quality gates
 

@@ -3,10 +3,10 @@ import os
 import shutil
 
 import trimesh
-from pygltflib import GLTF2
+from pygltflib import GLTF2, Node
 
 from converters import FBXConverter, OBJConverter, STLConverter, STEPConverter
-from converters.glb_optimizer import optimize_glb
+from converters.glb_optimizer import optimize_glb, readable_glb
 from converters.glb_quality import finalize_glb
 from glb_modifier import normalize_model_to_center
 
@@ -52,12 +52,39 @@ class ConversionService:
 
     @staticmethod
     def _limit_dimension(path, maximum):
-        mesh = trimesh.load(path)
-        bounds = mesh.bounds
+        """Shrink-only "Limit Model Size" for GLB/glTF input.
+
+        Measures the node-transform-baked extents (trimesh scene bounds), then
+        applies the scale on a new root node with pygltflib. Nothing is
+        re-exported through trimesh, so animations, skins, morph targets and
+        extensions survive and the scale is applied exactly once.
+        """
+        with readable_glb(path) as readable:
+            scene = trimesh.load(readable, force="scene")
+            bounds = scene.bounds if scene.geometry else None
+        if bounds is None:
+            return
         current = float(max(bounds[1] - bounds[0]))
-        if current > maximum and current > 0:
-            mesh.apply_scale(maximum / current)
-            mesh.export(path)
+        if not current > maximum or current <= 0:
+            return
+        scale = maximum / current
+        gltf = GLTF2().load(path)
+        if not gltf.scenes:
+            return
+        scene_def = gltf.scenes[gltf.scene or 0]
+        roots = list(scene_def.nodes or [])
+        if not roots:
+            return
+        # trimesh reserves the node name "world" for its own base frame; a
+        # node of that name (trimesh's own GLB export uses it) under a scaled
+        # parent would make trimesh mis-resolve the graph when measuring.
+        for node in gltf.nodes:
+            if node.name == "world":
+                node.name = "world_root"
+        wrapper = Node(name="Size limit", scale=[scale, scale, scale], children=roots)
+        gltf.nodes.append(wrapper)
+        scene_def.nodes = [len(gltf.nodes) - 1]
+        gltf.save(path)
 
     def convert(self, payload, output_path, *, progress=None):
         report = progress or (lambda *_: None)

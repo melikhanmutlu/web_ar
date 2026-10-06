@@ -73,8 +73,6 @@ from sqlalchemy.orm import Session
 import qrcode
 from slugify import slugify
 import trimesh
-from converters import OBJConverter, FBXConverter, STLConverter, STEPConverter
-from converters.glb_optimizer import optimize_glb
 from converters.glb_quality import finalize_glb
 import numpy as np
 from glb_modifier import modify_glb, normalize_model_to_center
@@ -823,130 +821,6 @@ def apply_color_to_scene(scene, color_hex):
         logger.error(f"Error applying color to scene: {str(e)}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         return False
-
-
-def apply_size_limit(mesh, max_size_meters=0.35):
-    """Scale the model to fit within the maximum size while maintaining proportions."""
-    if isinstance(mesh, trimesh.Scene):
-        # Get the overall bounding box of the scene
-        bounds = np.zeros((len(mesh.geometry), 2, 3))
-        for i, geom in enumerate(mesh.geometry.values()):
-            bounds[i] = geom.bounds
-        # Correctly calculate scene bounds: min of mins, max of maxs
-        min_bound = np.min(bounds[:, 0, :], axis=0)
-        max_bound = np.max(bounds[:, 1, :], axis=0)
-        bounds = np.array([min_bound, max_bound])
-    elif isinstance(mesh, trimesh.Trimesh):
-        bounds = mesh.bounds
-    else:
-        logger.warning(
-            "apply_size_limit called with unsupported type. Skipping scaling."
-        )
-        return mesh  # Return unmodified if not Scene or Trimesh
-
-    if bounds is None:
-        logger.warning("apply_size_limit: model has no geometry. Skipping scaling.")
-        return mesh
-
-    # Calculate current dimensions
-    dimensions = bounds[1] - bounds[0]
-    # Handle potential NaN or Inf values in dimensions gracefully
-    dimensions = np.nan_to_num(dimensions, nan=0.0, posinf=0.0, neginf=0.0)
-    max_dimension = np.max(dimensions)
-
-    # Calculate scale factor ONLY if target size and current size are positive
-    if (
-        max_size_meters <= 0 or max_dimension <= 1e-9
-    ):  # Use epsilon for float comparison
-        logger.warning(
-            f"Skipping scaling: Target size ({max_size_meters:.4f}m) or model dimension "
-            f"({max_dimension:.4f}m) is non-positive or too small."
-        )
-        return mesh  # Return the original mesh without scaling
-
-    scale_factor = max_size_meters / max_dimension
-    logger.info(
-        f"Calculated scale factor: {scale_factor:.4f} (Target: {max_size_meters:.4f}m / Current: {max_dimension:.4f}m)"
-    )
-
-    # Define the scaling transformation matrix
-    # Using trimesh.transformations is generally preferred and clearer
-    # Scaling is applied relative to the mesh's centroid to avoid shifting
-    center = mesh.centroid
-    T_neg = trimesh.transformations.translation_matrix(-center)
-    S = trimesh.transformations.scale_matrix(
-        scale_factor, origin=None
-    )  # Scale uniformly
-    T_pos = trimesh.transformations.translation_matrix(center)
-    transform_matrix = trimesh.transformations.concatenate_matrices(T_pos, S, T_neg)
-
-    # Apply scaling transformation
-    try:
-        mesh.apply_transform(transform_matrix)
-        logger.info("Scaling transformation applied successfully.")
-    except Exception as e:
-        logger.error(f"Error applying scaling transform: {e}")
-        # Return original mesh if transform fails
-        # (Need to reload original state or handle this more robustly if needed)
-        # For now, we might be returning a partially transformed mesh, which isn't ideal.
-        # A safer approach would be to work on a copy if scaling might fail.
-        pass  # Allow process to continue with potentially unscaled/partially scaled mesh
-
-    return mesh
-
-
-def convert_model_new(input_file, output_path=None, color=None):
-    """Convert 3D model to GLB format using converter classes with optional color."""
-    try:
-        if output_path is None:
-            output_path = os.path.join(
-                app.config["CONVERTED_FOLDER"],
-                os.path.splitext(os.path.basename(input_file))[0] + ".glb",
-            )
-
-        file_ext = os.path.splitext(input_file)[1].lower()
-
-        # Select appropriate converter class
-        if file_ext == ".fbx":
-            converter = FBXConverter()
-        elif file_ext == ".stl":
-            converter = STLConverter()
-        elif file_ext == ".obj":
-            converter = OBJConverter()
-        elif file_ext in (".step", ".stp"):
-            converter = STEPConverter()
-        elif file_ext in (".glb", ".gltf"):
-            # Direct copy/re-export for GLB/GLTF
-            try:
-                scene = trimesh.load(input_file)
-                if color:
-                    apply_color_to_scene(scene, color)
-                scene.export(output_path)
-                return output_path
-            except Exception as e:
-                logger.error(f"Error processing GLB/GLTF: {str(e)}")
-                return None
-        else:
-            logger.error(f"Unsupported format: {file_ext}")
-            return None
-
-        if not converter.validate(input_file):
-            logger.error(f"Validation failed for {file_ext}")
-            return None
-
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        success = converter.convert(input_file, output_path, color=color) if color else converter.convert(input_file, output_path)
-
-        if success and os.path.exists(output_path):
-            return output_path
-
-        logger.error(f"Conversion failed for {file_ext}")
-        return None
-
-    except Exception as e:
-        logger.error(f"Error in convert_model_new: {str(e)}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        return None
 
 
 def normalize_texture_name(filename):
@@ -1978,7 +1852,6 @@ def _run_upload_pipeline(payload, progress_callback=None):
     use_color = bool(payload.get("use_color"))
     color = payload.get("color")
     max_dimension = payload.get("max_dimension")
-    source_unit = payload.get("source_unit")
     user_id = payload.get("user_id")
     # Set by the programmatic write API (POST /api/v1/models): an org-scoped
     # token files the model under its org, and an optional caller-supplied name
@@ -2029,145 +1902,6 @@ def _run_upload_pipeline(payload, progress_callback=None):
         report(48, "Reading source", f"Inspecting {original_filename} and selected conversion options.")
         conversion_result = conversion_service.convert(payload, output_path, progress=report)
         converter = conversion_result["converter"]
-        service_converted = True
-        # Legacy orchestration below remains temporarily for dimension metadata;
-        # format dispatch itself is owned by ConversionService.
-        if service_converted:
-            pass
-        elif file_extension == ".obj":
-            converter = OBJConverter()
-            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
-            converter.set_source_unit(source_unit or "m")
-            if payload.get("mtl_path"):
-                converter.set_material_file(payload["mtl_path"])
-            for texture_path in payload.get("texture_paths") or []:
-                converter.add_texture_file(texture_path)
-        elif file_extension == ".stl":
-            converter = STLConverter()
-            # STL is unitless — let the user declare the source unit (mm|cm|m),
-            # defaulting to cm for backward compatibility.
-            converter.set_source_unit(source_unit or "cm")
-        elif file_extension == ".fbx":
-            converter = FBXConverter()
-        elif file_extension in (".step", ".stp"):
-            # STEP carries real units; cascadio converts to meters directly
-            converter = STEPConverter()
-        elif file_extension in (".glb", ".gltf"):
-            # GLB is already the target format; GLTF can be loaded+exported as GLB
-            converter = None  # No converter needed, handle directly below
-
-        # Handle GLB/GLTF directly (no converter needed)
-        if service_converted:
-            conversion_success = True
-        elif file_extension in (".glb", ".gltf"):
-            try:
-                report(56, "Preparing GLB", "Copying or repacking the uploaded glTF asset.")
-                # Write via a temp file + atomic rename so a disk-full/killed
-                # write can't leave a truncated model.glb behind.
-                tmp_output = output_path + ".part"
-                if file_extension == ".glb":
-                    # GLB is already binary glTF - just copy it
-                    shutil.copy2(temp_file_path, tmp_output)
-                    _atomic_replace(output_path, tmp_output)
-                    logger.info(
-                        f"[upload_model - {unique_id}] GLB file copied directly to {output_path}"
-                    )
-                else:
-                    # GLTF (text-based) needs to be loaded and re-exported as GLB
-                    import trimesh as tm_gltf
-
-                    gltf_mesh = tm_gltf.load(temp_file_path)
-                    gltf_mesh.export(tmp_output, file_type="glb")
-                    _atomic_replace(output_path, tmp_output)
-                    logger.info(
-                        f"[upload_model - {unique_id}] GLTF converted to GLB: {output_path}"
-                    )
-                conversion_success = os.path.exists(output_path)
-            except Exception as e:
-                logger.error(
-                    f"[upload_model - {unique_id}] Error handling GLB/GLTF: {e}",
-                    exc_info=True,
-                )
-                conversion_success = False
-        elif not converter:
-            raise RuntimeError(f"Unsupported file format: {file_extension}")
-        else:
-            # Set max dimension if specified (max_dimension is in meters)
-            if max_dimension is not None:
-                converter.set_max_dimension(max_dimension)
-
-            # Perform conversion
-            report(58, "Converting geometry", f"Running {type(converter).__name__} and building the GLB file.")
-            logger.info(
-                f"[upload_model - {unique_id}] Starting conversion using {type(converter).__name__} for {temp_file_path} to {output_path}"
-            )
-            conversion_success = converter.convert(
-                temp_file_path, output_path, color=color if use_color else None
-            )
-            logger.info(
-                f"[upload_model - {unique_id}] Conversion result: {conversion_success}"
-            )
-
-        if not conversion_success or not os.path.exists(output_path):
-            logger.error(
-                f"[upload_model - {unique_id}] Conversion failed or output file missing for {temp_file_path}"
-            )
-            errors = getattr(converter, "errors", None) if converter else None
-            raise RuntimeError(
-                "Conversion failed" + (f": {errors[-1]}" if errors else "")
-            )
-        else:
-            logger.info(
-                f"[upload_model - {unique_id}] Conversion successful, output exists: {output_path}"
-            )
-
-        # Apply size limit for GLB/GLTF files that bypassed the converter
-        if (
-            file_extension in (".glb", ".gltf")
-            and max_dimension is not None
-            and os.path.exists(output_path)
-        ):
-            report(68, "Scaling model", "Applying the requested maximum dimension limit.")
-            logger.info(
-                f"[upload_model - {unique_id}] Applying size limit to GLB: {max_dimension}m to {output_path}"
-            )
-            try:
-                import trimesh as tm
-
-                mesh = tm.load(output_path)
-                apply_size_limit(
-                    mesh, max_dimension
-                )  # max_dimension is already in meters
-                logger.info(
-                    f"[upload_model - {unique_id}] Scaling applied, attempting export..."
-                )
-                mesh.export(output_path)
-                logger.info(
-                    f"[upload_model - {unique_id}] Export after scaling successful."
-                )
-            except Exception as e:
-                logger.error(
-                    f"[upload_model - {unique_id}] Error scaling GLB model: {str(e)}",
-                    exc_info=True,
-                )
-        else:
-            logger.info(
-                f"[upload_model - {unique_id}] Scaling handled by converter or not requested."
-            )
-
-        # Optional, fail-safe GLB compression (no-op unless GLB_OPTIMIZE=true)
-        try:
-            report(72, "Optimizing GLB", "Checking compression and viewer compatibility.")
-            compression = payload.get("compression")
-            if not service_converted:
-                optimize_glb(
-                    output_path,
-                    enabled=None if compression is None else compression == "meshopt",
-                )
-        except Exception as e:
-            logger.warning(
-                f"[upload_model - {unique_id}] GLB optimization skipped: {e}"
-            )
 
         # Check file size before saving to DB
         final_file_size = 0
@@ -2189,55 +1923,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
             # Decide if 0-byte file is an error
             # return jsonify({'error': 'Internal server error: Processed file is empty'}), 500
 
-        # Normalize model to center origin for consistent pivot behavior.
-        # ConversionService already normalizes (and compresses last), so
-        # re-running a pygltflib save here would corrupt a meshopt/draco
-        # buffer ("buffer too short") -- skip for service-converted models.
-        if not service_converted:
-            try:
-                report(78, "Normalizing pivot", "Centering the model for predictable rotation and viewing.")
-                logger.info(
-                    f"[upload_model - {unique_id}] Normalizing model to center origin"
-                )
-                gltf = GLTF2().load(output_path)
-                gltf = normalize_model_to_center(gltf)
-                gltf.save(output_path)
-                logger.info(f"[upload_model - {unique_id}] Model normalized and saved")
-            except Exception as e:
-                logger.error(
-                    f"[upload_model - {unique_id}] Error normalizing model: {e}",
-                    exc_info=True,
-                )
-                # Continue even if normalization fails
-
-        quality_warnings = []
-        asset_report = None
-        # GLB quality pass: embed stray external textures, guarantee PBR
-        # materials, validate (warn-only — never blocks a viewable upload).
-        # ConversionService already ran finalize_glb + inspect on the
-        # uncompressed geometry and then compressed as its last step; re-running
-        # them here would (a) corrupt a meshopt/draco buffer via pygltflib save
-        # and (b) misread geometry counts from the compressed file. Reuse the
-        # service's results instead.
-        if service_converted:
-            quality_warnings = conversion_result.get("quality_warnings") or []
-            asset_report = conversion_result.get("asset_report")
-        else:
-            try:
-                report(84, "Checking materials", "Embedding textures and validating material settings.")
-                quality_search_dirs = [converted_dir]
-                if temp_dir:
-                    quality_search_dirs.append(temp_dir)
-                quality_warnings = finalize_glb(output_path, search_dirs=quality_search_dirs)
-                for w in quality_warnings:
-                    logger.warning(f"[upload_model - {unique_id}] GLB quality: {w}")
-            except Exception as e:
-                logger.warning(f"[upload_model - {unique_id}] GLB quality pass skipped: {e}")
-            try:
-                asset_report = asset_quality.inspect(output_path, quality_warnings)
-            except Exception as e:
-                logger.warning(f"[upload_model - {unique_id}] Asset report failed: {e}")
-                asset_report = {"valid": False, "warnings": [f"Inspection failed: {e}"]}
+        # Pivot normalization, quality pass, compression and dimension
+        # measurement all happen inside ConversionService.convert() (compression
+        # last, so nothing may re-save the GLB here).
+        quality_warnings = conversion_result.get("quality_warnings") or []
+        asset_report = conversion_result.get("asset_report")
 
         # Clean up temporary file and directory
         try:
@@ -2275,7 +1965,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
                     # Scaling was applied - calculate the scale factor
                     orig_max_m = orig_dims["max"]
                     target_max_m = converter.max_dimension
-                    scale_factor = target_max_m / orig_max_m
+                    scale_factor = min(1.0, target_max_m / orig_max_m)
                     logger.info(
                         f"[upload_model - {unique_id}] FBX was scaled: {scale_factor:.4f}x (orig: {orig_max_m:.4f}m -> target: {target_max_m:.4f}m)"
                     )
@@ -2301,7 +1991,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
         # geometry (before its final compression step). Re-measuring the stored
         # file here is unreliable once it's meshopt-compressed (quantized
         # coordinates), so use the service's value when available.
-        if not model_bounds and service_converted:
+        if not model_bounds:
             svc_dims = conversion_result.get("dimensions_cm")
             if svc_dims:
                 import json

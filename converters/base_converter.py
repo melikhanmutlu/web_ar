@@ -229,32 +229,29 @@ class BaseConverter:
 
     def calculate_scale_factor(self, dimensions: Dict[str, float]) -> float:
         """
-        Calculate scale factor based on maximum dimension.
-        ALWAYS scales to target dimension (both up and down) for AR standardization.
+        Scale factor for the "Limit Model Size" option. SHRINK-ONLY: a model
+        larger than max_dimension is scaled down to it, a smaller one is left
+        untouched (a limit must never enlarge a model).
         Args:
             dimensions: Dictionary containing x, y, z dimensions in meters
         Returns:
-            float: Scale factor to apply to the model (always applied if max_dimension is set)
+            float: min(1.0, max_dimension / largest_dimension)
         """
-        # Find the largest dimension
         max_current_dimension = max(dimensions.values())
-        
+
         if max_current_dimension <= 0:
             self.log_operation("Warning: Model has zero or negative dimensions", "WARNING")
             return 1.0
-        
+
         # If no max_dimension is set, don't scale
         if self.max_dimension <= 0:
             return 1.0
-            
-        # ALWAYS calculate scale factor (both scale up and scale down)
-        scale_factor = self.max_dimension / max_current_dimension
-        
-        if scale_factor > 1.0:
-            self.log_operation(f"Scaling UP: {scale_factor:.4f}x (Current max: {max_current_dimension:.4f}m -> Target: {self.max_dimension:.4f}m)")
-        elif scale_factor < 1.0:
-            self.log_operation(f"Scaling DOWN: {scale_factor:.4f}x (Current max: {max_current_dimension:.4f}m -> Target: {self.max_dimension:.4f}m)")
+
+        scale_factor = min(1.0, self.max_dimension / max_current_dimension)
+
+        if scale_factor < 1.0:
+            self.log_operation(f"Scaling DOWN: {scale_factor:.4f}x (Current max: {max_current_dimension:.4f}m -> Limit: {self.max_dimension:.4f}m)")
         else:
-            self.log_operation(f"No scaling needed (already at target: {self.max_dimension:.4f}m)")
-        
+            self.log_operation(f"No scaling needed (already within limit: {self.max_dimension:.4f}m)")
+
         return scale_factor

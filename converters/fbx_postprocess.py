@@ -64,7 +64,7 @@ class FBXPostProcessMixin:
         )
         mesh = trimesh.Trimesh(vertices=self._fbx_vertices, faces=self._fbx_faces)
         if original_dimensions and self.max_dimension > 0 and original_dimensions["max"] > 0:
-            scale_factor = self.max_dimension / original_dimensions["max"]
+            scale_factor = min(1.0, self.max_dimension / original_dimensions["max"])
             mesh.apply_scale(scale_factor)
             self.log_operation(f"Applied scale factor {scale_factor:.4f} to rescued mesh")
         if color:

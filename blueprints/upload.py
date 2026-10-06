@@ -15,27 +15,32 @@ from contextlib import contextmanager
 
 from flask import Blueprint, Response, jsonify, request, session, stream_with_context, url_for
 from flask_login import current_user
-from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from config import (
     BATCH_UPLOAD_MAX_FILES,
     CHUNK_UPLOAD_MAX_CHUNKS,
-    DEFAULT_MAX_DIMENSION_CM,
     JOB_STREAM_MAX_SECONDS,
-    MAX_MODEL_DIMENSION_METERS,
+    SIZE_LIMIT_MAX_CM,
+    SIZE_LIMIT_MIN_CM,
 )
-from converters import FBXConverter, OBJConverter, STEPConverter, STLConverter
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
-from services.model_permissions import check_model_mutation_allowed, get_live_model
+from services.model_permissions import get_live_model
 from services.plans import effective_storage_quota_mb, plan_limit
 from services.upgrade import upgrade_hint
 from services.time_utils import datetime
 from site_settings import setting_int
 
 upload_bp = Blueprint("upload", __name__)
+
+# "Limit Model Size" bounds: same range as the Studio input (studio.html).
+_SIZE_LIMIT_MIN_M = SIZE_LIMIT_MIN_CM / 100.0
+_SIZE_LIMIT_MAX_M = SIZE_LIMIT_MAX_CM / 100.0
+_SIZE_LIMIT_ERROR = (
+    f"Maximum dimension must be between {SIZE_LIMIT_MIN_CM:g} and {SIZE_LIMIT_MAX_CM:g} cm"
+)
 
 
 def _effective_max_upload_mb():
@@ -164,189 +169,6 @@ def upload_file():
     import app as app_module
 
     return jsonify({"success": False, "error": "Legacy upload endpoint removed; use /upload_model"}), 410
-
-    try:
-        app_module.logger.info("Starting upload process")
-
-        size_guard = _check_upload_size_limit()
-        if size_guard is not None:
-            return size_guard
-        quota_guard = _check_storage_quota()
-        if quota_guard is not None:
-            return quota_guard
-
-        if "file" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
-
-        file = request.files["file"]
-        app_module.logger.info(f"File object: {file}")
-
-        if file.filename == "":
-            return jsonify({"error": "No file selected"}), 400
-
-        if not app_module.allowed_file(file.filename):
-            return jsonify({"error": "File type not allowed"}), 400
-
-        # Generate unique ID
-        unique_id = str(uuid.uuid4())
-        edit_token = secrets.token_urlsafe(32) if not current_user.is_authenticated else None
-        status_token = secrets.token_urlsafe(32)
-        app_module.logger.info(f"Generated unique ID: {unique_id}")
-
-        # Create upload subdirectory
-        upload_subdir = os.path.join(app_module.app.config["UPLOAD_FOLDER"], unique_id)
-        os.makedirs(upload_subdir, exist_ok=True)
-        app_module.logger.info(f"Created upload subdirectory: {upload_subdir}")
-
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(upload_subdir, filename)
-        file.save(file_path)
-        app_module.logger.info(f"File saved successfully: {file_path}")
-
-        # Get file extension
-        file_extension = os.path.splitext(filename)[1].lower()
-        app_module.logger.info(f"File extension: {file_extension}")
-
-        # Get color settings
-        # Handle both string and boolean values for useColor
-        use_color_raw = request.form.get("useColor", "false")
-        if isinstance(use_color_raw, str):
-            use_color = use_color_raw.lower() in ("true", "1", "yes")
-        else:
-            use_color = bool(use_color_raw)
-
-        color = request.form.get("color", "#4CAF50")
-        try:
-            color = app_module.validate_color(color)
-        except ValueError as exc:
-            return jsonify({"success": False, "error": str(exc)}), 400
-        compression = request.form.get("compression")
-        if compression not in (None, "none", "meshopt", "draco"):
-            return jsonify({"success": False, "error": "Invalid compression mode"}), 400
-        app_module.logger.info(f"Color settings - useColor: {use_color}, color: {color}")
-
-        # Get texture removal setting (for FBX)
-        remove_textures_raw = request.form.get("removeTextures")
-        remove_textures = (
-            remove_textures_raw == "true" if remove_textures_raw else False
-        )
-        app_module.logger.info(f"Remove textures setting: {remove_textures}")
-
-        # Get maximum dimension setting (only if checkbox is checked)
-        use_max_dimension_raw = request.form.get("useMaxDimension")
-        app_module.logger.info(
-            f"DEBUG: useMaxDimension raw value: {use_max_dimension_raw}, type: {type(use_max_dimension_raw)}"
-        )
-        use_max_dimension = (
-            use_max_dimension_raw == "true" if use_max_dimension_raw else False
-        )
-        app_module.logger.info(f"DEBUG: useMaxDimension parsed: {use_max_dimension}")
-
-        if use_max_dimension:
-            max_dimension = float(request.form.get("maxDimension", str(DEFAULT_MAX_DIMENSION_CM)))  # Keep in cm
-            app_module.logger.info(f"Maximum dimension limit enabled: {max_dimension} cm")
-        else:
-            max_dimension = None  # No scaling
-            app_module.logger.info(
-                f"Maximum dimension limit disabled - model will keep original size"
-            )
-
-        # Create converted directory
-        converted_dir = os.path.join(app_module.app.config["CONVERTED_FOLDER"], unique_id)
-        os.makedirs(converted_dir, exist_ok=True)
-        output_path = os.path.join(converted_dir, "model.glb")
-
-        # Get file info
-        file_info = app_module.get_file_info(file_path)
-
-        # Convert based on file type
-        if file_extension == ".obj":
-            converter = OBJConverter()
-            # OBJ is unitless; default 'm' (no scaling) keeps the original behaviour.
-            converter.set_source_unit(request.form.get("sourceUnit", "m"))
-
-            # Handle MTL file for OBJ
-            if "mtl" in request.files:
-                mtl_file = request.files["mtl"]
-                if mtl_file and mtl_file.filename:
-                    mtl_filename = secure_filename(mtl_file.filename)
-                    mtl_path = os.path.join(upload_subdir, mtl_filename)
-                    mtl_file.save(mtl_path)
-                    converter.set_material_file(mtl_path)
-                    app_module.logger.info(f"MTL file saved: {mtl_path}")
-
-            # Handle texture files for OBJ
-            if "textures" in request.files:
-                texture_files = request.files.getlist("textures")
-                for texture_file in texture_files:
-                    if texture_file and texture_file.filename:
-                        texture_filename = secure_filename(texture_file.filename)
-                        texture_path = os.path.join(upload_subdir, texture_filename)
-                        texture_file.save(texture_path)
-                        converter.add_texture_file(texture_path)
-                        app_module.logger.info(f"Texture file saved: {texture_path}")
-
-        elif file_extension == ".stl":
-            converter = STLConverter()
-            converter.set_source_unit(request.form.get("sourceUnit", "cm"))
-        elif file_extension == ".fbx":
-            converter = FBXConverter()
-            # Set texture removal for FBX if requested
-            if remove_textures:
-                converter.remove_textures = True
-                app_module.logger.info("FBX texture removal enabled")
-        elif file_extension in (".step", ".stp"):
-            # STEP carries real units; cascadio converts to meters directly
-            converter = STEPConverter()
-        else:
-            return jsonify({"error": "Unsupported file format"}), 400
-
-        # Set maximum dimension — form değeri cm, converter metre bekliyor
-        if max_dimension is not None:
-            converter.set_max_dimension(max_dimension / 100.0)
-
-        # Apply color if specified
-        if use_color and color:
-            success = converter.convert(file_path, output_path, color=color)
-        else:
-            success = converter.convert(file_path, output_path)
-
-        if not success:
-            return jsonify({"error": "Conversion failed"}), 500
-
-        # Save model info to database
-        model = UserModel(
-            id=unique_id,  # Use the same unique_id generated for the folder
-            user_id=current_user.id if current_user.is_authenticated else None,
-            filename=output_path,  # Store the full path to the GLB file
-            file_size=os.path.getsize(output_path),
-            file_type=os.path.splitext(filename)[1][1:],  # Remove the dot
-            upload_date=datetime.utcnow(),
-            color=color if use_color else None,
-        )
-        db.session.add(model)
-        db.session.commit()
-        app_module.logger.info(f"Model info saved to database with ID: {unique_id}")
-
-        # Generate QR code
-        qr_code_filename = app_module.generate_qr_code(unique_id)
-        app_module.logger.info(f"QR code generated: {qr_code_filename}")
-
-        # Return success response
-        viewer_url = url_for("viewer.view_model", model_id=unique_id)
-        return jsonify(
-            {
-                "success": True,
-                "viewer_url": viewer_url,
-                "message": "Model uploaded and converted successfully",
-            }
-        )
-
-    except Exception as e:
-        app_module.logger.error(f"Error during upload: {str(e)}")
-        app_module.logger.error(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
 
 
 @upload_bp.route("/upload_progress")
@@ -527,10 +349,10 @@ def upload_model():
             if max_dimension_str:
                 try:
                     max_dimension = float(max_dimension_str) / 100.0
-                    if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
+                    if not math.isfinite(max_dimension) or not _SIZE_LIMIT_MIN_M <= max_dimension <= _SIZE_LIMIT_MAX_M:
                         return jsonify({
                             "success": False,
-                            "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
+                            "error": _SIZE_LIMIT_ERROR,
                         }), 400
                     app_module.logger.info(
                         f"Maximum dimension limit enabled: {max_dimension_str} cm ({max_dimension} m)"
@@ -828,10 +650,10 @@ def complete_chunked_upload(upload_id):
     if data.get("useMaxDimension"):
         try:
             max_dimension = float(data.get("maxDimension")) / 100.0
-            if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
+            if not math.isfinite(max_dimension) or not _SIZE_LIMIT_MIN_M <= max_dimension <= _SIZE_LIMIT_MAX_M:
                 return jsonify({
                     "success": False,
-                    "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
+                    "error": _SIZE_LIMIT_ERROR,
                 }), 400
         except (TypeError, ValueError):
             return jsonify({"success": False, "error": "Invalid maximum dimension"}), 400
@@ -935,10 +757,10 @@ def batch_upload_models():
         if max_dimension_str:
             try:
                 max_dimension = float(max_dimension_str) / 100.0
-                if not math.isfinite(max_dimension) or not 0 < max_dimension <= MAX_MODEL_DIMENSION_METERS:
+                if not math.isfinite(max_dimension) or not _SIZE_LIMIT_MIN_M <= max_dimension <= _SIZE_LIMIT_MAX_M:
                     return jsonify({
                         "success": False,
-                        "error": f"Maximum dimension must be greater than 0 and no more than {MAX_MODEL_DIMENSION_METERS:g} meters",
+                        "error": _SIZE_LIMIT_ERROR,
                     }), 400
             except ValueError:
                 return jsonify({"success": False, "error": "Invalid maximum dimension"}), 400
@@ -1165,66 +987,3 @@ def convert():
     import app as app_module
 
     return jsonify({"success": False, "error": "Legacy conversion endpoint removed; use /upload_model"}), 410
-
-    try:
-        app_module.logger.info("Starting model conversion process")
-        data = request.get_json()
-
-        if not data or "modelId" not in data:
-            app_module.logger.warning("No model ID provided")
-            return jsonify({"error": "No model ID provided"}), 400
-
-        model_id = data["modelId"]
-        selected_color = data.get("selectedColor", "#FFFFFF")
-
-        guard = check_model_mutation_allowed(model_id)
-        if guard is not None:
-            return guard
-
-        # Find original file in upload subfirectory
-        upload_subdir = os.path.join(app_module.app.config["UPLOAD_FOLDER"], model_id)
-        if not os.path.isdir(upload_subdir):
-            app_module.logger.error(f"Upload directory not found: {upload_subdir}")
-            return jsonify(
-                {"success": False, "error": "Upload directory not found"}
-            ), 404
-
-        original_files = os.listdir(upload_subdir)
-        if not original_files:
-            app_module.logger.error("No valid source file found in upload directory")
-            return jsonify(
-                {"success": False, "error": "No valid source file found"}
-            ), 404
-
-        source_file = os.path.join(upload_subdir, original_files[0])
-
-        # Create model-specific directory
-        model_dir = os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
-        os.makedirs(model_dir, exist_ok=True)
-        output_file = os.path.join(model_dir, "model.glb")
-
-        # Convert the model
-        file_ext = os.path.splitext(source_file)[1].lower()
-        if not app_module.convert_model_new(source_file, output_file, color=selected_color):
-            app_module.logger.error(f"Model conversion failed for {model_id}")
-            return jsonify({"success": False, "error": "Model conversion failed"}), 500
-
-        app_module.logger.info(f"Model converted successfully: {output_file}")
-
-        # Update database if user is authenticated
-        if current_user.is_authenticated:
-            session = Session(db.engine)
-            model = session.get(UserModel, model_id)
-            if model:
-                model.converted = True
-                model.conversion_date = datetime.utcnow()
-                db.session.commit()
-                app_module.logger.info(f"Model conversion status updated in database: {model_id}")
-
-        return jsonify(
-            {"message": "Model converted successfully", "model_id": model_id}
-        ), 200
-
-    except Exception as e:
-        app_module.logger.error(f"Error in convert: {str(e)}")
-        return jsonify({"error": str(e)}), 500

@@ -327,7 +327,7 @@ class FBXConverter(BaseConverter, FBXPostProcessMixin):
 
                             max_dim_m = float(max(extents))
                             if max_dim_m > 0:
-                                scale_factor = self.max_dimension / max_dim_m
+                                scale_factor = min(1.0, self.max_dimension / max_dim_m)
                                 if (
                                     abs(scale_factor - 1.0) > 0.001
                                 ):  # Only scale if significant difference

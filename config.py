@@ -131,6 +131,10 @@ WORKER_STALE_MINUTES = int(os.getenv('WORKER_STALE_MINUTES', 30))
 # clamp (values are centimeters as entered by the user; converters apply the
 # equivalent in meters).
 DEFAULT_MAX_DIMENSION_CM = float(os.getenv('DEFAULT_MAX_DIMENSION_CM', 50))
+# "Limit Model Size" accepted range (cm); mirrors min/max of #max-dimension in
+# templates/studio.html. The limit only ever shrinks a model.
+SIZE_LIMIT_MIN_CM = 10.0
+SIZE_LIMIT_MAX_CM = 100.0
 MAX_MODEL_DIMENSION_METERS = float(os.getenv('MAX_MODEL_DIMENSION_METERS', 100))
 
 # AR (Scene Viewer / Quick Look) places a GLB's mesh at its native scale as

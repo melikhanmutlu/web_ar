@@ -8,7 +8,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_
 
 from glb_modifier import modify_glb
-from services.request_json import json_dict
+from services.request_json import json_dict, json_text
 from models import AIGenerationJob, MaterialPreset, OrganizationMember, PromptPreset, db
 from services.model_permissions import check_model_mutation_allowed, get_live_model
 from services.org_membership import _organization_membership
@@ -35,8 +35,8 @@ SYSTEM_MATERIAL_PRESETS = [
 
 
 def _material_payload(data):
-    color = str(data.get("color", "#ffffff"))
-    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
+    color = data.get("color", "#ffffff")
+    if not isinstance(color, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", color):
         raise ValueError("Invalid material color")
     values = {}
     for field, default in (("metalness", 0), ("roughness", 0.5), ("opacity", 1)):
@@ -63,12 +63,19 @@ def material_presets_api():
             "custom": True,
         } for preset in custom]})
     data = json_dict()
-    name = str(data.get("name", "")).strip()[:120]
+    name = json_text(data, "name")[:120]
     if not name:
         return jsonify({"success": False, "error": "Preset name is required"}), 400
     organization_id = data.get("organization_id")
+    if organization_id is not None:
+        try:
+            if isinstance(organization_id, bool):
+                raise TypeError("organization_id")
+            organization_id = int(organization_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid organization_id"}), 400
     if organization_id is not None and not _organization_membership(
-        int(organization_id), {"owner", "admin", "editor"}
+        organization_id, {"owner", "admin", "editor"}
     ):
         return jsonify({"success": False, "error": "Organization editor role required"}), 403
     try:
@@ -77,7 +84,7 @@ def material_presets_api():
         return jsonify({"success": False, "error": str(exc)}), 400
     preset = MaterialPreset(
         user_id=current_user.id,
-        organization_id=int(organization_id) if organization_id is not None else None,
+        organization_id=organization_id,
         name=name, **values,
     )
     db.session.add(preset); db.session.commit()
@@ -178,8 +185,8 @@ def ai_prompt_presets():
             "prompt_template": preset.prompt_template, "custom": True,
         } for preset in custom]})
     data = json_dict()
-    name = str(data.get("name", "")).strip()[:120]
-    template = str(data.get("prompt_template", "")).strip()[:2000]
+    name = json_text(data, "name")[:120]
+    template = json_text(data, "prompt_template")[:2000]
     if not name or not template or "{prompt}" not in template:
         return jsonify({"success": False, "error": "Name and a template containing {prompt} are required"}), 400
     preset = PromptPreset(

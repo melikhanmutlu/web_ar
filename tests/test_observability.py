@@ -12,7 +12,11 @@ def test_health_and_request_correlation_headers(client):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
 
 
-def test_metrics_report_queue_state_and_duration(client):
+def test_metrics_report_queue_state_and_duration(client, monkeypatch):
+    import config
+    # The suite runs with DATABASE_URL set (production-like); /metrics is only
+    # open without a token in a true local-dev setup.
+    monkeypatch.setattr(config, "_IS_PRODUCTION", False)
     now = datetime.utcnow()
     db.session.add_all([
         ConversionJob(id="metric-pending", status="pending"),
@@ -29,6 +33,15 @@ def test_metrics_report_queue_state_and_duration(client):
     text = response.get_data(as_text=True)
     assert 'arvision_conversion_jobs{status="pending"} 1' in text
     assert "arvision_conversion_duration_seconds 5.000" in text
+
+
+def test_metrics_closed_without_token_in_production_like_env(client):
+    # DATABASE_URL/RAILWAY_ENVIRONMENT count as production even if FLASK_ENV
+    # is left at its development default (SEC-29).
+    import config
+    assert config._IS_PRODUCTION
+    assert client.application.config.get("FLASK_ENV") != "production"
+    assert client.get("/metrics").status_code == 404
 
 
 def test_metrics_require_bearer_token_whenever_configured(client):

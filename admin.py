@@ -1936,7 +1936,7 @@ def _parse_plan_fields(prefix, slug):
     if price_raw:
         try:
             price = int(price_raw)
-            if price < 0:
+            if not 0 <= price <= 10_000_000:
                 raise ValueError
         except ValueError:
             raise ValueError(f"{display_name}: price must be a non-negative whole number.")

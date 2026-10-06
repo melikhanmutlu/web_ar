@@ -108,11 +108,19 @@ from services.email_verification import is_verified
 
 app = Flask(__name__)
 app.config.from_object("config")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Number of trusted reverse-proxy hops in front of the app (Railway: 1). The
+# client IP used by every per-IP rate limit is taken that many hops from the
+# right of X-Forwarded-For, so set this to match the deployment (0 = no proxy,
+# ignore X-Forwarded-For entirely).
+try:
+    _PROXY_HOPS = max(0, int(os.environ.get("PROXY_FIX_X_FOR", "1")))
+except ValueError:
+    _PROXY_HOPS = 1
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_PROXY_HOPS, x_proto=1, x_host=1)
 
 
-# Baseline security headers on every response. X-Frame-Options is intentionally
-# omitted because /embed/<id> is designed to be iframed by third parties.
+# Baseline security headers on every response. X-Frame-Options is only sent for
+# non-embed pages because /embed/<id> is designed to be iframed by third parties.
 @app.after_request
 def after_request(response):
     request_id = getattr(g, "request_id", None)
@@ -140,7 +148,8 @@ def after_request(response):
         else:
             # Existing embed semantics allow any parent until an explicit
             # allowlist is configured for the model.
-            frame_ancestors = "*"
+            # (EMBED_DEFAULT_FRAME_ANCESTORS can narrow this default.)
+            frame_ancestors = os.environ.get("EMBED_DEFAULT_FRAME_ANCESTORS", "*").strip() or "*"
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
@@ -160,6 +169,11 @@ def after_request(response):
         "worker-src 'self' blob:; "
         f"frame-ancestors {frame_ancestors}",
     )
+    if request.endpoint != "viewer.embed_view":
+        # Clickjacking fallback for browsers without CSP frame-ancestors, and
+        # popup isolation that still lets payment/OAuth popups work.
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
     if request.is_secure:
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     # Keep per-user HTML pages (my_models, studio, billing, admin, ...) out of
@@ -489,6 +503,10 @@ app.view_functions["viewer.view_model"] = limiter.limit(
 )(app.view_functions["viewer.view_model"])
 for _endpoint in ("engagement.toggle_like",):
     app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
+# Hotspot comments are open to any logged-in viewer of a public model: slow spam.
+app.view_functions["hotspots.create_hotspot_comment"] = limiter.limit(
+    "10 per minute"
+)(app.view_functions["hotspots.create_hotspot_comment"])
 for _endpoint in ("model_editing.save_modifications", "model_editing.slice_model"):
     app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
 app.view_functions["upload.upload_file"] = limiter.limit(

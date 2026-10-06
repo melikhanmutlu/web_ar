@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from flask import Blueprint, abort, current_app, jsonify, request
 
+import config
 from services.time_utils import datetime
 from models import ConversionJob, WorkerHeartbeat, db
 
@@ -94,7 +95,9 @@ def healthz_worker():
 def metrics():
     """Small Prometheus-compatible operational surface without user data."""
     configured_token = current_app.config.get("METRICS_TOKEN", "")
-    if configured_token or current_app.config.get("FLASK_ENV") == "production":
+    # Token required in any production-like deployment (FLASK_ENV, Railway or a
+    # managed DATABASE_URL -- config._IS_PRODUCTION), not just FLASK_ENV.
+    if configured_token or current_app.config.get("FLASK_ENV") == "production" or config._IS_PRODUCTION:
         supplied_token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if not configured_token or not secrets.compare_digest(supplied_token, configured_token):
             abort(404)

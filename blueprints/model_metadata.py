@@ -18,6 +18,14 @@ from services.viewer_settings import resolved_viewer_settings
 
 model_metadata_bp = Blueprint("model_metadata", __name__)
 
+# model-viewer camera syntax: "<theta> <phi> <radius>" / "<fov>", each token
+# `auto` or a number with an optional angle/length unit.
+_CAM_TOKEN = r"(?:auto|-?\d+(?:\.\d+)?(?:[eE]-?\d+)?(?:deg|rad|m|cm|mm|%)?)"
+_CAMERA_VALUE_RE = {
+    "camera_orbit": re.compile(rf"{_CAM_TOKEN}(?: {_CAM_TOKEN}){{0,2}}"),
+    "field_of_view": re.compile(_CAM_TOKEN),
+}
+
 
 @model_metadata_bp.route("/api/models/<model_id>/metadata", methods=["PATCH"])
 @login_required
@@ -130,7 +138,7 @@ def model_viewer_settings(model_id):
     for field in ("camera_orbit", "field_of_view"):
         if field in data:
             value = str(data[field]).strip()[:80]
-            if not value:
+            if not _CAMERA_VALUE_RE[field].fullmatch(value):
                 return jsonify({"success": False, "error": f"Invalid {field}"}), 400
             current[field] = value
     if "branding" in data:

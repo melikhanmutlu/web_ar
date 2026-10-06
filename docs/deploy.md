@@ -47,7 +47,7 @@ no database access) with a 300 s timeout and restart on failure (max 10 retries)
 | `/healthz/live` | Liveness; used by Railway's deploy healthcheck. |
 | `/healthz` | Readiness: database and storage writability; also worker count when `JOB_QUEUE=true`. 503 when degraded. |
 | `/healthz/worker` | Worker heartbeat status. |
-| `/metrics` | Prometheus-style gauges. Requires `Authorization: Bearer $METRICS_TOKEN` when the token is set or `FLASK_ENV=production`. |
+| `/metrics` | Prometheus-style gauges. Requires `Authorization: Bearer $METRICS_TOKEN` when the token is set or the deployment is production-like (`FLASK_ENV=production`, `RAILWAY_ENVIRONMENT` or `DATABASE_URL` set). |
 
 ## Storage: one volume
 
@@ -72,6 +72,9 @@ Every variable the code reads is documented in [`.env.example`](../.env.example)
 | `ADMIN_EMAILS` | Comma-separated emails promoted to admin on every boot. No built-in default, so without it there is no admin account. |
 | `SITE_URL` | Canonical public URL (sitemap, canonical links, emails). |
 | `METRICS_TOKEN` | Protects `/metrics`. |
+| `PROXY_FIX_X_FOR` | Trusted reverse-proxy hops in front of the app (default `1`, right for Railway). Per-IP rate limits use the client IP from `X-Forwarded-For` that many hops from the right; set `0` when the app is exposed without a proxy, or the number of proxy layers otherwise. |
+| `EMBED_DEFAULT_FRAME_ANCESTORS` | CSP `frame-ancestors` for `/embed/<id>` of models without an `embed_allowed_domains` allowlist (default `*`: embeddable anywhere). |
+| `VIEW_DEDUPE_SECONDS` | One counted `/view` per visitor per model per this window (default `1800`). |
 | `LOG_FORMAT=json` | Structured logs to stdout; Railway collects them. |
 | `SENTRY_DSN` | Optional error tracking; release is taken from `RAILWAY_GIT_COMMIT_SHA`. |
 | `MESHY_API_KEY`, `SMTP_*`, `PAYTR_*` / `LEMONSQUEEZY_*` | Optional features; see `.env.example`. |

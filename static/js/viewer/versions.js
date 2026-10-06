@@ -98,11 +98,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ['Faces', formatDelta(d.faces)],
                     ['File size (bytes)', formatDelta(d.file_size)],
                 ].map(([label, value]) =>
-                    '<div class="tp-dim-row"><span>' + label + '</span><span>' + value + '</span></div>'
+                    '<div class="tp-dim-row"><span>' + escapeHtml(label) + '</span><span>' + escapeHtml(String(value)) + '</span></div>'
                 ).join('');
                 if (versionCompareResult) {
                     versionCompareResult.innerHTML =
-                        '<p class="tp-note" style="margin:0.4rem 0 0.2rem;">v' + a + ' &rarr; v' + b + '</p>' + rows;
+                        '<p class="tp-note" style="margin:0.4rem 0 0.2rem;">v' + escapeHtml(String(a)) + ' &rarr; v' + escapeHtml(String(b)) + '</p>' + rows;
                 }
             } catch (e) {
                 if (versionCompareResult) versionCompareResult.innerHTML = '<p class="tp-note">Comparison failed.</p>';
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         div.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem;">' +
                             '<div style="display:flex;align-items:center;gap:0.35rem;">' +
                             '<input type="checkbox" class="compare-checkbox" title="Select to compare">' +
-                            '<span style="font-weight:700;font-size:0.72rem;color:var(--color-gray-200);">v' + v.version_number + '</span>' +
+                            '<span style="font-weight:700;font-size:0.72rem;color:var(--color-gray-200);">v' + escapeHtml(String(v.version_number)) + '</span>' +
                             '<span class="tp-version-badge">' + escapeHtml(v.operation_type) + '</span>' +
                             '</div>' +
                             '<span style="font-size:0.6rem;color:var(--color-gray-500);">' + escapeHtml(v.created_at || '') + '</span>' +

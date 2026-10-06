@@ -70,6 +70,11 @@ class User(UserMixin, db.Model):
     is_active_flag = db.Column('is_active', db.Boolean, nullable=False, default=True, server_default=sa.true())
     failed_login_attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
     locked_until = db.Column(db.DateTime, nullable=True)
+    # Email verification (SEC-04). NULL = unverified; abuse-sensitive perks
+    # (free AI trials, Business trial, referral rewards) require it. A changed
+    # address waits in pending_email and only replaces `email` once verified.
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    pending_email = db.Column(db.String(120), nullable=True)
     models = db.relationship('UserModel', backref='user', lazy=True, passive_deletes=True)
     folders = db.relationship('Folder', backref='user', lazy=True, passive_deletes=True)
     organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan', passive_deletes=True)
@@ -240,6 +245,13 @@ class WebhookSubscription(db.Model):
         }
 
 
+def _default_visibility(context):
+    """New models are private for logged-in owners. Owner-less (anonymous)
+    uploads stay unlisted: they're reached via their edit-token/share flow and
+    a private owner-less model would be unviewable."""
+    return "private" if context.get_current_parameters().get("user_id") is not None else "unlisted"
+
+
 class UserModel(db.Model):
     id = db.Column(db.String(36), primary_key=True)  # Changed to String to support UUID
     filename = db.Column(db.String(255), nullable=False)
@@ -277,7 +289,7 @@ class UserModel(db.Model):
     # Soft delete: set when moved to trash, files stay on disk until purge
     deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     edit_token_hash = db.Column(db.String(255), nullable=True)
-    visibility = db.Column(db.String(20), nullable=False, default="unlisted", index=True)
+    visibility = db.Column(db.String(20), nullable=False, default=_default_visibility, index=True)
     embed_allowed_domains = db.Column(db.Text, nullable=True)
     validation_report = db.Column(db.JSON, nullable=True)
     seo_metadata = db.Column(db.JSON, nullable=True)

@@ -21,7 +21,8 @@ def make_user(username, email):
 def make_model_with_hotspot(user_id=None):
     model_id = "test-" + uuid.uuid4().hex[:8]
     model = UserModel(id=model_id, filename=f"{model_id}.glb",
-                      file_type="glb", file_size=1000, user_id=user_id)
+                      file_type="glb", file_size=1000, user_id=user_id,
+                      visibility="unlisted")
     db.session.add(model)
     db.session.commit()
 

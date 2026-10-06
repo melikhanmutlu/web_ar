@@ -57,7 +57,7 @@ def make_two_material_model(user_id=None):
     # store the full path exactly like the upload pipeline does.
     model = UserModel(id=model_id, filename=glb_path,
                       file_type="glb", file_size=1000, user_id=user_id,
-                      cumulative_scale=1.0)
+                      cumulative_scale=1.0, visibility="unlisted")
     db.session.add(model)
     db.session.commit()
     return model_id, glb_path
@@ -78,7 +78,7 @@ def make_sized_box_model(extent, user_id=None):
 
     model = UserModel(id=model_id, filename=glb_path,
                       file_type="glb", file_size=1000, user_id=user_id,
-                      cumulative_scale=1.0)
+                      cumulative_scale=1.0, visibility="unlisted")
     db.session.add(model)
     db.session.commit()
     return model_id, glb_path

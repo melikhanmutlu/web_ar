@@ -36,7 +36,10 @@ def upgrade():
 def downgrade():
     with op.batch_alter_table("user_model") as batch_op:
         batch_op.drop_index("ix_user_model_organization_id")
-        batch_op.drop_constraint("fk_user_model_organization", type_="foreignkey")
+        if op.get_bind().dialect.name == "sqlite":
+            # PostgreSQL: a later migration renamed this FK, and dropping the
+            # column below drops it anyway; only SQLite batch needs it.
+            batch_op.drop_constraint("fk_user_model_organization", type_="foreignkey")
         batch_op.drop_column("organization_id")
     op.drop_table("organization_member")
     op.drop_table("organization")

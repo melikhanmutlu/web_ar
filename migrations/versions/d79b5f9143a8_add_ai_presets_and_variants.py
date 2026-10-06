@@ -34,8 +34,11 @@ def downgrade():
         batch_op.drop_column("seo_metadata")
     with op.batch_alter_table("ai_generation_job") as batch_op:
         batch_op.drop_index("ix_ai_generation_job_parent_job_id")
-        batch_op.drop_constraint("fk_ai_generation_preset", type_="foreignkey")
-        batch_op.drop_constraint("fk_ai_generation_parent", type_="foreignkey")
+        if op.get_bind().dialect.name == "sqlite":
+            # PostgreSQL: a later migration renamed this FK, and dropping the
+            # column below drops it anyway; only SQLite batch needs it.
+            batch_op.drop_constraint("fk_ai_generation_preset", type_="foreignkey")
+            batch_op.drop_constraint("fk_ai_generation_parent", type_="foreignkey")
         batch_op.drop_column("preset_id")
         batch_op.drop_column("parent_job_id")
     op.drop_table("prompt_preset")

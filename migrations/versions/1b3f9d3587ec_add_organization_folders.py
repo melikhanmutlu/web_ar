@@ -16,5 +16,8 @@ def upgrade():
 def downgrade():
     with op.batch_alter_table("folder") as batch_op:
         batch_op.drop_index("ix_folder_organization_id")
-        batch_op.drop_constraint("fk_folder_organization", type_="foreignkey")
+        if op.get_bind().dialect.name == "sqlite":
+            # PostgreSQL: a later migration renamed this FK, and dropping the
+            # column below drops it anyway; only SQLite batch needs it.
+            batch_op.drop_constraint("fk_folder_organization", type_="foreignkey")
         batch_op.drop_column("organization_id")

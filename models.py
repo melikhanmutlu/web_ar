@@ -498,10 +498,10 @@ class HotspotComment(db.Model):
     hotspot's own title/description (which only its creator/an editor can set).
     """
     id = db.Column(db.Integer, primary_key=True)
-    hotspot_id = db.Column(db.Integer, db.ForeignKey('model_hotspot.id', ondelete='CASCADE'), nullable=False)
+    hotspot_id = db.Column(db.Integer, db.ForeignKey('model_hotspot.id', ondelete='CASCADE'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), nullable=False)
     body = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     hotspot = db.relationship('ModelHotspot', backref=db.backref(
         'comments', cascade='all, delete-orphan', passive_deletes=True,
@@ -850,7 +850,7 @@ class Payment(db.Model):
     period_end = db.Column(db.Date, nullable=True)
     note = db.Column(db.Text, nullable=True)
     recorded_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
     user = db.relationship('User', foreign_keys=[user_id])
     recorded_by = db.relationship('User', foreign_keys=[recorded_by_id])

@@ -82,7 +82,12 @@ def test_convert_to_usdz_writes_to_temp_path_not_final_path(client, tmp_path, mo
     assert result is True
     # Blender was pointed at a temp path, distinct from the live file.
     assert captured_cmd["cmd"][-1] != final_path
-    assert captured_cmd["cmd"][-1].startswith(final_path)
+    # ...in the same directory, and ending in ".usdz" (the Blender export
+    # script appends ".usdz" to any other suffix, which used to make every
+    # export "fail").
+    temp_arg = captured_cmd["cmd"][-1]
+    assert os.path.dirname(temp_arg) == os.path.dirname(final_path)
+    assert temp_arg.endswith(".usdz") and ".tmp" in os.path.basename(temp_arg)
     # The live path now holds the freshly-exported content, and the temp
     # file used to get it there is gone.
     with open(final_path, "rb") as f:

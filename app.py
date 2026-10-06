@@ -103,7 +103,7 @@ from services.storage_quota import (
     _storage_usage_for,
     _storage_quota_bytes,
 )
-from services.org_membership import _organization_membership
+from services.org_membership import _organization_membership, org_allows
 from services.email_verification import is_verified
 
 app = Flask(__name__)
@@ -391,6 +391,10 @@ def resolve_custom_domain():
     g.custom_domain = OrganizationDomain.query.filter_by(hostname=hostname).filter(
         OrganizationDomain.verified_at.isnot(None)
     ).first()
+    # Custom domains are a paid org feature, checked at serve time too so a
+    # downgraded owner's domain stops serving without deleting the record.
+    if g.custom_domain and not org_allows(g.custom_domain.organization, "custom_domains"):
+        g.custom_domain = None
     if g.custom_domain and request.endpoint == "main.index" and request.method == "GET":
         organization = g.custom_domain.organization
         models = UserModel.query.filter(

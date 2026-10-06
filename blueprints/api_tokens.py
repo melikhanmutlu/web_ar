@@ -52,6 +52,16 @@ def _bearer_token(required_scope):
     owner = db.session.get(User, token.user_id)
     if owner is None or not owner.is_active_flag:
         return None, (jsonify({"success": False, "error": "Invalid or expired API token"}), 401)
+    # Plan features are checked at use time (not just at creation): a plan that
+    # lapsed or was downgraded must stop the token working. The row is kept so
+    # the owner can still see and revoke it.
+    if not plan_allows(owner, "api_access"):
+        from services.upgrade import upgrade_hint
+        return None, (jsonify({
+            "success": False,
+            "error": "API access requires a Pro or Business plan.",
+            "upgrade": upgrade_hint("api_access"),
+        }), 403)
     if token.organization_id is not None:
         # Org tokens can only be minted by owners/admins; demoting the creator
         # must disable the token, not leave it with the old role's reach.

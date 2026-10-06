@@ -40,6 +40,8 @@
             <div id="tokenList" class="dev-list"></div>
             {% else %}
             <div class="account-locked"><span>PRO FEATURE</span><h3>Unlock programmatic access.</h3><p>API access is available on Pro and Business plans.</p><a class="primary-btn" href="{{ url_for('main.pricing') }}">Explore plans <span>&rarr;</span></a></div>
+            <p class="field-help">Tokens you created earlier are inactive on this plan, but you can still revoke them.</p>
+            <div id="tokenList" class="dev-list"></div>
             {% endif %}
         </article>
 
@@ -61,6 +63,8 @@
             <div id="webhookList" class="dev-list"></div>
             {% else %}
             <div class="account-locked"><span>BUSINESS FEATURE</span><h3>React to every completed job.</h3><p>Signed webhook delivery is available on the Business plan.</p><a class="primary-btn" href="{{ url_for('main.pricing') }}">Explore plans <span>&rarr;</span></a></div>
+            <p class="field-help">Webhooks you created earlier are paused on this plan, but you can still delete them.</p>
+            <div id="webhookList" class="dev-list"></div>
             {% endif %}
         </article>
     </section>
@@ -127,6 +131,8 @@
                 }
             });
         });
+    }
+    if (tokenList) {
         tokenList.addEventListener("click", async function (e) {
             var id = e.target.getAttribute("data-revoke");
             if (!id) return;
@@ -178,6 +184,8 @@
                 }
             });
         });
+    }
+    if (webhookList) {
         webhookList.addEventListener("click", async function (e) {
             var del = e.target.getAttribute("data-delhook");
             var rot = e.target.getAttribute("data-rotate");

@@ -25,4 +25,10 @@ def resolved_org_branding(organization):
     })
     if not settings["name"]:
         settings["name"] = organization.name
+    # Hiding "Powered by" is white-label: it only applies while the org's
+    # billing user's plan includes it.
+    if settings["hide_powered_by"]:
+        from services.org_membership import org_allows
+        if not org_allows(organization, "white_label"):
+            settings["hide_powered_by"] = False
     return settings

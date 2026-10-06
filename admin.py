@@ -753,6 +753,9 @@ def _delete_user_and_content(user):
     AIGenerationJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     ConversionJob.query.filter_by(user_id=user.id).delete(synchronize_session=False)
     Folder.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+    # Don't leave organizations ownerless (or with dangling domains) behind.
+    from services.org_membership import reassign_orgs_before_user_delete
+    reassign_orgs_before_user_delete(user)
     db.session.delete(user)
     return len(models)
 

@@ -19,7 +19,7 @@ from models import (
     UserModel,
     db,
 )
-from services.org_membership import _organization_membership
+from services.org_membership import _organization_membership, org_allows, org_billing_user
 from services import send_email
 from services.org_branding import resolved_org_branding
 from services.plans import plan_allows
@@ -75,7 +75,7 @@ def _check_org_seat_limit(organization_id):
     organization = db.session.get(Organization, organization_id)
     if organization is None:
         return None
-    owner = db.session.get(User, organization.created_by)
+    owner = org_billing_user(organization)
     # Floor to 0 (not None): a plan with no seat entitlement — Free, or a
     # Business owner who lapsed/downgraded — must NOT fall through to "unlimited".
     # 0 means no new members may be added; existing members stay.
@@ -84,7 +84,8 @@ def _check_org_seat_limit(organization_id):
     if current >= cap:
         return jsonify({
             "success": False,
-            "error": f"Seat limit reached ({cap}). Upgrade the plan to add more members.",
+            "error": f"Seat limit reached ({cap}). The organization owner's plan has to be "
+                     "upgraded to add more members.",
             "upgrade": upgrade_hint("org_seats"),
         }), 403
     return None
@@ -181,13 +182,18 @@ def organization_folders_api(organization_id):
     if not name:
         return jsonify({"success": False, "error": "Folder name is required"}), 400
     parent_id = data.get("parent_id")
+    if parent_id is not None:
+        try:
+            parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "Invalid parent folder id"}), 400
     if parent_id is not None and not Folder.query.filter_by(
-        id=int(parent_id), organization_id=organization_id
+        id=parent_id, organization_id=organization_id
     ).first():
         return jsonify({"success": False, "error": "Parent folder not found"}), 404
     if Folder.query.filter_by(
         name=name,
-        parent_id=int(parent_id) if parent_id is not None else None,
+        parent_id=parent_id,
         organization_id=organization_id,
     ).first():
         return jsonify({"success": False, "error": "A folder with this name already exists"}), 409
@@ -197,7 +203,7 @@ def organization_folders_api(organization_id):
         slug=f"{base}-{secrets.token_hex(4)}",
         user_id=current_user.id,
         organization_id=organization_id,
-        parent_id=int(parent_id) if parent_id is not None else None,
+        parent_id=parent_id,
     )
     db.session.add(folder)
     db.session.commit()
@@ -256,7 +262,7 @@ def organization_domains_api(organization_id):
                 "value": f"arvision-verification={domain.verification_token}",
             },
         } for domain in domains]})
-    if not plan_allows(current_user, "custom_domains"):
+    if not org_allows(db.session.get(Organization, organization_id), "custom_domains"):
         return jsonify({
             "success": False,
             "error": "Custom domains require a Business plan.",
@@ -365,7 +371,7 @@ def organization_branding_api(organization_id):
         return jsonify({"success": True, "branding": resolved_org_branding(organization)})
     if membership.role not in {"owner", "admin"}:
         return jsonify({"success": False, "error": "Admin role required"}), 403
-    if not plan_allows(current_user, "white_label"):
+    if not org_allows(organization, "white_label"):
         return jsonify({
             "success": False,
             "error": "White-label branding requires a Business plan.",

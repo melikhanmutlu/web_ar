@@ -110,6 +110,14 @@ def dispatch_webhook_event(event_type, user_id, payload):
     conversion/generation flow that triggers this."""
     if not user_id or event_type not in WEBHOOK_EVENT_TYPES:
         return
+    # Webhooks are a plan feature: if the owner's plan no longer includes them
+    # (downgrade, expired trial) deliveries stop; the rows stay so they can be
+    # reviewed/deleted and resume if the plan is restored.
+    from models import User
+    from services.plans import plan_allows
+    owner = db.session.get(User, user_id)
+    if owner is None or not plan_allows(owner, "webhooks"):
+        return
     subscriptions = WebhookSubscription.query.filter_by(
         user_id=user_id, is_active=True
     ).all()

@@ -458,10 +458,13 @@ def organization_invites_api(organization_id):
         f"Accept the invitation (valid for 7 days):\n{link}\n\n"
         "Sign in or create an account with this email address to accept it.",
     )
+    payload = {"success": True, "invite": _invite_json(invite), "email_sent": bool(sent)}
     if not sent:
-        # SMTP not configured/failed: the admin can still relay the link.
+        # SMTP not configured/failed: hand the link to the inviting admin (who
+        # may relay it) and log it; the invitee still needs the matching email.
         logger.info("Organization invite for %s (org %s): %s", email, organization_id, link)
-    return jsonify({"success": True, "invite": _invite_json(invite), "email_sent": bool(sent)}), 201
+        payload["link"] = link
+    return jsonify(payload), 201
 
 
 @organizations_bp.route("/api/organizations/<int:organization_id>/invites/<int:invite_id>", methods=["DELETE"])

@@ -37,6 +37,7 @@ from blueprints.seo import seo_bp
 from blueprints.material_presets import material_presets_bp, _resolve_prompt_preset
 from blueprints.api_tokens import api_tokens_bp, api_token_rate_limit_key
 from blueprints.organizations import organizations_bp
+from blueprints.workspace import workspace_bp
 from blueprints.model_files import model_files_bp
 from blueprints.models_crud import models_crud_bp
 from blueprints.sharing import sharing_bp
@@ -425,6 +426,7 @@ app.register_blueprint(seo_bp)
 app.register_blueprint(material_presets_bp)
 app.register_blueprint(api_tokens_bp)
 app.register_blueprint(organizations_bp)
+app.register_blueprint(workspace_bp)
 app.register_blueprint(model_files_bp)
 app.register_blueprint(models_crud_bp)
 app.register_blueprint(sharing_bp)

@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ organization.name }} — Workspace — ARVision{% endblock %}
+
+{% macro role_label(r) %}{{ r|capitalize }}{% endmacro %}
+
+{% block content %}
+<main id="main" class="account-surface workspace-page" data-org-id="{{ organization.id }}">
+    <section class="shell workspace-head">
+        <div class="reveal" data-reveal>
+            <a class="text-btn" href="{{ url_for('workspace.workspace_home') }}">&larr; All organizations</a>
+            <span class="workspace-kicker">WORKSPACE · {{ role|upper }}</span>
+            <h1>{{ organization.name }}</h1>
+            <p>{% if can_manage %}Manage people, shared folders, your custom domain and branding.{% else %}You are a {{ role }} of this organization. Admins manage members, domains and branding.{% endif %}</p>
+        </div>
+        <nav class="workspace-nav" aria-label="Workspace sections">
+            <a href="#members">Members</a>
+            {% if can_manage %}<a href="#invites">Invites</a>{% endif %}
+            <a href="#folders">Shared folders</a>
+            {% if can_manage %}<a href="#domains">Custom domains</a>{% endif %}
+            <a href="#branding">Branding</a>
+        </nav>
+    </section>
+
+    <section class="shell account-panels workspace-panels">
+        <article class="account-panel" id="members">
+            <header><div><span>01 · PEOPLE</span><h2>Members</h2>
+                <p>{{ seats_used }} of {{ seats_cap if seats_cap is not none else 'unlimited' }} seats used{% if seats_pending %} ({{ seats_pending }} pending invite{{ '' if seats_pending == 1 else 's' }}){% endif %}. Seats follow the owner's plan.</p></div><div class="panel-icon">&#9786;</div></header>
+            <div class="dev-list">
+                {% for m in members %}
+                <div class="dev-row">
+                    <div class="dev-row-main"><strong>{{ m.user.username }}</strong>{% if m.user_id == current_user.id %} <span class="field-help">(you)</span>{% endif %}<br><span class="field-help">{{ m.user.email }}</span></div>
+                    <div class="dev-actions">
+                        {% if can_manage and m.role != 'owner' %}
+                        <select class="av-input workspace-role" data-member-role="{{ m.user_id }}" aria-label="Role for {{ m.user.username }}">
+                            {% for r in ('admin', 'editor', 'viewer') %}<option value="{{ r }}"{% if r == m.role %} selected{% endif %}>{{ role_label(r) }}</option>{% endfor %}
+                        </select>
+                        <button class="secondary-btn mini" data-remove-member="{{ m.user_id }}" data-name="{{ m.user.username }}">Remove</button>
+                        {% else %}
+                        <span class="workspace-badge">{{ role_label(m.role) }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="workspace-foot">
+                <button class="secondary-btn mini" id="leaveOrg">Leave organization</button>
+                {% if is_owner and members|length > 1 %}
+                <span class="workspace-inline">
+                    <select class="av-input workspace-role" id="transferTarget" aria-label="New owner">
+                        {% for m in members if m.user_id != current_user.id %}<option value="{{ m.user_id }}">{{ m.user.username }}</option>{% endfor %}
+                    </select>
+                    <button class="secondary-btn mini" id="transferOwner">Transfer ownership</button>
+                </span>
+                {% endif %}
+            </div>
+        </article>
+
+        {% if can_manage %}
+        <article class="account-panel" id="invites">
+            <header><div><span>02 · INVITATIONS</span><h2>Invite by email</h2><p>Invitees get a link valid for 7 days. They must sign in or register with the invited address and verify it. Pending invites count toward your seats.</p></div><div class="panel-icon">&#9993;</div></header>
+            <form id="inviteForm" class="credential-form">
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="inviteEmail">Email</label>
+                    <input id="inviteEmail" class="av-input" type="email" maxlength="255" placeholder="teammate@example.com" required>
+                </div>
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="inviteRole">Role</label>
+                    <select id="inviteRole" class="av-input"><option value="viewer">Viewer</option><option value="editor" selected>Editor</option><option value="admin">Admin</option></select>
+                </div>
+                <button type="submit" class="primary-btn">Send invitation <span>&rarr;</span></button>
+            </form>
+            <div class="dev-list">
+                {% for inv in invites %}
+                <div class="dev-row">
+                    <div class="dev-row-main"><strong>{{ inv.email }}</strong><br><span class="field-help">{{ role_label(inv.role) }} &middot; expires {{ inv.expires_at.strftime('%b %d, %Y') }}</span></div>
+                    <div class="dev-actions"><button class="secondary-btn mini" data-revoke-invite="{{ inv.id }}">Revoke</button></div>
+                </div>
+                {% else %}
+                <p class="field-help workspace-empty">No pending invitations.</p>
+                {% endfor %}
+            </div>
+        </article>
+        {% endif %}
+
+        <article class="account-panel" id="folders">
+            <header><div><span>03 · SHARED LIBRARY</span><h2>Shared folders</h2><p>Folders everyone in the organization can see. Editors and above can create and manage them.</p></div><div class="panel-icon">&#9636;</div></header>
+            {% if can_edit_folders %}
+            <form id="folderForm" class="credential-form">
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="folderName">Folder name</label>
+                    <input id="folderName" class="av-input" maxlength="100" placeholder="e.g. Spring catalogue" required>
+                </div>
+                <button type="submit" class="primary-btn">Create folder <span>&rarr;</span></button>
+            </form>
+            {% endif %}
+            <div class="dev-list">
+                {% for f in folders %}
+                <div class="dev-row">
+                    <div class="dev-row-main"><strong>{{ f.name }}</strong><br><span class="field-help">{{ folder_counts[f.id] }} model{{ '' if folder_counts[f.id] == 1 else 's' }}</span></div>
+                    {% if can_edit_folders %}
+                    <div class="dev-actions">
+                        <button class="secondary-btn mini" data-rename-folder="{{ f.id }}" data-name="{{ f.name }}">Rename</button>
+                        <button class="secondary-btn mini" data-delete-folder="{{ f.id }}" data-name="{{ f.name }}">Delete</button>
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="field-help workspace-empty">No shared folders yet.</p>
+                {% endfor %}
+            </div>
+        </article>
+
+        {% if can_manage %}
+        <article class="account-panel" id="domains">
+            <header><div><span>04 · CUSTOM DOMAIN</span><h2>Custom domains</h2><p>Serve your gallery from your own hostname. Add it, create the DNS TXT record below, then verify.</p></div><div class="panel-icon">&#9906;</div></header>
+            {% if domains_allowed %}
+            <form id="domainForm" class="credential-form">
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="domainHost">Hostname</label>
+                    <input id="domainHost" class="av-input" maxlength="253" placeholder="ar.example.com" required>
+                </div>
+                <button type="submit" class="primary-btn">Add domain <span>&rarr;</span></button>
+            </form>
+            {% else %}
+            <div class="account-locked"><span>BUSINESS FEATURE</span><h3>Bring your own domain.</h3><p>Custom domains require the organization owner to be on the Business plan.</p><a class="primary-btn" href="{{ url_for('main.pricing', upgrade_reason='custom_domains') }}">Explore plans <span>&rarr;</span></a></div>
+            {% endif %}
+            <div class="dev-list">
+                {% for d in domains %}
+                <div class="dev-row">
+                    <div class="dev-row-main">
+                        <strong>{{ d.hostname }}</strong> <span class="workspace-badge{{ ' is-ok' if d.verified_at else '' }}">{{ 'Verified' if d.verified_at else 'Pending verification' }}</span>
+                        {% if not d.verified_at %}
+                        <p class="field-help">Create this DNS record, then press Verify (DNS changes can take a few minutes):</p>
+                        <p class="workspace-dns"><b>TXT</b> <code>_arvision.{{ d.hostname }}</code> &rarr; <code>arvision-verification={{ d.verification_token }}</code></p>
+                        {% endif %}
+                    </div>
+                    <div class="dev-actions">
+                        {% if not d.verified_at %}<button class="secondary-btn mini" data-verify-domain="{{ d.id }}">Verify</button>{% endif %}
+                        <button class="secondary-btn mini" data-delete-domain="{{ d.id }}" data-name="{{ d.hostname }}">Remove</button>
+                    </div>
+                </div>
+                {% else %}
+                <p class="field-help workspace-empty">No custom domains yet.</p>
+                {% endfor %}
+            </div>
+        </article>
+        {% endif %}
+
+        <article class="account-panel" id="branding">
+            <header><div><span>05 · WHITE-LABEL</span><h2>Branding</h2><p>Logo, name and accent colour for your custom-domain gallery.</p></div><div class="panel-icon">&#9680;</div></header>
+            {% if can_manage and white_label_allowed %}
+            <form id="brandingForm" class="credential-form">
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="brandName">Display name</label>
+                    <input id="brandName" class="av-input" maxlength="80" value="{{ branding.name or '' }}">
+                </div>
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="brandLogo">Logo URL (https)</label>
+                    <input id="brandLogo" class="av-input" type="url" maxlength="500" placeholder="https://example.com/logo.png" value="{{ branding.logo_url or '' }}">
+                </div>
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="brandColor">Accent colour</label>
+                    <input id="brandColor" class="av-input workspace-color" type="color" value="{{ branding.primary_color }}">
+                </div>
+                <label class="dev-check workspace-check"><input type="checkbox" id="brandHide"{% if branding.hide_powered_by %} checked{% endif %}> Hide the &ldquo;Powered by ARVision&rdquo; line</label>
+                <button type="submit" class="primary-btn">Save branding <span>&rarr;</span></button>
+            </form>
+            {% else %}
+            <div class="workspace-readonly">
+                <p><b>{{ branding.name }}</b>{% if branding.logo_url %} &middot; logo set{% endif %} &middot; accent <span class="workspace-swatch" style="background:{{ branding.primary_color }}"></span> <code>{{ branding.primary_color }}</code>{% if branding.hide_powered_by %} &middot; &ldquo;Powered by&rdquo; hidden{% endif %}</p>
+            </div>
+            {% if can_manage %}
+            <div class="account-locked"><span>BUSINESS FEATURE</span><h3>Make it yours.</h3><p>White-label branding requires the organization owner to be on the Business plan.</p><a class="primary-btn" href="{{ url_for('main.pricing', upgrade_reason='white_label') }}">Explore plans <span>&rarr;</span></a></div>
+            {% endif %}
+            {% endif %}
+        </article>
+    </section>
+</main>
+{% include "_site_footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    "use strict";
+    var orgId = document.querySelector("[data-org-id]").getAttribute("data-org-id");
+    var base = "/api/organizations/" + encodeURIComponent(orgId);
+
+    function api(method, url, body) {
+        var opts = { method: method };
+        if (body !== undefined) {
+            opts.headers = { "Content-Type": "application/json" };
+            opts.body = JSON.stringify(body);
+        }
+        return fetch(url, opts).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, body: b }; });
+        });
+    }
+    function done(r, okMessage, redirect) {
+        if (r.ok) {
+            if (redirect) { window.location.href = redirect; return; }
+            if (okMessage) { try { sessionStorage.setItem("wsToast", okMessage); } catch (e) {} }
+            window.location.reload();
+        } else {
+            window.arToast(r.body.error || "Something went wrong.", "error");
+        }
+    }
+    try {
+        var pending = sessionStorage.getItem("wsToast");
+        if (pending) { sessionStorage.removeItem("wsToast"); window.arToast(pending, "info"); }
+    } catch (e) {}
+
+    function onSubmit(id, handler) {
+        var form = document.getElementById(id);
+        if (form) form.addEventListener("submit", function (e) { e.preventDefault(); handler(); });
+    }
+    function val(id) { return document.getElementById(id).value.trim(); }
+
+    onSubmit("inviteForm", function () {
+        api("POST", base + "/invites", { email: val("inviteEmail"), role: val("inviteRole") })
+            .then(async function (r) {
+                if (r.ok && r.body.link) {
+                    await window.arPrompt("Email delivery is not configured. Send this link to the invitee yourself:", { label: "Invitation link", defaultValue: r.body.link, confirmLabel: "Done" });
+                }
+                done(r, "Invitation sent.");
+            });
+    });
+    onSubmit("folderForm", function () {
+        api("POST", base + "/folders", { name: val("folderName") }).then(function (r) { done(r, "Folder created."); });
+    });
+    onSubmit("domainForm", function () {
+        api("POST", base + "/domains", { hostname: val("domainHost") }).then(function (r) { done(r, "Domain added. Create the DNS record, then verify."); });
+    });
+    onSubmit("brandingForm", function () {
+        api("PATCH", base + "/branding", {
+            name: val("brandName"),
+            logo_url: val("brandLogo"),
+            primary_color: document.getElementById("brandColor").value,
+            hide_powered_by: document.getElementById("brandHide").checked
+        }).then(function (r) { done(r, "Branding saved."); });
+    });
+
+    document.addEventListener("change", function (e) {
+        var uid = e.target.getAttribute && e.target.getAttribute("data-member-role");
+        if (!uid) return;
+        api("PATCH", base + "/members/" + uid, { role: e.target.value }).then(function (r) { done(r, "Role updated."); });
+    });
+
+    document.addEventListener("click", async function (e) {
+        var t = e.target.closest("button");
+        if (!t) return;
+        var id;
+        if ((id = t.getAttribute("data-remove-member"))) {
+            if (!await window.arConfirm("Remove " + t.getAttribute("data-name") + " from this organization?", { confirmLabel: "Remove", danger: true })) return;
+            api("DELETE", base + "/members/" + id).then(function (r) { done(r, "Member removed."); });
+        } else if ((id = t.getAttribute("data-revoke-invite"))) {
+            api("DELETE", base + "/invites/" + id).then(function (r) { done(r, "Invitation revoked."); });
+        } else if ((id = t.getAttribute("data-rename-folder"))) {
+            var name = await window.arPrompt("Rename folder", { label: "Folder name", defaultValue: t.getAttribute("data-name"), confirmLabel: "Rename" });
+            if (!name || !name.trim()) return;
+            api("PATCH", base + "/folders/" + id, { name: name.trim() }).then(function (r) { done(r, "Folder renamed."); });
+        } else if ((id = t.getAttribute("data-delete-folder"))) {
+            if (!await window.arConfirm("Delete folder “" + t.getAttribute("data-name") + "”? Its models stay in the library.", { confirmLabel: "Delete", danger: true })) return;
+            api("DELETE", base + "/folders/" + id).then(function (r) { done(r, "Folder deleted."); });
+        } else if ((id = t.getAttribute("data-verify-domain"))) {
+            t.disabled = true;
+            api("POST", base + "/domains/" + id + "/verify").then(function (r) {
+                t.disabled = false;
+                done(r, "Domain verified.");
+            });
+        } else if ((id = t.getAttribute("data-delete-domain"))) {
+            if (!await window.arConfirm("Remove " + t.getAttribute("data-name") + "?", { confirmLabel: "Remove", danger: true })) return;
+            api("DELETE", base + "/domains/" + id).then(function (r) { done(r, "Domain removed."); });
+        } else if (t.id === "leaveOrg") {
+            if (!await window.arConfirm("Leave this organization? You will lose access to its shared models.", { confirmLabel: "Leave", danger: true })) return;
+            api("POST", base + "/leave").then(function (r) { done(r, null, "/workspace"); });
+        } else if (t.id === "transferOwner") {
+            var sel = document.getElementById("transferTarget");
+            var who = sel.options[sel.selectedIndex].text;
+            if (!await window.arConfirm("Make " + who + " the owner? You become an admin, and the organization's plan limits follow the new owner.", { confirmLabel: "Transfer", danger: true })) return;
+            api("POST", base + "/transfer", { user_id: parseInt(sel.value, 10) }).then(function (r) { done(r, "Ownership transferred."); });
+        }
+    });
+})();
+</script>
+{% endblock %}

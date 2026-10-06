@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Workspace — ARVision{% endblock %}
+
+{% block content %}
+<main id="main" class="account-surface workspace-page">
+    <section class="shell workspace-head">
+        <div class="reveal" data-reveal>
+            <span class="workspace-kicker">WORKSPACE</span>
+            <h1>Your teams.</h1>
+            <p>Organizations give a team shared folders, roles, a custom domain and a branded gallery.</p>
+        </div>
+    </section>
+
+    <section class="shell account-panels workspace-panels">
+        <article class="account-panel">
+            <header><div><span>01 · ORGANIZATIONS</span><h2>My organizations</h2><p>Organizations you own or belong to.</p></div><div class="panel-icon">&#9783;</div></header>
+            {% if organizations %}
+            <div class="dev-list" id="orgList">
+                {% for org in organizations %}
+                <div class="dev-row">
+                    <div class="dev-row-main"><strong>{{ org.name }}</strong><br><span class="field-help">{{ org.role|capitalize }} &middot; {{ org.member_count }} member{{ '' if org.member_count == 1 else 's' }}</span></div>
+                    <div class="dev-actions"><a class="secondary-btn mini" href="{{ url_for('workspace.workspace_org', organization_id=org.id) }}">{{ 'Manage' if org.role in ('owner', 'admin') else 'Open' }}</a></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="field-help workspace-empty">You are not part of an organization yet.</p>
+            {% endif %}
+        </article>
+
+        <article class="account-panel">
+            <header><div><span>02 · CREATE</span><h2>New organization</h2><p>You become its owner. Seats, custom domains and white-label follow your plan.</p></div><div class="panel-icon">+</div></header>
+            {% if can_create %}
+            <form id="createOrgForm" class="credential-form">
+                <div class="admin-field credential-name">
+                    <label class="field-label" for="orgName">Organization name</label>
+                    <input id="orgName" class="av-input" maxlength="120" placeholder="e.g. Acme Furniture" required>
+                </div>
+                <button type="submit" class="primary-btn">Create organization <span>&rarr;</span></button>
+            </form>
+            {% else %}
+            <div class="account-locked"><span>BUSINESS FEATURE</span><h3>Work together on one library.</h3><p>Creating an organization is available on the Business plan. You can still join organizations you are invited to.</p><a class="primary-btn" href="{{ url_for('main.pricing', upgrade_reason='organizations') }}">Explore plans <span>&rarr;</span></a></div>
+            {% endif %}
+        </article>
+    </section>
+</main>
+{% include "_site_footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if can_create %}
+<script>
+(function () {
+    "use strict";
+    var form = document.getElementById("createOrgForm");
+    if (!form) return;
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var name = document.getElementById("orgName").value.trim();
+        if (!name) return;
+        fetch("/api/organizations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: name })
+        }).then(function (r) {
+            return r.json().then(function (b) { return { ok: r.ok, body: b }; });
+        }).then(function (r) {
+            if (r.ok) { window.location.href = "/workspace/" + r.body.organization.id; }
+            else { window.arToast(r.body.error || "Could not create the organization.", "error"); }
+        });
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

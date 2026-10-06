@@ -65,7 +65,7 @@ def test_owner_invites_by_email_and_token_is_hashed(client, mails):
     _login(client, "inv_owner")
     resp = _invite(client, org, "Newbie@Example.com", "editor")
     assert resp.status_code == 201
-    assert "token" not in resp.get_data(as_text=True)
+    assert "/invites/" not in resp.get_data(as_text=True)  # link only travels by email
     assert mails[0][0] == "newbie@example.com"
     token = _token_from(mails)
     invite = OrganizationInvite.query.one()
@@ -133,7 +133,11 @@ def test_invite_email_failure_does_not_break(client, monkeypatch):
     org = _org(owner)
     _login(client, "inv_o6")
     resp = _invite(client, org, "n@example.com")
-    assert resp.status_code == 201 and resp.get_json()["email_sent"] is False
+    body = resp.get_json()
+    assert resp.status_code == 201 and body["email_sent"] is False
+    # no mail went out: the inviting admin gets the link to relay
+    token = body["link"].split("/invites/")[1]
+    assert OrganizationInvite.query.one().token_hash == hash_token(token)
 
 
 # ---- seats ------------------------------------------------------------------

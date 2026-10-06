@@ -3716,3 +3716,32 @@ html :focus-visible {
     }
     .nav-scrolled .mobile-menu { height: calc(100vh - 64px); height: calc(100dvh - 64px); }
 }
+
+/* Workspace (organizations) */
+.workspace-head { padding-top:130px; padding-bottom:0; }
+.workspace-head h1 { margin:14px 0 10px; font-size:clamp(38px,4.6vw,60px); line-height:1; letter-spacing:-.05em; }
+.workspace-head p { max-width:620px; margin:0; color:var(--muted); font-size:17px; line-height:1.6; }
+.workspace-kicker { display:block; margin-top:18px; color:var(--text-subtle); font-size:var(--fs-micro); font-weight:800; letter-spacing:.13em; }
+.workspace-nav { margin-top:28px; display:flex; flex-wrap:wrap; gap:8px; }
+.workspace-nav a { padding:8px 14px; border:1px solid var(--line); border-radius:999px; color:var(--ink); font-size:13px; font-weight:600; text-decoration:none; background:#fff; }
+.workspace-nav a:hover { border-color:var(--accent); color:var(--accent); }
+.workspace-panels { padding-top:40px; }
+.workspace-panels .dev-list { padding:6px 38px 22px; }
+.workspace-panels .dev-row:first-child { border-top:0; }
+.workspace-empty { padding:6px 0; }
+.workspace-role { width:auto; min-height:38px; padding:6px 10px; }
+.workspace-badge { display:inline-block; padding:3px 9px; border-radius:999px; background:#f0f1f4; color:#454b57; font-size:12px; font-weight:700; }
+.workspace-badge.is-ok { background:#e2f5e9; color:#17653a; }
+.workspace-foot { padding:18px 38px 26px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; border-top:1px solid var(--line); }
+.workspace-inline { display:inline-flex; gap:8px; align-items:center; }
+.workspace-dns { margin:8px 0 0; font-size:12.5px; line-height:1.8; word-break:break-all; }
+.workspace-dns code { margin-left:0; padding:2px 6px; border-radius:6px; background:#f0f1f4; color:#2f3440; }
+.workspace-color { width:64px; padding:4px; }
+.workspace-check { grid-column:1/-1; display:flex; gap:10px; align-items:center; margin:0; }
+.workspace-readonly { padding:24px 38px; }
+.workspace-swatch { display:inline-block; width:14px; height:14px; border-radius:4px; vertical-align:-2px; border:1px solid var(--line); }
+@media (max-width: 720px) {
+    .workspace-head { padding-top:104px; }
+    .workspace-panels .dev-list, .workspace-foot, .workspace-readonly { padding-left:20px; padding-right:20px; }
+    .workspace-panels .credential-form { grid-template-columns:1fr; padding:24px 20px; }
+}

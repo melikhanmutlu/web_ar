@@ -25,6 +25,7 @@
                     </div>
                     <a href="{{ url_for('models_crud.my_models') }}" class="user-menu-item {% if request.endpoint == 'models_crud.my_models' %}is-active{% endif %}">Library</a>
                     <a href="{{ url_for('auth.profile') }}" class="user-menu-item {% if request.endpoint == 'auth.profile' %}is-active{% endif %}">Profile settings</a>
+                    <a href="{{ url_for('workspace.workspace_home') }}" class="user-menu-item {% if request.endpoint and request.endpoint.startswith('workspace.') %}is-active{% endif %}">Workspace</a>
                     <a href="{{ url_for('main.developer_settings') }}" class="user-menu-item {% if request.endpoint == 'main.developer_settings' %}is-active{% endif %}">API &amp; webhooks</a>
                     <a href="{{ url_for('billing.billing_home') }}" class="user-menu-item {% if request.endpoint == 'billing.billing_home' %}is-active{% endif %}">Billing</a>
                     {% if current_user.is_admin %}
@@ -64,6 +65,7 @@
             {% if current_user.is_authenticated %}
             <a href="{{ url_for('models_crud.my_models') }}">Library</a>
             <a href="{{ url_for('auth.profile') }}">Profile</a>
+            <a href="{{ url_for('workspace.workspace_home') }}">Workspace</a>
             <a href="{{ url_for('main.developer_settings') }}">API &amp; webhooks</a>
             <a href="{{ url_for('billing.billing_home') }}">Billing</a>
             <a href="{{ url_for('main.studio') }}">3D Studio</a>

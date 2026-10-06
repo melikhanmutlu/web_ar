@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             '<div style="display:flex;gap:3px;">' +
                             '<button class="preview-btn tp-btn-sm" style="flex:1;">Preview</button>' +
                             (CAN_EDIT ? '<button class="restore-btn tp-btn-sm" style="flex:1;">Restore</button>' : '') +
-                            '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' +
+                            (CAN_EDIT ? '<button class="download-btn tp-btn-sm" style="flex:1;">Download</button>' : '') +
                             (CAN_EDIT ? '<button class="delete-btn tp-btn-sm" style="color:var(--color-gray-500);">Del</button>' : '') +
                             '</div>';
 
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             div.classList.add('is-previewing');
                         });
 
-                        div.querySelector('.download-btn').addEventListener('click', () => {
+                        div.querySelector('.download-btn')?.addEventListener('click', () => {
                             window.open('/api/versions/' + modelId + '/download/' + v.version_number, '_blank');
                         });
 

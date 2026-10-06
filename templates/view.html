@@ -11,7 +11,7 @@
     {% set seo_canonical = SITE_URL + url_for('main.demo_viewer') %}
     {% else %}
     {% set seo_canonical = SITE_URL + url_for('viewer.view_model', model_id=model_id) %}
-    {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id) %}
+    {% set seo_og_image = SITE_URL + url_for('model_files.serve_thumbnail', unique_id=model_unique_id, v=(model.asset_version or 0)) %}
     {% endif %}
     {% include '_seo_head.html' %}
     <title>{{ seo_title }}</title>
@@ -934,9 +934,9 @@
                 {% if marketing_demo|default(false) %}
                 src="{{ viewer_model_src }}"
                 {% else %}
-                src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.updated_at.timestamp()|int if model.updated_at else 0)) }}"
+                src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.asset_version or 0)) }}"
                 {% endif %}
-                {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename, v=(model.updated_at.timestamp()|int if model.updated_at else 0)) }}"{% endif %}
+                {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename, v=(model.asset_version or 0)) }}"{% endif %}
                 shadow-intensity="{{ viewer_settings.shadow_intensity }}"
                 shadow-softness="{{ viewer_settings.shadow_softness }}"
                 exposure="{{ viewer_settings.exposure }}"
@@ -1013,7 +1013,7 @@
                             <a href="/view/{{ om.id }}" class="showcase-gallery-tile" title="{{ om.original_filename }}">
                                 <div class="gallery-thumb-container">
                                     <img 
-                                        src="/thumbnail/{{ om.id }}"
+                                        src="/thumbnail/{{ om.id }}?v={{ om.asset_version or 0 }}"
                                         alt="{{ om.original_filename }}"
                                         class="gallery-thumbnail"
                                         loading="lazy"

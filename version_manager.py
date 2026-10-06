@@ -37,6 +37,20 @@ def version_path(version):
     return version.filename
 
 
+def bump_asset_version(model_id):
+    """Increment UserModel.asset_version (the ?v= cache-buster for GLB, USDZ and
+    thumbnail URLs) after model.glb/thumbnail was rewritten. Best-effort: a
+    failure must never fail the edit that already succeeded."""
+    try:
+        model = db.session.get(UserModel, model_id)
+        if model:
+            model.bump_asset_version()
+            db.session.commit()
+    except Exception as e:
+        logger.warning(f"Failed to bump asset_version for {model_id}: {e}")
+        db.session.rollback()
+
+
 def _atomic_copy(src, dst):
     """Copy src over dst atomically (temp file + os.replace on same dir)."""
     tmp = f"{dst}.tmp.{os.getpid()}"

@@ -26,7 +26,7 @@
                  onclick="window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'"
                  onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='{{ url_for('viewer.view_model', model_id=model.id) }}'; }">
             <div class="library-preview">
-                <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}"
+                <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id, v=(model.asset_version or 0)) }}"
                      alt="{{ model_name }} preview" loading="lazy" decoding="async"
                      onerror="this.closest('.library-preview').classList.add('is-empty'); this.remove();">
                 <div class="library-preview-fallback">

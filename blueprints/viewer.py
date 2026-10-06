@@ -411,6 +411,7 @@ def vr_view(model_id):
     response = make_response(render_template(
         "vr.html",
         model_id=model_id,
+        asset_version=model.asset_version,
         model_unique_id=model_unique_id,
         actual_filename=actual_filename,
         display_name=display_name,

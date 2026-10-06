@@ -12,7 +12,7 @@ from flask import Blueprint, jsonify, request, send_from_directory
 from glb_modifier import modify_glb
 from models import ModelHotspot, UserModel, db
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
-from version_manager import create_version
+from version_manager import bump_asset_version, create_version
 
 model_editing_bp = Blueprint("model_editing", __name__)
 
@@ -331,6 +331,7 @@ def save_modifications():
         if success and os.path.exists(temp_output):
             # Replace current model.glb with modified version (atomic on same volume)
             os.replace(temp_output, current_model_path)
+            bump_asset_version(model_id)
             app_module.logger.info(
                 f"[save_modifications] Successfully replaced model.glb with modified version"
             )
@@ -647,6 +648,7 @@ def slice_model():
         if success and os.path.exists(temp_output):
             # Replace original with sliced version (atomic on same volume)
             os.replace(temp_output, input_path)
+            bump_asset_version(model_id)
             app_module.logger.info(
                 f"[slice_model] Successfully replaced original with sliced mesh"
             )

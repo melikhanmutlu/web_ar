@@ -312,6 +312,10 @@ class UserModel(db.Model):
     # `filename` which is the on-disk storage path (always "<uuid>/model.glb").
     # Nullable so older rows fall back to the pre-existing (buggy) behaviour.
     source_filename = db.Column(db.String(255), nullable=True)
+
+    # Bumped whenever model.glb / model.usdz / thumbnail.png is rewritten, so
+    # asset URLs can carry ?v=<asset_version> and bypass the long browser cache.
+    asset_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     
     # Version tracking
     versions = db.relationship('ModelVersion', backref='model', lazy=True, cascade='all, delete-orphan', passive_deletes=True, order_by='ModelVersion.created_at.desc()')
@@ -325,6 +329,10 @@ class UserModel(db.Model):
     
     def __repr__(self):
         return f'<UserModel {self.filename}>'
+
+    def bump_asset_version(self):
+        """Atomically increment asset_version (caller commits)."""
+        self.asset_version = UserModel.asset_version + 1
 
     @property
     def original_filename(self):

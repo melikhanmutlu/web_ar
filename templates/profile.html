@@ -165,7 +165,7 @@
             {% set model_name = raw_name.replace('\\', '/').split('/')[-1] %}
             <article class="profile-model-tile">
                 <a href="{{ url_for('viewer.view_model', model_id=model.id) }}" class="profile-model-preview">
-                    <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id) }}" alt="{{ model_name }} preview" loading="lazy" onerror="this.remove();">
+                    <img src="{{ url_for('model_files.serve_thumbnail', unique_id=model.id, v=(model.asset_version or 0)) }}" alt="{{ model_name }} preview" loading="lazy" onerror="this.remove();">
                     <span>{{ model.file_type | upper if model.file_type else '3D' }}</span>
                 </a>
                 <div class="profile-model-copy">

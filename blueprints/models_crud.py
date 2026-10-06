@@ -219,6 +219,7 @@ def update_model_color():
                 return jsonify({"success": False, "error": "Failed to update model color"}), 500
             os.replace(temp_output, output_path)
             model.color = color
+            model.bump_asset_version()
             model.validation_report = app_module.asset_quality.inspect(output_path)
             db.session.commit()
             # Regenerate the USDZ so iOS Quick Look (served via ios-src) reflects

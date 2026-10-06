@@ -140,6 +140,7 @@ def apply_model_material_preset(model_id):
         comment=f"Applied material preset: {preset['name']}",
     )
     model.validation_report = app_module.asset_quality.inspect(source)
+    model.bump_asset_version()
     db.session.commit()
     return jsonify({"success": True, "preset": preset, "viewer_url": url_for("viewer.view_model", model_id=model_id)})
 

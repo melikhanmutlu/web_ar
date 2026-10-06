@@ -50,12 +50,23 @@ _ALLOWED_SERVE_RE = re.compile(
 )
 
 
+def _scope_cache(response, model):
+    """Only models with public visibility may be cached by shared caches
+    (proxies/CDNs); unlisted/private/share-link/org content stays private to
+    the requesting browser."""
+    if model is not None and model.visibility != "public":
+        response.cache_control.public = False
+        response.cache_control.private = True
+    return response
+
+
 @model_files_bp.route("/converted_files/<path:unique_id>/<path:filename>")
 def serve_converted_file(unique_id, filename):
     if not _UUID_RE.match(unique_id):
         current_app.logger.warning(f"Invalid unique_id format rejected: {unique_id}")
         return "Not Found", 404
-    if not get_live_model(unique_id):
+    live_model = get_live_model(unique_id)
+    if not live_model:
         return "Not Found", 404
     denied = check_model_view_allowed(unique_id)
     if denied:
@@ -97,7 +108,10 @@ def serve_converted_file(unique_id, filename):
                     )
         # Content is cache-busted with ?v= query params, so a 1-day TTL is
         # safe and avoids a revalidation round-trip on every viewer load.
-        return send_from_directory(directory, filename, as_attachment=False, max_age=86400)
+        return _scope_cache(
+            send_from_directory(directory, filename, as_attachment=False, max_age=86400),
+            live_model,
+        )
     except FileNotFoundError:
         current_app.logger.error(
             f"File not found in serve_converted_file: {directory}/{filename}"
@@ -185,6 +199,8 @@ def save_viewer_thumbnail(unique_id):
             f.write(img_bytes)
         from converters.thumbnail_render import mark_thumbnail_current
         mark_thumbnail_current(thumb_path)
+        model.bump_asset_version()
+        db.session.commit()
 
         return jsonify({"success": True})
     except Exception as e:
@@ -221,10 +237,10 @@ def serve_thumbnail(unique_id):
 
     # If thumbnail exists, serve it
     if os.path.exists(thumbnail_path):
-        return send_from_directory(
+        return _scope_cache(send_from_directory(
             os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id), "thumbnail.png",
             max_age=86400,
-        )
+        ), model)
 
     # Generate thumbnail on-the-fly
     try:

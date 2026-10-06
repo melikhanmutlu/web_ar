@@ -197,7 +197,7 @@ def model_exploded_asset(model_id):
             return jsonify({"success": False, "error": denied.error}), denied.status
         return jsonify({
             "success": True, "ready": os.path.isfile(output),
-            "url": url_for("model_files.serve_converted_file", unique_id=model_id, filename=filename) if os.path.isfile(output) else None,
+            "url": url_for("model_files.serve_converted_file", unique_id=model_id, filename=filename, v=model.asset_version or 0) if os.path.isfile(output) else None,
         })
     guard = check_model_mutation_allowed(model_id)
     if guard:
@@ -249,12 +249,14 @@ def model_exploded_asset(model_id):
         settings = resolved_viewer_settings(model)
         settings["exploded_view"] = {"factor": factor, "filename": filename}
         model.viewer_settings = settings
+        model.bump_asset_version()
         db.session.commit()
     except Exception as exc:
         app_module.logger.exception("Exploded view generation failed for %s", model_id)
         return jsonify({"success": False, "error": "Exploded view failed"}), 500
     return jsonify({"success": True, "url": url_for(
-        "model_files.serve_converted_file", unique_id=model_id, filename=filename
+        "model_files.serve_converted_file", unique_id=model_id, filename=filename,
+        v=model.asset_version or 0,
     ), "factor": factor})
 
 

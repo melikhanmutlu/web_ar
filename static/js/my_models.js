@@ -989,7 +989,15 @@ document.addEventListener('click', (event) => {
         scriptInjected = true;
         const s = document.createElement('script');
         s.type = 'module';
-        s.src = 'https://unpkg.com/@google/model-viewer@4.2.0/dist/model-viewer.min.js';
+        s.src = '/static/js/model-viewer.min.js';
+        s.onload = () => {
+            customElements.whenDefined('model-viewer').then(() => {
+                const MV = customElements.get('model-viewer');
+                MV.meshoptDecoderLocation = '/static/js/meshopt_decoder.js';
+                MV.dracoDecoderLocation = '/static/vendor/draco/';
+                MV.ktx2TranscoderLocation = '/static/vendor/basis/';
+            });
+        };
         document.head.appendChild(s);
     }
 

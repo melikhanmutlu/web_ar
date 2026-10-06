@@ -6,7 +6,7 @@
     {% include '_security_head.html' %}
     <title>{% block title %}admin — arvision{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/lucide/lucide-1.17.0.min.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
     {% block extra_head %}{% endblock %}

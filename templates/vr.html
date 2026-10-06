@@ -136,7 +136,7 @@
     <a-scene
         webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor, hand-tracking"
         renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true"
-        gltf-model="meshoptDecoderPath: {{ url_for('static', filename='js/meshopt_decoder.js') }}"
+        gltf-model="meshoptDecoderPath: {{ url_for('static', filename='js/meshopt_decoder.js') }}; dracoDecoderPath: {{ url_for('static', filename='vendor/draco/') }}; basisTranscoderPath: {{ url_for('static', filename='vendor/basis/') }}"
         loading-screen="dotsColor: white; backgroundColor: black"
         vr-mode-ui="enabled: true">
 

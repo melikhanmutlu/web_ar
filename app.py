@@ -144,11 +144,11 @@ def after_request(response):
         "Content-Security-Policy",
         "default-src 'self'; "
         # 'wasm-unsafe-eval' is REQUIRED: model-viewer's decoders (meshopt,
-        # and DRACO/KTX2 from gstatic) compile WebAssembly. Without it the
+        # and the self-hosted DRACO/KTX2 decoders) compile WebAssembly. Without it the
         # decoder's WebAssembly.instantiate() is refused, the loader's
         # decoder promise rejects, and EVERY model load fails -- blank
         # viewer, dead AR/fullscreen buttons on all devices.
-        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.tailwindcss.com https://unpkg.com https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com https://www.gstatic.com; "
+        "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://ajax.googleapis.com https://cdnjs.cloudflare.com https://aframe.io https://cdn.rawgit.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com data:; "
         # GLTFLoader turns images embedded in a GLB binary chunk into blob:

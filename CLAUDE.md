@@ -80,7 +80,7 @@ organizations, and analytics.
   Flask-Migrate (Alembic), Flask-Limiter.
 - **DB:** PostgreSQL in production (`DATABASE_URL`), SQLite locally & in tests.
 - **Frontend:** Vanilla JS + Jinja2 templates, `<model-viewer>`, Tailwind
-  (Play CDN in `templates/base.html`, no build step), some A-Frame for the VR page.
+  (prebuilt CSS — `npm run build:css` -> `static/css/tailwind-*.min.css`, committed; `npm run check:css` verifies it), some A-Frame for the VR page.
 - **Conversion:** trimesh, pygltflib, shapely/scipy/networkx; Node
   `obj2gltf` / `gltfpack` / `@gltf-transform/cli`; `FBX2glTF` (binary in
   `tools/`); Blender & Assimp (via nixpacks) for USDZ / STEP.

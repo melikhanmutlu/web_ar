@@ -11,7 +11,7 @@
     <title>{{ seo_title }}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
-    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/lucide/lucide-1.17.0.min.js') }}"></script>
     <script>
         document.documentElement.classList.remove('dark');
         localStorage.theme = 'light';
@@ -1546,6 +1546,8 @@
                         customElements.whenDefined('model-viewer').then(() => {
                             customElements.get('model-viewer').meshoptDecoderLocation =
                                 "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+                            customElements.get('model-viewer').dracoDecoderLocation = "{{ url_for('static', filename='vendor/draco/') }}";
+                            customElements.get('model-viewer').ktx2TranscoderLocation = "{{ url_for('static', filename='vendor/basis/') }}";
                         });
                         resolve();
                     };

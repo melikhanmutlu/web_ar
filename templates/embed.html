@@ -15,6 +15,9 @@
         customElements.whenDefined('model-viewer').then(() => {
             customElements.get('model-viewer').meshoptDecoderLocation =
                 "{{ url_for('static', filename='js/meshopt_decoder.js') }}";
+            // Self-hosted DRACO / KTX2 decoders (model-viewer defaults to www.gstatic.com).
+            customElements.get('model-viewer').dracoDecoderLocation = "{{ url_for('static', filename='vendor/draco/') }}";
+            customElements.get('model-viewer').ktx2TranscoderLocation = "{{ url_for('static', filename='vendor/basis/') }}";
         });
     </script>
     <style>

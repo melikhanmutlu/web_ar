@@ -7,84 +7,11 @@
     {% include '_seo_head.html' %}
     <title>{% block title %}ARVision{% endblock %}</title>
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@1.17.0/dist/umd/lucide.min.js"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#1F2937',
-                        'primary-dark': '#111827',
-                        secondary: '#4B5563',
-                        'secondary-dark': '#374151',
-                        cyan: {
-                            400: '#00E5FF',
-                            500: '#00B2CC',
-                            600: '#008FA3'
-                        },
-                        orange: {
-                            500: '#FF3D00',
-                            600: '#C30000'
-                        }
-                    },
-                    fontFamily: {
-                        'poppins': ['Poppins', 'sans-serif'],
-                        'inter': ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
-    <style type="text/tailwindcss">
-        @layer base {
-            body {
-                @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
-            }
-            .arvision-logo {
-                @apply text-4xl font-bold text-gray-900 dark:text-white ml-4 hover:opacity-80 transition-opacity;
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            }
-        }
-        @layer components {
-            .btn {
-                @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200;
-            }
-            .btn-primary {
-                @apply text-white bg-gray-900 hover:bg-gray-800 focus:ring-gray-900;
-            }
-            .btn-secondary {
-                @apply text-white bg-gray-700 hover:bg-gray-600 focus:ring-gray-700;
-            }
-            .nav-link {
-                @apply text-gray-700 dark:text-white font-medium hover:text-gray-900 dark:hover:text-cyan-400 transition-colors duration-200;
-            }
-        }
-        /* Custom Styles */
-        .btn {
-            @apply px-4 py-2 rounded-lg font-medium transition-colors;
-        }
-        .btn-primary {
-            @apply bg-gray-900 text-white hover:bg-gray-800;
-        }
-        .btn-secondary {
-            @apply bg-gray-700 text-white hover:bg-gray-600;
-        }
-        .arvision-logo {
-            @apply text-4xl font-bold text-gray-900 dark:text-white ml-4 hover:opacity-80 transition-opacity;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        /* Dark mode styles */
-        .dark .btn-primary {
-            @apply bg-gray-800 hover:bg-gray-700;
-        }
-        .dark .btn-secondary {
-            @apply bg-gray-700 hover:bg-gray-600;
-        }
-    </style>
+    <script src="{{ url_for('static', filename='vendor/lucide/lucide-1.17.0.min.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
     {% block extra_head %}{% endblock %}
+    {# Prebuilt Tailwind (npm run build:css). Last in <head> so it cascades like the old runtime-injected Play CDN styles. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-base.min.css') }}">
 </head>
 <body class="h-full">
     {% block header %}

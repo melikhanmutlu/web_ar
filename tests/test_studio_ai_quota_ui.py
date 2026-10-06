@@ -68,7 +68,7 @@ def test_studio_renders_users_plan_upload_limit(client):
     set_setting("max_upload_mb", "7")
     try:
         html = client.get("/studio").get_data(as_text=True)
-        assert "const UPLOAD_MAX_BYTES = 7340032;" in html
+        assert "\"uploadMaxBytes\": 7340032" in html
         assert "max. 7MB each" in html
     finally:
         set_setting("max_upload_mb", "0")

@@ -266,145 +266,37 @@ def serve_thumbnail(unique_id):
             max_age=86400,
         ), model)
 
+    model_dir = os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id)
+    model_path = os.path.join(model_dir, "model.glb")
+    from converters.thumbnail_render import (
+        PLACEHOLDER_FILENAME, render_thumbnail, write_placeholder_thumbnail,
+    )
+    placeholder_path = os.path.join(model_dir, PLACEHOLDER_FILENAME)
+
+    # A cached placeholder means the real render already failed for this
+    # geometry; don't retry on every request unless the model changed since.
+    def _placeholder_fresh():
+        try:
+            return (os.path.getmtime(placeholder_path) >= os.path.getmtime(model_path)
+                    if os.path.exists(model_path) else True)
+        except OSError:
+            return False
+
+    if os.path.exists(placeholder_path) and _placeholder_fresh():
+        return _scope_cache(send_from_directory(model_dir, PLACEHOLDER_FILENAME, max_age=86400), model)
+
     # Generate thumbnail on-the-fly
     try:
-        # Try to generate from 3D model using trimesh
-        model_path = os.path.join(
-            current_app.config["CONVERTED_FOLDER"], unique_id, "model.glb"
-        )
-
         if os.path.exists(model_path):
-            # First choice: render the actual geometry (software rasterizer)
-            from converters.thumbnail_render import render_thumbnail
-
+            # Real geometry (software rasterizer; heavy/compressed models are
+            # decompressed/decimated inside render_thumbnail)
             if render_thumbnail(model_path, thumbnail_path):
-                return send_from_directory(
-                    os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id),
-                    "thumbnail.png",
-                )
+                return send_from_directory(model_dir, "thumbnail.png")
 
-            try:
-                import trimesh
-
-                # Load mesh
-                with readable_glb(model_path) as readable_path:
-                    mesh = trimesh.load(readable_path, file_type="glb")
-
-                # Get scene if it's a Scene object
-                if isinstance(mesh, trimesh.Scene):
-                    # Combine all geometries
-                    meshes = [
-                        g
-                        for g in mesh.geometry.values()
-                        if isinstance(g, trimesh.Trimesh)
-                    ]
-                    if meshes:
-                        combined = trimesh.util.concatenate(meshes)
-                    else:
-                        raise ValueError("No meshes found in scene")
-                else:
-                    combined = mesh
-
-                # Render using trimesh's built-in rendering
-                # Create a simple PNG with model info
-                from PIL import Image, ImageDraw, ImageFont
-
-                img = Image.new("RGB", (256, 256), color=(30, 30, 40))
-                draw = ImageDraw.Draw(img)
-
-                # Try to use default font
-                try:
-                    font = ImageFont.truetype("arial.ttf", 14)
-                    font_small = ImageFont.truetype("arial.ttf", 10)
-                except:
-                    font = ImageFont.load_default()
-                    font_small = font
-
-                # Draw model name
-                name = model.original_filename[:25]
-                draw.text(
-                    (128, 100), name, fill=(255, 255, 255), font=font, anchor="mm"
-                )
-
-                # Draw model stats
-                stats = []
-                if hasattr(combined, "vertices"):
-                    stats.append(f"{len(combined.vertices)} vertices")
-                if hasattr(combined, "faces"):
-                    stats.append(f"{len(combined.faces)} faces")
-
-                for i, stat in enumerate(stats):
-                    draw.text(
-                        (128, 130 + i * 20),
-                        stat,
-                        fill=(150, 160, 180),
-                        font=font_small,
-                        anchor="mm",
-                    )
-
-                # Save thumbnail (via temp file + atomic rename — see _atomic_replace)
-                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
-                img.save(tmp_thumbnail_path, "PNG")
-                app_module._atomic_replace(thumbnail_path, tmp_thumbnail_path)
-                return send_from_directory(
-                    os.path.join(current_app.config["CONVERTED_FOLDER"], unique_id),
-                    "thumbnail.png",
-                )
-
-            except Exception as e:
-                current_app.logger.warning(
-                    f"Failed to generate 3D thumbnail for {unique_id}: {e}"
-                )
-
-        # Fallback: Generate SVG-based gradient thumbnail
-        import html as html_module
-
-        # Escape the stored color too: it is served as image/svg+xml, so an
-        # unescaped value could break out of the style attribute and inject
-        # markup/script (defense in depth alongside upload-time validation and
-        # any legacy rows persisted before that validation existed).
-        color = html_module.escape(model.color if model.color else "#667eea")
-        name = html_module.escape(model.original_filename[:20])
-        file_type = html_module.escape(model.file_type or "GLB")
-
-        svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-            <defs>
-                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:{color};stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:{color}cc;stop-opacity:1" />
-                </linearGradient>
-                <radialGradient id="glow" cx="50%" cy="60%" r="50%">
-                    <stop offset="0%" style="stop-color:rgba(255,255,255,0.2);stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:rgba(255,255,255,0);stop-opacity:1" />
-                </radialGradient>
-            </defs>
-            <rect width="256" height="256" fill="url(#bg)"/>
-            <rect width="256" height="256" fill="url(#glow)"/>
-            <text x="128" y="120" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">
-                {name}
-            </text>
-            <text x="128" y="145" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-family="Arial, sans-serif" font-size="12">
-                {file_type} Model
-            </text>
-        </svg>"""
-
-        # Save SVG and return directly
-        try:
-            svg_path = os.path.join(
-                current_app.config["CONVERTED_FOLDER"], unique_id, "thumbnail.svg"
-            )
-            os.makedirs(os.path.dirname(svg_path), exist_ok=True)
-            with open(svg_path, "w", encoding="utf-8") as f:
-                f.write(svg_content)
-
-            return current_app.response_class(
-                response=svg_content, status=200, mimetype="image/svg+xml"
-            )
-        except Exception as e:
-            current_app.logger.warning(f"Failed to save SVG thumbnail for {unique_id}: {e}")
-            return current_app.response_class(
-                response=svg_content, status=200, mimetype="image/svg+xml"
-            )
+        write_placeholder_thumbnail(
+            placeholder_path, model.original_filename, model.file_type, model.color,
+        )
+        return _scope_cache(send_from_directory(model_dir, PLACEHOLDER_FILENAME, max_age=86400), model)
 
     except Exception as e:
         current_app.logger.error(f"Error generating thumbnail for {unique_id}: {e}")

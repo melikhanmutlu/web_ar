@@ -1431,78 +1431,12 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
             )
             return
 
-        # Try to generate from 3D model using trimesh
-        try:
-            import trimesh
-            import numpy as np
-            from PIL import Image, ImageDraw, ImageFont
+        # The real render is not possible (empty/degenerate scene, missing
+        # decoder...): cache a gradient placeholder PNG next to the model so the
+        # route does not retry the render on every request. It lives in its own
+        # file so a later successful render still writes thumbnail.png.
+        from converters.thumbnail_render import PLACEHOLDER_FILENAME, write_placeholder_thumbnail
 
-            # Load mesh
-            mesh = trimesh.load(input_glb_path, file_type="glb")
-
-            # Get combined geometry if it's a Scene
-            if isinstance(mesh, trimesh.Scene):
-                meshes = [
-                    g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)
-                ]
-                if meshes:
-                    combined = trimesh.util.concatenate(meshes)
-                else:
-                    raise ValueError("No meshes found in scene")
-            else:
-                combined = mesh
-
-            # Create image
-            img = Image.new("RGB", (256, 256), color=(30, 30, 40))
-            draw = ImageDraw.Draw(img)
-
-            # Try to use default font
-            try:
-                font = ImageFont.truetype("arial.ttf", 14)
-                font_small = ImageFont.truetype("arial.ttf", 10)
-            except:
-                font = ImageFont.load_default()
-                font_small = font
-
-            # Get model name from database
-            with app.app_context():
-                model = UserModel.query.get(model_id)
-                name = model.original_filename[:25] if model else "Model"
-
-            # Draw model name
-            draw.text((128, 100), name, fill=(255, 255, 255), font=font, anchor="mm")
-
-            # Draw model stats
-            stats = []
-            if hasattr(combined, "vertices"):
-                stats.append(f"{len(combined.vertices)} vertices")
-            if hasattr(combined, "faces"):
-                stats.append(f"{len(combined.faces)} faces")
-
-            for i, stat in enumerate(stats):
-                draw.text(
-                    (128, 130 + i * 20),
-                    stat,
-                    fill=(150, 160, 180),
-                    font=font_small,
-                    anchor="mm",
-                )
-
-            # Save thumbnail
-            tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
-            img.save(tmp_thumbnail_path, "PNG")
-            _atomic_replace(thumbnail_path, tmp_thumbnail_path)
-            logger.info(
-                f"[Thumbnail Async - {model_id}] Thumbnail generated from 3D model"
-            )
-            return
-
-        except Exception as e:
-            logger.warning(
-                f"[Thumbnail Async - {model_id}] Failed to generate 3D thumbnail: {e}"
-            )
-
-        # Fallback: Generate gradient-based thumbnail
         with app.app_context():
             model = UserModel.query.get(model_id)
             if not model:
@@ -1510,63 +1444,11 @@ def generate_thumbnail_async(model_id, input_glb_path, color=None):
                     f"[Thumbnail Async - {model_id}] Model not found in database"
                 )
                 return
-
-            import html as _html
-            # Escape values interpolated into the SVG (served as image/svg+xml):
-            # defense in depth against a stored value breaking out of markup.
-            thumb_color = _html.escape(color or model.color or "#667eea")
-            name = _html.escape(model.original_filename[:20])
-            file_type = _html.escape(model.file_type or "GLB")
-
-            svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-                <defs>
-                    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:{thumb_color};stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:{thumb_color}cc;stop-opacity:1" />
-                    </linearGradient>
-                    <radialGradient id="glow" cx="50%" cy="60%" r="50%">
-                        <stop offset="0%" style="stop-color:rgba(255,255,255,0.2);stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:rgba(255,255,255,0);stop-opacity:1" />
-                    </radialGradient>
-                </defs>
-                <rect width="256" height="256" fill="url(#bg)"/>
-                <rect width="256" height="256" fill="url(#glow)"/>
-                <text x="128" y="120" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="16" font-weight="bold">
-                    {name}
-                </text>
-                <text x="128" y="145" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-family="Arial, sans-serif" font-size="12">
-                    {file_type} Model
-                </text>
-            </svg>"""
-
-            # Try to convert SVG to PNG
-            try:
-                import cairosvg
-
-                png_data = cairosvg.svg2png(
-                    bytestring=svg_content.encode(), output_width=256, output_height=256
-                )
-
-                tmp_thumbnail_path = f"{thumbnail_path}.tmp{os.getpid()}"
-                with open(tmp_thumbnail_path, "wb") as f:
-                    f.write(png_data)
-                _atomic_replace(thumbnail_path, tmp_thumbnail_path)
-
-                logger.info(
-                    f"[Thumbnail Async - {model_id}] Thumbnail generated from SVG (PNG)"
-                )
-            except ImportError:
-                # If cairosvg is not available, save SVG
-                svg_path = os.path.join(
-                    app.config["CONVERTED_FOLDER"], model_id, "thumbnail.svg"
-                )
-                with open(svg_path, "w") as f:
-                    f.write(svg_content)
-                logger.info(f"[Thumbnail Async - {model_id}] Thumbnail saved as SVG")
-            except Exception as e:
-                logger.warning(
-                    f"[Thumbnail Async - {model_id}] Failed to convert SVG: {e}"
-                )
+            write_placeholder_thumbnail(
+                os.path.join(os.path.dirname(thumbnail_path), PLACEHOLDER_FILENAME),
+                model.original_filename, model.file_type, color or model.color,
+            )
+            logger.info(f"[Thumbnail Async - {model_id}] Placeholder thumbnail cached")
 
     except Exception as e:
         logger.error(

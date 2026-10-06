@@ -74,8 +74,9 @@ def test_samples_embedded_base_color_texture(tmp_path):
     assert reddish > 0.05
 
 
-def test_face_limit_skips_render(tmp_path, monkeypatch):
+def test_face_limit_skips_render_without_decimator(tmp_path, monkeypatch):
     monkeypatch.setattr(thumbnail_render, "MAX_RENDER_FACES", 5)
+    monkeypatch.setattr("converters.glb_optimizer._resolve_gltfpack", lambda: None)
     box = trimesh.creation.box(extents=[1, 1, 1])  # 12 faces > 5
     glb = _make_glb(tmp_path, box)
     out = tmp_path / "thumb.png"

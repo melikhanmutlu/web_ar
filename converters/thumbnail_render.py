@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +28,11 @@ DEFAULT_MESH_COLOR = (160, 170, 180)
 # gets too slow for the on-the-fly /thumbnail route, so give up and let the
 # caller fall back to a placeholder.
 MAX_RENDER_FACES = int(os.environ.get("MAX_THUMBNAIL_FACES", 500_000))
+# Models above MAX_RENDER_FACES are rendered from a decimated temp copy with
+# about this many faces (preview only; the stored model is never touched).
+DECIMATED_TARGET_FACES = int(os.environ.get("THUMBNAIL_DECIMATED_FACES", 200_000))
 THUMBNAIL_RENDER_VERSION = "2-texture-sampling"
+PLACEHOLDER_FILENAME = "thumbnail_placeholder.png"
 
 
 def _version_path(png_path: str) -> str:
@@ -47,17 +53,58 @@ def mark_thumbnail_current(png_path: str) -> None:
     os.replace(tmp_marker, marker)
 
 
+def _decimated_copy(glb_path: str, face_count: int, timeout: int = 300):
+    """Uncompressed, simplified temp copy of a heavy GLB (gltfpack), or None.
+    Caller owns the returned temp file."""
+    from converters.glb_optimizer import _resolve_gltfpack, _safe_remove
+
+    command = _resolve_gltfpack()
+    if not command:
+        return None
+    ratio = max(0.01, min(0.99, DECIMATED_TARGET_FACES / float(face_count)))
+    fd, tmp_out = tempfile.mkstemp(suffix=".glb", prefix="thumb_decimated_")
+    os.close(fd)
+    try:
+        # -noq keeps plain float attributes trimesh can read; -sa guarantees
+        # the target even on unwelded meshes.
+        result = subprocess.run(
+            command + ["-i", glb_path, "-o", tmp_out, "-si", f"{ratio:.4f}", "-sa", "-noq"],
+            capture_output=True, text=True, timeout=timeout,
+        )
+        if result.returncode == 0 and os.path.getsize(tmp_out) > 0:
+            return tmp_out
+    except Exception:
+        logger.warning("Thumbnail decimation failed for %s", glb_path, exc_info=True)
+    _safe_remove(tmp_out)
+    return None
+
+
+def _glb_face_count(glb_path: str) -> int:
+    from converters.lod_generator import _triangle_count
+
+    return _triangle_count(glb_path)
+
+
 def render_thumbnail(glb_path: str, png_path: str) -> bool:
     """Render a real shaded view of the GLB to png_path. Returns True on success."""
     if not os.path.isfile(glb_path):
         return False
     try:
-        from converters.glb_optimizer import readable_glb
+        from converters.glb_optimizer import _safe_remove, readable_glb
 
         # meshopt/draco GLBs load as empty scenes in trimesh -- render a
-        # decompressed temp copy instead of failing to the SVG placeholder.
+        # decompressed temp copy instead of failing to the placeholder.
         with readable_glb(glb_path) as readable_path:
-            rendered = _rasterize(readable_path, png_path)
+            decimated = None
+            try:
+                # Too heavy for the pure-Python painter loop: render a
+                # simplified copy instead of giving up on a real preview.
+                faces = _glb_face_count(readable_path)
+                if faces > MAX_RENDER_FACES:
+                    decimated = _decimated_copy(readable_path, faces)
+                rendered = _rasterize(decimated or readable_path, png_path)
+            finally:
+                _safe_remove(decimated)
         if rendered:
             mark_thumbnail_current(png_path)
         return rendered
@@ -258,3 +305,39 @@ def _rasterize(glb_path: str, png_path: str) -> bool:
     img.save(tmp_path, "PNG", optimize=True)
     os.replace(tmp_path, png_path)
     return True
+
+
+def _hex_to_rgb(color, default=(102, 126, 234)):
+    try:
+        value = (color or "").lstrip("#")
+        if len(value) == 3:
+            value = "".join(ch * 2 for ch in value)
+        if len(value) == 6:
+            return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        pass
+    return default
+
+
+def write_placeholder_thumbnail(png_path: str, name: str, file_type: str = "GLB", color=None) -> None:
+    """Draw a gradient card (name + file type) to png_path. Used when the real
+    geometry cannot be rendered; callers cache the file so the render is not
+    retried on every request."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    size = 256
+    r, g, b = _hex_to_rgb(color)
+    t = np.linspace(0.0, 1.0, size)
+    blend = ((t[None, :] + t[:, None]) / 2.0)[..., None]  # diagonal 0..1
+    start = np.array([r, g, b], dtype=np.float64)
+    end = start * 0.8
+    pixels = (start * (1 - blend) + end * blend).astype(np.uint8)
+    img = Image.fromarray(pixels, "RGB")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default()
+    draw.text((size / 2, 120), (name or "Model")[:20], fill=(255, 255, 255), font=font, anchor="mm")
+    draw.text((size / 2, 145), f"{file_type or 'GLB'} Model", fill=(235, 235, 245), font=font, anchor="mm")
+    Path(png_path).parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = f"{png_path}.tmp{os.getpid()}"
+    img.save(tmp_path, "PNG")
+    os.replace(tmp_path, png_path)

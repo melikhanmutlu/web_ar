@@ -2499,7 +2499,7 @@ def before_request():
     if setting_bool("maintenance_mode", False):
         exempt = request.path.startswith(
             ("/admin", "/login", "/logout", "/static", "/favicon.ico",
-             "/robots.txt", "/sitemap.xml")
+             "/robots.txt", "/sitemap.xml", "/healthz")
         )
         is_admin = current_user.is_authenticated and getattr(
             current_user, "is_admin", False

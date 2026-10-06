@@ -38,6 +38,6 @@ ENV FLASK_APP=app.py
 # ADMIN_EMAILS promotion, leaving no admin account on a Dockerfile deploy.
 CMD export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/lib:/usr/lib:$(dirname "$(find /usr/lib -name 'libassimp.so*' 2>/dev/null | head -n 1)")" && \
     (python scripts/heal_alembic.py || true) && \
-    (SKIP_DB_BOOTSTRAP=1 flask db upgrade || echo "[FATAL] flask db upgrade failed -- deploying anyway on the assumption stamp-on-boot will handle a legacy DB, but if alembic_version already exists this means the schema is now STALE relative to the code. Check logs above for the real error." >&2) && \
+    (SKIP_DB_BOOTSTRAP=1 flask db upgrade || { echo "[FATAL] flask db upgrade failed -- refusing to start on a stale schema; the previous deployment keeps serving. Check the error above." >&2; exit 1; }) && \
     (while true; do python worker.py; echo "worker exited, restarting in 3s"; sleep 3; done &) && \
     exec gunicorn app:app --bind 0.0.0.0:${PORT:-5000} --workers 1 --worker-class gthread --threads 8 --timeout 120 --log-level info

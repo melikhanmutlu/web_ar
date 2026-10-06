@@ -67,6 +67,19 @@ def healthz():
     return jsonify(result)
 
 
+@health_bp.route("/healthz/live")
+def healthz_live():
+    """Web-only readiness for the platform deploy healthcheck: app imported and
+    the database answers. Unlike /healthz it ignores worker liveness, so a
+    worker still starting up (or busy on a long job) can't fail a deploy."""
+    try:
+        db.session.execute(db.text("SELECT 1"))
+    except Exception:
+        logger.exception("Database health check failed")
+        return jsonify({"status": "unhealthy", "database": "down"}), 503
+    return jsonify({"status": "ok"})
+
+
 @health_bp.route("/healthz/worker")
 def healthz_worker():
     """Dedicated worker-liveness probe, so a deployment can watch the worker

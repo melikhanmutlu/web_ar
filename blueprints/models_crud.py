@@ -11,6 +11,7 @@ from flask import Blueprint, current_app, flash, jsonify, redirect, request, sen
 from flask_login import current_user, login_required
 from slugify import slugify
 from sqlalchemy.orm import Session
+from werkzeug.exceptions import NotFound
 
 from services.time_utils import datetime
 from models import Folder, UserModel, db
@@ -472,6 +473,9 @@ def delete_folder(folder_id):
         current_app.logger.info(f"Folder {folder_id} deleted successfully")
         return jsonify({"success": True, "message": "Folder deleted successfully"}), 200
 
+    except NotFound:
+        # get_or_404 must surface as a 404, not be swallowed into a 500
+        raise
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error deleting folder {folder_id}: {str(e)}")
@@ -515,6 +519,9 @@ def move_model():
 
         return jsonify({"success": True, "message": "Model moved successfully"}), 200
 
+    except NotFound:
+        # get_or_404 must surface as a 404, not be swallowed into a 500
+        raise
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error moving model: {str(e)}")
@@ -537,6 +544,9 @@ def restore_model(model_id):
             model.folder_id = None
         db.session.commit()
         return jsonify({"success": True}), 200
+    except NotFound:
+        # get_or_404 must surface as a 404, not be swallowed into a 500
+        raise
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error restoring model {model_id}: {str(e)}")
@@ -609,6 +619,9 @@ def rename_folder(folder_id):
         folder.name = new_name
         db.session.commit()
         return jsonify({"success": True, "name": folder.name}), 200
+    except NotFound:
+        # get_or_404 must surface as a 404, not be swallowed into a 500
+        raise
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error renaming folder {folder_id}: {str(e)}")
@@ -656,6 +669,9 @@ def move_selected_models():
             {"success": True, "message": f"Successfully moved {len(models)} models"}
         )
 
+    except NotFound:
+        # get_or_404 must surface as a 404, not be swallowed into a 500
+        raise
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error moving models: {str(e)}")

@@ -38,6 +38,18 @@ def version_path(version):
     return version.filename
 
 
+def invalidate_lods(model_id):
+    """Drop a model's LOD rows and files. LODs are simplified copies of
+    model.glb, so any rewrite of model.glb makes them stale (they would keep
+    serving the pre-edit geometry). Caller commits. Best-effort on files."""
+    from models import ModelLOD
+
+    lods = ModelLOD.query.filter_by(model_id=model_id).all()
+    for lod in lods:
+        _remove_quietly(os.path.join(_model_dir(model_id), os.path.basename(lod.filename)))
+        db.session.delete(lod)
+
+
 def bump_asset_version(model_id):
     """Increment UserModel.asset_version (the ?v= cache-buster for GLB, USDZ and
     thumbnail URLs) after model.glb/thumbnail was rewritten. Best-effort: a
@@ -46,6 +58,7 @@ def bump_asset_version(model_id):
         model = db.session.get(UserModel, model_id)
         if model:
             model.bump_asset_version()
+            invalidate_lods(model_id)
             db.session.commit()
     except Exception as e:
         logger.warning(f"Failed to bump asset_version for {model_id}: {e}")
@@ -272,6 +285,7 @@ def restore_version(model_id, version_number):
             if restored_scale is not None:
                 model.cumulative_scale = float(restored_scale)
             model.bump_asset_version()
+            invalidate_lods(model_id)
             db.session.commit()
 
         # Snapshot of the restored state (cumulative_scale_after is read from

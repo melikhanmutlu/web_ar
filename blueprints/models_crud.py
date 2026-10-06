@@ -22,7 +22,7 @@ from services.storage_quota import (
     _storage_quota_bytes,
     _storage_usage_for,
 )
-from version_manager import create_version
+from version_manager import create_version, invalidate_lods
 
 models_crud_bp = Blueprint("models_crud", __name__)
 logger = logging.getLogger(__name__)
@@ -229,6 +229,7 @@ def update_model_color():
             os.replace(temp_output, output_path)
             model.color = color
             model.bump_asset_version()
+            invalidate_lods(model_id)
             model.validation_report = app_module.asset_quality.inspect(output_path)
             db.session.commit()
             # Regenerate the USDZ so iOS Quick Look (served via ios-src) reflects

@@ -11,7 +11,7 @@ from glb_modifier import modify_glb
 from models import AIGenerationJob, MaterialPreset, OrganizationMember, PromptPreset, db
 from services.model_permissions import check_model_mutation_allowed, get_live_model
 from services.org_membership import _organization_membership
-from version_manager import create_version
+from version_manager import create_version, invalidate_lods
 
 material_presets_bp = Blueprint("material_presets", __name__)
 
@@ -141,6 +141,7 @@ def apply_model_material_preset(model_id):
     )
     model.validation_report = app_module.asset_quality.inspect(source)
     model.bump_asset_version()
+    invalidate_lods(model_id)
     db.session.commit()
     return jsonify({"success": True, "preset": preset, "viewer_url": url_for("viewer.view_model", model_id=model_id)})
 

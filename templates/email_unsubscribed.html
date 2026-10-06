@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>{{ title }} — arvision</title>
+    <title>{{ title }} — ARVision</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
 </head>
 <body>
@@ -13,7 +13,11 @@
         <div class="av-card av-stack">
             <h1 class="home-title">{{ title }}</h1>
             <p class="av-card-desc">{{ message }}</p>
-            {% if ok %}
+            {% if confirm %}
+            <form method="post">
+                <button type="submit" class="btn-primary" style="width:100%">Unsubscribe</button>
+            </form>
+            {% elif ok %}
             <p class="av-card-desc">Receipts, password resets and other account emails are not affected. You can change this any time in your <a href="{{ url_for('auth.profile') }}">profile</a>.</p>
             {% endif %}
             <a class="btn-primary" href="{{ url_for('main.index') }}" style="text-align:center">Go to arvision</a>

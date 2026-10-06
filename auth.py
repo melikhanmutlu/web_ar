@@ -339,9 +339,10 @@ def update_email_preferences():
 
 @auth.route('/unsubscribe/<token>', methods=['GET', 'POST'])
 def unsubscribe(token):
-    """One-click unsubscribe from the signed link in optional emails (GET from
-    the link, POST from RFC 8058 mail-client one-click). The token proves
-    which account and category; no login is needed."""
+    """Unsubscribe from the signed link in optional emails. GET only shows a
+    confirm button: mail scanners and link prefetchers follow GET links, so a
+    GET must not change anything. POST (the button, or an RFC 8058 mail-client
+    one-click) applies it. The token proves account and category; no login."""
     from services.email_preferences import CATEGORIES, read_unsubscribe_token, set_pref
     parsed = read_unsubscribe_token(token)
     user = db.session.get(User, parsed[0]) if parsed else None
@@ -350,6 +351,10 @@ def unsubscribe(token):
                                title='Link not valid',
                                message='This unsubscribe link is invalid.'), 400
     category = parsed[1]
+    if request.method == 'GET':
+        return render_template('email_unsubscribed.html', ok=True, confirm=True,
+                               title='Unsubscribe?',
+                               message=f'Stop sending: {CATEGORIES[category][1]}?')
     set_pref(user, category, False)
     db.session.commit()
     return render_template('email_unsubscribed.html', ok=True, title='Unsubscribed',

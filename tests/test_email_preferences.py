@@ -98,7 +98,12 @@ def test_transactional_senders_have_no_unsubscribe(client, smtp):
 def test_unsubscribe_link_turns_category_off(client):
     user = _user("unsub1")
     token = prefs.unsubscribe_url(user, "onboarding").rsplit("/", 1)[1]
+    # GET (what a link scanner does) only asks for confirmation.
     r = client.get(f"/unsubscribe/{token}")
+    assert r.status_code == 200 and "Unsubscribe?" in r.get_data(as_text=True)
+    db.session.refresh(user)
+    assert user.email_onboarding is True
+    r = client.post(f"/unsubscribe/{token}")
     assert r.status_code == 200 and "Unsubscribed" in r.get_data(as_text=True)
     db.session.refresh(user)
     assert user.email_onboarding is False

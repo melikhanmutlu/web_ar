@@ -4,6 +4,9 @@ These use raw SQL deletes on purpose — ORM delete-orphan cascades are
 covered elsewhere; this proves the database itself stays consistent when
 rows are removed outside the ORM (bulk jobs, psql, another service).
 """
+import os
+
+import pytest
 from sqlalchemy import text
 from werkzeug.security import generate_password_hash
 
@@ -29,6 +32,10 @@ def _make_user(name):
     return user
 
 
+@pytest.mark.skipif(
+    not os.environ.get("DATABASE_URL", "").startswith("sqlite"),
+    reason="PRAGMA foreign_keys is SQLite-specific; PostgreSQL always enforces FKs",
+)
 def test_sqlite_connections_enforce_foreign_keys(client):
     assert db.session.execute(text("PRAGMA foreign_keys")).scalar() == 1
 

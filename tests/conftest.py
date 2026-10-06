@@ -8,16 +8,74 @@ import tempfile
 # real instance/app.db. Setting DATABASE_URL here (config.py reads it at import)
 # guarantees isolation. A temp file (not :memory:) keeps the same DB across the
 # multiple connections SQLAlchemy may open during a test.
-_TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db", prefix="arvision_test_")
-os.close(_TEST_DB_FD)
-os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH}"
+#
+# TEST_DATABASE_URL (e.g. postgresql+psycopg2://user:pw@host/db) points the suite
+# at an external database instead — CI uses it to run the tests on PostgreSQL,
+# the production dialect. Under pytest-xdist each worker gets its own database
+# (<name>_<worker id>, created here and dropped at exit) so workers never share
+# tables; SQLite already gets one temp file per process.
+_EXTERNAL_DB_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
+
+
+def _per_worker_database(url_str):
+    """Under xdist, create/return a URL for a worker-private database."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if not worker:
+        return url_str
+    import atexit
+
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import make_url
+
+    url = make_url(url_str)
+    if not url.get_backend_name().startswith("postgresql"):
+        return url_str
+    worker_db = f"{url.database}_{worker}"
+    admin = create_engine(url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{worker_db}"'))
+        conn.execute(text(f'CREATE DATABASE "{worker_db}"'))
+
+    def _drop():
+        try:
+            with admin.connect() as conn:
+                conn.execute(text(f'DROP DATABASE IF EXISTS "{worker_db}" WITH (FORCE)'))
+        except Exception:
+            pass
+        admin.dispose()
+
+    atexit.register(_drop)
+    return url.set(database=worker_db).render_as_string(hide_password=False)
+
+
+if _EXTERNAL_DB_URL:
+    os.environ["DATABASE_URL"] = _per_worker_database(_EXTERNAL_DB_URL)
+else:
+    _TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db", prefix="arvision_test_")
+    os.close(_TEST_DB_FD)
+    os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB_PATH}"
 # Setting DATABASE_URL trips config.py's production detection, which then
 # requires a SECRET_KEY — provide a fixed test one so import succeeds.
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key")
 
+import threading
+import time
+
 import pytest
 from app import app, db, limiter
 from models import User, Folder
+
+def _join_new_threads(before, timeout=30):
+    """Wait for background threads a test started (inline conversion, USDZ
+    refresh) before the schema is dropped under them — otherwise they hit
+    "relation does not exist"/IntegrityError after the test ended and leak
+    into the next test."""
+    deadline = time.monotonic() + timeout
+    for t in threading.enumerate():
+        if t is threading.current_thread() or t in before:
+            continue
+        t.join(max(0, deadline - time.monotonic()))
+
 
 @pytest.fixture
 def client():
@@ -49,6 +107,8 @@ def client():
     # cover rate-limit/lockout behavior flip this back on for their own body.
     limiter.enabled = False
 
+    _threads_before = set(threading.enumerate())
+
     with app.test_client() as client:
         with app.app_context():
             db.drop_all()
@@ -59,6 +119,7 @@ def client():
             from services.plans import seed_plans_if_empty
             seed_plans_if_empty()
             yield client
+            _join_new_threads(_threads_before)
             db.session.remove()
             db.drop_all()
     limiter.enabled = True

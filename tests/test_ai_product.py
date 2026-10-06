@@ -53,7 +53,10 @@ def test_generation_variant_applies_preset_and_parent(client, monkeypatch):
     monkeypatch.setattr(
         ai_generator,
         "start_text_to_3d",
-        lambda prompt, **kw: captured.setdefault("prompt", prompt) or "task-id",
+        # Return a short task id like Meshy does (the column is VARCHAR(80); the
+        # old `setdefault(...) or "task-id"` returned the prompt itself, which
+        # only fit because SQLite ignores VARCHAR lengths).
+        lambda prompt, **kw: (captured.setdefault("prompt", prompt), "task-id")[1],
     )
     response = client.post("/api/generate-3d", json={
         "mode": "text",

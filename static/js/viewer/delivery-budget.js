@@ -45,10 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
             { mode: 'compress' }, 'Optimizing for mobile… this can take a minute.'));
     }
     if (simplifyBtn) {
-        simplifyBtn.addEventListener('click', () => {
+        simplifyBtn.addEventListener('click', async () => {
             const target = parseInt(simplifyBtn.dataset.targetTriangles, 10);
-            if (!window.confirm('Simplify this model to about ' + target.toLocaleString() +
-                ' triangles? Fine detail is lost, but your original is kept in the History tab.')) return;
+            if (!await window.arConfirm('Simplify this model to about ' + target.toLocaleString() +
+                ' triangles? Fine detail is lost, but your original is kept in the History tab.',
+                { confirmLabel: 'Simplify' })) return;
             run({ mode: 'simplify', target_triangles: target },
                 'Simplifying for mobile… this can take a few minutes.');
         });

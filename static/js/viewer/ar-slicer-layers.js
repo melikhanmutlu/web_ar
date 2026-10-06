@@ -999,8 +999,8 @@ void main() {
             });
 
             document.getElementById('purgeHiddenLayers')?.addEventListener('click', async (e) => {
-                if (!window.confirm('Permanently delete the hidden layers from this model? You can still restore an earlier version from the History tab.')) return;
                 const btn = e.currentTarget;
+                if (!await window.arConfirm('Permanently delete the hidden layers from this model? You can still restore an earlier version from the History tab.', { confirmLabel: 'Delete layers', danger: true })) return;
                 btn.disabled = true;
                 try {
                     const response = await fetch('/save_modifications', {

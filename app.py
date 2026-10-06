@@ -2527,6 +2527,37 @@ def ai_trial_needs_verification(user):
         user, effective_ai_monthly_limit(user, global_default_limit)) > 0
 
 
+def ai_quota_summary(user):
+    """What the Studio AI tab needs to render the right message/CTA.
+
+    state: "ok" (can generate), "needs_verification" (a Free trial exists but
+    the email isn't verified), "trial_exhausted" (verified Free user used the
+    lifetime trial) or "exhausted" (monthly quota used up, no credits).
+    kind: "trial" (lifetime allowance) or "monthly" (rolling 30 days).
+    """
+    from services.plans import effective_ai_monthly_limit
+    _exceeded, used, limit = _ai_quota_state(user.id)
+    monthly = effective_ai_monthly_limit(
+        user, setting_int("ai_monthly_limit", app.config.get("AI_GEN_MONTHLY_LIMIT", 0)))
+    trial_total = _free_ai_trial_allowance(user, monthly)
+    needs_verification = ai_trial_needs_verification(user)
+    kind = "trial" if trial_total and not needs_verification else "monthly"
+    remaining = max(0, limit - used)
+    credits = user.ai_credit_balance or 0
+    if remaining > 0 or credits > 0:
+        state = "ok"
+    elif needs_verification:
+        state = "needs_verification"
+    elif kind == "trial":
+        state = "trial_exhausted"
+    else:
+        state = "exhausted"
+    return {
+        "used": used, "limit": limit, "remaining": remaining, "credits": credits,
+        "kind": kind, "state": state, "trial_total": trial_total,
+    }
+
+
 def _consume_ai_allowance(user):
     """Decide whether an AI generation may proceed for `user`, consuming one
     prepaid overage credit when the monthly plan quota is exhausted.

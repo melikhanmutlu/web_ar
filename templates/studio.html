@@ -385,15 +385,29 @@
                     </div>
                 </div>
 
-                <button type="button" id="generateBtn" class="btn-primary">
+                {% set ai_locked = ai_quota and ai_quota.state in ('needs_verification', 'trial_exhausted', 'exhausted') %}
+                <button type="button" id="generateBtn" class="btn-primary"{% if ai_locked %} disabled data-locked="1" aria-describedby="genQuotaNote"{% endif %}>
                     <i data-lucide="sparkles" style="width:1.1rem;height:1.1rem;"></i>
                     Generate 3D Model
                 </button>
                 <p class="av-card-desc" style="text-align:center;" id="genQuotaNote">
-                    {% if ai_quota %}
-                    <span id="genQuotaRemaining">{{ ai_quota.remaining }}</span> of {{ ai_quota.limit }} generations left today
+                    {% if not ai_quota %}
+                    Uses AI credits · subject to a monthly limit.
+                    {% elif ai_quota.state == 'needs_verification' %}
+                    Verify your email to unlock {{ ai_quota.trial_total }} free AI generations.
+                    <a href="{{ url_for('auth.profile') }}" style="font-weight:600;">Verify email</a>
+                    {% elif ai_quota.state == 'trial_exhausted' %}
+                    You've used all {{ ai_quota.limit }} free trial generations.
+                    <a href="{{ url_for('main.pricing') }}" style="font-weight:600;">Upgrade for monthly generations</a>
+                    {% elif ai_quota.state == 'exhausted' %}
+                    You've used all {{ ai_quota.limit }} generations for this month.
+                    <a href="{{ url_for('main.pricing') }}" style="font-weight:600;">Upgrade or buy credits</a>
+                    {% elif ai_quota.kind == 'trial' %}
+                    <span id="genQuotaRemaining">{{ ai_quota.remaining }}</span> of {{ ai_quota.limit }} free trial generations left
+                    {% elif ai_quota.remaining > 0 %}
+                    <span id="genQuotaRemaining">{{ ai_quota.remaining }}</span> of {{ ai_quota.limit }} generations left this month{% if ai_quota.credits %} · {{ ai_quota.credits }} extra credit{{ '' if ai_quota.credits == 1 else 's' }}{% endif %}
                     {% else %}
-                    Uses AI credits · subject to a daily limit.
+                    Monthly generations used · using {{ ai_quota.credits }} extra credit{{ '' if ai_quota.credits == 1 else 's' }}
                     {% endif %}
                 </p>
             </div>
@@ -479,8 +493,8 @@
             const files = dt.files;
 
             if (files.length > 0) {
-                handleFiles(files);
                 fileInput.files = files; // Set the files to the input element
+                handleFiles(files); // may clear the input again if the selection is rejected
             }
         });
 
@@ -493,8 +507,8 @@
         const submitBtn = document.getElementById('submitBtn');
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
+                // handleFiles enables/disables the submit button itself.
                 handleFiles(e.target.files);
-                submitBtn.disabled = false; // Enable submit button
             }
         });
 
@@ -556,10 +570,14 @@
             return '.' + file.name.split('.').pop().toLowerCase();
         }
 
+        // Returns true when the selection is usable. On rejection the specific
+        // error is shown (displayError also clears the input and keeps the
+        // submit button disabled) so a later submit can't overwrite it with a
+        // generic "select a file" message.
         function handleFiles(files) {
             if (files.length > 1) {
                 handleMultipleFiles(files);
-                return;
+                return pendingBatchFiles.length > 0;
             }
             const file = files[0];
             if (file) {
@@ -568,13 +586,13 @@
 
                 if (!VALID_UPLOAD_EXTENSIONS.includes(fileExtension)) {
                     displayError('Invalid file type. Supported: {{ upload_extensions | map("upper") | join(", ") }}.');
-                    return;
+                    return false;
                 }
 
                 // Upload policy is rendered from the backend's single source of truth.
                 if (file.size > UPLOAD_MAX_BYTES) {
-                    displayError('File size exceeds {{ upload_max_mb }}MB limit. Please choose a smaller file.');
-                    return;
+                    displayError('File size exceeds your plan\'s {{ upload_max_mb }}MB limit. Please choose a smaller file.');
+                    return false;
                 }
 
                 // Update the filename display
@@ -583,6 +601,8 @@
                 selectedFileName.classList.remove('hidden');
                 document.getElementById('batchNote')?.classList.add('hidden');
 
+                // A valid new selection replaces any earlier rejection message.
+                uploadForm.querySelector('.av-alert--error')?.remove();
                 // Enable submit button
                 const submitBtn = document.getElementById('submitBtn');
                 if (submitBtn) submitBtn.disabled = false;
@@ -656,6 +676,7 @@
             selectedFileName.innerHTML = summary;
             selectedFileName.classList.remove('hidden');
             document.getElementById('batchNote')?.classList.remove('hidden');
+            uploadForm.querySelector('.av-alert--error')?.remove();
             if (submitBtn) submitBtn.disabled = false;
 
             // Batch mode has no per-file MTL/texture/source-unit controls.
@@ -684,6 +705,10 @@
             // Clear the file input
             fileInput.value = '';
             selectedFileName.classList.add('hidden');
+            pendingBatchFiles = [];
+            document.getElementById('batchNote')?.classList.add('hidden');
+            const failedSubmitBtn = document.getElementById('submitBtn');
+            if (failedSubmitBtn) failedSubmitBtn.disabled = true;
         }
 
         function highlight(e) {
@@ -1623,7 +1648,7 @@
                 errBox.classList.remove('hidden');
                 setProgress(0, 'Failed');
             } finally {
-                genBtn.disabled = false;
+                genBtn.disabled = genBtn.dataset.locked === '1';
             }
         });
     })();

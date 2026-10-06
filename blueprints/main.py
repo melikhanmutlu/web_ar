@@ -210,11 +210,19 @@ def studio():
     ai_remove_lighting_supported = ai_generator.supports_remove_lighting()
     ai_quota = None
     if current_user.is_authenticated:
-        exceeded, used, limit = app_module._ai_quota_state(current_user.id)
-        ai_quota = {"used": used, "limit": limit, "remaining": max(0, limit - used)}
+        ai_quota = app_module.ai_quota_summary(current_user)
+    # Render the limit this visitor will actually be held to (admin setting /
+    # plan), not just the global hard ceiling, so the client rejects oversized
+    # files with the same number the server enforces.
+    from blueprints.upload import _effective_max_upload_mb
+    hard_cap_mb = app_module.app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
+    effective_mb = _effective_max_upload_mb()
+    upload_max_mb = min(effective_mb, hard_cap_mb) if effective_mb else hard_cap_mb
     return render_template("studio.html",
                             ai_remove_lighting_supported=ai_remove_lighting_supported,
                             ai_quota=ai_quota,
+                            upload_max_mb=upload_max_mb,
+                            upload_max_bytes=upload_max_mb * 1024 * 1024,
                             worker_poll_interval_ms=int(WORKER_POLL_INTERVAL * 1000))
 
 

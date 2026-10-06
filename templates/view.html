@@ -877,6 +877,22 @@
         initialToolsSection: {{ initial_tools_section | default(none) | tojson }},
       };
     </script>
+    <script>
+      // The anonymous uploader's edit_token arrives in the URL once (the session
+      // keeps the capability). Drop it from the address bar right away and make
+      // every shareable link (QR, copy) the canonical token-free URL.
+      window.canonicalViewerUrl = function () { return location.origin + location.pathname; };
+      (function () {
+        try {
+          var params = new URLSearchParams(location.search);
+          if (params.has('edit_token')) {
+            params.delete('edit_token');
+            var qs = params.toString();
+            history.replaceState(history.state, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+          }
+        } catch (e) { /* non-critical */ }
+      })();
+    </script>
     <script src="{{ url_for('static', filename='js/viewer/fullscreen-modal.js') }}"></script>
     <!-- Layers (visibility / color / explode) + slicer. Not loaded on the
          read-only homepage demo, which ships no editing JS; all mutating
@@ -907,6 +923,42 @@
          .nav-actions classes (defined above). -->
     {% set viewer_chrome = true %}
     {% include '_site_header.html' %}
+
+    {% if anon_edit_token %}
+    <div id="anonOwnerBanner" role="region" aria-label="Save your edit access" hidden
+         style="position:fixed;left:12px;bottom:12px;z-index:60;max-width:min(26rem,calc(100vw - 24px));padding:.85rem 1rem;border-radius:12px;border:1px solid var(--color-gray-300);background:var(--color-white);color:var(--color-gray-900);box-shadow:0 8px 28px rgba(0,0,0,.18);font-size:.85rem;line-height:1.4;">
+        <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:flex-start;">
+            <strong>Save your edit link</strong>
+            <button type="button" id="anonBannerDismiss" aria-label="Dismiss" style="background:none;border:0;cursor:pointer;color:inherit;font-size:1.1rem;line-height:1;padding:0;">&times;</button>
+        </div>
+        <p style="margin:.35rem 0 .6rem;">This model has no account. Only this browser can edit it right now &mdash; keep the private edit link to edit it later, and never share it.</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <button type="button" id="anonCopyEditLink" class="btn-secondary" style="padding:.4rem .75rem;">Copy private edit link</button>
+            <a href="{{ url_for('auth.register', next='/view/' ~ model.id) }}" class="btn-primary" style="padding:.4rem .75rem;text-decoration:none;width:auto;">Create an account to keep this model</a>
+        </div>
+    </div>
+    <script>
+      (function () {
+        var banner = document.getElementById('anonOwnerBanner');
+        var key = 'anonBannerDismissed:' + {{ model.id | tojson }};
+        var token = {{ anon_edit_token | tojson }};
+        try { if (sessionStorage.getItem(key)) return; } catch (e) {}
+        banner.hidden = false;
+        document.getElementById('anonBannerDismiss').addEventListener('click', function () {
+          banner.hidden = true;
+          try { sessionStorage.setItem(key, '1'); } catch (e) {}
+        });
+        document.getElementById('anonCopyEditLink').addEventListener('click', function () {
+          var link = location.origin + location.pathname + '?edit_token=' + encodeURIComponent(token);
+          var btn = this;
+          function ok() { btn.textContent = 'Edit link copied'; }
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(link).then(ok, function () { window.prompt('Copy your private edit link', link); });
+          } else { window.prompt('Copy your private edit link', link); }
+        });
+      })();
+    </script>
+    {% endif %}
 
     <!-- QR Modal -->
     <div id="qrModal" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
@@ -1624,6 +1676,9 @@
             <button id="arButton" class="tb-btn ar-btn" title="View in AR"><i data-lucide="box"></i><span class="tb-label">AR</span></button>
             <button id="cameraOverlayButton" class="tb-btn" title="Camera overlay — freely move the model over your real object, no surface lock"><i data-lucide="scan"></i><span class="tb-label">Scan</span></button>
             <button id="vrButton" class="tb-btn" title="View in VR" onclick="window.open('/vr/{{ model_id }}', '_blank')"><i data-lucide="eye"></i><span class="tb-label">VR</span></button>
+            {% if is_owner %}
+            <button id="shareButton" class="tb-btn" type="button" title="Share" data-share-dialog data-model-id="{{ model.id }}" data-model-name="{{ display_name }}" data-visibility="{{ model.visibility }}"><i data-lucide="share-2"></i><span class="tb-label">Share</span></button>
+            {% endif %}
             <button id="qrButton" class="tb-btn" title="QR Code"><i data-lucide="qr-code"></i><span class="tb-label">QR</span></button>
             <div class="download-menu" id="downloadMenu">
                 <button id="downloadButton" class="tb-btn" title="Download" data-formats="glb{% if can_edit %},stl,obj,ply{% endif %}"><i data-lucide="download"></i><span class="tb-label">Download</span></button>
@@ -1852,6 +1907,7 @@
     <script src="{{ url_for('static', filename='js/viewer/annotations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/versions.js') }}"></script>
     {% if is_owner %}
+    <script src="{{ url_for('static', filename='js/viewer/share-dialog.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
     <script src="{{ url_for('static', filename='js/viewer/embed-panel.js') }}"></script>
     {% endif %}

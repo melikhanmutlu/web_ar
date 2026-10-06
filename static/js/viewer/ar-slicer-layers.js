@@ -51,7 +51,7 @@
                 if (qrContainer) {
                     qrContainer.innerHTML = '';
                     new QRCode(qrContainer, {
-                        text: window.location.href,
+                        text: window.canonicalViewerUrl(),
                         width: 200,
                         height: 200,
                         colorDark: '#000000',
@@ -80,7 +80,7 @@
                 const el = document.getElementById('qrcode');
                 if (qrcode) { qrcode.clear(); el.innerHTML = ''; }
                 qrcode = new QRCode(el, {
-                    text: window.location.href,
+                    text: window.canonicalViewerUrl(),
                     width: 120,
                     height: 120,
                     colorDark: '#000000',

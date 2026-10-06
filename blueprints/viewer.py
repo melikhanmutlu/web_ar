@@ -271,6 +271,17 @@ def view_model(model_id):
     # viewers whose mutations the backend would actually accept.
     can_edit = is_owner or model.user_id is None
 
+    # An anonymous uploader's edit capability lives in the session (the URL
+    # token is stripped client-side after load). Expose it to that browser only,
+    # so the "save your edit link" banner can offer it explicitly.
+    anon_edit_token = None
+    if model.user_id is None and model.edit_token_hash:
+        from flask import session
+        from werkzeug.security import check_password_hash
+        session_token = session.get(f"model_edit_token:{model_id}")
+        if session_token and check_password_hash(model.edit_token_hash, session_token):
+            anon_edit_token = session_token
+
     response = make_response(render_template(
         "view.html",
         model_id=model_id,
@@ -289,6 +300,7 @@ def view_model(model_id):
         is_owner=is_owner,
         viewer_settings=resolved_viewer_settings(model),
         can_edit=can_edit,
+        anon_edit_token=anon_edit_token,
         seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

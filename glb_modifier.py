@@ -232,6 +232,55 @@ def _resolve_layer_node(mesh_nodes, name, occurrence):
     return None, None
 
 
+HIDDEN_LAYER_EXTRAS_KEY = "arvision_hidden"
+
+
+def count_hidden_layers(glb_path):
+    """Number of layers hidden by a previous save (nodes flagged in extras),
+    read from the GLB's JSON chunk only so it stays cheap on big files."""
+    import json
+    import struct
+
+    try:
+        with open(glb_path, "rb") as f:
+            header = f.read(20)
+            if len(header) < 20 or header[:4] != b"glTF":
+                return 0
+            json_length = struct.unpack("<I", header[12:16])[0]
+            doc = json.loads(f.read(json_length))
+        return sum(
+            1 for node in doc.get("nodes", [])
+            if isinstance(node.get("extras"), dict) and HIDDEN_LAYER_EXTRAS_KEY in node["extras"]
+        )
+    except Exception:
+        return 0
+
+
+def restore_hidden_layers(gltf):
+    """Re-attach every node that apply_layer_modifications detached (flagged
+    in its extras) to its original parent / scene root."""
+    restored = 0
+    for node_idx, node in enumerate(gltf.nodes or []):
+        info = node.extras.get(HIDDEN_LAYER_EXTRAS_KEY) if isinstance(node.extras, dict) else None
+        if info is None:
+            continue
+        parent = info.get("parent") if isinstance(info, dict) else None
+        position = info.get("index", 0) if isinstance(info, dict) else 0
+        if parent is not None and 0 <= parent < len(gltf.nodes):
+            siblings = gltf.nodes[parent].children = list(gltf.nodes[parent].children or [])
+        else:
+            scene_idx = gltf.scene if gltf.scene is not None else 0
+            scene = gltf.scenes[scene_idx]
+            siblings = scene.nodes = list(scene.nodes or [])
+        if node_idx not in siblings:
+            siblings.insert(min(max(position, 0), len(siblings)), node_idx)
+        del node.extras[HIDDEN_LAYER_EXTRAS_KEY]
+        restored += 1
+    if restored:
+        logger.info(f"Restored {restored} hidden layer node(s)")
+    return gltf
+
+
 def apply_layer_modifications(gltf, layer_mods):
     """
     Apply per-layer (per-mesh-node) visibility and color overrides baked
@@ -246,6 +295,9 @@ def apply_layer_modifications(gltf, layer_mods):
     """
     if not gltf.nodes or not gltf.meshes:
         return gltf
+
+    if layer_mods.get('restore_hidden'):
+        gltf = restore_hidden_layers(gltf)
 
     mesh_nodes = _iter_gltf_mesh_nodes(gltf)
 
@@ -285,6 +337,23 @@ def apply_layer_modifications(gltf, layer_mods):
             hidden_targets.add(node_idx)
 
     if hidden_targets:
+        # Hiding detaches the node from the scene (so the viewer and AR skip
+        # it) but keeps its mesh in the file. Flag it, with where it hung, so
+        # restore_hidden_layers() can bring it back.
+        scene_idx = gltf.scene if gltf.scene is not None else 0
+        scene_roots = gltf.scenes[scene_idx].nodes or [] if gltf.scenes else []
+        for target in hidden_targets:
+            parent, index = None, 0
+            for candidate_idx, candidate in enumerate(gltf.nodes):
+                if target in (candidate.children or []):
+                    parent, index = candidate_idx, list(candidate.children).index(target)
+                    break
+            else:
+                index = list(scene_roots).index(target) if target in scene_roots else 0
+            target_node = gltf.nodes[target]
+            if not isinstance(target_node.extras, dict):
+                target_node.extras = {}
+            target_node.extras[HIDDEN_LAYER_EXTRAS_KEY] = {"parent": parent, "index": index}
         for node in gltf.nodes:
             if node.children:
                 node.children = [c for c in node.children if c not in hidden_targets]

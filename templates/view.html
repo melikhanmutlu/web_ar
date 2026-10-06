@@ -854,6 +854,7 @@
         // built when the server would actually accept the mutation.
         canEdit: {{ can_edit | tojson }},
         isOwner: {{ is_owner | tojson }},
+        hiddenLayerCount: {{ hidden_layer_count | default(0) | tojson }},
         isAuthenticated: {{ current_user.is_authenticated | tojson }},
         currentUserId: {{ (current_user.id if current_user.is_authenticated else None) | tojson }},
         cumulativeScale: {{ (model.cumulative_scale if model.cumulative_scale else None) | tojson }},
@@ -1371,7 +1372,10 @@
                         <i data-lucide="expand" style="width:0.75rem;height:0.75rem;"></i>
                         Save Exploded Layout
                     </button>
-                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
+                    <p class="tp-note">Visibility and color changes are included the next time you press Save & Apply to AR. Hidden layers are left out of the viewer and AR but stay inside the saved file, so they can be restored. Explode is preview-only unless you press Save Exploded Layout — that permanently moves the parts, including in AR.</p>
+                    {% if hidden_layer_count %}
+                    <button id="restoreHiddenLayers" class="tp-btn-full" style="margin-top:0.35rem;">Restore {{ hidden_layer_count }} hidden layer{{ '' if hidden_layer_count == 1 else 's' }}</button>
+                    {% endif %}
                     {% else %}
                     <p class="tp-note">Preview only — visibility, color and explode changes reset on reload.</p>
                     {% endif %}

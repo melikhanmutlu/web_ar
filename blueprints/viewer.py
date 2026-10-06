@@ -284,6 +284,12 @@ def view_model(model_id):
     # Delivery budget (asset_quality thresholds): tell the owner when the
     # model is heavy for phones; offer one-click meshopt compression unless
     # the file is already compressed.
+    hidden_layer_count = 0
+    if can_edit:
+        from glb_modifier import count_hidden_layers
+
+        hidden_layer_count = count_hidden_layers(model.glb_path)
+
     delivery_budget = None
     report = model.validation_report if is_owner else None
     if isinstance(report, dict):
@@ -321,6 +327,7 @@ def view_model(model_id):
         anon_edit_token=anon_edit_token,
 
         delivery_budget=delivery_budget,
+        hidden_layer_count=hidden_layer_count,
         seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

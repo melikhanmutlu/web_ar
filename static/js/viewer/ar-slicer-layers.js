@@ -973,6 +973,31 @@ void main() {
                 document.getElementById('saveExplodedLayout')?.classList.toggle('hidden', t <= 0);
             });
 
+            document.getElementById('restoreHiddenLayers')?.addEventListener('click', async (e) => {
+                const btn = e.currentTarget;
+                btn.disabled = true;
+                try {
+                    const response = await fetch('/save_modifications', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model_id: window.VIEWER_CONFIG.modelDbId,
+                            modifications: { layers: { restore_hidden: true } }
+                        })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        window.location.reload();
+                        return;
+                    }
+                    alert('Restore failed: ' + (result.error || 'Unknown error'));
+                } catch (err) {
+                    console.error('Restore hidden layers error:', err);
+                    alert('Failed to restore hidden layers.');
+                }
+                btn.disabled = false;
+            });
+
             document.getElementById('resetLayers')?.addEventListener('click', () => {
                 modelLayers.forEach(layer => {
                     layer.node.visible = layer.origVisible;

@@ -139,6 +139,9 @@ def apply_modifications():
         # texture exactly like Save does — otherwise download ≠ save ≠ preview.
         if isinstance(modifications.get("material"), dict):
             modifications["material"]["tint_textures"] = True
+        for _block in modifications.get("material_targets") or []:
+            if isinstance(_block, dict):
+                _block["tint_textures"] = True
 
         # Create output filename with timestamp
         output_filename = f"modified_{int(time.time())}_{uuid.uuid4().hex[:8]}.glb"
@@ -315,6 +318,9 @@ def save_modifications():
         # the protective skip-on-textured behavior in glb_modifier.)
         if isinstance(modifications.get("material"), dict):
             modifications["material"]["tint_textures"] = True
+        for _block in modifications.get("material_targets") or []:
+            if isinstance(_block, dict):
+                _block["tint_textures"] = True
 
         # Use current model.glb as base (which may be sliced or modified)
         # This ensures modifications are applied to the current state, not original upload
@@ -494,6 +500,7 @@ def save_modifications():
                         ("explode", "explode"),
                     )
                     if key in modifications
+                    or (key == "material" and "material_targets" in modifications)
                 ]
                 operation_type = "+".join(kinds) or "material"
 

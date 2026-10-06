@@ -20,38 +20,64 @@ document.addEventListener('DOMContentLoaded', () => {
             // other materials' values for it — including per-layer colors
             // saved earlier via the Layers panel.
             const mats = window.getMaterials();
+            // Build one material block from a material's live values + the
+            // fields the user touched for that target.
+            const buildMaterialBlock = (mat, dirtyFields) => {
+                const cf = mat.pbrMetallicRoughness?.baseColorFactor;
+                const material = {};
+                if (dirtyFields.has('color') && cf) {
+                    material.color = [cf[0], cf[1], cf[2]];
+                    // Color and opacity share baseColorFactor's alpha
+                    // channel server-side, so a color write must carry
+                    // the current alpha or it would reset to opaque.
+                    material.opacity = cf[3];
+                } else if (dirtyFields.has('opacity') && cf) {
+                    material.opacity = cf[3];
+                }
+                if (dirtyFields.has('metalness')) {
+                    material.metalness = mat.pbrMetallicRoughness?.metallicFactor ?? 0;
+                }
+                if (dirtyFields.has('roughness')) {
+                    material.roughness = mat.pbrMetallicRoughness?.roughnessFactor ?? 1;
+                }
+                return material;
+            };
             if (materialDirty && mats.length > 0) {
                 try {
-                    const mat = mats[0];
-                    const cf = mat.pbrMetallicRoughness?.baseColorFactor;
+                    // "All parts" edits: the whole-model block, read from mat[0]
+                    // exactly as before (backward-compatible payload).
                     const dirtyFields = window._materialDirtyFields?.() ||
                         new Set(['color', 'metalness', 'roughness', 'opacity']);
-                    const material = {};
-                    if (dirtyFields.has('color') && cf) {
-                        material.color = [cf[0], cf[1], cf[2]];
-                        // Color and opacity share baseColorFactor's alpha
-                        // channel server-side, so a color write must carry
-                        // the current alpha or it would reset to opaque.
-                        material.opacity = cf[3];
-                    } else if (dirtyFields.has('opacity') && cf) {
-                        material.opacity = cf[3];
-                    }
-                    if (dirtyFields.has('metalness')) {
-                        material.metalness = mat.pbrMetallicRoughness?.metallicFactor ?? 0;
-                    }
-                    if (dirtyFields.has('roughness')) {
-                        material.roughness = mat.pbrMetallicRoughness?.roughnessFactor ?? 1;
-                    }
+                    const material = buildMaterialBlock(mats[0], dirtyFields);
                     if (Object.keys(material).length > 0) {
                         mods.material = material;
                     }
+                    // Per-material edits: one block per edited material, tagged
+                    // with its index (server: `material_targets[].target`).
+                    const targets = [];
+                    (window._materialDirtyTargets?.() || []).forEach(([idx, fields]) => {
+                        if (!mats[idx]) return;
+                        const block = buildMaterialBlock(mats[idx], fields);
+                        if (Object.keys(block).length > 0) targets.push(Object.assign({ target: idx }, block));
+                    });
+                    if (targets.length > 0) mods.material_targets = targets;
                 } catch (e) { /* material not loaded — skip material mods */ }
             }
-            // A pending texture upload is a material change in its own right.
+            // A pending texture upload is a material change in its own right,
+            // scoped to the target that was selected when it was chosen.
             const _textureUpload = document.getElementById('textureUpload');
             if (_textureUpload?.files?.length > 0) {
-                if (!mods.material) mods.material = {};
-                mods.material._pendingTextureFile = _textureUpload.files[0];
+                const texTarget = window._textureTarget;
+                let block;
+                if (Number.isInteger(texTarget)) {
+                    if (!mods.material_targets) mods.material_targets = [];
+                    block = mods.material_targets.find(b => b.target === texTarget);
+                    if (!block) { block = { target: texTarget }; mods.material_targets.push(block); }
+                } else {
+                    if (!mods.material) mods.material = {};
+                    block = mods.material;
+                }
+                block._pendingTextureFile = _textureUpload.files[0];
             }
 
             // Transform modifications
@@ -101,16 +127,18 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (hasModifications) {
                     // Convert pending texture file to base64 if present
-                    if (modifications.material?._pendingTextureFile) {
-                        const file = modifications.material._pendingTextureFile;
+                    const _texBlocks = [modifications.material, ...(modifications.material_targets || [])]
+                        .filter(b => b && b._pendingTextureFile);
+                    for (const block of _texBlocks) {
+                        const file = block._pendingTextureFile;
                         const base64 = await new Promise((resolve, reject) => {
                             const reader = new FileReader();
                             reader.onload = () => resolve(reader.result);
                             reader.onerror = reject;
                             reader.readAsDataURL(file);
                         });
-                        modifications.material.texture = base64;
-                        delete modifications.material._pendingTextureFile;
+                        block.texture = base64;
+                        delete block._pendingTextureFile;
                     }
 
                     const response = await fetch('/save_modifications', {

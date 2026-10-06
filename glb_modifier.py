@@ -34,13 +34,23 @@ def hex_to_rgb(hex_color):
     return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 
+def _material_target(material_mods):
+    """Single material index a modification block is limited to, or None (all)."""
+    target = (material_mods or {}).get('target')
+    if isinstance(target, bool) or not isinstance(target, int) or target < 0:
+        return None
+    return target
+
+
 def apply_material_modifications(gltf, material_mods):
     """
     Apply material modifications to all materials in the GLTF
     
     Args:
         gltf: GLTF2 object
-        material_mods: dict with 'color', 'metalness', 'roughness'
+        material_mods: dict with 'color', 'metalness', 'roughness'. An optional
+            integer 'target' restricts the edit to that single material index
+            (multi-material models); without it every material is edited.
     """
     logger.info(f"Applying material modifications: {material_mods}")
 
@@ -60,7 +70,10 @@ def apply_material_modifications(gltf, material_mods):
                 if prim.material is None:
                     prim.material = 0
     
+    target = _material_target(material_mods)
     for i, material in enumerate(gltf.materials):
+        if target is not None and i != target:
+            continue
         # Ensure material has PBR metallic roughness
         if not material.pbrMetallicRoughness:
             logger.warning(f"Material {i} has no PBR properties, skipping")
@@ -440,7 +453,7 @@ def _ensure_texcoord0(gltf):
     return gltf
 
 
-def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
+def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None, target=None):
     """
     Apply texture to all materials in the GLTF.
     Embeds the image into the GLB binary buffer (not as data URI)
@@ -448,6 +461,7 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
 
     tint_rgba: explicit [r,g,b,a] tint chosen alongside the texture (viewer
     editor). Defaults to white so a stale color can't discolor the image.
+    target: restrict the texture to this material index (default: all).
     """
     if not texture_data_base64:
         logger.info("No texture data provided, skipping texture modification")
@@ -555,6 +569,8 @@ def apply_texture_modifications(gltf, texture_data_base64, tint_rgba=None):
         # Apply texture to all materials
         if gltf.materials:
             for i, material in enumerate(gltf.materials):
+                if target is not None and i != target:
+                    continue
                 if material.pbrMetallicRoughness:
                     # baseColorFactor MULTIPLIES the texture. Use the explicit
                     # tint when one was chosen with the texture; otherwise reset
@@ -1300,9 +1316,16 @@ def modify_glb(input_path, output_path, modifications, transform_info=None):
         logger.info(f"  - Animations: {len(gltf.animations) if gltf.animations else 0}")
         logger.info(f"  - Skins: {len(gltf.skins) if gltf.skins else 0}")
         
-        # Apply material modifications
-        if 'material' in modifications:
-            mat_mods = modifications['material']
+        # Apply material modifications. 'material' applies to every material
+        # (or to one when it carries a 'target' index); 'material_targets' is
+        # an optional list of further per-material blocks, each with 'target'.
+        mat_blocks = []
+        if isinstance(modifications.get('material'), dict):
+            mat_blocks.append(modifications['material'])
+        extra_blocks = modifications.get('material_targets')
+        if isinstance(extra_blocks, list):
+            mat_blocks.extend(b for b in extra_blocks if isinstance(b, dict) and _material_target(b) is not None)
+        for mat_mods in mat_blocks:
             gltf = apply_material_modifications(gltf, mat_mods)
 
             # Apply texture if provided. Pass the user's tint through so the
@@ -1316,7 +1339,10 @@ def modify_glb(input_path, output_path, modifications, transform_info=None):
                         tint_rgba = list(rgb) + [float(mat_mods.get('opacity', 1.0))]
                     except Exception as te:
                         logger.warning(f"Could not derive texture tint from color: {te}")
-                gltf = apply_texture_modifications(gltf, mat_mods['texture'], tint_rgba=tint_rgba)
+                gltf = apply_texture_modifications(
+                    gltf, mat_mods['texture'], tint_rgba=tint_rgba,
+                    target=_material_target(mat_mods),
+                )
 
         # Apply per-layer visibility/color modifications
         if 'layers' in modifications:

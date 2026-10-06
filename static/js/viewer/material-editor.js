@@ -11,17 +11,33 @@ let transformEditorInitialized = false;
 // also send `color` — that would wipe previously saved per-layer colors
 // (Layers panel clones) with material 0's color.
 let materialDirty = false;
-const materialDirtyFields = new Set();
+// Multi-material models: the editor can target "all" materials (default) or a
+// single material index. Dirty fields are tracked per target so a save can
+// send each target's edits separately ('material' for all, 'material_targets'
+// for individual materials).
+let materialTarget = 'all';
+const materialDirtyTargets = new Map(); // 'all' | index -> Set(fields)
+function materialDirtySet(key) {
+    if (!materialDirtyTargets.has(key)) materialDirtyTargets.set(key, new Set());
+    return materialDirtyTargets.get(key);
+}
 function markMaterialChanged(field) {
     materialDirty = true;
-    if (field) materialDirtyFields.add(field);
+    if (field) {
+        materialDirtySet(materialTarget).add(field);
+        // An "all parts" edit supersedes earlier per-part edits of that field
+        // (the server applies per-part blocks last).
+        if (materialTarget === 'all') {
+            materialDirtyTargets.forEach((set, key) => { if (key !== 'all') set.delete(field); });
+        }
+    }
     // If a slice preview is active, re-patch materials: a material change
     // can recompile/replace the THREE material and lose the clip shader.
     window._reapplyClipping?.();
 }
 function clearMaterialDirty() {
     materialDirty = false;
-    materialDirtyFields.clear();
+    materialDirtyTargets.clear();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,6 +66,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return mats;
         }
 
+        // Same, restricted to the editor's current target ("All parts" or one
+        // material). Live edits go through this; reads/reset still use forEachMaterial.
+        function forEachTargetMaterial(cb) {
+            forEachMaterial((mat, i) => {
+                if (materialTarget === 'all' || materialTarget === i) cb(mat, i);
+            });
+        }
+
         // Iterate materials defensively — if one isn't loaded yet, skip it instead of
         // letting the pbrMetallicRoughness getter throw an uncaught error.
         function forEachMaterial(cb) {
@@ -57,6 +81,65 @@ document.addEventListener('DOMContentLoaded', () => {
                 try { cb(mat, i); } catch (e) { /* material not loaded yet */ }
             });
         }
+
+        // Push one material's values into the editor controls.
+        function syncControlsFromMaterial(mat) {
+            try {
+                const pbr = mat.pbrMetallicRoughness;
+                const cf = pbr?.baseColorFactor || [1, 1, 1, 1];
+                const hex = '#' + [0, 1, 2].map(k => Math.round(cf[k] * 255).toString(16).padStart(2, '0')).join('');
+                const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v.toFixed(2); };
+                set('materialColor', hex);
+                set('materialColorHex', hex.toUpperCase());
+                const metal = pbr?.metallicFactor ?? 0, rough = pbr?.roughnessFactor ?? 1, alpha = cf[3] ?? 1;
+                set('metalnessSlider', metal); txt('metalnessValue', metal);
+                set('roughnessSlider', rough); txt('roughnessValue', rough);
+                set('opacitySlider', alpha); txt('opacityValue', alpha);
+            } catch (e) { /* material not loaded yet */ }
+        }
+
+        function materialLabel(mat, i, all) {
+            const base = (mat.name || '').trim() || 'Material';
+            const dupes = all.filter(m => ((m.name || '').trim() || 'Material') === base).length > 1;
+            return (!mat.name || dupes) ? base + ' #' + (i + 1) : base;
+        }
+
+        // "Edit: All parts / <material>" selector — only for multi-material models.
+        function buildMaterialTargetSelect() {
+            const field = document.getElementById('materialTargetField');
+            const select = document.getElementById('materialTargetSelect');
+            if (!field || !select) return;
+            const mats = getMaterials();
+            if (mats.length < 2) { field.classList.add('hidden'); return; }
+            select.innerHTML = '';
+            const all = document.createElement('option');
+            all.value = 'all';
+            all.textContent = 'All parts (' + mats.length + ')';
+            select.appendChild(all);
+            mats.forEach((m, i) => {
+                const o = document.createElement('option');
+                o.value = String(i);
+                o.textContent = materialLabel(m, i, mats);
+                select.appendChild(o);
+            });
+            select.value = String(materialTarget);
+            field.classList.remove('hidden');
+            if (!select._wired) {
+                select._wired = true;
+                select.addEventListener('change', () => setMaterialTarget(select.value));
+            }
+        }
+
+        function setMaterialTarget(value) {
+            materialTarget = value === 'all' ? 'all' : parseInt(value, 10);
+            const select = document.getElementById('materialTargetSelect');
+            if (select) select.value = String(materialTarget);
+            const mats = getMaterials();
+            syncControlsFromMaterial(materialTarget === 'all' ? mats[0] : mats[materialTarget]);
+            document.querySelectorAll('.material-preset-btn.is-active').forEach(b => b.classList.remove('is-active'));
+        }
+        window._setMaterialTarget = setMaterialTarget;
 
         function captureOriginalMaterials() {
             try {
@@ -127,6 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modelViewer?.addEventListener('load', async () => {
             await ensureMaterialsLoaded();
             captureOriginalMaterials();
+            buildMaterialTargetSelect();
             // Lets undo-redo.js capture its baseline snapshot only once the
             // sliders actually reflect the model's real material state,
             // instead of guessing with a fixed delay.
@@ -167,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function applyMaterialColor(hex) {
             const rgb = hexToRgb(hex);
-            forEachMaterial(mat => {
+            forEachTargetMaterial(mat => {
                 const currentAlpha = mat.pbrMetallicRoughness?.baseColorFactor?.[3] ?? 1;
                 mat.pbrMetallicRoughness.setBaseColorFactor([rgb.r, rgb.g, rgb.b, currentAlpha]);
             });
@@ -208,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
             metalnessSlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (metalnessValue) metalnessValue.textContent = val.toFixed(2);
-                forEachMaterial(mat => {
+                forEachTargetMaterial(mat => {
                     mat.pbrMetallicRoughness.setMetallicFactor(val);
                 });
                 markMaterialChanged('metalness');
@@ -217,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
             roughnessSlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (roughnessValue) roughnessValue.textContent = val.toFixed(2);
-                forEachMaterial(mat => {
+                forEachTargetMaterial(mat => {
                     mat.pbrMetallicRoughness.setRoughnessFactor(val);
                 });
                 markMaterialChanged('roughness');
@@ -226,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
             opacitySlider?.addEventListener('input', (e) => {
                 const val = parseFloat(e.target.value);
                 if (opacityValue) opacityValue.textContent = val.toFixed(2);
-                forEachMaterial(mat => {
+                forEachTargetMaterial(mat => {
                     const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
                     mat.pbrMetallicRoughness.setBaseColorFactor([cf[0], cf[1], cf[2], val]);
                     if (val < 1) {
@@ -248,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (texturePreview) texturePreview.classList.remove('hidden');
 
                     const texture = await modelViewer.createTexture(url);
-                    forEachMaterial(mat => {
+                    forEachTargetMaterial(mat => {
                         // glTF multiplies the texture by baseColorFactor, so any
                         // applied color would tint the image — reset to white
                         // (keep current alpha) so the texture shows true colors.
@@ -256,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         mat.pbrMetallicRoughness.setBaseColorFactor([1, 1, 1, cf[3]]);
                         mat.pbrMetallicRoughness.baseColorTexture.setTexture(texture);
                     });
+                    window._textureTarget = materialTarget;
                     markMaterialChanged('texture');
                     markMaterialChanged('color');
                     // Sync color pickers with the reset tint
@@ -300,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Remove texture (global function for onclick)
             window.removeTexture = function() {
-                forEachMaterial(mat => {
+                forEachTargetMaterial(mat => {
                     mat.pbrMetallicRoughness.baseColorTexture.setTexture(null);
                 });
                 if (texturePreview) texturePreview.classList.add('hidden');
@@ -324,6 +409,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (opacitySlider) { opacitySlider.value = 1; if (opacityValue) opacityValue.textContent = '1.0'; }
                 if (texturePreview) texturePreview.classList.add('hidden');
                 if (textureUpload) textureUpload.value = '';
+                materialTarget = 'all';
+                const targetSelect = document.getElementById('materialTargetSelect');
+                if (targetSelect) targetSelect.value = 'all';
                 // Back at the model's saved appearance — nothing material-wise
                 // left to persist, so a later save must not send a material block.
                 clearMaterialDirty();
@@ -356,9 +444,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 // instead of blanket-marking all four — otherwise a
                 // roughness-only edit, once undone/redone, would save a full
                 // material block and flatten every other material's color.
-                dirtyFields: Array.from(materialDirtyFields),
+                dirtyFields: Array.from(materialDirtySet('all')),
+                // Multi-material state: which target is selected, every
+                // material's live values (so undo restores parts edited
+                // separately) and each target's dirty fields.
+                target: materialTarget,
+                perMaterial: capturePerMaterial(),
+                dirtyTargets: Array.from(materialDirtyTargets.entries())
+                    .filter(([k]) => k !== 'all')
+                    .map(([k, set]) => [k, Array.from(set)]),
             };
         };
+        function capturePerMaterial() {
+            const mats = getMaterials();
+            if (mats.length < 2) return null;
+            return mats.map(m => {
+                try {
+                    const pbr = m.pbrMetallicRoughness;
+                    return {
+                        color: [...(pbr.baseColorFactor || [1, 1, 1, 1])],
+                        metalness: pbr.metallicFactor ?? 0,
+                        roughness: pbr.roughnessFactor ?? 1,
+                    };
+                } catch (e) { return null; }
+            });
+        }
         // Cross-file bridge: undo-redo.js needs the model's TRUE original
         // material (as captured by captureOriginalMaterials() straight from
         // the loaded GLB) to fix up its baseline snapshot once material sync
@@ -380,12 +490,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 roughness: om.roughness ?? 1,
                 opacity: om.baseColor[3] ?? 1,
                 dirtyFields: [],
+                target: 'all',
+                perMaterial: originalMaterials.length < 2 ? null : originalMaterials.map(o => ({
+                    color: [...o.baseColor], metalness: o.metallic, roughness: o.roughness,
+                })),
+                dirtyTargets: [],
             };
         };
         // Exposed for save-flow.js: which material fields the user actually
         // touched, so the save payload only carries those fields.
+        // Per-material edits (non-"all" targets) as [[index, Set(fields)], ...].
+        window._materialDirtyTargets = function() {
+            return Array.from(materialDirtyTargets.entries())
+                .filter(([k, set]) => k !== 'all' && set.size > 0)
+                .map(([k, set]) => [k, new Set(set)]);
+        };
         window._materialDirtyFields = function() {
-            return new Set(materialDirtyFields);
+            return new Set(materialDirtySet('all'));
         };
 
         window._applyMaterialSnapshot = function(snap, opts) {
@@ -397,6 +518,27 @@ document.addEventListener('DOMContentLoaded', () => {
             const metalnessValue = document.getElementById('metalnessValue');
             const roughnessValue = document.getElementById('roughnessValue');
             const opacityValue = document.getElementById('opacityValue');
+
+            // Restore the target selection and, for multi-material models,
+            // every material's own values (parts edited separately).
+            if (snap.target !== undefined) {
+                materialTarget = snap.target;
+                const targetSelect = document.getElementById('materialTargetSelect');
+                if (targetSelect) targetSelect.value = String(materialTarget);
+            }
+            if (Array.isArray(snap.perMaterial)) {
+                const hasTex = getMaterials().some(m => !!(m.pbrMetallicRoughness?.baseColorTexture?.texture));
+                forEachMaterial((mat, i) => {
+                    const pm = snap.perMaterial[i];
+                    if (!pm) return;
+                    const pbr = mat.pbrMetallicRoughness;
+                    pbr.setMetallicFactor(pm.metalness);
+                    pbr.setRoughnessFactor(pm.roughness);
+                    const cur = pbr.baseColorFactor || [1, 1, 1, 1];
+                    pbr.setBaseColorFactor(hasTex ? [cur[0], cur[1], cur[2], pm.color[3]] : pm.color);
+                    mat.setAlphaMode(pm.color[3] < 1 ? 'BLEND' : 'OPAQUE');
+                });
+            }
 
             if (matColor) matColor.value = snap.color;
             if (matColorHex) matColorHex.value = snap.color.toUpperCase();
@@ -418,7 +560,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (opacitySlider) opacitySlider.value = snap.opacity;
             if (opacityValue) opacityValue.textContent = snap.opacity.toFixed(2);
 
-            forEachMaterial(mat => {
+            // (Single-material models, and legacy snapshots without perMaterial.)
+            if (!Array.isArray(snap.perMaterial)) forEachMaterial(mat => {
                 mat.pbrMetallicRoughness.setMetallicFactor(snap.metalness);
                 mat.pbrMetallicRoughness.setRoughnessFactor(snap.roughness);
                 const cf = mat.pbrMetallicRoughness?.baseColorFactor || [1, 1, 1, 1];
@@ -430,9 +573,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // changed. Falls back to the older opts.dirty flag for snapshots
             // captured before dirtyFields existed.
             if (Array.isArray(snap.dirtyFields)) {
-                materialDirtyFields.clear();
-                snap.dirtyFields.forEach((f) => materialDirtyFields.add(f));
-                materialDirty = materialDirtyFields.size > 0;
+                materialDirtyTargets.clear();
+                snap.dirtyFields.forEach((f) => materialDirtySet('all').add(f));
+                (snap.dirtyTargets || []).forEach(([k, fields]) => fields.forEach((f) => materialDirtySet(k).add(f)));
+                materialDirty = Array.from(materialDirtyTargets.values()).some(set => set.size > 0);
                 window._reapplyClipping?.();
             } else if (opts && opts.dirty === false) {
                 clearMaterialDirty();

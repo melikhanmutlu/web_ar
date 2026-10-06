@@ -114,6 +114,8 @@ def login():
             return render_template(
                 'login.html', form=form, auth_error='This account has been deactivated.'
             )
+        from services.model_claim import claim_and_flash
+        claim_and_flash(user)
         next_page = _safe_next(request.args.get('next')) or url_for('main.index')
         return redirect(next_page)
     
@@ -149,6 +151,8 @@ def register():
             db.session.commit()
         send_verification(user)
         login_user(user)
+        from services.model_claim import claim_and_flash
+        claim_and_flash(user)
         flash('Registration successful! We sent a verification link to your email - '
               'verify it to unlock free AI trials.', 'success')
         return redirect(_safe_next(request.args.get('next')) or url_for('main.index'))

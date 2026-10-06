@@ -84,7 +84,7 @@ VS_PAGES = {
                    "not a community to publish into? Here's how the two compare.",
         "we_win": [
             "Upload-to-AR-link in seconds — no publishing workflow to learn.",
-            "Built-in AI text/image → 3D generation.",
+            "AI text/image → 3D generation built in: 3 free trial generations, more on Pro.",
             "Automatic USDZ + Scene Viewer + QR from any STL/OBJ/FBX/STEP.",
             "Frictionless free tier aimed at getting one model live fast.",
         ],
@@ -99,7 +99,7 @@ VS_PAGES = {
         "subhead": "Generated a model with AI — now what? ARVision turns it into an "
                    "AR-ready, shareable link that works on any phone.",
         "we_win": [
-            "Generate → instant AR link → share, in one flow.",
+            "Generate (3 free trial generations, more on Pro) → instant AR link → share, in one flow.",
             "Automatic USDZ for iOS Quick Look and Android Scene Viewer.",
             "Hosting, QR, embeds, versioning and analytics around the model.",
             "Convert your own uploads too — not only AI output.",

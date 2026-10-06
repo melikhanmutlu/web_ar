@@ -66,3 +66,10 @@ def test_billing_page_has_no_try_and_uses_dollar_prices(client):
     assert "TRY" not in html
     assert "$19<small>/mo" in html
     assert "<b>$9</b>" in html
+
+
+def test_marketing_copy_does_not_overpromise_ai(client):
+    for path in ("/", "/vs/sketchfab", "/vs/meshy"):
+        html = client.get(path).get_data(as_text=True)
+        assert "Built-in AI" not in html, path
+        assert "free trial generations" in html, path

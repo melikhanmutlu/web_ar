@@ -49,6 +49,23 @@ def _invalidate_thumbnail(app_module, model):
         app_module.logger.warning(f"[_invalidate_thumbnail] Failed to re-queue thumbnail for {model.id}: {e}")
 
 
+def _make_editable(app_module, glb_path, model_id, where):
+    """trimesh can't decode meshopt/draco GLBs, so decompress in place before
+    an edit (the edit rewrites geometry uncompressed anyway). If the file is
+    still compressed afterwards, refuse: editing it anyway reads an empty
+    scene and can save a model collapsed to a single point."""
+    from converters.glb_optimizer import decompress_glb_in_place, glb_needs_decompression
+
+    if decompress_glb_in_place(glb_path):
+        app_module.logger.info(f"[{where}] Decompressed {model_id} for editing")
+    if glb_needs_decompression(glb_path):
+        app_module.logger.error(f"[{where}] {model_id} is compressed and could not be decoded")
+        return jsonify({"success": False,
+                        "error": "This model is compressed in a format the server can't edit right now. "
+                                 "Nothing was changed."}), 422
+    return None
+
+
 @model_editing_bp.route("/apply_modifications", methods=["POST"])
 def apply_modifications():
     """Apply material and transform modifications to GLB model"""
@@ -80,13 +97,9 @@ def apply_modifications():
             app_module.logger.error(f"Original GLB not found: {original_path}")
             return jsonify({"success": False, "error": "Original model not found"}), 404
 
-        # trimesh can't decode meshopt/draco-compressed GLBs, so decompress
-        # in place first (the edit rewrites geometry to uncompressed form
-        # anyway) instead of hard-blocking. Keeps compressed models editable.
-        from converters.glb_optimizer import decompress_glb_in_place
-
-        if decompress_glb_in_place(original_path):
-            app_module.logger.info(f"[apply_modifications] Decompressed {model_id} for editing")
+        refused = _make_editable(app_module, original_path, model_id, "apply_modifications")
+        if refused:
+            return refused
 
         # Same as save_modifications: the user picked the color while SEEING
         # the texture in the viewer, so the downloaded file must tint the
@@ -284,13 +297,9 @@ def save_modifications():
             app_module.logger.error(f"Current model.glb not found: {current_model_path}")
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
-        # trimesh can't decode meshopt/draco-compressed GLBs -- decompress in
-        # place first (the save rewrites geometry to uncompressed form anyway)
-        # instead of hard-blocking, so compressed models stay editable.
-        from converters.glb_optimizer import decompress_glb_in_place
-
-        if decompress_glb_in_place(current_model_path):
-            app_module.logger.info(f"[save_modifications] Decompressed {model_id} for editing")
+        refused = _make_editable(app_module, current_model_path, model_id, "save_modifications")
+        if refused:
+            return refused
 
         app_module.logger.info(
             f"[save_modifications] Using current model.glb as base: {current_model_path}"
@@ -596,13 +605,9 @@ def slice_model():
                 {"success": False, "error": f"Model not found at {input_path}"}
             ), 404
 
-        # trimesh can't decode meshopt/draco-compressed GLBs -- decompress in
-        # place first (slicing rewrites geometry to uncompressed form anyway)
-        # instead of hard-blocking, so compressed models can be sliced.
-        from converters.glb_optimizer import decompress_glb_in_place
-
-        if decompress_glb_in_place(input_path):
-            app_module.logger.info(f"[slice_model] Decompressed {model_id} for slicing")
+        refused = _make_editable(app_module, input_path, model_id, "slice_model")
+        if refused:
+            return refused
 
         # Create backup
         backup_path = os.path.join(
@@ -627,6 +632,17 @@ def slice_model():
             planes=planes,
         )
         success = bool(slice_result.get("success"))
+
+        if success and slice_result.get("degenerate"):
+            # Saving would leave a model with no thickness on some axis --
+            # effectively destroying it. Keep the current file untouched.
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+            return jsonify({
+                "success": False,
+                "error": "This cut would leave the model flat (no thickness left). "
+                         "Move the slider or flip the kept side. Nothing was changed.",
+            }), 422
 
         if success and os.path.exists(temp_output):
             # Replace original with sliced version (atomic on same volume)
@@ -704,11 +720,6 @@ def slice_model():
             # Surface near-flat results, lost materials, or GLB quality issues
             # so the UI can warn the user instead of a silently degraded model.
             warnings = []
-            if slice_result.get("degenerate"):
-                warnings.append(
-                    "The slice result is nearly flat — one dimension is almost zero. "
-                    "Check the kept side / slider position."
-                )
             if slice_result.get("material_warning"):
                 warnings.append(slice_result["material_warning"])
             warnings.extend(quality_warnings)

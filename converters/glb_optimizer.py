@@ -62,29 +62,37 @@ def glb_needs_decompression(glb_path: str) -> bool:
 
 
 def _decompress_glb_to_temp(glb_path: str, timeout: int = 120):
-    """Produce an uncompressed temp copy of a compressed GLB via gltfpack (which
-    decodes meshopt and draco input natively). Returns the temp path, or None if
-    gltfpack is unavailable or fails. Caller owns the returned temp file."""
-    cmd_base = _resolve_gltfpack()
-    if not cmd_base:
-        logger.warning("GLB needs decompression but gltfpack is unavailable: %s", glb_path)
+    """Produce an uncompressed temp copy of a compressed GLB. Tries gltfpack
+    first, then `gltf-transform copy` -- the npm gltfpack build cannot decode
+    Draco, while gltf-transform decodes both Draco and meshopt and writes the
+    result uncompressed. Returns the temp path, or None if both fail. Caller
+    owns the returned temp file."""
+    attempts = []
+    gltfpack = _resolve_gltfpack()
+    if gltfpack:
+        # -noq: no quantization -- re-export plain float attributes trimesh can
+        # read. Deliberately omit -cc so the output is uncompressed.
+        attempts.append(("gltfpack", lambda out: gltfpack + ["-i", glb_path, "-o", out, "-noq", "-kn", "-ke", "-km"]))
+    gltf_transform = _resolve_gltf_transform()
+    if gltf_transform:
+        attempts.append(("gltf-transform", lambda out: gltf_transform + ["copy", glb_path, out]))
+    if not attempts:
+        logger.warning("GLB needs decompression but no decoder is available: %s", glb_path)
         return None
-    fd, tmp_out = tempfile.mkstemp(suffix=".glb", prefix="decompressed_")
-    os.close(fd)
-    # -noq: no quantization -- re-export plain float attributes trimesh can read.
-    # Deliberately omit -cc so the output is uncompressed.
-    cmd = cmd_base + ["-i", glb_path, "-o", tmp_out, "-noq", "-kn", "-ke", "-km"]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except Exception as e:
-        logger.warning("gltfpack decompression failed to run for %s: %s", glb_path, e)
+    for tool, build_cmd in attempts:
+        fd, tmp_out = tempfile.mkstemp(suffix=".glb", prefix="decompressed_")
+        os.close(fd)
+        try:
+            result = subprocess.run(build_cmd(tmp_out), capture_output=True, text=True, timeout=timeout)
+            ok = result.returncode == 0 and os.path.getsize(tmp_out) > 0 and not glb_needs_decompression(tmp_out)
+        except Exception as e:
+            logger.warning("%s decompression failed to run for %s: %s", tool, glb_path, e)
+            ok = False
+        if ok:
+            return tmp_out
+        logger.warning("%s could not decompress %s", tool, glb_path)
         _safe_remove(tmp_out)
-        return None
-    if result.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) == 0:
-        logger.warning("gltfpack decompression returned %s for %s", result.returncode, glb_path)
-        _safe_remove(tmp_out)
-        return None
-    return tmp_out
+    return None
 
 
 def decompress_glb_in_place(glb_path: str) -> bool:

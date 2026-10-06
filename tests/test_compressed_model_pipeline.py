@@ -87,3 +87,70 @@ def test_compressed_model_can_be_sliced(client, monkeypatch):
     # (uncompressed) rather than a compressed dead end.
     db.session.refresh(model)
     assert not glb_needs_decompression(model.glb_path)
+
+
+def _upload(client, monkeypatch, compression):
+    monkeypatch.setattr(app_module, "JOB_QUEUE_ENABLED", True)
+    mesh = trimesh.creation.icosphere(subdivisions=3)
+    resp = client.post(
+        "/upload_model",
+        data={"file": (io.BytesIO(mesh.export(file_type="stl")), "sphere.stl"),
+              "compression": compression, "sourceUnit": "m"},
+        content_type="multipart/form-data",
+    )
+    body = resp.get_json()
+    job = db.session.get(ConversionJob, body["job_id"])
+    run_conversion_job(job, allow_retry=False)
+    return db.session.get(UserModel, body["job_id"]), body.get("edit_token")
+
+
+def test_draco_model_can_be_sliced(client, monkeypatch):
+    """The npm gltfpack can't decode Draco; gltf-transform must take over
+    instead of the slice running on an unreadable file."""
+    model, edit_token = _upload(client, monkeypatch, "draco")
+    if not glb_needs_decompression(model.glb_path):
+        pytest.skip("draco compression unavailable in this environment")
+
+    resp = client.post("/slice_model", json={
+        "model_id": model.id, "edit_token": edit_token,
+        "planes": [{"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0]}],
+    })
+
+    assert resp.status_code == 200, resp.get_json()
+    extents = trimesh.load(model.glb_path, force="mesh").extents
+    assert extents.min() > 0.5  # a real half-sphere, not a collapsed point
+
+
+def test_edit_refused_when_compressed_file_cannot_be_decoded(client, monkeypatch):
+    model, edit_token = _upload(client, monkeypatch, "meshopt")
+    import converters.glb_optimizer as opt
+    monkeypatch.setattr(opt, "_decompress_glb_to_temp", lambda path, timeout=120: None)
+    before = open(model.glb_path, "rb").read()
+
+    resp = client.post("/slice_model", json={
+        "model_id": model.id, "edit_token": edit_token,
+        "planes": [{"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0]}],
+    })
+
+    assert resp.status_code == 422
+    assert open(model.glb_path, "rb").read() == before
+
+
+def test_slice_that_flattens_the_model_is_not_saved(client, monkeypatch):
+    model, edit_token = _upload(client, monkeypatch, "none")
+    import mesh_slicer
+
+    def flattening_slice(input_path, output_path, planes):
+        trimesh.creation.box(extents=(0.0, 1, 1)).export(output_path)
+        return {"success": True, "degenerate": True, "extents": [0.0, 1.0, 1.0]}
+
+    monkeypatch.setattr(mesh_slicer, "slice_mesh_multi", flattening_slice)
+    before = open(model.glb_path, "rb").read()
+
+    resp = client.post("/slice_model", json={
+        "model_id": model.id, "edit_token": edit_token,
+        "planes": [{"plane_origin": [0, 0, 0], "plane_normal": [1, 0, 0]}],
+    })
+
+    assert resp.status_code == 422
+    assert open(model.glb_path, "rb").read() == before

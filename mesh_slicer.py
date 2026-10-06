@@ -583,7 +583,14 @@ def _slice_core(input_path, output_path, planes):
 
     bounds = out_scene.bounds
     extents = (bounds[1] - bounds[0]) if bounds is not None else None
-    degenerate = bool(extents is not None and np.any(extents < 1e-4))
+    # Degenerate = the slice flattened an axis the input had thickness on
+    # (a model that was already a flat plate isn't the slice's fault).
+    in_bounds = loaded.bounds
+    in_extents = (in_bounds[1] - in_bounds[0]) if in_bounds is not None else None
+    degenerate = bool(
+        extents is not None and in_extents is not None
+        and np.any((extents < 1e-4) & (in_extents >= 1e-4))
+    )
     logger.info(
         f"Sliced {total_kept}/{total_in} geometries, "
         f"extents={extents.tolist() if extents is not None else None}, degenerate={degenerate}"

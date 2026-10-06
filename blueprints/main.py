@@ -326,6 +326,32 @@ def workflow():
     return render_template("workflow.html")
 
 
+# Date shown on /privacy and /terms; bump it whenever the text changes.
+LEGAL_LAST_UPDATED = "October 6, 2026"
+
+
+def _legal_context():
+    import config
+    from urllib.parse import urlparse
+    return {
+        "legal_entity": config.LEGAL_ENTITY_NAME,
+        "legal_address": config.LEGAL_ADDRESS,
+        "legal_email": config.LEGAL_CONTACT_EMAIL,
+        "legal_updated": LEGAL_LAST_UPDATED,
+        "site_host": urlparse(config.SITE_URL).netloc,
+    }
+
+
+@main_bp.route("/privacy", methods=["GET"])
+def privacy():
+    return render_template("privacy.html", **_legal_context())
+
+
+@main_bp.route("/terms", methods=["GET"])
+def terms():
+    return render_template("terms.html", **_legal_context())
+
+
 @main_bp.route("/developers", methods=["GET"])
 def developers():
     """Public API/integration documentation (sidebar + content)."""

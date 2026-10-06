@@ -214,6 +214,14 @@ PARASUT_COMPANY_ID = os.getenv('PARASUT_COMPANY_ID', '')
 # off the current Railway subdomain to a custom domain later — canonical
 # links, the sitemap, and OG/Twitter URLs must stay stable across that move.
 SITE_URL = os.getenv('SITE_URL', 'https://webar.up.railway.app').rstrip('/')
+# Legal pages (/privacy, /terms) and contact details. These identify the
+# operator of the service; set them in the deploy env before launch. The
+# bracketed defaults are deliberately obvious placeholders.
+LEGAL_ENTITY_NAME = os.getenv('LEGAL_ENTITY_NAME') or '[Legal entity name]'
+LEGAL_ADDRESS = os.getenv('LEGAL_ADDRESS') or '[Registered address]'
+LEGAL_CONTACT_EMAIL = os.getenv('LEGAL_CONTACT_EMAIL') or '[contact email]'
+# Sales / enterprise enquiries (falls back to the legal contact address).
+SALES_EMAIL = os.getenv('SALES_EMAIL') or LEGAL_CONTACT_EMAIL
 # Google Search Console HTML-tag ownership verification value (just the
 # content="..." string). Leave empty until a GSC property exists.
 GOOGLE_SITE_VERIFICATION = os.getenv('GOOGLE_SITE_VERIFICATION', '')

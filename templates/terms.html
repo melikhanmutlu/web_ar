@@ -1,0 +1,91 @@
+{#
+  DRAFT: this text is a plain-English draft written for ARVision and has NOT
+  been reviewed by a lawyer. It must be reviewed (consumer-protection, e-commerce
+  and Turkish law) and the operator details (LEGAL_ENTITY_NAME / LEGAL_ADDRESS /
+  LEGAL_CONTACT_EMAIL in the environment) filled in before launch. Keep it in
+  sync with the pricing page and the billing code (trials, refunds, USD list
+  prices charged in TRY by PayTR). Bump LEGAL_LAST_UPDATED in blueprints/main.py
+  when the text changes.
+#}
+{% extends "base.html" %}
+
+{% set seo_title = "Terms of Service — ARVision" %}
+{% set seo_description = "The terms that apply when you use ARVision: accounts, acceptable use, your content, AI-generated content, plans and billing, availability and liability." %}
+{% set seo_robots = "index, follow" %}
+
+{% block title %}Terms of Service — ARVision{% endblock %}
+
+{% block content %}
+<main>
+    <section class="page-hero">
+        <div class="shell">
+            <h1>Terms of Service</h1>
+            <p>The rules for using ARVision, in plain English.</p>
+            <p class="legal-updated">Last updated: {{ legal_updated }}</p>
+        </div>
+    </section>
+
+    <article class="legal-doc shell">
+        <h2 id="agreement">1. Agreement</h2>
+        <p>These terms are an agreement between you and <strong>{{ legal_entity }}</strong>, {{ legal_address }} (&ldquo;ARVision&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;), the operator of {{ site_host }} and its related apps and APIs (the &ldquo;Service&rdquo;). By creating an account or using the Service you agree to these terms and to our <a href="{{ url_for('main.privacy') }}">Privacy Policy</a>. If you use the Service for an organization, you confirm you can bind it. If you do not agree, do not use the Service.</p>
+
+        <h2 id="accounts">2. Accounts</h2>
+        <ul>
+            <li>You must be at least 16 years old and able to form a binding contract.</li>
+            <li>Provide accurate information, keep your password confidential and tell us promptly if you suspect unauthorized access. You are responsible for activity under your account and under API tokens you create.</li>
+            <li>One person or organization per account; do not share credentials. Do not create accounts to evade limits, bans or quotas.</li>
+        </ul>
+
+        <h2 id="use">3. Acceptable use</h2>
+        <p>You agree not to upload, generate, share or link to anything that:</p>
+        <ul>
+            <li>is illegal, or that you do not have the right to use (including models, textures or trademarks that infringe someone else&rsquo;s copyright, trade secrets, design rights or other rights);</li>
+            <li>contains malware or is crafted to exploit the converters or the platform, or contains child sexual abuse material, content that promotes violence or terrorism, or non-consensual intimate content;</li>
+            <li>is designed to harass, defraud, deceive or impersonate others.</li>
+        </ul>
+        <p>You also agree not to: probe, scan or attack the Service; bypass rate limits, quotas, plan limits or access controls; scrape the Service beyond what the API allows; resell the Service except as your plan permits; or use it to build a competing service by copying it. We may remove content and suspend or terminate accounts that break these rules, and we respond to valid notices of alleged infringement. To report content, contact <a href="mailto:{{ legal_email }}">{{ legal_email }}</a>.</p>
+
+        <h2 id="content">4. Your content</h2>
+        <p><strong>You keep ownership</strong> of the models, textures and other files you upload and of the models you create with the Service (&ldquo;Your Content&rdquo;). You grant us a worldwide, non-exclusive, royalty-free licence, limited to the term of your use of the Service, to host, store, copy, convert, optimize, transform (for example to GLB/USDZ, thumbnails and level-of-detail versions), display and deliver Your Content, and to make it available to the people you choose to share it with, solely to operate and improve the Service for you. When you set a model to public or share a link or embed, you authorize anyone with access to view it as that setting allows. We do not use Your Content to train AI models.</p>
+        <p>You are responsible for Your Content, for having all rights and permissions needed, and for keeping your own backups. Our trash workflow and version history are conveniences, not backup guarantees.</p>
+
+        <h2 id="ai">5. AI-generated content</h2>
+        <p>AI generation is powered by third-party providers (currently Meshy). Outputs may be inaccurate, unexpected, or similar to other outputs, and may not be protectable by copyright in some countries. You are responsible for reviewing outputs and for how you use them, including making sure your prompts and reference images do not infringe anyone&rsquo;s rights and contain no personal or confidential data. Subject to the provider&rsquo;s terms and applicable law, we do not claim ownership of the outputs you generate. Generation quotas, trial generations and credits are described on the <a href="{{ url_for('main.pricing') }}">pricing page</a> and may change; failed generations are not counted against your allowance.</p>
+
+        <h2 id="plans">6. Plans, trials, billing and refunds</h2>
+        <ul>
+            <li><strong>Plans and prices.</strong> The Service has a free plan and paid plans with different limits and features, described on the pricing page. Prices are listed in US dollars (USD). Where payment is processed by PayTR, you are charged the Turkish lira (TRY) equivalent at the exchange rate applied at checkout, so the TRY amount can differ between purchases; Lemon Squeezy purchases are charged as shown at its checkout. Taxes (such as VAT) may apply and are shown at checkout where required.</li>
+            <li><strong>Free plan and trials.</strong> The free plan includes a small number of trial AI generations for accounts with a verified email. New accounts may start one 14-day trial of the Business plan without entering a card; at the end of the trial the account returns to the free plan unless you purchase a plan. We may change or end trials and may limit them to one per person or organization.</li>
+            <li><strong>Billing periods.</strong> Paid plans are bought for a period (for example one month) and give access until the end of that period. Where a provider supports recurring billing, your plan renews at the then-current price until you cancel, and you can cancel at any time to stop future renewals. Access to paid features lasts until the end of the period you already paid for.</li>
+            <li><strong>AI credit packs</strong> are prepaid, used after your monthly allowance, do not expire while your account is active, and are not transferable.</li>
+            <li><strong>Refunds.</strong> Fees are generally non-refundable once a period has started, except where required by law (including any statutory withdrawal or cancellation right that applies to you as a consumer) or where we say otherwise. If you believe you were charged in error, contact us within 30 days at <a href="mailto:{{ legal_email }}">{{ legal_email }}</a> and we will review it promptly.</li>
+            <li><strong>Changes.</strong> We may change plan limits and prices. Price increases for an active paid period apply from the next renewal and we will give you reasonable notice.</li>
+            <li><strong>Non-payment and expiry.</strong> If a payment fails or a paid plan expires, your account returns to the free plan and paid features and limits stop applying. Contact us if you need help with content that exceeds free-plan limits.</li>
+        </ul>
+
+        <h2 id="service">7. Availability and changes to the Service</h2>
+        <p>We work to keep the Service available but it is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;. We do not promise uninterrupted or error-free operation, that every file will convert correctly or look identical on every device, or that AR will work on every phone and browser. We may add, change or remove features, and we may perform maintenance. Features described as &ldquo;set up on request&rdquo; are configured manually by us and may take time to arrange.</p>
+
+        <h2 id="warranty">8. No warranty</h2>
+        <p>To the fullest extent permitted by law, we disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, non-infringement and accuracy of AI outputs. Nothing in these terms limits rights you have as a consumer that cannot be waived under mandatory law.</p>
+
+        <h2 id="liability">9. Limitation of liability</h2>
+        <p>To the fullest extent permitted by law, we are not liable for indirect, incidental, special, consequential or punitive damages, or for loss of profits, revenue, data or goodwill, arising from your use of the Service. Our total liability for all claims relating to the Service is limited to the greater of the amount you paid us in the 12 months before the event giving rise to the claim and USD 100. Nothing in these terms excludes or limits liability that cannot be excluded or limited by law, including liability for intent or gross negligence, or death or personal injury.</p>
+        <p>You agree to indemnify us against third-party claims arising from Your Content or your breach of these terms, to the extent permitted by law.</p>
+
+        <h2 id="termination">10. Suspension and termination</h2>
+        <p>You can stop using the Service and request deletion of your account at any time (see the Privacy Policy). We may suspend or terminate your access if you breach these terms, if required by law, to protect the Service or other users, or if your account is inactive for a long period (with notice where practical). On termination your right to use the Service ends; where we are able, we will give you a reasonable chance to export Your Content before it is deleted, except where termination is for serious abuse. Sections that by their nature should survive (for example ownership, liability limits and governing law) do survive.</p>
+
+        <h2 id="law">11. Governing law and disputes</h2>
+        <p>These terms are governed by the laws of the Republic of T&uuml;rkiye, without regard to its conflict-of-laws rules. The courts and enforcement offices of the city where {{ legal_entity }} has its registered address have jurisdiction, except that if you are a consumer you may also use the consumer arbitration committees and consumer courts in your place of residence where Turkish law gives you that right, and mandatory consumer-protection rules of your country of residence continue to apply to you.</p>
+
+        <h2 id="changes">12. Changes to these terms</h2>
+        <p>We may update these terms. The &ldquo;Last updated&rdquo; date above shows the current version, and we will notify registered users of material changes by email or in the app at least 14 days before they take effect. If you keep using the Service after the changes take effect, you accept them; if you do not, you can close your account.</p>
+
+        <h2 id="contact">13. Contact</h2>
+        <p>{{ legal_entity }}<br>{{ legal_address }}<br><a href="mailto:{{ legal_email }}">{{ legal_email }}</a></p>
+    </article>
+</main>
+
+{% include "_site_footer.html" %}
+{% endblock %}

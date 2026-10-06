@@ -3620,3 +3620,17 @@ footer { border-top: 1px solid #e2e5ea; background: #fff; }
     .footer-meta { grid-column: 1 / -1; }
     .footer-brand .brand { font-size: 1.85rem; }
 }
+
+/* Legal pages (/privacy, /terms) */
+.legal-updated { margin-top: 12px !important; font-size: 13px !important; }
+.legal-doc { max-width: 820px; padding: 24px 0 96px; color: var(--ink, #14161c); font-size: 16px; line-height: 1.7; }
+.legal-doc h2 { margin: 2.2em 0 .5em; font-size: 24px; letter-spacing: -.02em; }
+.legal-doc h3 { margin: 1.4em 0 .3em; font-size: 17px; }
+.legal-doc p, .legal-doc ul { margin: .6em 0; }
+.legal-doc ul { padding-left: 1.3em; list-style: disc; }
+.legal-doc li { margin: .35em 0; }
+.legal-doc a { text-decoration: underline; text-underline-offset: 2px; }
+.legal-table { width: 100%; margin: 1em 0; border-collapse: collapse; font-size: 14px; }
+.legal-table th, .legal-table td { padding: 10px 12px; border: 1px solid var(--line, #e3e6eb); text-align: left; vertical-align: top; }
+.legal-table th { background: var(--soft, #f6f7f9); }
+@media (max-width: 640px) { .legal-doc { overflow-x: auto; } }

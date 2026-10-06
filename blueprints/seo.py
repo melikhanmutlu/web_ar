@@ -10,6 +10,7 @@ seo_bp = Blueprint("seo", __name__)
 SITEMAP_STATIC_ENDPOINTS = [
     "main.index", "main.features", "main.pricing", "main.developers",
     "main.security", "main.contact_sales", "main.workflow",
+    "main.privacy", "main.terms",
 ]
 
 

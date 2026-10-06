@@ -1,0 +1,106 @@
+{#
+  DRAFT: this text is a plain-English draft written for ARVision and has NOT
+  been reviewed by a lawyer. It must be reviewed (GDPR + Turkish KVKK) and the
+  operator details (LEGAL_ENTITY_NAME / LEGAL_ADDRESS / LEGAL_CONTACT_EMAIL in
+  the environment) filled in before launch. Bump LEGAL_LAST_UPDATED in
+  blueprints/main.py when the text changes.
+#}
+{% extends "base.html" %}
+
+{% set seo_title = "Privacy Policy — ARVision" %}
+{% set seo_description = "What personal data ARVision collects, why we process it, who we share it with, how long we keep it and how to exercise your GDPR and KVKK rights." %}
+{% set seo_robots = "index, follow" %}
+
+{% block title %}Privacy Policy — ARVision{% endblock %}
+
+{% block content %}
+<main>
+    <section class="page-hero">
+        <div class="shell">
+            <h1>Privacy Policy</h1>
+            <p>What we collect, why, who helps us run the service, and the choices you have.</p>
+            <p class="legal-updated">Last updated: {{ legal_updated }}</p>
+        </div>
+    </section>
+
+    <article class="legal-doc shell">
+        <h2 id="who">1. Who we are</h2>
+        <p>ARVision ({{ site_host }}) is operated by <strong>{{ legal_entity }}</strong>, {{ legal_address }} (&ldquo;ARVision&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). We are the data controller for the personal data described here (the &ldquo;data controller&rdquo; under the EU/UK GDPR and the &ldquo;veri sorumlusu&rdquo; under the Turkish Personal Data Protection Law No. 6698, &ldquo;KVKK&rdquo;). You can reach us at <a href="mailto:{{ legal_email }}">{{ legal_email }}</a>.</p>
+
+        <h2 id="collect">2. What we collect</h2>
+        <h3>Account data</h3>
+        <p>Username, email address, a salted password hash (we never store your password in readable form), your plan, email-verification status, and the time you registered and last signed in. If you join an organization, we also store your membership and role.</p>
+        <h3>Content you upload</h3>
+        <p>3D model files (STL, OBJ, FBX, STEP, GLB and similar), textures, thumbnails, the files we generate from them (GLB, USDZ, QR codes, level-of-detail versions), model names, descriptions, hotspots/annotations, version history, folders and scenes. Models are private to you unless you choose to share them.</p>
+        <h3>AI-generated content</h3>
+        <p>If you use AI generation, the text prompt or reference image you submit is sent to our AI provider (Meshy) to produce a 3D model, and the result is stored in your library. Please do not put personal data or confidential information in prompts or reference images.</p>
+        <h3>Usage and analytics data</h3>
+        <p>When a model page, embed or AR link is opened we record an event (view, AR open, share or similar), the visitor&rsquo;s device type, the referring domain and a pseudonymous visitor identifier (a hash of a random session value and a server-side secret), so that model owners can see view counts and unique visitors. We do not store the visitor&rsquo;s IP address in these analytics events. Standard server logs (IP address, user agent, URLs, timestamps, error details) are kept for security, abuse prevention and debugging.</p>
+        <h3>Billing data</h3>
+        <p>For paid plans and credit packs we record the plan or pack, amount, currency, payment status and provider reference. <strong>We do not receive or store your card number.</strong> Card details are entered on the hosted payment page of our payment providers (see section 5).</p>
+        <h3>Communications</h3>
+        <p>Messages you send through the contact-sales form or by email (name, email, company, message), and transactional emails we send you (verification, security and billing notices, and product notices you can opt out of where the law requires it).</p>
+
+        <h2 id="cookies">3. Cookies and similar technologies</h2>
+        <p>We use a small number of first-party cookies that are needed for the service to work: a session cookie that keeps you signed in and protects forms against cross-site request forgery (CSRF), an optional &ldquo;remember me&rdquo; cookie (up to 30 days) if you choose to stay signed in, and, on shared model pages, the same session cookie carries a random identifier that lets us count unique visitors. We do not use advertising or cross-site tracking cookies. Some pages load third-party scripts (for example the Google <code>model-viewer</code> component, fonts and icon libraries) from content-delivery networks; those providers may receive your IP address and browser details when you load the page.</p>
+
+        <h2 id="purposes">4. Why we use your data and our legal bases</h2>
+        <table class="legal-table">
+            <thead><tr><th>Purpose</th><th>GDPR basis</th><th>KVKK basis (art. 5)</th></tr></thead>
+            <tbody>
+                <tr><td>Create and secure your account; host, convert, display and share your models; provide AI generation</td><td>Performance of a contract (Art. 6(1)(b))</td><td>Necessary for the performance of a contract (5/2-c)</td></tr>
+                <tr><td>Process payments, issue invoices, keep accounting records</td><td>Contract; legal obligation (Art. 6(1)(b), (c))</td><td>Contract; legal obligation (5/2-c, 5/2-&ccedil;)</td></tr>
+                <tr><td>Security, fraud and abuse prevention, rate limiting, debugging, service reliability</td><td>Legitimate interests (Art. 6(1)(f))</td><td>Legitimate interests of the controller (5/2-f)</td></tr>
+                <tr><td>Model analytics shown to model owners; improving the product</td><td>Legitimate interests (Art. 6(1)(f))</td><td>Legitimate interests (5/2-f)</td></tr>
+                <tr><td>Service emails (verification, receipts, security and plan notices)</td><td>Contract; legitimate interests</td><td>Contract; legitimate interests</td></tr>
+                <tr><td>Answering your enquiries and sales requests</td><td>Legitimate interests; steps before a contract (Art. 6(1)(b), (f))</td><td>5/2-c, 5/2-f</td></tr>
+                <tr><td>Defending legal claims and complying with law</td><td>Legal obligation; legitimate interests</td><td>5/2-&ccedil;, 5/2-e</td></tr>
+            </tbody>
+        </table>
+        <p>Where we rely on consent (for example optional marketing email, if we ever offer it), you can withdraw it at any time without affecting earlier processing. We do not make decisions about you based solely on automated processing that produce legal or similarly significant effects.</p>
+
+        <h2 id="processors">5. Who we share data with</h2>
+        <p>We do not sell your personal data. We use the following service providers (&ldquo;processors&rdquo; or independent providers, depending on the service) who handle data only to provide their service to us:</p>
+        <ul>
+            <li><strong>Railway</strong> &mdash; cloud hosting, database and file storage for the application.</li>
+            <li><strong>Meshy</strong> &mdash; AI 3D generation. Receives the prompts and images you submit for generation and returns the generated model.</li>
+            <li><strong>PayTR</strong> and/or <strong>Lemon Squeezy</strong> &mdash; payment processing. They collect and process your card and billing details on their own hosted pages and tell us whether a payment succeeded. Lemon Squeezy acts as merchant of record for purchases made through it.</li>
+            <li><strong>Our email provider</strong> (SMTP service configured by us) &mdash; sends transactional emails to the address you registered with.</li>
+            <li><strong>Content-delivery networks</strong> &mdash; serve third-party front-end libraries to your browser.</li>
+        </ul>
+        <p>If you share a model by link, embed it or make it public, anyone with access to that link can view it. If you add colleagues to an organization, they can see what the organization&rsquo;s roles allow. We may also disclose data when required by law, to enforce our terms, or in a merger or sale of the business (with notice to you where required).</p>
+
+        <h2 id="transfers">6. International transfers</h2>
+        <p>Our providers may process data outside your country, including in the European Economic Area, the United States and other countries. Where personal data of people in the EEA, UK or T&uuml;rkiye is transferred to a country without an adequacy decision, we rely on appropriate safeguards such as standard contractual clauses and, for KVKK, the mechanisms permitted by article 9 of the KVKK (including the Board&rsquo;s standard contract), together with the provider&rsquo;s own security commitments.</p>
+
+        <h2 id="retention">7. How long we keep data</h2>
+        <ul>
+            <li><strong>Account and models:</strong> for as long as your account exists. When you delete a model it moves to the trash and is permanently purged after the retention period (30 days by default); trashed models still count against your storage until then.</li>
+            <li><strong>Account deletion:</strong> email us at <a href="mailto:{{ legal_email }}">{{ legal_email }}</a> from your registered address and we will delete your account, models, files and analytics, normally within 30 days. Backups roll off on their normal schedule.</li>
+            <li><strong>Analytics events:</strong> kept while the related model exists, and removed with it. Plans limit how much history is shown to you.</li>
+            <li><strong>Billing records:</strong> kept for as long as tax and accounting law requires (generally up to 10 years in T&uuml;rkiye), even after account deletion.</li>
+            <li><strong>Server logs:</strong> kept for a short period (typically up to 90 days) for security and debugging.</li>
+            <li><strong>Sales enquiries:</strong> kept for as long as needed to respond and for a reasonable follow-up period.</li>
+        </ul>
+
+        <h2 id="rights">8. Your rights and how to use them</h2>
+        <p>Depending on where you live, you have the right to: know whether we process your data and get a copy; have inaccurate data corrected; have your data erased; restrict or object to processing based on legitimate interests; receive your data in a portable format; withdraw consent; and, under KVKK article 11, request information about third parties to whom data is transferred and claim compensation for damage caused by unlawful processing. You can edit your profile and delete individual models in the app at any time.</p>
+        <p>To exercise a right, email <a href="mailto:{{ legal_email }}">{{ legal_email }}</a> from your registered address (or tell us how we can verify it&rsquo;s you). We will respond within 30 days. If you are unhappy with our answer you can complain to your data-protection authority: in T&uuml;rkiye the Personal Data Protection Authority (KVKK Kurumu), in the EU/EEA your local supervisory authority, and in the UK the ICO.</p>
+
+        <h2 id="security">9. Security</h2>
+        <p>We protect data with HTTPS in transit, salted password hashing, role-based access control, CSRF protection, rate limiting and treating every upload as untrusted. No system is perfectly secure; if a breach affecting your personal data occurs we will notify you and the authorities as required by law. See also our <a href="{{ url_for('main.security') }}">Security page</a>.</p>
+
+        <h2 id="children">10. Children</h2>
+        <p>ARVision is not directed to children under 16 and we do not knowingly collect their personal data. If you believe a child has given us personal data, contact us and we will delete it.</p>
+
+        <h2 id="changes">11. Changes to this policy</h2>
+        <p>We may update this policy from time to time. The &ldquo;Last updated&rdquo; date above shows the latest version, and we will notify registered users of material changes by email or in the app before they take effect.</p>
+
+        <h2 id="contact">12. Contact</h2>
+        <p>{{ legal_entity }}<br>{{ legal_address }}<br><a href="mailto:{{ legal_email }}">{{ legal_email }}</a></p>
+        <p>See also our <a href="{{ url_for('main.terms') }}">Terms of Service</a>.</p>
+    </article>
+</main>
+
+{% include "_site_footer.html" %}
+{% endblock %}

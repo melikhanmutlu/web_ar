@@ -231,8 +231,60 @@ def run_conversion_job(job, allow_retry=True):
                     )
 
 
+def _run_simplify_mobile_pipeline(payload, progress_callback=None):
+    """Owner-chosen simplification of model.glb to a triangle budget.
+
+    The pre-simplification state is snapshotted as a version first, so the
+    original stays recoverable from History. LODs are invalidated and
+    asset_version bumped (cache-bust) like any geometry rewrite."""
+    from converters.lod_generator import simplify_glb
+    from services.model_lock import ModelEditLock
+    from version_manager import bump_asset_version, create_version
+
+    model_id = payload["model_id"]
+    target = int(payload["target_triangles"])
+    model = get_live_model(model_id)
+    if not model or not os.path.isfile(model.glb_path):
+        raise RuntimeError("Model source is unavailable")
+    report = progress_callback or (lambda *_: None)
+    report(50, "Simplifying for mobile", "Reducing the triangle count so it loads faster on phones.")
+    glb_path = model.glb_path
+    with ModelEditLock(os.path.dirname(glb_path)):
+        before_size = os.path.getsize(glb_path)
+        if create_version(model_id, "pre_simplify", {"target_triangles": target},
+                          "Original before simplification") is None:
+            raise RuntimeError("Could not save a version of the original; nothing was changed")
+        temp_output = glb_path + ".simplify.tmp.glb"
+        try:
+            stats = simplify_glb(glb_path, temp_output, target, meshopt=True)
+            os.replace(temp_output, glb_path)
+        finally:
+            if os.path.exists(temp_output):
+                os.remove(temp_output)
+        inspected = asset_quality.inspect(glb_path)
+        model.file_size = os.path.getsize(glb_path)
+        model.validation_report = inspected
+        model.vertices = inspected.get("vertices")
+        model.faces = inspected.get("triangles")
+        db.session.commit()
+        bump_asset_version(model_id)
+        create_version(model_id, "simplify", {
+            "target_triangles": target, "ratio": stats["ratio"],
+            "triangles_before": stats["triangles_before"],
+            "triangles_after": stats["triangles_after"],
+            "bytes_before": before_size, "bytes_after": model.file_size,
+        }, f"Simplified to {stats['triangles_after']:,} triangles for mobile")
+    try:
+        usdz_service.refresh_usdz_after_edit(model_id, glb_path)
+    except Exception as exc:
+        logger.warning(f"[simplify - {model_id}] USDZ refresh skipped: {exc}")
+    return model_id
+
+
 def _run_optimize_mobile_pipeline(payload, progress_callback=None):
     """Meshopt-compress a model's GLB for mobile delivery (owner-triggered)."""
+    if payload.get("mode") == "simplify":
+        return _run_simplify_mobile_pipeline(payload, progress_callback=progress_callback)
     from converters.glb_optimizer import glb_compression_mode, optimize_glb
     from services.model_lock import ModelEditLock
     from version_manager import create_version

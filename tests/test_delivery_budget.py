@@ -111,3 +111,68 @@ def test_optimize_endpoint_compresses_bumps_version_and_snapshots(client, monkey
     assert client.post(f"/api/models/{model_id}/optimize-mobile").status_code == 409
     body = client.get(f"/view/{model_id}").get_data(as_text=True)
     assert "Optimize for mobile" not in body
+
+
+def test_owner_banner_offers_simplify_with_budget_target(client):
+    owner = _user("simp_banner_owner")
+    model_id, _ = _heavy_model(owner.id)
+    _login(client, "simp_banner_owner")
+    body = client.get(f"/view/{model_id}").get_data(as_text=True)
+    assert 'id="deliverySimplifyBtn"' in body
+    assert 'data-target-triangles="100"' in body
+
+
+def test_simplify_endpoint_validates_input_and_owner(client, monkeypatch):
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
+    owner = _user("simp_val_owner")
+    model_id, _ = _heavy_model(owner.id)
+    _user("simp_val_other")
+    url = f"/api/models/{model_id}/optimize-mobile"
+
+    _login(client, "simp_val_other")
+    assert client.post(url, json={"mode": "simplify", "target_triangles": 1000}).status_code in (401, 403)
+    client.post("/logout")
+
+    _login(client, "simp_val_owner")
+    assert client.post(url, json={"mode": "bogus"}).status_code == 400
+    assert client.post(url, json={"mode": "simplify", "target_triangles": "lots"}).status_code == 400
+    assert client.post(url, json={"mode": "simplify", "target_triangles": 5120}).status_code == 400
+    assert client.post(url, json={"mode": "simplify", "target_triangles": 5}).status_code == 400
+    assert ConversionJob.query.filter_by(job_type="optimize_mobile").count() == 0
+
+
+def test_simplify_job_reduces_triangles_keeps_original_and_invalidates_lods(client, monkeypatch):
+    from models import ModelLOD
+    from version_manager import version_path
+
+    monkeypatch.setattr(upload_pipeline, "JOB_QUEUE_ENABLED", True)
+    owner = _user("simp_owner")
+    model_id, glb_path = _heavy_model(owner.id)
+    lod_path = os.path.join(os.path.dirname(glb_path), "model_lod1.glb")
+    with open(lod_path, "wb") as fh:
+        fh.write(b"stale")
+    db.session.add(ModelLOD(model_id=model_id, level=1, ratio=0.5, filename=lod_path, file_size=5))
+    db.session.commit()
+    _login(client, "simp_owner")
+
+    resp = client.post(f"/api/models/{model_id}/optimize-mobile",
+                       json={"mode": "simplify", "target_triangles": 1000})
+    assert resp.status_code == 202, resp.get_json()
+    job = db.session.get(ConversionJob, resp.get_json()["job_id"])
+    assert job.payload["mode"] == "simplify" and job.payload["target_triangles"] == 1000
+    run_conversion_job(job, allow_retry=False)
+    db.session.refresh(job)
+    assert job.status == "completed", job.error
+
+    db.session.expire_all()
+    model = db.session.get(UserModel, model_id)
+    assert model.faces < 1500
+    assert model.validation_report["triangles"] == model.faces
+    assert model.asset_version >= 1
+    assert ModelLOD.query.filter_by(model_id=model_id).count() == 0
+    assert not os.path.exists(lod_path)
+    versions = {v.operation_type: v for v in ModelVersion.query.filter_by(model_id=model_id)}
+    assert set(versions) >= {"pre_simplify", "simplify"}
+    assert versions["pre_simplify"].faces == 5120  # the original is recoverable
+    assert os.path.isfile(version_path(versions["pre_simplify"]))
+    assert versions["simplify"].faces == model.faces

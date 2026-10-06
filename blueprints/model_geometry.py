@@ -186,11 +186,14 @@ def model_lods(model_id):
 
 @model_geometry_bp.route("/api/models/<model_id>/optimize-mobile", methods=["POST"])
 def optimize_model_for_mobile(model_id):
-    """Queue meshopt compression of the model's GLB (delivery-budget fix).
+    """Queue a delivery-budget fix for the model's GLB.
 
-    Runs as a background job (worker queue or inline thread) so a large model
-    cannot block the request."""
+    Default (mode "compress"): meshopt compression. Mode "simplify": reduce
+    the triangle count to `target_triangles` (the original is kept as a
+    version). Runs as a background job (worker queue or inline thread) so a
+    large model cannot block the request."""
     from converters.glb_optimizer import glb_compression_mode
+    import app as app_module
 
     model = get_live_model(model_id)
     if not model:
@@ -200,13 +203,36 @@ def optimize_model_for_mobile(model_id):
         return guard
     if not os.path.isfile(model.glb_path):
         return jsonify({"success": False, "error": "Model file not found"}), 404
-    if glb_compression_mode(model.glb_path) is not None:
-        return jsonify({"success": False, "error": "This model is already compressed"}), 409
+    data = request.get_json(silent=True) if request.is_json else None
+    data = data if isinstance(data, dict) else {}
+    mode = data.get("mode", "compress")
+    if mode not in ("compress", "simplify"):
+        return jsonify({"success": False, "error": "mode must be 'compress' or 'simplify'"}), 400
+    job_payload = {}
+    if mode == "compress":
+        if glb_compression_mode(model.glb_path) is not None:
+            return jsonify({"success": False, "error": "This model is already compressed"}), 409
+    else:
+        report = model.validation_report if isinstance(model.validation_report, dict) else {}
+        current = report.get("triangles") or model.faces
+        if not current:
+            current = (app_module.asset_quality.inspect(model.glb_path) or {}).get("triangles")
+        target = data.get("target_triangles")
+        if target is None:
+            target = (report.get("budgets") or {}).get("warning_triangles") or 100000
+        if isinstance(target, bool) or not isinstance(target, (int, float)) or not math.isfinite(target):
+            return jsonify({"success": False, "error": "target_triangles must be a number"}), 400
+        target = int(target)
+        if not current or target >= current:
+            return jsonify({"success": False, "error": "This model is already within the triangle target"}), 400
+        if target < 100 or target < current * 0.01:
+            return jsonify({"success": False, "error": "The triangle target is too low for this model"}), 400
+        job_payload = {"mode": "simplify", "target_triangles": target}
     job_id = str(uuid.uuid4())
     status_token = secrets.token_urlsafe(32)
     db.session.add(ConversionJob(
         id=job_id, job_type="optimize_mobile", status="pending",
-        payload={"job_id": job_id, "model_id": model_id},
+        payload={"job_id": job_id, "model_id": model_id, **job_payload},
         user_id=model.user_id,
         status_token_hash=generate_password_hash(status_token),
         max_attempts=1,

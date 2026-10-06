@@ -872,6 +872,9 @@
         {% if delivery_budget.can_optimize %}
         <button id="deliveryOptimizeBtn" type="button">Optimize for mobile</button>
         {% endif %}
+        {% if delivery_budget.can_simplify %}
+        <button id="deliverySimplifyBtn" type="button" data-target-triangles="{{ delivery_budget.target_triangles }}" title="Reduces the triangle count. Your original is kept in History.">Simplify to {{ '{:,}'.format(delivery_budget.target_triangles) }} triangles</button>
+        {% endif %}
     </div>
     {% endif %}
     <div id="mobileArOnboarding" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.88);align-items:flex-end;">
@@ -1878,7 +1881,7 @@
     <script defer src="{{ url_for('static', filename='js/viewer/share-dialog.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/viewer/analytics-panel.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/viewer/embed-panel.js') }}"></script>
-    {% if delivery_budget and delivery_budget.can_optimize %}
+    {% if delivery_budget and (delivery_budget.can_optimize or delivery_budget.can_simplify) %}
     <script defer src="{{ url_for('static', filename='js/viewer/delivery-budget.js') }}"></script>
     {% endif %}
     {% endif %}

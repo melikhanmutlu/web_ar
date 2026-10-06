@@ -312,6 +312,8 @@ def view_model(model_id):
                 "size_mb": round(size_bytes / 1024 / 1024, 1),
                 "triangles": triangles,
                 "can_optimize": glb_compression_mode(model.glb_path) is None,
+                "can_simplify": triangles > (budgets.get("warning_triangles") or float("inf")),
+                "target_triangles": budgets.get("warning_triangles"),
             }
 
     response = make_response(render_template(

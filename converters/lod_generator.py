@@ -87,3 +87,39 @@ def generate_lods(source_path, output_dir, ratios=(0.5, 0.25, 0.1), *, meshopt=T
     if not outputs:
         raise LODGenerationError("LOD generation produced no smaller assets")
     return outputs
+
+
+def simplify_glb(source_path, destination_path, target_triangles, *, meshopt=True, timeout=600):
+    """Simplify a GLB down to ~`target_triangles` with gltfpack (-si ratio, and
+    -sa when the first pass misses the target, as generate_lods does).
+
+    Writes `destination_path` only; the source is never touched. Returns
+    {"ratio", "triangles_before", "triangles_after"}."""
+    command = _resolve_gltfpack()
+    if not command:
+        raise LODGenerationError("gltfpack is required for simplification")
+    if not os.path.isfile(source_path):
+        raise LODGenerationError("Source GLB is missing")
+    target_triangles = int(target_triangles)
+    with readable_glb(source_path) as readable_source:
+        before = _triangle_count(readable_source)
+        if before <= target_triangles:
+            raise LODGenerationError("The model is already within the triangle target")
+        ratio = target_triangles / before
+        if ratio < 0.01:
+            raise LODGenerationError("The triangle target is too low for this model")
+        result = _run_gltfpack(command, readable_source, destination_path, ratio, meshopt, timeout)
+        if (result.returncode == 0 and os.path.isfile(destination_path)
+                and _triangle_count(destination_path) > target_triangles * 1.5):
+            result = _run_gltfpack(command, readable_source, destination_path, ratio, meshopt,
+                                   timeout, aggressive=True)
+        if result.returncode != 0 or not os.path.isfile(destination_path):
+            try:
+                os.remove(destination_path)
+            except OSError:
+                pass
+            raise LODGenerationError(f"Simplification failed: {(result.stderr or '')[:300]}")
+    ensure_pbr_materials(destination_path)
+    validate_glb_quality(destination_path)
+    return {"ratio": ratio, "triangles_before": before,
+            "triangles_after": _triangle_count(destination_path)}

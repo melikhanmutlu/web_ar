@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       SECRET_KEY: ci-secret-not-for-production
@@ -44,7 +44,7 @@ jobs:
       - run: python -m pytest -q -n auto --junitxml=test-results.xml
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pytest-results
           path: test-results.xml
@@ -56,7 +56,7 @@ jobs:
   # Production runs PostgreSQL: run the whole suite there too (each xdist worker
   # creates and drops its own <db>_<worker> database, see tests/conftest.py).
   test-postgres:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:
@@ -92,13 +92,13 @@ jobs:
       - run: python -m pytest -q -n auto --junitxml=test-results-postgres.xml
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pytest-results-postgres
           path: test-results-postgres.xml
 
   frontend-and-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       SECRET_KEY: ci-secret-not-for-production
@@ -124,7 +124,7 @@ jobs:
       # Traces/screenshots/HTML report make e2e failures diagnosable.
       - name: Upload Playwright report and traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           path: |
@@ -136,7 +136,7 @@ jobs:
   # Migrations against the production dialect: upgrade, model/schema drift
   # check, then a full downgrade/upgrade round trip.
   migration-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -175,7 +175,7 @@ jobs:
           flask db check
 
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5

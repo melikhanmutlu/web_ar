@@ -209,14 +209,16 @@ class BaseConverter:
         Guess the source unit of a unitless mesh (OBJ/STL) from its raw extent.
 
         Picks the unit that lands the object in a plausible real-world size
-        (5 cm - 5 m). Preference order m > cm > mm, so a model that is
-        plausible as metres stays untouched. Falls back to the nearest
-        sensible interpretation when nothing fits.
+        (5 cm - 5 m). Preference order mm > cm > m: millimetres is the usual
+        unit of CAD / 3D-print parts, so a 100-unit part is read as 100 mm
+        (10 cm), not 100 cm (1 m). Models only plausible as metres (extent
+        0.05 - 5) still resolve to metres. Falls back to the nearest sensible
+        interpretation when nothing fits.
 
         Returns:
             (unit, scale_to_meters): e.g. ("cm", 0.01)
         """
-        candidates = (("m", 1.0), ("cm", 0.01), ("mm", 0.001))
+        candidates = (("mm", 0.001), ("cm", 0.01), ("m", 1.0))
         if max_extent and max_extent > 0:
             for unit, k in candidates:
                 if 0.05 <= max_extent * k <= 5.0:

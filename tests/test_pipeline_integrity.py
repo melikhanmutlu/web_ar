@@ -142,3 +142,48 @@ def test_size_limit_server_range_matches_ui(client):
 def test_legacy_endpoints_still_gone(client):
     assert client.post("/upload").status_code == 410
     assert client.post("/convert", json={}).status_code == 410
+
+
+# --- units: default cm everywhere, auto prefers mm > cm > m ----------------
+
+def test_auto_detect_prefers_mm_then_cm_then_m():
+    from converters.base_converter import BaseConverter
+    detect = BaseConverter.auto_detect_unit
+    assert detect(100.0)[0] == "mm"      # typical 100 mm part
+    assert detect(50.0)[0] == "mm"
+    assert detect(1500.0)[0] == "mm"
+    assert detect(20.0)[0] == "cm"       # only plausible as cm
+    assert detect(0.5)[0] == "m"         # only plausible as metres
+    assert detect(2.0)[0] == "m"
+    assert detect(100000.0)[0] == "mm"   # huge -> mm fallback
+
+
+@pytest.mark.parametrize("fname,builder", [("u.stl", box_stl), ("u.obj", box_obj)])
+def test_default_unit_is_cm_and_auto_is_explicit(client, tmp_path, fname, builder):
+    data = builder([100, 50, 20])
+    model, glb = run_pipeline(tmp_path, fname, data)  # no source_unit -> cm
+    assert glb_extents_m(glb).max() == pytest.approx(1.0, abs=1e-3)
+    model, glb = run_pipeline(tmp_path, fname, data, source_unit="auto")
+    assert glb_extents_m(glb).max() == pytest.approx(0.1, abs=1e-3)  # auto -> mm
+
+
+def test_resolved_unit_reported_in_job_status(client, tmp_path):
+    from models import ConversionJob, db
+    from werkzeug.security import generate_password_hash
+    payload = {
+        "unique_id": "t-" + uuid.uuid4().hex[:10], "original_filename": "u.stl",
+        "file_extension": ".stl", "source_unit": "auto", "compression": "none",
+    }
+    temp_dir = tmp_path / "s"
+    temp_dir.mkdir()
+    (temp_dir / "u.stl").write_bytes(box_stl([100, 50, 20]))
+    payload.update(temp_dir=str(temp_dir), temp_file_path=str(temp_dir / "u.stl"))
+    job = ConversionJob(id=payload["unique_id"], job_type="upload", status="processing",
+                        payload=payload, status_token_hash=generate_password_hash("tok"))
+    db.session.add(job)
+    db.session.commit()
+    app_module.run_conversion_job(job, allow_retry=False)
+    r = client.get(f"/api/upload-jobs/{job.id}", headers={"X-Job-Status-Token": "tok"})
+    body = r.get_json()
+    assert body["status"] == "completed", body
+    assert body["source_unit"] == "mm" and body["detected_unit"] == "mm"

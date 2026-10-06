@@ -24,7 +24,7 @@ class ConversionService:
         extension = payload["file_extension"]
         if extension == ".obj":
             converter = OBJConverter()
-            converter.set_source_unit(payload.get("source_unit") or "m")
+            converter.set_source_unit(payload.get("source_unit") or "cm")
             if payload.get("mtl_path"):
                 converter.set_material_file(payload["mtl_path"])
             for texture in payload.get("texture_paths") or []:
@@ -163,8 +163,15 @@ class ConversionService:
         if not os.path.isfile(output_path) or os.path.getsize(output_path) == 0:
             raise RuntimeError("Processed file missing or empty")
 
+        # Unit actually applied to unitless input ("auto" resolves to the
+        # detected one); None for formats that carry their own units.
+        resolved_unit = (
+            getattr(converter, "source_unit", None)
+            if extension in {".obj", ".stl"} else None
+        )
         return {
             "converter": converter,
+            "source_unit": resolved_unit,
             "file_size": os.path.getsize(output_path),
             "quality_warnings": warnings,
             "asset_report": asset_report,

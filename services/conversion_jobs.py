@@ -12,8 +12,10 @@ class ConversionJobService:
         self.retry_base_seconds = retry_base_seconds
         self.retry_max_seconds = retry_max_seconds
 
-    def update_progress(self, job, *, progress=None, stage=None, detail=None):
+    def update_progress(self, job, *, progress=None, stage=None, detail=None, extra=None):
         payload = dict(job.payload or {})
+        if extra:
+            payload.update(extra)
         if progress is not None:
             payload["progress"] = int(max(0, min(100, progress)))
         if stage is not None:

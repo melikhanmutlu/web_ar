@@ -867,6 +867,12 @@ def _build_job_status_payload(job):
     data["stage"] = payload.get("stage")
     data["detail"] = payload.get("detail")
     data["filename"] = payload.get("client_filename") or payload.get("original_filename")
+    # Unit the converter actually applied to unitless STL/OBJ input; detected_unit
+    # is set only when the user asked for auto-detect.
+    data["source_unit"] = payload.get("resolved_unit")
+    data["detected_unit"] = (
+        payload.get("resolved_unit") if payload.get("source_unit") == "auto" else None
+    )
     data["events"] = [event.to_dict() for event in job.events[-50:]]
     if job.status == "completed" and job.model_id:
         data["viewer_url"] = url_for("viewer.view_model", model_id=job.model_id)

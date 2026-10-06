@@ -1641,9 +1641,9 @@ def _enqueue_internal_job(job_type, model_id, payload):
     return job
 
 
-def update_conversion_progress(job, *, progress=None, stage=None, detail=None):
+def update_conversion_progress(job, *, progress=None, stage=None, detail=None, extra=None):
     conversion_jobs.update_progress(
-        job, progress=progress, stage=stage, detail=detail
+        job, progress=progress, stage=stage, detail=detail, extra=extra
     )
 
 
@@ -1672,8 +1672,8 @@ def run_conversion_job(job, allow_retry=True):
         detail="The model has been received and the converter is starting.",
     )
     try:
-        callback = lambda progress, stage, detail: update_conversion_progress(
-            job, progress=progress, stage=stage, detail=detail
+        callback = lambda progress, stage, detail, **extra: update_conversion_progress(
+            job, progress=progress, stage=stage, detail=detail, extra=extra
         )
         if job.job_type == "lod":
             model_id = _run_lod_pipeline(job.payload, progress_callback=callback)
@@ -1894,9 +1894,9 @@ def _run_upload_pipeline(payload, progress_callback=None):
         f"[upload_model - {unique_id}] Defined final output path: {output_path}"
     )
 
-    def report(progress, stage, detail):
+    def report(progress, stage, detail, **extra):
         if progress_callback:
-            progress_callback(progress, stage, detail)
+            progress_callback(progress, stage, detail, **extra)
 
     try:
         report(48, "Reading source", f"Inspecting {original_filename} and selected conversion options.")
@@ -1945,7 +1945,10 @@ def _run_upload_pipeline(payload, progress_callback=None):
 
         # Calculate model dimensions for database
         model_bounds = None
-        report(91, "Measuring model", "Calculating dimensions for the model details panel.")
+        # resolved_unit: the unit actually applied to unitless STL/OBJ input
+        # (what "auto" resolved to); exposed by the job status response.
+        report(91, "Measuring model", "Calculating dimensions for the model details panel.",
+               resolved_unit=conversion_result.get("source_unit"))
 
         # For FBX, try to use original dimensions from converter
         # BUT if scaling was applied, we need to scale the dimensions too!

@@ -2064,15 +2064,16 @@ def settings():
                 flash("AI monthly limit must be between 0 and 100000.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
             set_setting("ai_monthly_limit", str(limit))
-            try:
-                trial_count = int(request.form.get("free_ai_trial_count", ""))
-            except ValueError:
-                flash("Free AI trial generations must be a number.", "error")
-                return redirect(url_for("admin.settings", tab=tab))
-            if not 0 <= trial_count <= 100:
-                flash("Free AI trial generations must be between 0 and 100.", "error")
-                return redirect(url_for("admin.settings", tab=tab))
-            set_setting("free_ai_trial_count", str(trial_count))
+            if request.form.get("free_ai_trial_count", "").strip() != "":
+                try:
+                    trial_count = int(request.form["free_ai_trial_count"])
+                except ValueError:
+                    flash("Free AI trial generations must be a number.", "error")
+                    return redirect(url_for("admin.settings", tab=tab))
+                if not 0 <= trial_count <= 100:
+                    flash("Free AI trial generations must be between 0 and 100.", "error")
+                    return redirect(url_for("admin.settings", tab=tab))
+                set_setting("free_ai_trial_count", str(trial_count))
         elif tab == "uploads":
             ceiling = _max_upload_ceiling_mb()
             try:

@@ -116,5 +116,9 @@ def test_save_modifications_decompresses_a_meshopt_compressed_model(client, monk
     })
     data = resp.get_json()
     assert data["success"] is True, data
-    # The edit decompressed it in place, so it's now editable going forward.
-    assert not glb_needs_decompression(dest)
+    # The edit decompressed it to work on, then re-applied the compression the
+    # model had (so it doesn't silently balloon); it stays readable on demand.
+    assert glb_needs_decompression(dest)
+    from converters.glb_optimizer import readable_glb
+    with readable_glb(dest) as readable_path:
+        assert glb_needs_decompression(readable_path) is False

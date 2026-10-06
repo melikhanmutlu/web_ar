@@ -394,3 +394,39 @@ def test_slice_route_refuses_animated_model_with_422(client):
     assert resp.status_code == 422
     assert "animat" in resp.get_json()["error"].lower()
     assert os.path.getsize(glb_path) == before
+
+
+def _gradient_box(subdivide=True):
+    box = trimesh.creation.box(extents=(1, 1, 1))
+    if subdivide:
+        box = box.subdivide()
+    colors = np.zeros((len(box.vertices), 4), dtype=np.uint8)
+    colors[:, 1] = np.clip((box.vertices[:, 1] + 0.5) * 255, 0, 255).astype(np.uint8)
+    colors[:, 3] = 255
+    box.visual = trimesh.visual.ColorVisuals(vertex_colors=colors)
+    return box
+
+
+def test_real_vertex_color_slice_has_section_cap():
+    result = ms._slice_single_mesh(_gradient_box(), np.array([0.2, 0, 0]), np.array([1.0, 0, 0]))
+    assert result.bounds[0][0] == pytest.approx(0.2, abs=1e-6)
+    # The cap has its own (flat-coloured) vertices; geometrically the shell is closed.
+    geo = trimesh.Trimesh(result.vertices.copy(), result.faces.copy(), process=True)
+    assert geo.is_watertight, "vertex-colour slice should be capped, not an open shell"
+    vc = result.visual.vertex_colors
+    assert len(vc) == len(result.vertices)
+
+
+def test_vertex_color_cap_uses_mean_boundary_colour():
+    result = ms._slice_single_mesh(_gradient_box(), np.array([0.2, 0, 0]), np.array([1.0, 0, 0]))
+    on_plane = np.isclose(result.vertices[:, 0], 0.2, atol=1e-6)
+    normals = trimesh.Trimesh(result.vertices, result.faces, process=False).face_normals
+    cap_idx = [i for i, f in enumerate(result.faces)
+               if on_plane[f].all() and normals[i][0] < -0.99]
+    assert cap_idx
+    cap_colors = result.visual.vertex_colors[np.unique(result.faces[cap_idx])]
+    # gradient is symmetric around the cut -> mean green ~ 127, one flat colour
+    assert np.all(cap_colors == cap_colors[0])
+    assert int(cap_colors[0][1]) == pytest.approx(127, abs=3)
+    # side walls keep their gradient (not flattened)
+    assert result.visual.vertex_colors[:, 1].max() - result.visual.vertex_colors[:, 1].min() > 200

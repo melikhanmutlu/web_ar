@@ -467,6 +467,74 @@ def _clip_slice_with_vertex_colors(mesh, plane_origin, plane_normal):
     return result
 
 
+def _result_vertex_rgba(sliced):
+    """Per-vertex RGBA uint8 of a colour-carrying slice result, else None."""
+    vis = sliced.visual
+    if isinstance(vis, trimesh.visual.ColorVisuals):
+        return np.asarray(vis.vertex_colors, dtype=np.uint8)
+    attr = _texture_visual_color_attr(sliced)
+    return None if attr is None else np.asarray(attr, dtype=np.uint8)
+
+
+def _cap_vertex_colored_slice(mesh, sliced, plane_origin, plane_normal):
+    """Add a section cap to a vertex-colour slice (which is uncapped).
+
+    Reuses trimesh's own cap (slice_plane(cap=True)) on the bare geometry, so
+    the cap triangulation is exactly the one flat-colour meshes get, then maps
+    the clipped colours back onto it by position. The cap faces get their own
+    vertices painted with the mean colour of the cut boundary, so the section
+    reads as one flat colour instead of smearing the boundary gradient across
+    it. Returns `sliced` unchanged when no cap can be built (open meshes,
+    UV-textured results, any mismatch).
+    """
+    from scipy.spatial import cKDTree
+
+    rgba = _result_vertex_rgba(sliced)
+    if rgba is None or len(rgba) != len(sliced.vertices):
+        return sliced
+    vis = sliced.visual
+    if isinstance(vis, trimesh.visual.TextureVisuals) and getattr(vis, 'uv', None) is not None:
+        return sliced
+    try:
+        bare = trimesh.Trimesh(vertices=mesh.vertices.copy(), faces=mesh.faces.copy(), process=False)
+        capped = bare.slice_plane(plane_origin=plane_origin, plane_normal=plane_normal, cap=True)
+        if capped is None or len(capped.faces) == 0:
+            return sliced
+        normal = np.asarray(plane_normal, dtype=np.float64)
+        normal = normal / np.linalg.norm(normal)
+        extent = max(float(np.linalg.norm(mesh.extents)), 1.0)
+        eps = 1e-6 * extent
+        tri = capped.vertices[capped.faces]
+        dist = np.abs((tri - np.asarray(plane_origin, dtype=np.float64)) @ normal)
+        in_plane = np.all(dist < eps, axis=1)
+        facing = (capped.face_normals @ normal) < -0.99
+        cap_mask = in_plane & facing
+        if not np.any(cap_mask):
+            return sliced
+        d, idx = cKDTree(sliced.vertices).query(capped.vertices)
+        if d.max() > eps:
+            return sliced
+        v_rgba = rgba[idx]
+        cap_faces = capped.faces[cap_mask]
+        boundary = np.unique(cap_faces)
+        mean = np.round(v_rgba[boundary].astype(np.float64).mean(axis=0)).astype(np.uint8)
+        body_faces = capped.faces[~cap_mask]
+        cap_vertex_ids, cap_inverse = np.unique(cap_faces, return_inverse=True)
+        vertices = np.vstack([capped.vertices, capped.vertices[cap_vertex_ids]])
+        colors = np.vstack([v_rgba, np.tile(mean, (len(cap_vertex_ids), 1))])
+        faces = np.vstack([body_faces, cap_inverse.reshape(-1, 3) + len(capped.vertices)])
+        result = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+        if isinstance(vis, trimesh.visual.TextureVisuals):
+            result.visual = trimesh.visual.TextureVisuals(material=getattr(vis, 'material', None))
+            result.visual.vertex_attributes['color'] = colors
+        else:
+            result.visual = trimesh.visual.ColorVisuals(result, vertex_colors=colors)
+        return result
+    except Exception as e:
+        logger.warning(f"Could not cap vertex-colour slice ({e}); keeping uncapped cut")
+        return sliced
+
+
 def _facemask_slice(mesh, plane_origin, plane_normal):
     """
     Keep only faces whose vertices all lie on the kept side. No new
@@ -570,7 +638,7 @@ def _slice_single_mesh(mesh, plane_origin, plane_normal):
         try:
             sliced = _clip_slice_with_vertex_colors(mesh, plane_origin, plane_normal)
             if sliced is not None and len(sliced.vertices) > 0:
-                return sliced
+                return _cap_vertex_colored_slice(mesh, sliced, plane_origin, plane_normal)
         except Exception as e:
             logger.warning(f"Colour-interpolating slice failed ({e}); trying face mask")
 

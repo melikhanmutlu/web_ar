@@ -55,7 +55,7 @@ def test_funnel_breakdown_and_mrr(client):
     assert metrics["funnel"]["shared"] == 1
     assert metrics["funnel"]["paid"] == 1               # only the real payer
     assert metrics["plan_breakdown"] == {"pro": 1}      # trial Business excluded
-    assert metrics["mrr"] == 19  # seeded Pro monthly price, trial not added
+    assert metrics["mrr"] == {"USD": 19}  # seeded Pro monthly price, trial not added
 
 
 def test_renewal_rate_counts_only_ended_plan_periods(client):

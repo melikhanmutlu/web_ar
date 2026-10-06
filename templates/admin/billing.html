@@ -28,7 +28,7 @@
             {% for cur, amt in stats.mrr.items() %}{{ '%.2f'|format(amt) }} {{ cur }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
         </div>
         <div class="kpi-label">estimated MRR</div>
-        <div class="kpi-sub">plan price &times; active users, current plan config</div>
+        <div class="kpi-sub">paid, non-trial, unexpired plans; same as Growth</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-value">{% for p in plans %}{{ stats.plan_counts.get(p, 0) }}{% if not loop.last %} / {% endif %}{% endfor %}</div>

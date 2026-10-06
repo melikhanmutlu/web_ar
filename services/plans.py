@@ -18,7 +18,7 @@ Value conventions (shared with the enforcement sites):
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Seed / self-serve identity. The Plan table is seeded from these on first boot
 # (seed_plans_if_empty); after that the DB is authoritative and admins can add
@@ -211,6 +211,43 @@ def _plan_name(user):
 def plan_name(user):
     """Public: the plan name in effect for `user` (admins -> ADMIN_PLAN)."""
     return _plan_name(user)
+
+
+TRIAL_DAYS = 14
+
+
+def plan_summary(user):
+    """One description of a user's plan for every page that shows it (profile,
+    billing): the effective plan, when it ends, whether that period has
+    already lapsed, and whether it is the self-serve trial.
+
+    Keys: slug, display_name, expires_at (only for a plan that is still in
+    effect), expired (a stored paid plan whose period ended and has not been
+    swept yet), expired_on (that end date), is_trial.
+    """
+    slug = _plan_name(user)
+    stored_expiry = getattr(user, "plan_expires_at", None)
+    stored_plan = getattr(user, "plan", None)
+    is_admin = bool(getattr(user, "is_admin", False))
+    expired = bool(
+        not is_admin and stored_expiry is not None and stored_expiry < datetime.utcnow()
+        and stored_plan and stored_plan != DEFAULT_PLAN
+    )
+    expires_at = None if (expired or is_admin) else stored_expiry
+    trial_started = getattr(user, "business_trial_used_at", None)
+    is_trial = bool(
+        expires_at is not None and trial_started is not None and slug != DEFAULT_PLAN
+        and expires_at - trial_started <= timedelta(days=TRIAL_DAYS, minutes=5)
+    )
+    cfg = get_plan_config(slug)
+    return {
+        "slug": slug,
+        "display_name": cfg.get("display_name") or slug.title(),
+        "expires_at": expires_at,
+        "expired": expired,
+        "expired_on": stored_expiry if expired else None,
+        "is_trial": is_trial,
+    }
 
 
 def public_plan_slugs():

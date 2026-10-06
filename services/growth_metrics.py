@@ -23,20 +23,42 @@ def _monthly_price(plan):
 
 
 def _active_paid_users(now):
-    """Non-admin users currently on a paid plan who have actually paid for it
-    (a paid subscription Payment on record). Trials (plan set, no Payment) and
-    comped accounts are deliberately excluded from MRR/subscriber counts."""
-    paying_ids = db.session.query(Payment.user_id).filter(
+    """Non-admin users currently on a paid plan who have actually paid for it:
+    a paid subscription Payment for THAT plan on record, and a plan_expires_at
+    that hasn't passed.
+    Trials (plan set, no Payment), admin-granted/comped plans, and expired
+    plans are deliberately excluded from MRR/subscriber counts."""
+    paying = db.session.query(Payment.user_id, Payment.plan).filter(
         Payment.status == "paid",
         Payment.kind == "plan",
         Payment.user_id.isnot(None),
-    )
-    return User.query.filter(
+    ).distinct().all()
+    paying = {(uid, plan) for uid, plan in paying}
+    users = User.query.filter(
         User.plan != DEFAULT_PLAN,
         User.is_admin.is_(False),
         or_(User.plan_expires_at.is_(None), User.plan_expires_at > now),
-        User.id.in_(paying_ids),
     ).all()
+    return [u for u in users if (u.id, u.plan) in paying]
+
+
+def compute_mrr(paid_users):
+    """The one MRR definition: sum of the monthly price (yearly plans /12) of
+    each paid, non-trial, non-admin-granted, unexpired plan, per currency.
+    Returns {currency: amount}."""
+    mrr = {}
+    for user in paid_users:
+        cfg = get_plan_config(user.plan)
+        currency = cfg.get("currency") or "USD"
+        mrr[currency] = mrr.get(currency, 0) + _monthly_price(user.plan)
+    return {cur: round(amount, 2) for cur, amount in mrr.items()}
+
+
+def format_mrr(mrr):
+    """Human text for an {currency: amount} MRR dict, e.g. '19.00 USD'."""
+    if not mrr:
+        return "0"
+    return " + ".join(f"{amount:.2f} {cur}" for cur, amount in sorted(mrr.items()))
 
 
 def collect_growth_metrics(now=None):
@@ -76,7 +98,7 @@ def collect_growth_metrics(now=None):
     # --- Subscribers + MRR -----------------------------------------------
     paid_users = _active_paid_users(now)
     plan_breakdown = dict(Counter(u.plan for u in paid_users))
-    mrr = round(sum(_monthly_price(u.plan) for u in paid_users), 2)
+    mrr = compute_mrr(paid_users)
 
     funnel = {
         "registered": registered,

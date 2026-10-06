@@ -14,15 +14,19 @@
                 {% if failed %}<div class="account-notice account-notice--error">The payment was not completed. You can try again below.</div>{% endif %}
             </div>
             <article class="current-plan-card reveal" data-reveal style="--delay:100ms">
-                <div class="current-plan-top"><span>CURRENT PLAN</span><i>ACTIVE</i></div>
+                <div class="current-plan-top"><span>CURRENT PLAN</span><i>{% if plan_info.expired %}EXPIRED{% elif plan_info.is_trial %}TRIAL{% else %}ACTIVE{% endif %}</i></div>
                 <h2>{{ plan_config.display_name or plan }}</h2>
                 <p>Your ARVision workspace and included monthly capacity.</p>
                 <div class="current-plan-meta">
                     <div><span>AI CREDIT BALANCE</span><b>{{ credit_balance }}</b></div>
-                    <div><span>RENEWAL</span><b>{% if plan_expires_at %}{{ plan_expires_at.strftime('%b %d, %Y') }}{% elif plan == 'unlimited' %}No limit{% else %}No expiry{% endif %}</b></div>
+                    <div><span>{% if plan_info.is_trial %}TRIAL ENDS{% elif plan_info.expires_at %}RENEWAL{% else %}PLAN PERIOD{% endif %}</span><b>{% if plan_info.expires_at %}{{ plan_info.expires_at.strftime('%b %d, %Y') }}{% elif plan_info.expired_on %}Expired {{ plan_info.expired_on.strftime('%b %d, %Y') }}{% elif plan == 'unlimited' %}No limit{% else %}No expiry{% endif %}</b></div>
                 </div>
-            {% if plan_expires_at %}
-            <p class="current-plan-note">Renew before {{ plan_expires_at.strftime('%Y-%m-%d') }} to keep your features.</p>
+            {% if plan_info.expired_on %}
+            <p class="current-plan-note">Your paid plan expired on {{ plan_info.expired_on.strftime('%Y-%m-%d') }}. Choose a plan below to restore your features.</p>
+            {% elif plan_info.is_trial %}
+            <p class="current-plan-note">Your Business trial ends on {{ plan_info.expires_at.strftime('%Y-%m-%d') }}. Choose a plan below to keep your features.</p>
+            {% elif plan_info.expires_at %}
+            <p class="current-plan-note">Renew before {{ plan_info.expires_at.strftime('%Y-%m-%d') }} to keep your features.</p>
             {% elif plan == 'unlimited' %}
             <p class="current-plan-note">Admin account — no usage limits apply.</p>
             {% elif plan == 'free' %}
@@ -33,8 +37,8 @@
             {% if trial_available %}
             <form method="POST" action="{{ url_for('billing.start_trial') }}" class="trial-action">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="light-btn wide">Start your {{ trial_days }}-day Business trial <span>&rarr;</span></button>
-                <span>No card required · Full Business access</span>
+                <button type="submit" class="light-btn wide"{% if not email_verified %} disabled aria-disabled="true"{% endif %}>Start your {{ trial_days }}-day Business trial <span>&rarr;</span></button>
+                {% if email_verified %}<span>No card required · Full Business access</span>{% else %}<span>Verify your email first — <a href="{{ url_for('auth.profile') }}#verifyEmailNotice">resend the link from your profile</a></span>{% endif %}
             </form>
             {% endif %}
         </article>

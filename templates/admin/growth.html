@@ -19,8 +19,11 @@
         </div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-value">{{ metrics.mrr }}</div>
-        <div class="kpi-label">mrr (plan currency)</div>
+        <div class="kpi-value">
+            {% for cur, amt in metrics.mrr.items() %}{{ '%.2f'|format(amt) }} {{ cur }}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}
+        </div>
+        <div class="kpi-label">mrr</div>
+        <div class="kpi-sub">paid, non-trial, unexpired plans</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-value">{% if metrics.renewal.rate is not none %}{{ (metrics.renewal.rate * 100) | round(1) }}%{% else %}—{% endif %}</div>
@@ -49,6 +52,6 @@
             <tr><td>Paid</td><td>{{ metrics.funnel.paid }}</td><td>{{ (metrics.funnel.paid * 100 / reg) | round(1) }}%</td></tr>
         </tbody>
     </table>
-    <p class="field-help" style="margin-bottom:0;">"Shared" counts users with a share link, a public model, or a viewer share action. MRR sums the monthly price of every active paid plan (yearly plans /12).</p>
+    <p class="field-help" style="margin-bottom:0;">"Shared" counts users with a share link, a public model, or a viewer share action. MRR sums the monthly price (yearly plans /12) of every paid, unexpired plan with a matching payment, per currency; trials and admin-granted plans are excluded. Same figure as Billing.</p>
 </section>
 {% endblock %}

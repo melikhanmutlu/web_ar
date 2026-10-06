@@ -1707,15 +1707,9 @@ def billing():
         .group_by(User.plan)
         .all()
     )
-    mrr = {}
-    for p in plan_slugs:
-        count = plan_counts.get(p, 0)
-        if not count:
-            continue
-        cfg = get_plan_config(p)
-        price = cfg.get("price") or 0
-        currency = cfg.get("currency") or "USD"
-        mrr[currency] = mrr.get(currency, 0) + count * price
+    # One MRR definition shared with /admin/growth and the weekly report.
+    from services.growth_metrics import _active_paid_users, compute_mrr
+    mrr = compute_mrr(_active_paid_users(now))
     outstanding_credits = db.session.query(
         func.coalesce(func.sum(User.ai_credit_balance), 0)
     ).scalar()

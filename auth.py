@@ -318,11 +318,12 @@ def _claims_admin_email(new_email):
 
 def _render_profile(profile_form, password_form):
     import app as app_module
-    from services.plans import get_plan_config, plan_limit
+    from services.plans import plan_limit, plan_summary
     from services.storage_quota import _storage_usage_for, _storage_quota_bytes
 
-    plan = current_user.plan
-    plan_display = get_plan_config(plan).get("display_name", plan.title())
+    plan_info = plan_summary(current_user)
+    plan = plan_info["slug"]
+    plan_display = plan_info["display_name"]
 
     storage_used = _storage_usage_for(current_user.id)
     storage_quota = _storage_quota_bytes(current_user)  # 0 => unlimited
@@ -355,6 +356,7 @@ def _render_profile(profile_form, password_form):
         email_verified=is_verified(current_user),
         plan=plan,
         plan_display=plan_display,
+        plan_info=plan_info,
         usage=usage,
         payments=payments,
         profile_form=profile_form,

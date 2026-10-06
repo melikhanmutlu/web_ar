@@ -18,9 +18,12 @@ from services.time_utils import datetime
 from models import Payment, User, db
 from services import send_email
 from services.credits import CREDIT_PACKS, grant_ai_credits
+from services.email_verification import is_verified
 from services.fx import FxUnavailable, to_try
 from services.payments import get_active_provider
-from services.plans import DEFAULT_CURRENCY, get_plan_config, plan_name, public_plan_slugs
+from services.plans import (
+    DEFAULT_CURRENCY, TRIAL_DAYS, get_plan_config, plan_name, plan_summary, public_plan_slugs,
+)
 
 billing_bp = Blueprint("billing", __name__)
 logger = logging.getLogger(__name__)
@@ -49,7 +52,8 @@ def billing_home():
         "billing.html",
         plan=plan_name(current_user),
         plan_config=get_plan_config(plan_name(current_user)),
-        plan_expires_at=current_user.plan_expires_at,
+        plan_info=plan_summary(current_user),
+        email_verified=is_verified(current_user),
         public_plans={slug: get_plan_config(slug) for slug in public_plan_slugs()},
         payments=payments,
         credit_packs=CREDIT_PACKS,
@@ -139,7 +143,6 @@ def checkout(plan_slug):
 
 
 TRIAL_PLAN = "business"
-TRIAL_DAYS = 14
 
 
 @billing_bp.route("/billing/trial", methods=["POST"])

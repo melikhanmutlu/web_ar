@@ -12,7 +12,7 @@ from sqlalchemy import func
 
 from models import Organization, User, UserModel, db
 from services import send_email
-from services.growth_metrics import collect_growth_metrics
+from services.growth_metrics import collect_growth_metrics, format_mrr
 from services.time_utils import datetime
 from site_settings import get_setting, set_setting
 
@@ -54,7 +54,7 @@ def _build_body(metrics, now):
         f"ARVision weekly report — week of {now.date().isoformat()}",
         "",
         f"Signups: {m['signups']['d7']} (7d) / {m['signups']['d30']} (30d)",
-        f"Active subscribers: {m['funnel']['paid']}  |  MRR: {m['mrr']}",
+        f"Active subscribers: {m['funnel']['paid']}  |  MRR: {format_mrr(m['mrr'])}",
         f"Plan breakdown: {m['plan_breakdown'] or '—'}",
         (
             f"Renewal rate (30d): "

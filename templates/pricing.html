@@ -137,9 +137,9 @@
                         {% for plan in plans %}
                         <td{% if plan == 'pro' %} class="pricing-compare-featured"{% endif %}>
                             {% if plan_config[plan].features[key] %}
-                            <span class="pricing-compare-yes" aria-label="Included">&check;</span>
+                            <span class="pricing-compare-yes" role="img" aria-label="Included">&check;</span>
                             {% else %}
-                            <span class="pricing-compare-no" aria-label="Not included">&times;</span>
+                            <span class="pricing-compare-no" role="img" aria-label="Not included">&mdash;</span>
                             {% endif %}
                         </td>
                         {% endfor %}

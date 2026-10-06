@@ -61,6 +61,31 @@ def glb_needs_decompression(glb_path: str) -> bool:
             return False
 
 
+def glb_compression_mode(glb_path: str):
+    """Which compression a GLB was stored with: "meshopt", "draco" or None.
+
+    Used before an edit decompresses the file so the same compression can be
+    re-applied afterwards (the upload's choice is not stored anywhere else)."""
+    try:
+        if not glb_path or not os.path.exists(glb_path):
+            return None
+        from pygltflib import GLTF2
+
+        required = list(getattr(GLTF2().load(glb_path), "extensionsRequired", None) or [])
+    except Exception:
+        try:
+            with open(glb_path, "rb") as f:
+                head = f.read(262144)
+            required = [ext for ext in _COMPRESSION_EXTENSIONS if ext.encode() in head]
+        except Exception:
+            return None
+    if "EXT_meshopt_compression" in required:
+        return "meshopt"
+    if "KHR_draco_mesh_compression" in required:
+        return "draco"
+    return None
+
+
 def _decompress_glb_to_temp(glb_path: str, timeout: int = 120):
     """Produce an uncompressed temp copy of a compressed GLB. Tries gltfpack
     first, then `gltf-transform copy` -- the npm gltfpack build cannot decode

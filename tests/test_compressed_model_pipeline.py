@@ -83,10 +83,10 @@ def test_compressed_model_can_be_sliced(client, monkeypatch):
     assert resp.status_code == 200, resp.get_json()
     assert resp.get_json()["success"] is True
 
-    # Slicing an inherently-geometry-rewriting op leaves the model editable
-    # (uncompressed) rather than a compressed dead end.
+    # The edit decompresses to work, then re-applies the compression the
+    # model was uploaded with (it must not silently stay bloated).
     db.session.refresh(model)
-    assert not glb_needs_decompression(model.glb_path)
+    assert glb_needs_decompression(model.glb_path)
 
 
 def _upload(client, monkeypatch, compression):
@@ -117,7 +117,9 @@ def test_draco_model_can_be_sliced(client, monkeypatch):
     })
 
     assert resp.status_code == 200, resp.get_json()
-    extents = trimesh.load(model.glb_path, force="mesh").extents
+    from converters.glb_optimizer import readable_glb
+    with readable_glb(model.glb_path) as readable_path:
+        extents = trimesh.load(readable_path, force="mesh").extents
     assert extents.min() > 0.5  # a real half-sphere, not a collapsed point
 
 
@@ -154,3 +156,69 @@ def test_slice_that_flattens_the_model_is_not_saved(client, monkeypatch):
 
     assert resp.status_code == 422
     assert open(model.glb_path, "rb").read() == before
+
+
+# ---- compressed models: dimensions, versions, thumbnails, recompression ----
+
+def test_compressed_model_dimensions_endpoint_and_first_version(client, monkeypatch):
+    """/get_model_dimensions used to 500 and the initial upload version was
+    never created for a meshopt model (trimesh can't read it directly)."""
+    from models import ModelVersion
+
+    model, _ = _upload_compressed(client, monkeypatch)
+    assert glb_needs_decompression(model.glb_path)
+
+    resp = client.get(f"/get_model_dimensions/{model.id}")
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["dimensions"]["width"] == pytest.approx(200.0, rel=0.02)
+
+    first = ModelVersion.query.filter_by(model_id=model.id, version_number=1).first()
+    assert first is not None and first.operation_type == "upload"
+    assert first.dimensions["max"] == pytest.approx(200.0, rel=0.02)
+
+
+def test_compressed_model_thumbnail_renders(client, monkeypatch, tmp_path):
+    from converters.thumbnail_render import render_thumbnail
+
+    model, _ = _upload_compressed(client, monkeypatch)
+    png = tmp_path / "t.png"
+    assert render_thumbnail(model.glb_path, str(png)) is True
+    assert png.stat().st_size > 0
+
+
+def test_edit_reapplies_meshopt_compression(client, monkeypatch):
+    """First edit used to strip compression for good (1.3 MB -> 6.9 MB)."""
+    import os
+    model, edit_token = _upload_compressed(client, monkeypatch)
+    size_before = os.path.getsize(model.glb_path)
+
+    resp = client.post("/save_modifications", json={
+        "model_id": model.id, "edit_token": edit_token,
+        "modifications": {"transform": {"scale": 2.0, "rotation": {"x": 0, "y": 0, "z": 0}}},
+    })
+    assert resp.status_code == 200, resp.get_json()
+    db.session.refresh(model)
+
+    assert glb_needs_decompression(model.glb_path), "compression must be re-applied after the edit"
+    assert os.path.getsize(model.glb_path) < size_before * 2
+    from converters.glb_optimizer import glb_compression_mode
+    assert glb_compression_mode(model.glb_path) == "meshopt"
+    # ...and the stored dimensions reflect the edit (readable via the endpoint).
+    dims = client.get(f"/get_model_dimensions/{model.id}").get_json()["dimensions"]
+    assert dims["width"] == pytest.approx(400.0, rel=0.02)
+
+
+def test_failed_create_version_removes_copied_file(client, monkeypatch):
+    import os
+    from tests.test_viewer_page import make_two_material_model
+    from version_manager import create_version
+
+    model_id, glb_path = make_two_material_model(user_id=None)
+    version_file = os.path.join(os.path.dirname(glb_path), "version_1.glb")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("cannot read")
+
+    monkeypatch.setattr(trimesh, "load", boom)
+    assert create_version(model_id, "upload") is None
+    assert not os.path.exists(version_file), "orphaned version file must be cleaned up"

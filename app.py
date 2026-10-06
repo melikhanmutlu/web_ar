@@ -1394,7 +1394,11 @@ def convert_usdz_async(model_id, input_glb_path, output_usdz_path):
     try:
         logger.info(f"[USDZ Async - {model_id}] Starting background USDZ conversion")
 
-        success = convert_to_usdz(input_glb_path, output_usdz_path)
+        # Blender can't import meshopt/draco GLBs: convert a decompressed copy.
+        from converters.glb_optimizer import readable_glb
+
+        with readable_glb(input_glb_path) as readable_path:
+            success = convert_to_usdz(readable_path, output_usdz_path)
 
         if success:
             # Update database with USDZ path

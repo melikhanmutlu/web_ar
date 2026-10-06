@@ -10,6 +10,7 @@ import re
 from flask import Blueprint, current_app, jsonify, request, send_file, send_from_directory
 from flask_login import current_user, login_required
 
+from converters.glb_optimizer import readable_glb
 from models import UserModel, db
 from services.model_permissions import (
     check_model_mutation_allowed,
@@ -145,7 +146,8 @@ def export_model_as(model_id, fmt):
     try:
         import trimesh
 
-        scene = trimesh.load(glb_path, force="scene")
+        with readable_glb(glb_path) as readable_path:
+            scene = trimesh.load(readable_path, force="scene")
         exported = scene.export(file_type=fmt)
         if isinstance(exported, str):
             exported = exported.encode("utf-8")
@@ -263,7 +265,8 @@ def serve_thumbnail(unique_id):
                 import trimesh
 
                 # Load mesh
-                mesh = trimesh.load(model_path, file_type="glb")
+                with readable_glb(model_path) as readable_path:
+                    mesh = trimesh.load(readable_path, file_type="glb")
 
                 # Get scene if it's a Scene object
                 if isinstance(mesh, trimesh.Scene):

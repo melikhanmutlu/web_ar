@@ -52,7 +52,12 @@ def render_thumbnail(glb_path: str, png_path: str) -> bool:
     if not os.path.isfile(glb_path):
         return False
     try:
-        rendered = _rasterize(glb_path, png_path)
+        from converters.glb_optimizer import readable_glb
+
+        # meshopt/draco GLBs load as empty scenes in trimesh -- render a
+        # decompressed temp copy instead of failing to the SVG placeholder.
+        with readable_glb(glb_path) as readable_path:
+            rendered = _rasterize(readable_path, png_path)
         if rendered:
             mark_thumbnail_current(png_path)
         return rendered

@@ -13,6 +13,7 @@ import trimesh
 from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 
+from converters.glb_optimizer import readable_glb
 from models import UserModel
 
 scenes_bp = Blueprint("scenes", __name__)
@@ -77,7 +78,8 @@ def build_scene():
             return jsonify({"success": False, "error": f"position must be within +/-{MAX_OFFSET_METERS}m"}), 400
 
         try:
-            piece = trimesh.load(model.glb_path, force="scene")
+            with readable_glb(model.glb_path) as readable_path:
+                piece = trimesh.load(readable_path, force="scene")
         except Exception as e:
             app_module.logger.error(f"[build_scene] Could not load model {model_id}: {e}")
             return jsonify({"success": False, "error": "Could not load model"}), 400

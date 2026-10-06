@@ -11,6 +11,7 @@ import trimesh
 from flask import Blueprint, jsonify, request, url_for
 from werkzeug.security import generate_password_hash
 
+from converters.glb_optimizer import readable_glb
 from converters.glb_quality import finalize_glb
 from models import ConversionJob, ModelDerivedAsset, ModelLOD, db
 from services.model_permissions import (
@@ -65,7 +66,8 @@ def get_model_bounds(model_id):
 
         # Calculate bounds from GLB file
         try:
-            mesh = trimesh.load(glb_path, force="scene")
+            with readable_glb(glb_path) as readable_path:
+                mesh = trimesh.load(readable_path, force="scene")
 
             # Get bounds
             if isinstance(mesh, trimesh.Scene):
@@ -209,7 +211,8 @@ def model_exploded_asset(model_id):
     if not math.isfinite(factor) or not 0.05 <= factor <= 2.0:
         return jsonify({"success": False, "error": "Explosion factor must be 0.05-2.0"}), 400
     try:
-        scene = trimesh.load(model.filename, force="scene")
+        with readable_glb(model.filename) as readable_path:
+            scene = trimesh.load(readable_path, force="scene")
         # scene.geometry values are in each part's own LOCAL frame; for any
         # model whose parts are placed via node transforms (STEP assemblies,
         # most GLB exports), copying them raw piles everything at the wrong

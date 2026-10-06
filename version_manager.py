@@ -61,41 +61,45 @@ def _atomic_copy(src, dst):
 def create_version(model_id, operation_type, operation_details=None, comment=None):
     """
     Create a new version entry for a model
-    
+
     Args:
         model_id: UUID of the model
         operation_type: Type of operation ('upload', 'transform', 'slice', 'material')
         operation_details: Dict with operation details
         comment: Optional user comment
-    
+
     Returns:
         ModelVersion object or None
     """
+    version_file = None
     try:
         model = db.session.get(UserModel, model_id)
         if not model:
             logger.error(f"Model {model_id} not found")
             return None
-        
+
         # Get next version number
         last_version = ModelVersion.query.filter_by(model_id=model_id).order_by(ModelVersion.version_number.desc()).first()
         version_number = (last_version.version_number + 1) if last_version else 1
-        
+
         # Copy current model file to version storage
         current_file = os.path.join(_model_dir(model_id), 'model.glb')
-        version_file = os.path.join(_model_dir(model_id), f'version_{version_number}.glb')
+        candidate = os.path.join(_model_dir(model_id), f'version_{version_number}.glb')
 
-
-        if os.path.exists(current_file):
-            shutil.copy2(current_file, version_file)
-            file_size = os.path.getsize(version_file)
-        else:
+        if not os.path.exists(current_file):
             logger.error(f"Current model file not found: {current_file}")
             return None
+        shutil.copy2(current_file, candidate)
+        version_file = candidate
+        file_size = os.path.getsize(version_file)
 
-        # Get model metadata
+        # Get model metadata. trimesh can't decode meshopt/draco, so read a
+        # decompressed temp copy of compressed models.
         import trimesh
-        mesh = trimesh.load(current_file, force='mesh')
+        from converters.glb_optimizer import readable_glb
+
+        with readable_glb(current_file) as readable_path:
+            mesh = trimesh.load(readable_path, force='mesh')
 
         if isinstance(mesh, trimesh.Scene):
             meshes = list(mesh.geometry.values())
@@ -104,14 +108,14 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
 
         if not hasattr(mesh, 'vertices'):
             logger.error(f"Model {model_id} produced no mesh; skipping version metadata")
-            os.remove(version_file)  # the copy at version_file was already made above
+            _remove_quietly(version_file)  # the copy at version_file was already made above
             return None
         if len(mesh.vertices) > MAX_VERTICES:
             logger.error(
                 f"Model {model_id} mesh too large "
                 f"({len(mesh.vertices)} > {MAX_VERTICES} verts); skipping version"
             )
-            os.remove(version_file)
+            _remove_quietly(version_file)
             return None
 
         bounds = mesh.bounds
@@ -143,9 +147,10 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
             faces=len(mesh.faces),
             comment=comment
         )
-        
+
         db.session.add(version)
         db.session.commit()
+        version_file = None  # committed: the row now owns the file
 
         logger.info(f"Created version {version_number} for model {model_id}: {operation_type}")
 
@@ -156,11 +161,21 @@ def create_version(model_id, operation_type, operation_details=None, comment=Non
         cleanup_old_versions(model_id)
 
         return version
-        
+
     except Exception as e:
         logger.error(f"Failed to create version for model {model_id}: {e}", exc_info=True)
         db.session.rollback()
+        # Don't leave an orphaned version_N.glb that no DB row points at.
+        _remove_quietly(version_file)
         return None
+
+
+def _remove_quietly(path):
+    if path and os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def get_version_history(model_id):

@@ -9,6 +9,7 @@ import time
 import trimesh
 from flask import Blueprint, jsonify, request, send_from_directory
 
+from converters.glb_optimizer import glb_compression_mode, optimize_glb, readable_glb
 from glb_modifier import modify_glb
 from models import ModelHotspot, UserModel, db
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
@@ -64,6 +65,21 @@ def _make_editable(app_module, glb_path, model_id, where):
                         "error": "This model is compressed in a format the server can't edit right now. "
                                  "Nothing was changed."}), 422
     return None
+
+
+def _restore_compression(app_module, glb_path, mode, where):
+    """Re-apply the compression (meshopt/draco) the model had before an edit
+    decompressed it, so the first edit doesn't permanently bloat the file.
+    Best-effort: an uncompressed result is still a valid model."""
+    if not mode:
+        return
+    try:
+        if optimize_glb(glb_path, enabled=True, mode=mode):
+            app_module.logger.info(f"[{where}] Re-applied {mode} compression")
+        else:
+            app_module.logger.warning(f"[{where}] Could not re-apply {mode} compression; keeping uncompressed")
+    except Exception as e:
+        app_module.logger.warning(f"[{where}] Re-compression skipped: {e}")
 
 
 @model_editing_bp.route("/apply_modifications", methods=["POST"])
@@ -195,8 +211,9 @@ def get_model_dimensions(model_id):
         if not os.path.exists(glb_path):
             return jsonify({"success": False, "error": "Model not found"}), 404
 
-        # Load model with trimesh
-        mesh = trimesh.load(glb_path, force="scene")
+        # Load model with trimesh (compressed GLBs are decoded to a temp copy)
+        with readable_glb(glb_path) as readable_path:
+            mesh = trimesh.load(readable_path, force="scene")
 
         # Get bounding box
         bounds = mesh.bounds
@@ -297,6 +314,7 @@ def save_modifications():
             app_module.logger.error(f"Current model.glb not found: {current_model_path}")
             return jsonify({"success": False, "error": "Model file not found"}), 404
 
+        compression_mode = glb_compression_mode(current_model_path)
         refused = _make_editable(app_module, current_model_path, model_id, "save_modifications")
         if refused:
             return refused
@@ -331,6 +349,7 @@ def save_modifications():
         if success and os.path.exists(temp_output):
             # Replace current model.glb with modified version (atomic on same volume)
             os.replace(temp_output, current_model_path)
+            _restore_compression(app_module, current_model_path, compression_mode, "save_modifications")
             bump_asset_version(model_id)
             app_module.logger.info(
                 f"[save_modifications] Successfully replaced model.glb with modified version"
@@ -383,7 +402,8 @@ def save_modifications():
 
             # Update database dimensions after modifications
             try:
-                mesh = trimesh.load(current_model_path, force="scene")
+                with readable_glb(current_model_path) as readable_path:
+                    mesh = trimesh.load(readable_path, force="scene")
                 if isinstance(mesh, trimesh.Scene):
                     bounds = mesh.bounds
                 else:
@@ -606,6 +626,7 @@ def slice_model():
                 {"success": False, "error": f"Model not found at {input_path}"}
             ), 404
 
+        compression_mode = glb_compression_mode(input_path)
         refused = _make_editable(app_module, input_path, model_id, "slice_model")
         if refused:
             return refused
@@ -669,12 +690,17 @@ def slice_model():
             except Exception as e:
                 app_module.logger.warning(f"[slice_model] GLB quality pass skipped: {e}")
 
+            # finalize_glb above rewrites the GLB with pygltflib, so compress
+            # only after it (a compressed buffer can't be re-saved safely).
+            _restore_compression(app_module, input_path, compression_mode, "slice_model")
+
             # Rebuild the iOS USDZ from the sliced GLB (Quick Look uses it).
             app_module.refresh_usdz_after_edit(model_id, input_path)
 
             # Update dimensions in database
             try:
-                mesh = trimesh.load(input_path, force="mesh")
+                with readable_glb(input_path) as readable_path:
+                    mesh = trimesh.load(readable_path, force="mesh")
 
                 if isinstance(mesh, trimesh.Scene):
                     meshes = list(mesh.geometry.values())

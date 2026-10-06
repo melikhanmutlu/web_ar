@@ -103,6 +103,8 @@ jobs:
       - run: pip install --require-hashes -r requirements.txt
       - run: npm ci
       - run: npm run lint
+      # The committed Tailwind build must match templates (npm run build:css).
+      - run: npm run check:css
       - run: npm run security
       # github annotations + an HTML report (CI's default reporter is just "dot").
       - run: npm run test:e2e -- --reporter=github,html

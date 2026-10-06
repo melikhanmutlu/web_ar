@@ -4,6 +4,7 @@ programmatic write surface (upload/convert, job status, update, delete)."""
 import hashlib
 import os
 import secrets
+import shutil
 import uuid
 
 from flask import Blueprint, jsonify, request, url_for
@@ -13,6 +14,7 @@ from werkzeug.utils import secure_filename
 from services.time_utils import datetime
 from datetime import timedelta
 from services import upload_pipeline
+from services.storage_quota import reserve_storage, reserved_bytes_for
 from services.request_json import json_dict
 from models import ApiToken, ConversionJob, ModelAnalyticsEvent, OrganizationMember, User, UserModel, db
 from services import UploadStagingError
@@ -315,7 +317,7 @@ def _token_quota_error(token, user, incoming_bytes):
     global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
     quota_mb = effective_storage_quota_mb(user, global_default_mb)
     if quota_mb:
-        used = _storage_usage_for(token.user_id)
+        used = _storage_usage_for(token.user_id) + reserved_bytes_for(token.user_id)
         if used + incoming_bytes > quota_mb * 1024 * 1024:
             return f"Storage quota exceeded ({quota_mb} MB limit)."
     return None
@@ -351,6 +353,16 @@ def api_v1_create_model():
         staged = app_module.upload_staging.stage(job_id, file)
     except UploadStagingError as exc:
         return jsonify({"error": str(exc)}), 400
+    try:
+        reserved = os.path.getsize(staged["temp_file_path"])
+    except (OSError, KeyError):
+        reserved = 0
+    # Atomic check-and-reserve against the real staged size (the pre-check above
+    # only saw the declared Content-Length and can race with concurrent uploads).
+    quota_mb = reserve_storage(user, reserved)
+    if quota_mb is not None:
+        shutil.rmtree(staged["temp_dir"], ignore_errors=True)
+        return jsonify({"error": f"Storage quota exceeded ({quota_mb} MB limit)."}), 413
     name = str(request.form.get("name", "")).strip()[:255] or None
     payload = {
         **staged,
@@ -361,7 +373,7 @@ def api_v1_create_model():
     }
     job = ConversionJob(
         id=job_id, job_type="upload", status="pending",
-        payload=payload, user_id=token.user_id,
+        payload=payload, user_id=token.user_id, reserved_bytes=reserved,
     )
     db.session.add(job)
     db.session.commit()

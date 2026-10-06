@@ -946,6 +946,9 @@ class ConversionJob(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     error = db.Column(db.Text, nullable=True)
     status_token_hash = db.Column(db.String(255), nullable=True)
+    # Storage this job will add once it finishes; counted against the user's
+    # quota only while pending/processing (services/storage_quota.py).
+    reserved_bytes = db.Column(db.BigInteger, nullable=False, default=0, server_default='0')
 
     attempts = db.Column(db.Integer, nullable=False, default=0)
     max_attempts = db.Column(db.Integer, nullable=False, default=2)

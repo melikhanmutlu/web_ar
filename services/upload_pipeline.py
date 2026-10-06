@@ -36,6 +36,7 @@ from services import usdz as usdz_service
 from services.conversion import ConversionService
 from services.email import send_email
 from services.model_permissions import get_live_model
+from services.storage_quota import lock_user_storage, reserve_storage
 from services.time_utils import datetime
 from services.webhooks import dispatch_webhook_event
 from version_manager import create_version
@@ -769,8 +770,16 @@ def _run_upload_pipeline(payload, progress_callback=None):
         raise
 
 
+class StorageQuotaExceeded(Exception):
+    """register_glb_as_model(enforce_quota=True) would push the user over quota."""
+
+    def __init__(self, quota_mb):
+        super().__init__(f"Storage quota exceeded ({quota_mb} MB limit)")
+        self.quota_mb = quota_mb
+
+
 def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
-                          usdz_src_path=None, color=None):
+                          usdz_src_path=None, color=None, enforce_quota=False):
     """Register an already-prepared GLB into the same pipeline as /upload_model.
 
     Mirrors the upload flow: UUID dir -> converted/<uuid>/model.glb -> bounds via
@@ -881,6 +890,16 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         },
         source=source,
     )
+    if user_id is not None:
+        # Row-lock the user so this insert and any concurrent quota
+        # check-and-reserve are serialized (released by the commit below).
+        if enforce_quota:
+            quota_mb = reserve_storage(db.session.get(User, user_id), model.file_size)
+            if quota_mb is not None:
+                shutil.rmtree(converted_dir, ignore_errors=True)
+                raise StorageQuotaExceeded(quota_mb)
+        else:
+            lock_user_storage(user_id)
     db.session.add(model)
     db.session.commit()
 

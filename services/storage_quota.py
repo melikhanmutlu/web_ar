@@ -6,7 +6,7 @@ import shutil
 from flask import current_app
 
 from services.time_utils import datetime
-from models import UserModel, db
+from models import ConversionJob, User, UserModel, db
 from services.plans import effective_storage_quota_mb
 from site_settings import setting_int
 
@@ -60,3 +60,63 @@ def _storage_quota_bytes(user=None):
     default; pass None (or omit) to get the plain global quota."""
     global_default = global_storage_quota_mb()
     return effective_storage_quota_mb(user, global_default) * 1024 * 1024
+
+
+# --- Atomic check-and-reserve -------------------------------------------------
+# Quota is enforced against committed UserModel rows, but an upload only becomes
+# a UserModel after conversion. Without a reservation, N concurrent uploads each
+# see the same "used" figure and all pass. So every path that adds bytes to a
+# user's account (a) takes a row lock on the user (SELECT ... FOR UPDATE on
+# PostgreSQL; SQLAlchemy omits it on SQLite, whose writer lock already
+# serializes the transaction; we take it up front with a no-op UPDATE), (b) counts bytes still in flight, and (c) records
+# its own reservation in the same transaction. Reservations live on the pending
+# ConversionJob (reserved_bytes) and stop counting by themselves once the job
+# leaves pending/processing, so there is nothing to release or leak.
+
+_IN_FLIGHT_STATUSES = ("pending", "processing")
+
+
+def lock_user_storage(user_id):
+    """Serialize quota decisions for one user until the transaction ends."""
+    if db.session.get_bind().dialect.name == "sqlite":
+        # SQLite has no row locks; a no-op write takes the database write lock
+        # up front, so a concurrent request waits here instead of reading the
+        # same usage and then failing on the read->write lock upgrade.
+        db.session.execute(db.update(User).where(User.id == user_id).values(id=User.id))
+        return
+    db.session.execute(
+        db.select(User.id).where(User.id == user_id).with_for_update()
+    ).first()
+
+
+def reserved_bytes_for(user_id):
+    """Bytes promised to this user's not-yet-finished upload jobs."""
+    return (
+        db.session.query(db.func.coalesce(db.func.sum(ConversionJob.reserved_bytes), 0))
+        .filter(
+            ConversionJob.user_id == user_id,
+            ConversionJob.status.in_(_IN_FLIGHT_STATUSES),
+        )
+        .scalar()
+    )
+
+
+def reserve_storage(user, incoming_bytes):
+    """Lock `user`, then check used + in-flight + incoming against their quota.
+
+    Returns None when it fits (the caller must now store `incoming_bytes` as the
+    new job's reserved_bytes and commit in this same transaction, which also
+    releases the lock) or the quota in MB when it doesn't (the transaction is
+    rolled back). Unlimited (0) quotas and anonymous users always fit.
+    """
+    if user is None or not getattr(user, "is_authenticated", True):
+        return None
+    quota_bytes = _storage_quota_bytes(user)
+    if not quota_bytes:
+        return None
+    lock_user_storage(user.id)
+    total = _storage_usage_for(user.id) + reserved_bytes_for(user.id) + (incoming_bytes or 0)
+    if total > quota_bytes:
+        db.session.rollback()
+        return quota_bytes // (1024 * 1024)
+    return None

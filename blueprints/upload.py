@@ -26,6 +26,7 @@ from config import (
     SIZE_LIMIT_MIN_CM,
 )
 from services import upload_pipeline
+from services.storage_quota import reserve_storage, reserved_bytes_for
 from services.request_json import json_dict
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
@@ -137,7 +138,7 @@ def _check_storage_quota(incoming_bytes=None):
     quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
     if not quota_mb:
         return None
-    used = _storage_usage_for(current_user.id)
+    used = _storage_usage_for(current_user.id) + reserved_bytes_for(current_user.id)
     incoming = (request.content_length or 0) if incoming_bytes is None else incoming_bytes
     if used + incoming > quota_mb * 1024 * 1024:
         return jsonify(
@@ -205,6 +206,33 @@ def upload_progress():
     return jsonify({"progress": progress})
 
 
+def _staged_size(staged):
+    try:
+        return os.path.getsize(staged["temp_file_path"])
+    except (OSError, KeyError, TypeError):
+        return 0
+
+
+def _reserve_or_discard(staged):
+    """Atomic check-and-reserve for one staged upload (see
+    services/storage_quota.py). Returns (reserved_bytes, error_response): on
+    quota failure the staged files are removed and error_response is the 413.
+    The caller stores reserved_bytes on its ConversionJob and commits, which
+    releases the per-user row lock taken here."""
+    if not current_user.is_authenticated:
+        return 0, None
+    size = _staged_size(staged)
+    quota_mb = reserve_storage(current_user, size)
+    if quota_mb is None:
+        return size, None
+    shutil.rmtree(staged["temp_dir"], ignore_errors=True)
+    return 0, (jsonify(
+        {"success": False,
+         "error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin.",
+         "upgrade": upgrade_hint("storage_quota")}
+    ), 413)
+
+
 def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
                            source_unit, compression):
     """Create one ConversionJob per staged model (used when a single ZIP
@@ -212,7 +240,13 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
     renders as a progress list -- mirroring /api/uploads/batch."""
     user_id = current_user.id if current_user.is_authenticated else None
     jobs = []
+    errors = []
     for index, (job_id, staged) in enumerate(staged_models):
+        reserved, quota_error = _reserve_or_discard(staged)
+        if quota_error is not None:
+            errors.append({"filename": staged["client_filename"],
+                           "error": "Storage quota exceeded", "index": index})
+            continue
         edit_token = secrets.token_urlsafe(32) if user_id is None else None
         status_token = secrets.token_urlsafe(32)
         payload = {
@@ -235,6 +269,7 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
         job = ConversionJob(
             id=job_id, job_type="upload", status="pending", payload=payload,
             user_id=user_id, status_token_hash=generate_password_hash(status_token),
+            reserved_bytes=reserved,
         )
         db.session.add(job)
         db.session.commit()
@@ -248,7 +283,7 @@ def _finalize_multi_staged(staged_models, *, use_color, color, max_dimension,
             "edit_token": edit_token,
             "status_url": url_for("upload.upload_job_status", job_id=job_id),
         })
-    return jsonify({"success": True, "multi": True, "jobs": jobs, "errors": []}), 202
+    return jsonify({"success": bool(jobs), "multi": True, "jobs": jobs, "errors": errors}), 202 if jobs else 413
 
 
 def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimension,
@@ -258,6 +293,9 @@ def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimensio
     persist it, and kick off processing (queue or inline thread)."""
     import app as app_module
 
+    reserved, quota_error = _reserve_or_discard(staged)
+    if quota_error is not None:
+        return quota_error
     payload = {
         "unique_id": unique_id,
         "original_filename": staged["original_filename"],
@@ -282,6 +320,7 @@ def _finalize_staged_upload(unique_id, staged, *, use_color, color, max_dimensio
         payload=payload,
         user_id=payload["user_id"],
         status_token_hash=generate_password_hash(status_token),
+        reserved_bytes=reserved,
     )
     db.session.add(job)
     db.session.commit()
@@ -543,7 +582,7 @@ def init_chunked_upload():
         global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
         quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
         if quota_mb:
-            used = _storage_usage_for(current_user.id)
+            used = _storage_usage_for(current_user.id) + reserved_bytes_for(current_user.id)
             if used + total_size > quota_mb * 1024 * 1024:
                 return jsonify({"success": False, "error": "Storage quota exceeded",
                                 "upgrade": upgrade_hint("storage_quota")}), 413
@@ -705,7 +744,7 @@ def complete_chunked_upload(upload_id):
             global_default_mb = setting_int("storage_quota_mb", int(os.environ.get("STORAGE_QUOTA_MB", 1024)))
             quota_mb = effective_storage_quota_mb(current_user, global_default_mb)
             if quota_mb:
-                used = _storage_usage_for(current_user.id)
+                used = _storage_usage_for(current_user.id) + reserved_bytes_for(current_user.id)
                 if used + assembled_size > quota_mb * 1024 * 1024:
                     return jsonify({"success": False, "error": "Storage quota exceeded",
                                     "upgrade": upgrade_hint("storage_quota")}), 413
@@ -797,6 +836,10 @@ def batch_upload_models():
         status_token = secrets.token_urlsafe(32)
         try:
             staged = app_module.upload_staging.stage(job_id, item)
+            reserved, quota_error = _reserve_or_discard(staged)
+            if quota_error is not None:
+                errors.append({"filename": item.filename, "error": "Storage quota exceeded", "index": index})
+                continue
             payload = {
                 **staged,
                 "unique_id": job_id,
@@ -811,6 +854,7 @@ def batch_upload_models():
             job = ConversionJob(
                 id=job_id, job_type="upload", status="pending", payload=payload,
                 user_id=user_id, status_token_hash=generate_password_hash(status_token),
+                reserved_bytes=reserved,
             )
             db.session.add(job)
             db.session.commit()

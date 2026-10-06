@@ -82,11 +82,23 @@
 
     // Homepage Viewer demo: show a compact loader until the live iframe is
     // ready, then cross-fade without shifting the browser-style frame.
+    // The iframe (model-viewer + GLB, ~2 MB) only loads when the visitor asks
+    // for it via the poster button, and stays out of the Tab order until then.
     var demoFrame = document.querySelector('[data-home-viewer-demo]');
     if (demoFrame) {
+        var demoShell = demoFrame.closest('[data-home-viewer-shell]');
         demoFrame.addEventListener('load', function () {
-            demoFrame.closest('[data-home-viewer-shell]')?.classList.add('is-ready');
+            if (demoFrame.getAttribute('src')) demoShell?.classList.add('is-ready');
         });
+        var demoLoad = document.querySelector('[data-home-viewer-load]');
+        if (demoLoad) {
+            demoLoad.addEventListener('click', function () {
+                demoShell?.classList.add('is-loading');
+                demoFrame.removeAttribute('tabindex');
+                demoFrame.setAttribute('src', demoFrame.getAttribute('data-src'));
+                demoFrame.focus();
+            });
+        }
     }
 
     // Landing workflow section: 3-step tab switcher.

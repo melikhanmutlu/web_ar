@@ -50,11 +50,15 @@
                     <div class="browser-shot browser-shot--live" data-home-viewer-shell>
                         <div class="browser-bar"><i aria-hidden="true"></i><span>arvision.app/viewer</span></div>
                         <div class="browser-shot-viewport">
+                            <button type="button" class="browser-shot-poster" data-home-viewer-load aria-label="Load the interactive 3D demo">
+                                <img src="{{ url_for('static', filename='marketing/home-viewer-demo-poster.webp') }}" alt="" width="1280" height="720" decoding="async">
+                                <span class="primary-btn">Try the 3D demo <span aria-hidden="true">&rarr;</span></span>
+                            </button>
                             <div class="browser-shot-loader" aria-live="polite">
                                 <span class="browser-shot-spinner" aria-hidden="true"></span>
                                 <span>Loading Viewer</span>
                             </div>
-                            <iframe class="browser-shot-frame" data-home-viewer-demo src="{{ url_for('main.demo_viewer') }}" title="Interactive ARVision Viewer demo" allow="fullscreen" allowfullscreen></iframe>
+                            <iframe class="browser-shot-frame" data-home-viewer-demo data-src="{{ url_for('main.demo_viewer') }}" tabindex="-1" title="Interactive ARVision Viewer demo" allow="fullscreen" allowfullscreen></iframe>
                         </div>
                     </div>
                 </div>
@@ -75,7 +79,7 @@
                 </div>
                 <div class="viewer-drift">
                     <div class="viewer-hero reveal" data-reveal style="--delay:120ms">
-                        <img src="{{ url_for('static', filename='marketing/hero-3d-maker-world.png') }}" alt="3D printer transforming a physical prototype into a digital 3D and AR experience" width="1783" height="892">
+                        <img src="{{ url_for('static', filename='marketing/hero-3d-maker-world.webp') }}" srcset="{{ url_for('static', filename='marketing/hero-3d-maker-world-900.webp') }} 900w, {{ url_for('static', filename='marketing/hero-3d-maker-world.webp') }} 1774w" sizes="(max-width: 900px) 100vw, 900px" alt="3D printer transforming a physical prototype into a digital 3D and AR experience" width="1774" height="887" loading="lazy" decoding="async">
                     </div>
                 </div>
             </div>
@@ -134,7 +138,7 @@
                     <div class="capability-viewport" id="capabilityViewport" tabindex="0" aria-label="ARVision capabilities">
                         <div class="capability-track">
                             <a class="capability-card capability-card--upload" href="{{ url_for('main.studio') }}">
-                                <img src="{{ url_for('static', filename='marketing/capability-upload-convert.png') }}" alt="3D scan transforming a physical object into a digital model" width="1024" height="1536">
+                                <img src="{{ url_for('static', filename='marketing/capability-upload-convert.webp') }}" alt="3D scan transforming a physical object into a digital model" width="1024" height="1536" loading="lazy" decoding="async">
                                 <span class="capability-card-shade" aria-hidden="true"></span>
                                 <span class="capability-card-copy">
                                     <strong>Upload &amp; convert</strong>
@@ -143,7 +147,7 @@
                                 <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
                             </a>
                             <a class="capability-card" href="{{ url_for('main.studio') }}">
-                                <img src="{{ url_for('static', filename='marketing/capability-build-scene.png') }}" alt="Product-design scene with a sculptural chair and materials" width="1024" height="1536">
+                                <img src="{{ url_for('static', filename='marketing/capability-build-scene.webp') }}" alt="Product-design scene with a sculptural chair and materials" width="1024" height="1536" loading="lazy" decoding="async">
                                 <span class="capability-card-shade" aria-hidden="true"></span>
                                 <span class="capability-card-copy">
                                     <strong>Build your scene</strong>
@@ -152,7 +156,7 @@
                                 <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
                             </a>
                             <a class="capability-card" href="{{ url_for('main.features') }}">
-                                <img src="{{ url_for('static', filename='marketing/capability-review-viewer.png') }}" alt="3D product displayed in an immersive viewer" width="1024" height="1536">
+                                <img src="{{ url_for('static', filename='marketing/capability-review-viewer.webp') }}" alt="3D product displayed in an immersive viewer" width="1024" height="1536" loading="lazy" decoding="async">
                                 <span class="capability-card-shade" aria-hidden="true"></span>
                                 <span class="capability-card-copy">
                                     <strong>Review in the Viewer</strong>
@@ -161,7 +165,7 @@
                                 <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
                             </a>
                             <a class="capability-card capability-card--prepare" href="{{ url_for('main.features') }}">
-                                <img src="{{ url_for('static', filename='marketing/capability-prepare-assets.png') }}" alt="Raw geometry being prepared into a finished 3D asset" width="1024" height="1536">
+                                <img src="{{ url_for('static', filename='marketing/capability-prepare-assets.webp') }}" alt="Raw geometry being prepared into a finished 3D asset" width="1024" height="1536" loading="lazy" decoding="async">
                                 <span class="capability-card-shade" aria-hidden="true"></span>
                                 <span class="capability-card-copy">
                                     <strong>Prepare every asset</strong>
@@ -170,7 +174,7 @@
                                 <span class="capability-card-arrow" aria-hidden="true">&rarr;</span>
                             </a>
                             <a class="capability-card capability-card--ar" href="{{ url_for('main.features') }}">
-                                <img src="{{ url_for('static', filename='marketing/capability-place-ar.png') }}" alt="Phone placing a sculptural chair in augmented reality" width="1024" height="1536">
+                                <img src="{{ url_for('static', filename='marketing/capability-place-ar.webp') }}" alt="Phone placing a sculptural chair in augmented reality" width="1024" height="1536" loading="lazy" decoding="async">
                                 <span class="capability-card-shade" aria-hidden="true"></span>
                                 <span class="capability-card-copy">
                                     <strong>Place it in AR</strong>

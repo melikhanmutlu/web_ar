@@ -3566,6 +3566,12 @@ body {
 .browser-shot--live.is-ready .browser-shot-frame { opacity: 1; }
 .browser-shot--live.is-ready .browser-shot-loader { opacity: 0; visibility: hidden; pointer-events: none; }
 @keyframes browser-shot-spin { to { transform: rotate(360deg); } }
+/* Click-to-load poster: the demo iframe is not requested until it is used. */
+.browser-shot--live:not(.is-loading) .browser-shot-loader { opacity: 0; visibility: hidden; pointer-events: none; }
+.browser-shot-poster { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; width: 100%; padding: 0; border: 0; background: #111318; cursor: pointer; }
+.browser-shot-poster > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .9; }
+.browser-shot-poster > .primary-btn { position: relative; }
+.browser-shot--live.is-loading .browser-shot-poster { opacity: 0; visibility: hidden; pointer-events: none; }
 .browser-bar { height: 44px; display: flex; align-items: center; gap: 22px; padding: 0 18px; border-bottom: 1px solid #e3e6eb; background: #f1f3f6; color: #8a919c; font-size: 11px; text-align: left; }
 .browser-bar i, .browser-bar i:before, .browser-bar i:after { width: 8px; height: 8px; border-radius: 50%; background: #c5cad2; }
 .browser-bar i { position: relative; margin-right: 20px; }

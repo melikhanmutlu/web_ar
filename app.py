@@ -285,9 +285,11 @@ migrate = Migrate(app, db)
 
 # Response compression (br/gzip) for text payloads only. GLB/USDZ/images are
 # already compressed and text/event-stream (job progress SSE) must stay
-# unbuffered, so neither mimetype is listed.
+# unbuffered, so neither mimetype is listed. text/html is deliberately NOT
+# compressed either: pages embed the static per-session CSRF token, and
+# compressing secret-bearing HTML that can reflect attacker input is the BREACH
+# setup. CSS/JS/JSON/SVG/WASM carry no such secret.
 app.config["COMPRESS_MIMETYPES"] = [
-    "text/html",
     "text/css",
     "text/xml",
     "text/javascript",

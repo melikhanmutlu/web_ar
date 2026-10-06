@@ -106,6 +106,9 @@ def client():
     # the real rate limit and 429 unrelated tests. Tests that specifically
     # cover rate-limit/lockout behavior flip this back on for their own body.
     limiter.enabled = False
+    # In-process view/like dedupe state must not leak between tests.
+    from services import abuse_guard
+    abuse_guard.reset()
 
     _threads_before = set(threading.enumerate())
 

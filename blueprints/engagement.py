@@ -10,12 +10,15 @@ from flask_login import current_user, login_required
 
 from services.time_utils import datetime
 from models import ModelAnalyticsEvent, ModelLike, ModelSave, Organization, OrganizationMember, UserModel, db
+from services import abuse_guard
 from services.model_analytics import ANALYTICS_EVENT_TYPES, record_model_event
 from services.model_permissions import check_model_view_allowed, get_live_model
 from services.org_membership import _organization_membership
 from services.plans import plan_limit
 
 engagement_bp = Blueprint("engagement", __name__)
+
+ANON_LIKES_PER_IP_PER_DAY = 3
 
 
 @engagement_bp.route("/api/models/<model_id>/like", methods=["POST"])
@@ -50,6 +53,14 @@ def toggle_like(model_id):
                     "liked": False,
                     "count": ModelLike.query.filter_by(model_id=model_id).count(),
                 }
+            )
+        # A fresh cookie per request would otherwise mint a fresh like each
+        # time: cap new anonymous likes per IP per model per day.
+        if not abuse_guard.allow(
+            f"anon-like:{model_id}", abuse_guard.visitor_key(), ANON_LIKES_PER_IP_PER_DAY, 86400
+        ):
+            return jsonify(
+                {"liked": False, "count": ModelLike.query.filter_by(model_id=model_id).count()}
             )
         like = ModelLike(model_id=model_id, session_id=sid)
     db.session.add(like)

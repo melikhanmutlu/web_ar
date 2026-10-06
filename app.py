@@ -482,6 +482,13 @@ app.view_functions["engagement.create_model_analytics_event"] = limiter.limit(
 # inflated without bound.
 for _endpoint in ("engagement.track_share", "engagement.track_download"):
     app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
+# Likes and the /view counter write are anonymous too (SEC-12); the per-visitor
+# dedupe lives in services/abuse_guard.py, this adds a coarse per-IP/user cap.
+app.view_functions["viewer.view_model"] = limiter.limit(
+    "120 per minute"
+)(app.view_functions["viewer.view_model"])
+for _endpoint in ("engagement.toggle_like",):
+    app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
 for _endpoint in ("model_editing.save_modifications", "model_editing.slice_model"):
     app.view_functions[_endpoint] = limiter.limit("60 per minute")(app.view_functions[_endpoint])
 app.view_functions["upload.upload_file"] = limiter.limit(

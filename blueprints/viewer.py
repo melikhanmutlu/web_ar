@@ -8,12 +8,16 @@ from flask_login import current_user
 
 from config import SEO_INDEX_MODEL_PAGES
 from models import ModelLike, ModelSave, UserModel, db
+from services import abuse_guard
 from services.model_analytics import record_model_event
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from services.viewer_settings import resolved_viewer_settings
 from site_settings import setting_bool
 
 viewer_bp = Blueprint("viewer", __name__)
+
+# One counted view per visitor per model per this many seconds.
+VIEW_DEDUPE_SECONDS = int(os.environ.get("VIEW_DEDUPE_SECONDS", "1800"))
 
 
 def _seo_robots_for_model_page(is_canonical=False):
@@ -59,12 +63,16 @@ def view_model(model_id):
 
     # Increment view count atomically (a read-modify-write loses concurrent
     # views; match the coalesce+1 pattern used for share/download counts).
-    UserModel.query.filter_by(id=model_id).update(
-        {UserModel.view_count: db.func.coalesce(UserModel.view_count, 0) + 1},
-        synchronize_session=False,
-    )
-    db.session.commit()
-    record_model_event(model_id, "view")
+    # Count at most one view per visitor (account, else IP) per model per
+    # window, so reloading/scripting /view can't inflate the counter or grow
+    # the analytics table without bound.
+    if abuse_guard.allow(f"view:{model_id}", abuse_guard.visitor_key(), 1, VIEW_DEDUPE_SECONDS):
+        UserModel.query.filter_by(id=model_id).update(
+            {UserModel.view_count: db.func.coalesce(UserModel.view_count, 0) + 1},
+            synchronize_session=False,
+        )
+        db.session.commit()
+        record_model_event(model_id, "view")
 
     # Check if converted file exists. glb_path resolves from the CURRENT
     # CONVERTED_FOLDER — the absolute path stored in model.filename goes stale

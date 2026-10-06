@@ -305,6 +305,9 @@
                                         <option value="public" {% if model.visibility == 'public' %}selected{% endif %}>Public (shown in Community)</option>
                                     </select>
                                 </label>
+                                <button type="button" data-share-dialog data-model-id="{{ model.id }}" data-model-name="{{ model.display_name or model.original_filename }}" data-visibility="{{ model.visibility }}">
+                                    <i data-lucide="share-2"></i> Share...
+                                </button>
                                 <button type="button" class="library-model-menu-danger" onclick="event.stopPropagation(); deleteModel('{{ model.id }}')">
                                     <i data-lucide="trash-2"></i> Move to trash
                                 </button>
@@ -462,4 +465,5 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/my_models.js') }}"></script>
+<script src="{{ url_for('static', filename='js/viewer/share-dialog.js') }}"></script>
 {% endblock %}

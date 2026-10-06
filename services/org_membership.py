@@ -98,3 +98,17 @@ def reassign_orgs_before_user_delete(user):
             organization.created_by = owner.user_id
     db.session.flush()
     return result
+
+
+def org_seat_usage(organization):
+    """(members, pending_invites, cap) for an organization. The cap follows the
+    billing user's plan (max_org_members), floored to 0 so a plan with no seat
+    entitlement never reads as unlimited. Pending invites hold a seat."""
+    from services.org_invites import pending_invites_query
+    from services.plans import plan_limit
+
+    members = OrganizationMember.query.filter_by(organization_id=organization.id).count()
+    pending = pending_invites_query(organization.id).count()
+    owner = org_billing_user(organization)
+    cap = plan_limit(owner, "max_org_members", 0) if owner is not None else 0
+    return members, pending, cap

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Organization invitation — ARVision{% endblock %}
+
+{% block content %}
+<div class="aurora-bg aurora-bg--static" aria-hidden="true"></div>
+<main id="main" class="auth-main">
+    <section class="auth-shell">
+        <div class="auth-copy">
+            <p class="home-kicker">Invitation</p>
+            {% if state == 'pending' %}
+            <h1 class="home-title">Join {{ organization.name }}.</h1>
+            <p class="auth-lede">You were invited to collaborate on {{ organization.name }} as <strong>{{ invite.role }}</strong>. The invitation was sent to {{ invite.email }}.</p>
+            {% elif state == 'accepted' %}
+            <h1 class="home-title">Invitation already used.</h1>
+            <p class="auth-lede">This invitation has already been accepted. Ask an organization admin for a new one if you need access.</p>
+            {% elif state == 'expired' %}
+            <h1 class="home-title">Invitation expired.</h1>
+            <p class="auth-lede">Invitations are valid for 7 days. Ask an organization admin to send you a new one.</p>
+            {% else %}
+            <h1 class="home-title">Invitation not found.</h1>
+            <p class="auth-lede">This invitation link is not valid. It may have been revoked.</p>
+            {% endif %}
+        </div>
+
+        <div class="auth-form av-stack">
+            {% if state != 'pending' %}
+                <a class="btn-primary" href="{{ url_for('main.index') }}" style="text-align:center">Go to ARVision</a>
+            {% elif not current_user.is_authenticated %}
+                <p class="auth-alt">Sign in or create an account with <strong>{{ invite.email }}</strong> to accept.</p>
+                <a class="btn-primary" href="{{ url_for('auth.login', next=request.path) }}" style="text-align:center">Sign in</a>
+                <a class="btn-secondary" href="{{ url_for('auth.register', next=request.path) }}" style="text-align:center">Create account</a>
+            {% elif not matches %}
+                <p id="invite-error" class="auth-error auth-error--form" role="alert">You are signed in as {{ current_user.email }}, but this invitation was sent to {{ invite.email }}. Sign in with that address to accept it.</p>
+                <form method="POST" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn-primary">Sign out</button>
+                </form>
+            {% elif not verified %}
+                <p id="invite-error" class="auth-error auth-error--form" role="alert">Verify your email address first, then reopen this link.</p>
+                <a class="btn-primary" href="{{ url_for('auth.profile') }}" style="text-align:center">Open profile settings</a>
+            {% else %}
+                <p id="invite-error" class="auth-error auth-error--form" role="alert" hidden></p>
+                <button type="button" class="btn-primary" id="acceptInvite" data-token="{{ token }}" data-next="/workspace/{{ organization.id }}">Accept invitation</button>
+            {% endif %}
+        </div>
+    </section>
+</main>
+{% include "_site_footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    "use strict";
+    var btn = document.getElementById("acceptInvite");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+        btn.disabled = true;
+        fetch("/api/invites/" + encodeURIComponent(btn.getAttribute("data-token")) + "/accept", { method: "POST" })
+            .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+            .then(function (r) {
+                if (r.ok) { window.location.href = btn.getAttribute("data-next"); return; }
+                var err = document.getElementById("invite-error");
+                err.textContent = r.body.error || "Could not accept the invitation.";
+                err.hidden = false;
+                btn.disabled = false;
+            })
+            .catch(function () { btn.disabled = false; });
+    });
+})();
+</script>
+{% endblock %}

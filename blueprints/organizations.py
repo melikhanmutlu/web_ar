@@ -5,7 +5,7 @@ import logging
 import re
 import secrets
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, render_template, request, url_for
 from flask_login import current_user, login_required
 from slugify import slugify
 
@@ -15,14 +15,21 @@ from models import (
     Folder,
     Organization,
     OrganizationDomain,
+    OrganizationInvite,
     OrganizationMember,
     User,
     UserModel,
     db,
 )
-from services.org_membership import _organization_membership, org_allows, org_billing_user
+from services.org_invites import (
+    INVITE_ROLES, create_invite, find_invite, invite_state, pending_invites_query,
+)
+from services.org_membership import (
+    _organization_membership, org_allows, org_billing_user, org_seat_usage,
+)
 from services import send_email
 from services.org_branding import resolved_org_branding
+from services.email_verification import is_verified
 from services.plans import plan_allows
 from services.upgrade import upgrade_hint
 
@@ -67,22 +74,24 @@ def organizations_api():
     }}), 201
 
 
-def _check_org_seat_limit(organization_id):
-    """Block a new member when the org is at its owner's plan seat cap
-    (max_org_members). Governed by the org creator's plan — they're who pays.
+def _check_org_seat_limit(organization_id, exclude_email=None):
+    """Block a new member/invite when members + pending invites reach the org
+    owner's plan seat cap (max_org_members). Governed by the org creator's plan
+    -- they're who pays. `exclude_email` skips that address's own pending invite
+    (re-inviting it, or accepting it, does not need a second seat).
     Returns a response tuple or None."""
-    from services.plans import plan_limit
-
     organization = db.session.get(Organization, organization_id)
     if organization is None:
         return None
-    owner = org_billing_user(organization)
-    # Floor to 0 (not None): a plan with no seat entitlement — Free, or a
-    # Business owner who lapsed/downgraded — must NOT fall through to "unlimited".
-    # 0 means no new members may be added; existing members stay.
-    cap = plan_limit(owner, "max_org_members", 0)
-    current = OrganizationMember.query.filter_by(organization_id=organization_id).count()
-    if current >= cap:
+    # cap floors to 0 (not None): a plan with no seat entitlement -- Free, or a
+    # Business owner who lapsed/downgraded -- must NOT fall through to
+    # "unlimited". 0 means no new members may be added; existing members stay.
+    members, pending, cap = org_seat_usage(organization)
+    if exclude_email:
+        pending -= pending_invites_query(organization_id).filter(
+            db.func.lower(OrganizationInvite.email) == exclude_email.lower()
+        ).count()
+    if members + pending >= cap:
         return jsonify({
             "success": False,
             "error": f"Seat limit reached ({cap}). The organization owner's plan has to be "
@@ -123,9 +132,12 @@ def organization_members_api(organization_id):
             return jsonify({"success": False, "error": "Owner membership cannot be changed"}), 409
         existing.role = role
     else:
-        seat_guard = _check_org_seat_limit(organization_id)
+        seat_guard = _check_org_seat_limit(organization_id, exclude_email=user.email)
         if seat_guard is not None:
             return seat_guard
+        pending_invites_query(organization_id).filter(
+            db.func.lower(OrganizationInvite.email) == (user.email or "").lower()
+        ).delete(synchronize_session=False)
         db.session.add(OrganizationMember(
             organization_id=organization_id, user_id=user.id, role=role
         ))
@@ -399,3 +411,179 @@ def organization_branding_api(organization_id):
     organization.branding = branding
     db.session.commit()
     return jsonify({"success": True, "branding": resolved_org_branding(organization)})
+
+
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+def _invite_json(invite):
+    return {
+        "id": invite.id, "email": invite.email, "role": invite.role,
+        "expires_at": invite.expires_at.isoformat(),
+    }
+
+
+@organizations_bp.route("/api/organizations/<int:organization_id>/invites", methods=["GET", "POST"])
+@login_required
+def organization_invites_api(organization_id):
+    if not _organization_membership(organization_id, {"owner", "admin"}):
+        return jsonify({"success": False, "error": "Admin role required"}), 403
+    if request.method == "GET":
+        invites = pending_invites_query(organization_id).order_by(OrganizationInvite.id).all()
+        return jsonify({"success": True, "invites": [_invite_json(i) for i in invites]})
+    data = json_dict()
+    email = str(data.get("email", "")).strip().lower()
+    role = data.get("role", "viewer")
+    if len(email) > 255 or not _EMAIL_RE.fullmatch(email):
+        return jsonify({"success": False, "error": "A valid email address is required"}), 400
+    if role not in INVITE_ROLES:
+        return jsonify({"success": False, "error": "Invalid role"}), 400
+    already = (
+        OrganizationMember.query.join(User, User.id == OrganizationMember.user_id)
+        .filter(OrganizationMember.organization_id == organization_id,
+                db.func.lower(User.email) == email).first()
+    )
+    if already:
+        return jsonify({"success": False, "error": "This person is already a member"}), 409
+    seat_guard = _check_org_seat_limit(organization_id, exclude_email=email)
+    if seat_guard is not None:
+        return seat_guard
+    organization = db.session.get(Organization, organization_id)
+    invite, token = create_invite(organization, email, role, current_user.id)
+    db.session.commit()
+    link = url_for("organizations.invite_page", token=token, _external=True)
+    sent = send_email(
+        email, f"You're invited to join {organization.name} on ARVision",
+        f"{current_user.username} invited you to join {organization.name} as {role}.\n\n"
+        f"Accept the invitation (valid for 7 days):\n{link}\n\n"
+        "Sign in or create an account with this email address to accept it.",
+    )
+    if not sent:
+        # SMTP not configured/failed: the admin can still relay the link.
+        logger.info("Organization invite for %s (org %s): %s", email, organization_id, link)
+    return jsonify({"success": True, "invite": _invite_json(invite), "email_sent": bool(sent)}), 201
+
+
+@organizations_bp.route("/api/organizations/<int:organization_id>/invites/<int:invite_id>", methods=["DELETE"])
+@login_required
+def revoke_organization_invite(organization_id, invite_id):
+    if not _organization_membership(organization_id, {"owner", "admin"}):
+        return jsonify({"success": False, "error": "Admin role required"}), 403
+    invite = OrganizationInvite.query.filter_by(
+        id=invite_id, organization_id=organization_id, accepted_at=None
+    ).first_or_404()
+    db.session.delete(invite)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@organizations_bp.route("/invites/<token>", methods=["GET"])
+def invite_page(token):
+    """Landing page for an emailed invite link. Anonymous visitors are asked to
+    sign in / register (with `next` back here); accepting itself is a POST."""
+    invite = find_invite(token)
+    state = invite_state(invite) if invite else "invalid"
+    organization = invite.organization if invite and state == "pending" else None
+    matches = bool(
+        organization and current_user.is_authenticated and current_user.email
+        and current_user.email.lower() == invite.email
+    )
+    return render_template(
+        "invite_accept.html", token=token, invite=invite, state=state,
+        organization=organization, matches=matches,
+        verified=bool(current_user.is_authenticated and is_verified(current_user)),
+    )
+
+
+@organizations_bp.route("/api/invites/<token>/accept", methods=["POST"])
+@login_required
+def accept_organization_invite(token):
+    invite = find_invite(token)
+    if invite is None:
+        return jsonify({"success": False, "error": "Invitation not found"}), 404
+    state = invite_state(invite)
+    if state != "pending":
+        return jsonify({"success": False, "error": f"This invitation is {state}"}), 410
+    if not current_user.email or current_user.email.lower() != invite.email:
+        return jsonify({"success": False,
+                        "error": "This invitation was sent to a different email address"}), 403
+    if not is_verified(current_user):
+        return jsonify({"success": False,
+                        "error": "Verify your email address before accepting an invitation"}), 403
+    organization_id = invite.organization_id
+    existing = OrganizationMember.query.filter_by(
+        organization_id=organization_id, user_id=current_user.id
+    ).first()
+    if existing is None:
+        seat_guard = _check_org_seat_limit(organization_id, exclude_email=invite.email)
+        if seat_guard is not None:
+            return seat_guard
+    # Single use: only the request that flips accepted_at proceeds.
+    claimed = OrganizationInvite.query.filter_by(id=invite.id, accepted_at=None).update(
+        {"accepted_at": datetime.utcnow()}, synchronize_session=False
+    )
+    if not claimed:
+        db.session.rollback()
+        return jsonify({"success": False, "error": "This invitation is accepted"}), 410
+    if existing is None:
+        db.session.add(OrganizationMember(
+            organization_id=organization_id, user_id=current_user.id, role=invite.role
+        ))
+    db.session.commit()
+    return jsonify({"success": True, "organization_id": organization_id}), 200
+
+
+@organizations_bp.route("/api/organizations/<int:organization_id>/leave", methods=["POST"])
+@login_required
+def leave_organization(organization_id):
+    membership = _organization_membership(organization_id)
+    if not membership:
+        return jsonify({"success": False, "error": "Forbidden"}), 403
+    organization = db.session.get(Organization, organization_id)
+    if membership.role == "owner":
+        other_owner = OrganizationMember.query.filter(
+            OrganizationMember.organization_id == organization_id,
+            OrganizationMember.role == "owner",
+            OrganizationMember.user_id != current_user.id,
+        ).order_by(OrganizationMember.created_at, OrganizationMember.id).first()
+        if other_owner is None:
+            return jsonify({"success": False,
+                            "error": "Transfer ownership to another member before leaving"}), 409
+        if organization.created_by == current_user.id:
+            organization.created_by = other_owner.user_id
+    db.session.delete(membership)
+    db.session.commit()
+    return jsonify({"success": True})
+
+
+@organizations_bp.route("/api/organizations/<int:organization_id>/transfer", methods=["POST"])
+@login_required
+def transfer_organization_ownership(organization_id):
+    actor = _organization_membership(organization_id, {"owner"})
+    if not actor:
+        return jsonify({"success": False, "error": "Owner role required"}), 403
+    try:
+        target_id = int((json_dict()).get("user_id"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "A member user_id is required"}), 400
+    if target_id == current_user.id:
+        return jsonify({"success": False, "error": "You already own this organization"}), 400
+    target = OrganizationMember.query.filter_by(
+        organization_id=organization_id, user_id=target_id
+    ).first()
+    if target is None:
+        return jsonify({"success": False, "error": "Target must be an existing member"}), 404
+    # created_by is the billing user (plan gates, seats): the new owner's plan
+    # must be able to carry organizations or the team would silently lock up.
+    if not plan_allows(db.session.get(User, target_id), "organizations"):
+        return jsonify({
+            "success": False,
+            "error": "The new owner's plan does not include organizations.",
+            "upgrade": upgrade_hint("organizations"),
+        }), 409
+    organization = db.session.get(Organization, organization_id)
+    target.role = "owner"
+    actor.role = "admin"
+    organization.created_by = target_id
+    db.session.commit()
+    return jsonify({"success": True, "owner_id": target_id})

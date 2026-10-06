@@ -190,6 +190,22 @@ class OrganizationMember(db.Model):
     __table_args__ = (db.UniqueConstraint('organization_id', 'user_id', name='uq_org_member'),)
 
 
+class OrganizationInvite(db.Model):
+    """Email invitation to join an organization. Only the SHA-256 of the
+    emailed token is stored; accepting needs a logged-in user whose verified
+    email matches `email`, and sets accepted_at (single use)."""
+    id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'), nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False, index=True)
+    role = db.Column(db.String(20), nullable=False, default='viewer')
+    token_hash = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    invited_by = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    organization = db.relationship('Organization', backref=db.backref('invites', lazy=True, cascade='all, delete-orphan', passive_deletes=True))
+
+
 class OrganizationDomain(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organization.id', ondelete='CASCADE'), nullable=False, index=True)

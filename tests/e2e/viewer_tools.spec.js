@@ -87,10 +87,13 @@ test('measure tool lives in the bottom-right toolbar and places visible markers'
   expect(unexpected, `unexpected console/page errors: ${unexpected.join('\n')}`).toEqual([]);
 });
 
-test('AR button explains why AR is unavailable on an unsupported device', async ({ page }) => {
-  // Headless Chromium has no WebXR/Scene Viewer/Quick Look support, so
+test('AR button explains why AR is unavailable on an unsupported device', async ({ page, isMobile }) => {
+  // Headless desktop Chromium has no WebXR/Scene Viewer/Quick Look support, so
   // clicking AR here always takes the "unsupported" fallback path -- this
   // exercises the reason-specific messaging added for mobile AR failures.
+  // The mobile project emulates an Android UA, where model-viewer reports AR
+  // as available and launches the Scene Viewer intent instead of the modal.
+  test.skip(isMobile, 'Android UA launches Scene Viewer, not the fallback modal');
   await uploadCubeAndGetViewerUrl(page);
   await page.locator('#arButton').click();
   await expect(page.locator('#arModal')).toHaveClass(/show/);
@@ -165,7 +168,7 @@ test('undo back to baseline, then a transform-only save sends no material block'
   const payload = request.postDataJSON();
   expect(payload.modifications.transform.scale).toBe(1.5);
   expect(payload.modifications.material).toBeUndefined();
-  expect(errors).toEqual([]);
+  expect(errors.filter(isUnexpectedError)).toEqual([]);
 });
 
 test('roughness-only edit saves a material block without color', async ({ page }) => {

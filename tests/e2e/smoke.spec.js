@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
-test('home upload experience renders the current upload contract', async ({ page }) => {
-  await page.goto('/');
+test('studio upload experience renders the current upload contract', async ({ page }) => {
+  await page.goto('/studio');
   await expect(page).toHaveTitle(/arvision/i);
   await expect(page.locator('#uploadForm')).toHaveAttribute('action', '/upload_model');
   await expect(page.locator('#file-upload')).toHaveAttribute('accept', /\.zip/);

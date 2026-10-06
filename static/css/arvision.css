@@ -253,6 +253,7 @@ a { color: inherit; }
 }
 .library-actions { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); justify-content: flex-end; }
 .library-btn {
+    text-decoration: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;

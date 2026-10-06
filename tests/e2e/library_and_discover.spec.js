@@ -11,16 +11,18 @@ test('public model appears on the Discover page', async ({ page }) => {
   const modelId = viewerUrl.match(/\/view\/([^/?]+)/)[1];
 
   // No UI exists yet to flip visibility to public from the viewer page, so
-  // drive the existing sharing API directly -- same authenticated browser
-  // context/session the page itself uses. page.request bypasses the page's
-  // own fetch() (which the app's global wrapper auto-attaches the CSRF
-  // token to), so the token has to be read from the page and sent explicitly.
-  const csrfToken = await page.locator('meta[name="csrf-token"]').getAttribute('content');
-  const patchResp = await page.request.patch(`/api/models/${modelId}/sharing`, {
-    data: { visibility: 'public' },
-    headers: { 'X-CSRFToken': csrfToken },
-  });
-  expect(patchResp.ok()).toBeTruthy();
+  // drive the existing sharing API directly. Use the page's own fetch() (the
+  // app's global wrapper attaches the CSRF token): page.request doesn't send
+  // the Secure session cookie over plain http, which the e2e server uses.
+  const patchOk = await page.evaluate(async (id) => {
+    const resp = await fetch(`/api/models/${id}/sharing`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: 'public' }),
+    });
+    return resp.ok;
+  }, modelId);
+  expect(patchOk).toBeTruthy();
 
   await page.goto('/discover');
   await expect(page.locator(`article.model-card[data-model-id="${modelId}"]`)).toBeVisible();

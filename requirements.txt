@@ -6,7 +6,7 @@ Flask-SQLAlchemy==3.1.1
 SQLAlchemy==2.0.54
 Flask-Login==0.6.3
 Flask-Migrate==4.0.5
-Werkzeug==3.1.6
+Werkzeug==3.1.9
 trimesh==4.0.5
 cascadio==0.0.17
 mapbox-earcut>=1.1.0

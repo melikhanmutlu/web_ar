@@ -12,7 +12,7 @@ test('STEP upload converts to a loaded Viewer model', async ({ page }) => {
   await page.waitForFunction(() => document.querySelector('model-viewer')?.loaded, { timeout: 20000 });
 });
 
-test('mobile navigation dismisses with Escape and outside click', async ({ page }) => {
+test('mobile navigation dismisses with Escape and the menu button', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const burger = page.locator('#navBurger');
@@ -23,8 +23,11 @@ test('mobile navigation dismisses with Escape and outside click', async ({ page 
   await expect(menu).toBeHidden();
   await expect(burger).toHaveAttribute('aria-expanded', 'false');
   await expect(burger).toBeFocused();
+  // The open panel now covers the whole viewport below the header, so there is
+  // no "outside" to click; the menu button toggles it closed.
   await burger.click();
-  await page.locator('h1').click();
+  await expect(menu).toBeVisible();
+  await burger.click();
   await expect(menu).toBeHidden();
 });
 

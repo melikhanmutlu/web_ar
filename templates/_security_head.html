@@ -12,6 +12,41 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     };
+    // Small shared UI helpers (self-contained styles: view.html doesn't load
+    // arvision.css). arToast(msg, type, {actionLabel, onAction}) shows a
+    // transient toast; withBusy(btn, fn) disables a button while an async
+    // action runs so a double-click can't fire it twice.
+    window.arToast = function (message, type, opts) {
+        opts = opts || {};
+        var t = document.createElement('div');
+        t.className = 'ar-toast ar-toast--' + (type || 'info');
+        t.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99998;' +
+            'max-width:90vw;display:flex;gap:12px;align-items:center;padding:10px 16px;border-radius:10px;' +
+            'font-size:14px;line-height:1.4;box-shadow:0 10px 30px rgba(0,0,0,.3);color:#fff;' +
+            'background:' + (type === 'error' ? '#b91c1c' : '#111827') + ';';
+        var span = document.createElement('span');
+        span.textContent = message;
+        t.appendChild(span);
+        if (opts.actionLabel && typeof opts.onAction === 'function') {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.textContent = opts.actionLabel;
+            b.style.cssText = 'background:rgba(255,255,255,.18);border:0;color:#fff;padding:3px 10px;border-radius:6px;cursor:pointer;font-weight:600;';
+            b.addEventListener('click', function () { t.remove(); opts.onAction(); });
+            t.appendChild(b);
+        }
+        document.body.appendChild(t);
+        setTimeout(function () { t.remove(); }, opts.duration || (opts.actionLabel ? 8000 : 4000));
+        return t;
+    };
+    window.withBusy = async function (btn, fn, busyText) {
+        if (btn && btn.disabled) return;
+        var label = btn ? btn.textContent : '';
+        if (btn) { btn.disabled = true; if (busyText) btn.textContent = busyText; }
+        try { return await fn(); }
+        finally { if (btn) { btn.disabled = false; if (busyText) btn.textContent = label; } }
+    };
     // Attach the CSRF token to every same-origin state-changing fetch so
     // existing fetch() calls across the app stay protected without edits.
     // The same wrapper watches failed JSON responses for the backend's

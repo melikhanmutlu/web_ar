@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const history = [];
     let pointer = -1; // index of the currently-applied snapshot
     let restoring = false; // guards against re-capturing a snapshot we just applied
+    let batchDepth = 0; // >0 while a multi-input change (e.g. a material preset) is applied
 
     const undoButton = document.getElementById('undoButton');
     const redoButton = document.getElementById('redoButton');
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function pushSnapshot() {
-        if (restoring) return;
+        if (restoring || batchDepth > 0) return;
         const snap = captureSnapshot();
         if (pointer >= 0 && snapshotsEqual(history[pointer], snap)) return;
         history.length = pointer + 1; // drop any redo branch
@@ -42,6 +43,14 @@ document.addEventListener('DOMContentLoaded', () => {
         pointer = history.length - 1;
         updateButtons();
     }
+
+    // A change that drives several inputs at once (material presets) wraps
+    // itself in begin/end so it records exactly one undo step.
+    window._beginUndoBatch = () => { batchDepth += 1; };
+    window._endUndoBatch = () => {
+        batchDepth = Math.max(0, batchDepth - 1);
+        if (batchDepth === 0) pushSnapshot();
+    };
 
     function applySnapshot(snap) {
         restoring = true;

@@ -52,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const preset = MATERIAL_PRESETS[name];
         if (!preset) return;
         _applyingMaterialPreset = true;
+        // One preset click = one undo step (no-op when undo-redo isn't loaded).
+        window._beginUndoBatch?.();
         try {
             if (preset.color) {
                 const hexInput = document.getElementById('materialColorHex');
@@ -66,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setSliderValue('roughnessSlider', preset.roughness);
             setSliderValue('opacitySlider', preset.opacity);
         } finally {
+            window._endUndoBatch?.();
             _applyingMaterialPreset = false;
         }
     }

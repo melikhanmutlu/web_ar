@@ -77,6 +77,7 @@
                 <th>status</th>
                 <th>method</th>
                 <th>period</th>
+                <th>invoice</th>
                 <th>recorded by</th>
                 <th>update</th>
             </tr>
@@ -101,6 +102,10 @@
                     {{ payment.period_start.isoformat() if payment.period_start else '?' }} &rarr; {{ payment.period_end.isoformat() if payment.period_end else '?' }}
                     {% else %}—{% endif %}
                 </td>
+                <td class="muted"{% if payment.invoice_error %} title="{{ payment.invoice_error }}"{% endif %}>
+                    {% if payment.invoice_status and payment.invoice_status != 'none' %}{{ badge(payment.invoice_status) }}{% else %}—{% endif %}
+                    {% if payment.invoice_external_id %}<span class="muted">{{ payment.invoice_external_id }}</span>{% endif %}
+                </td>
                 <td class="muted">{{ payment.recorded_by.username if payment.recorded_by else '—' }}</td>
                 <td>
                     <span class="admin-inline-field">
@@ -118,7 +123,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="muted">no payments recorded yet</td></tr>
+            <tr><td colspan="10" class="muted">no payments recorded yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

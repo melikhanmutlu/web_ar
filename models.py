@@ -849,6 +849,12 @@ class Payment(db.Model):
     period_start = db.Column(db.Date, nullable=True)
     period_end = db.Column(db.Date, nullable=True)
     note = db.Column(db.Text, nullable=True)
+    # E-invoice outcome (services/invoicing.py): none = never attempted (no
+    # provider active), pending = attempt in flight, issued, failed (error in
+    # invoice_error). Lets un-invoiced payments be found and reconciled.
+    invoice_status = db.Column(db.String(10), nullable=False, default='none', server_default='none')
+    invoice_external_id = db.Column(db.String(120), nullable=True)
+    invoice_error = db.Column(db.Text, nullable=True)
     recorded_by_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='SET NULL'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 

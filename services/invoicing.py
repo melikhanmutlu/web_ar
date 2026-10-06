@@ -89,6 +89,25 @@ def get_active_provider():
     return provider_cls() if provider_cls else None
 
 
+def _record(payment, status, result=None):
+    """Persist the invoice outcome on a real Payment row (best effort: a DB
+    hiccup here must not break billing). Skipped for non-model objects."""
+    from models import Payment, db
+
+    if not isinstance(payment, Payment):
+        return
+    try:
+        payment.invoice_status = status
+        if result is not None:
+            payment.invoice_external_id = result.external_id
+            payment.invoice_error = (result.error or None) if not result.issued else None
+        db.session.commit()
+    except Exception as exc:
+        logger.warning("Could not record invoice outcome for payment %s: %s",
+                       getattr(payment, "id", None), exc)
+        db.session.rollback()
+
+
 def issue_invoice(payment, user):
     """Issue an invoice for a payment if a provider is active and configured.
     A no-op (issued=False) otherwise. Safe to call from the payment-success
@@ -96,12 +115,14 @@ def issue_invoice(payment, user):
     provider = get_active_provider()
     if provider is None:
         return InvoiceResult(issued=False, error="No invoicing provider active.")
+    _record(payment, "pending")
     try:
         result = provider.issue_invoice(payment, user)
     except Exception as exc:  # defensive: invoicing must never break billing
         logger.warning("Invoice issue failed: %s", exc)
         result = InvoiceResult(issued=False, provider=provider.name, error=str(exc))
-    # The outcome is recorded in the log (one line per payment, whatever its
+    _record(payment, "issued" if result.issued else "failed", result)
+    # The outcome is also recorded in the log (one line per payment, whatever its
     # kind) so un-invoiced payments can be found and reconciled.
     logger.info(
         "invoice outcome: payment=%s kind=%s provider=%s issued=%s external_id=%s error=%s",

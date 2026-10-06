@@ -2038,6 +2038,11 @@ def settings():
                 "seo_index_model_pages",
                 "true" if "seo_index_model_pages" in request.form else "false",
             )
+            calcom_url = (request.form.get("calcom_url") or "").strip()
+            if calcom_url and not (calcom_url.startswith("https://") and len(calcom_url) <= 500):
+                flash("Sales booking URL must start with https:// (max 500 characters).", "error")
+                return redirect(url_for("admin.settings", tab=tab))
+            set_setting("calcom_url", calcom_url)
         elif tab == "users":
             set_setting(
                 "registration_enabled",
@@ -2059,6 +2064,15 @@ def settings():
                 flash("AI monthly limit must be between 0 and 100000.", "error")
                 return redirect(url_for("admin.settings", tab=tab))
             set_setting("ai_monthly_limit", str(limit))
+            try:
+                trial_count = int(request.form.get("free_ai_trial_count", ""))
+            except ValueError:
+                flash("Free AI trial generations must be a number.", "error")
+                return redirect(url_for("admin.settings", tab=tab))
+            if not 0 <= trial_count <= 100:
+                flash("Free AI trial generations must be between 0 and 100.", "error")
+                return redirect(url_for("admin.settings", tab=tab))
+            set_setting("free_ai_trial_count", str(trial_count))
         elif tab == "uploads":
             ceiling = _max_upload_ceiling_mb()
             try:
@@ -2105,6 +2119,8 @@ def settings():
         "registration_enabled": setting_bool("registration_enabled", True),
         "default_new_user_plan": get_setting("default_new_user_plan", "free") or "free",
         "ai_monthly_limit": _effective_ai_monthly_limit(),
+        "free_ai_trial_count": max(0, setting_int("free_ai_trial_count", 3)),
+        "calcom_url": get_setting("calcom_url", "") or "",
         "max_upload_mb": setting_int("max_upload_mb", ceiling),
         "storage_quota_mb": _effective_storage_quota_mb(),
     }
@@ -2120,7 +2136,8 @@ def settings():
         key: get_setting(key) is not None
         for key in ("maintenance_mode", "announcement_text", "seo_index_model_pages",
                     "registration_enabled", "default_new_user_plan",
-                    "ai_monthly_limit", "max_upload_mb", "storage_quota_mb")
+                    "ai_monthly_limit", "free_ai_trial_count", "calcom_url",
+                    "max_upload_mb", "storage_quota_mb")
     }
 
     plan_rows = {p.slug: p for p in Plan.query.order_by(Plan.sort_order, Plan.id).all()}

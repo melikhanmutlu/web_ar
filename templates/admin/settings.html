@@ -263,6 +263,12 @@
             </label>
             <p class="field-help">When on, every canonical /view/&lt;id&gt; page becomes indexable ("index, follow"). Embed and VR pages always stay noindex. Env default: {{ 'on' if defaults.seo_index_model_pages else 'off' }}.</p>
         </div>
+        <div class="admin-field">
+            <label class="field-label" for="calcom_url">sales booking URL {{ source_chip('calcom_url') }}</label>
+            <input type="url" id="calcom_url" name="calcom_url" class="av-input" maxlength="500" placeholder="https://cal.com/your-team"
+                   value="{{ values.calcom_url }}">
+            <p class="field-help">Shown as "Book directly" on the contact-sales page. Must be https://. Leave empty to hide the link.</p>
+        </div>
 
         {% elif tab == 'users' %}
         <div class="admin-field">
@@ -291,7 +297,13 @@
             <label class="field-label" for="ai_monthly_limit">monthly generation limit per user {{ source_chip('ai_monthly_limit') }}</label>
             <input type="number" id="ai_monthly_limit" name="ai_monthly_limit" class="av-input" min="0" max="100000"
                    value="{{ values.ai_monthly_limit }}">
-            <p class="field-help">Rolling 30-day window; the fallback for users whose plan doesn't set its own monthly allowance (e.g. Free). Each generation costs Meshy credits. 0 disables AI generation entirely. Env default: {{ defaults.ai_monthly_limit }}.</p>
+            <p class="field-help">Rolling 30-day window; the fallback for users whose plan doesn't set its own monthly allowance (e.g. Free). Each generation costs Meshy credits. 0 disables the monthly allowance, but not the Free trial below. Env default: {{ defaults.ai_monthly_limit }}.</p>
+        </div>
+        <div class="admin-field">
+            <label class="field-label" for="free_ai_trial_count">free AI trial generations {{ source_chip('free_ai_trial_count') }}</label>
+            <input type="number" id="free_ai_trial_count" name="free_ai_trial_count" class="av-input" min="0" max="100"
+                   value="{{ values.free_ai_trial_count }}">
+            <p class="field-help">Lifetime generations a verified Free account gets while its monthly allowance is 0. 0 disables the trial. Default: 3.</p>
         </div>
 
         {% elif tab == 'uploads' %}
@@ -325,6 +337,7 @@
             <div><dt>new accounts start on</dt><dd>{{ values.default_new_user_plan }}</dd></div>
             {% elif tab == 'ai' %}
             <div><dt>global monthly limit</dt><dd>{{ values.ai_monthly_limit }}</dd></div>
+            <div><dt>free trial generations</dt><dd>{{ values.free_ai_trial_count }}</dd></div>
             <div><dt>env default</dt><dd>{{ defaults.ai_monthly_limit }}</dd></div>
             {% elif tab == 'uploads' %}
             <div><dt>effective upload cap</dt><dd>{{ values.max_upload_mb }} MB</dd></div>

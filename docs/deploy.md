@@ -33,9 +33,27 @@ Defined in `nixpacks.toml` (`[start] cmd`), in this order:
    threads assume one process. Scale with threads, or move to Redis before adding workers.
    `exec` makes gunicorn PID 1 so a redeploy's SIGTERM triggers its graceful shutdown.
 
-Known limitation: the background worker is not signalled on shutdown; a job that
-is mid-conversion during a deploy is requeued by the stale-job sweep after
-`WORKER_STALE_MINUTES` (default 30).
+Worker shutdown and liveness: `worker.py` handles SIGTERM/SIGINT. It stops
+claiming jobs and lets the current one finish; if it is still running after
+`WORKER_SHUTDOWN_GRACE_SECONDS` (default 25) the job is put straight back in the
+queue (the attempt is refunded) and the process exits. While a job runs, a
+background thread refreshes the worker heartbeat and the job's
+`last_heartbeat_at` every `WORKER_JOB_HEARTBEAT_SECONDS` (default 15), so
+`/healthz` stays green on long conversions and the stale sweep does not
+double-process them. On startup (and every minute) a `processing` job with no
+live owner for `WORKER_ORPHAN_SECONDS` (default 60) is requeued immediately;
+`WORKER_STALE_MINUTES` (default 30) remains the fallback. Because the worker
+runs in the same container as gunicorn, a SIGTERM that only reaches PID 1 may
+not reach it; the orphan sweep covers that case.
+
+### Optional: separate worker service (later)
+
+To scale conversions independently, add a second Railway service from the same
+repo/image with start command `python worker.py` and the same environment
+variables (`DATABASE_URL`, `SECRET_KEY`, `JOB_QUEUE=true`, storage settings) and
+the same volume mounted at the same path (conversion outputs are read by the
+web service). Then remove the background worker loop from the web service's
+start command. Not required today.
 
 ## Health checks
 

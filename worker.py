@@ -18,6 +18,8 @@ tab, independent of ConversionJob's own queue above.
 
 import logging
 import os
+import signal
+import threading
 import time
 import socket
 from datetime import timedelta
@@ -44,6 +46,37 @@ logging.basicConfig(
 logger = logging.getLogger("worker")
 
 WORKER_ID = os.environ.get("WORKER_ID") or f"{socket.gethostname()}:{os.getpid()}"
+
+
+# While a job runs, a background thread keeps the worker heartbeat (and the
+# job's own last_heartbeat_at) fresh: a single conversion can take many minutes
+# with no progress commit, which made /healthz report the worker dead and let
+# the stale sweep double-process the job.
+JOB_HEARTBEAT_INTERVAL = float(os.environ.get("WORKER_JOB_HEARTBEAT_SECONDS", "15"))
+# After SIGTERM/SIGINT the current job gets this long to finish; past it the job
+# is put back in the queue immediately and the process exits.
+SHUTDOWN_GRACE_SECONDS = float(os.environ.get("WORKER_SHUTDOWN_GRACE_SECONDS", "25"))
+# A 'processing' job with no live owner (no fresh WorkerHeartbeat pointing at it
+# and no job heartbeat) for this long is requeued without waiting for
+# WORKER_STALE_MINUTES.
+ORPHAN_SECONDS = float(os.environ.get("WORKER_ORPHAN_SECONDS", "60"))
+
+_shutdown = threading.Event()
+_shutdown_at = None
+
+
+def request_shutdown(signum=None, frame=None):
+    """Signal handler: stop claiming jobs and let the current one wind down."""
+    global _shutdown_at
+    if _shutdown_at is None:
+        _shutdown_at = time.monotonic()
+    _shutdown.set()
+    logger.info("Shutdown requested; finishing current job (grace %ss)", SHUTDOWN_GRACE_SECONDS)
+
+
+def install_signal_handlers():
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
 
 
 def record_worker_heartbeat(current_job_id=None):
@@ -178,7 +211,30 @@ def expire_stale_plans():
         db.session.commit()
 
 
+def _live_owned_job_ids(max_age_seconds):
+    cutoff = datetime.utcnow() - timedelta(seconds=max_age_seconds)
+    rows = WorkerHeartbeat.query.filter(
+        WorkerHeartbeat.current_job_id.isnot(None),
+        WorkerHeartbeat.last_seen_at >= cutoff,
+    ).all()
+    return {row.current_job_id for row in rows}
+
+
+def requeue_orphaned_jobs():
+    """Fast recovery: requeue 'processing' jobs that no live worker owns.
+
+    Jobs a live worker heartbeat still points at are left alone. Used at
+    startup and in the loop so a crashed worker's job doesn't wait for
+    WORKER_STALE_MINUTES.
+    """
+    _requeue_jobs(stale_seconds=ORPHAN_SECONDS, only_orphaned=True)
+
+
 def requeue_stale_jobs():
+    _requeue_jobs()
+
+
+def _requeue_jobs(stale_seconds=None, only_orphaned=False):
     """Recover orphaned 'processing' jobs (crashed worker).
 
     run_conversion_job increments and commits `attempts` *before* the pipeline
@@ -186,11 +242,16 @@ def requeue_stale_jobs():
     max_attempts here: a job that keeps crashing the worker (toxic input) is
     marked failed instead of being requeued forever (poison-pill protection).
     """
-    cutoff = datetime.utcnow() - timedelta(minutes=STALE_PROCESSING_MINUTES)
+    if stale_seconds is None:
+        stale_seconds = STALE_PROCESSING_MINUTES * 60
+    cutoff = datetime.utcnow() - timedelta(seconds=stale_seconds)
     stale = ConversionJob.query.filter(
         ConversionJob.status == "processing",
         db.func.coalesce(ConversionJob.last_heartbeat_at, ConversionJob.started_at) < cutoff,
     ).all()
+    if only_orphaned and stale:
+        owned = _live_owned_job_ids(stale_seconds)
+        stale = [job for job in stale if job.id not in owned]
     for job in stale:
         staged = (job.payload or {}).get("temp_file_path")
         if staged and not os.path.exists(staged):
@@ -286,15 +347,102 @@ def reconcile_stale_ai_jobs():
             db.session.rollback()
 
 
+def requeue_job_now(job_id):
+    """Put a 'processing' job straight back in the queue (graceful shutdown).
+
+    The attempt that was started is refunded: being interrupted by a deploy is
+    not the job's fault. Returns True when the row was still 'processing'.
+    """
+    now = datetime.utcnow()
+    changed = ConversionJob.query.filter(
+        ConversionJob.id == job_id, ConversionJob.status == "processing",
+    ).update(
+        {
+            "status": "pending",
+            "attempts": db.case(
+                (db.func.coalesce(ConversionJob.attempts, 0) > 1, ConversionJob.attempts - 1),
+                else_=0,
+            ),
+            "next_attempt_at": now,
+            "last_heartbeat_at": now,
+        },
+        synchronize_session=False,
+    )
+    db.session.commit()
+    return bool(changed)
+
+
+class JobHeartbeat:
+    """Background thread that heartbeats while a job runs and enforces the
+    shutdown grace period (requeue + exit when the job can't finish in time)."""
+
+    def __init__(self, job_id, interval=None, grace=None, exit_fn=None):
+        self.job_id = job_id
+        self.interval = JOB_HEARTBEAT_INTERVAL if interval is None else interval
+        self.grace = SHUTDOWN_GRACE_SECONDS if grace is None else grace
+        self.exit_fn = exit_fn or (lambda: os._exit(0))
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="job-heartbeat", daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        self._thread.join(timeout=10)
+        return False
+
+    def _beat(self):
+        now = datetime.utcnow()
+        ConversionJob.query.filter(
+            ConversionJob.id == self.job_id, ConversionJob.status == "processing",
+        ).update({"last_heartbeat_at": now}, synchronize_session=False)
+        WorkerHeartbeat.query.filter(WorkerHeartbeat.worker_id == WORKER_ID).update(
+            {"last_seen_at": now, "current_job_id": self.job_id}, synchronize_session=False,
+        )
+        db.session.commit()
+
+    def _run(self):
+        last_beat = time.monotonic()
+        tick = max(0.05, min(self.interval, 0.5))
+        with app.app_context():
+            while not self._stop.wait(tick):
+                try:
+                    if time.monotonic() - last_beat >= self.interval:
+                        self._beat()
+                        last_beat = time.monotonic()
+                    if (_shutdown_at is not None
+                            and time.monotonic() - _shutdown_at >= self.grace):
+                        if requeue_job_now(self.job_id):
+                            logger.warning(
+                                "Job %s did not finish within %ss of shutdown; requeued",
+                                self.job_id, self.grace,
+                            )
+                            WorkerHeartbeat.query.filter(
+                                WorkerHeartbeat.worker_id == WORKER_ID
+                            ).delete(synchronize_session=False)
+                            db.session.commit()
+                            self.exit_fn()
+                        return
+                except Exception as e:
+                    logger.warning("Job heartbeat failed: %s", e)
+                    db.session.rollback()
+            db.session.remove()
+
+
 def run_once():
     """Claim and process a single pending job; returns it, or None when idle."""
+    if _shutdown.is_set():
+        return None
     job = claim_next_job()
     if job is None:
         return None
 
     logger.info(f"Processing job {job.id} (attempt {(job.attempts or 0) + 1})")
     record_worker_heartbeat(job.id)
-    run_conversion_job(job)
+    with JobHeartbeat(job.id):
+        run_conversion_job(job)
     record_worker_heartbeat()
     logger.info(f"Job {job.id} -> {job.status}")
     return job
@@ -309,10 +457,17 @@ def main():
     # up for less than an hour a 0.0 seed delayed the hourly sweeps until then.
     last_stale_sweep = float("-inf")
     record_worker_heartbeat()
+    # A previous worker that died mid-job left it 'processing'; pick it up now
+    # rather than after WORKER_STALE_MINUTES (jobs a live worker owns are kept).
+    try:
+        requeue_orphaned_jobs()
+    except Exception as e:
+        logger.warning(f"Startup orphan requeue failed: {e}")
+        db.session.rollback()
     last_heartbeat = float("-inf")
     last_ai_reconcile = float("-inf")
     last_heartbeat_prune = float("-inf")
-    while True:
+    while not _shutdown.is_set():
         try:
             if time.monotonic() - last_heartbeat > HEARTBEAT_INTERVAL:
                 try:
@@ -323,6 +478,7 @@ def main():
 
             if time.monotonic() - last_stale_sweep > 60:
                 requeue_stale_jobs()
+                requeue_orphaned_jobs()
                 record_worker_heartbeat()
                 last_stale_sweep = time.monotonic()
 
@@ -362,8 +518,19 @@ def main():
             except Exception:
                 pass
             time.sleep(POLL_INTERVAL)
+    if _shutdown.is_set():
+        # Clean exit: drop our heartbeat row so nothing waits on a dead worker id.
+        try:
+            WorkerHeartbeat.query.filter(WorkerHeartbeat.worker_id == WORKER_ID).delete(
+                synchronize_session=False
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    logger.info("Worker exited cleanly")
 
 
 if __name__ == "__main__":
+    install_signal_handlers()
     with app.app_context():
         main()

@@ -278,3 +278,91 @@ def test_main_loop_survives_unexpected_errors(client, monkeypatch):
         monkeypatch.setattr(worker, name, lambda: None)
     worker.main()
     assert sleeps == [worker.POLL_INTERVAL]  # error path backs off instead of crashing
+
+
+# --------------------------------------------------------------------------
+# Faz 6: heartbeat thread, graceful shutdown, orphan requeue
+# --------------------------------------------------------------------------
+
+def test_heartbeat_advances_during_long_job(client, monkeypatch):
+    import time as _time
+    _job("long-1")
+    monkeypatch.setattr(worker, "JOB_HEARTBEAT_INTERVAL", 0.1)
+    seen = {}
+
+    def slow_pipeline(payload, progress_callback=None):
+        before_job = _fresh("long-1").last_heartbeat_at
+        before_worker = _heartbeat().last_seen_at
+        _time.sleep(0.8)
+        seen["job_advanced"] = _fresh("long-1").last_heartbeat_at > before_job
+        seen["worker_advanced"] = _heartbeat().last_seen_at > before_worker
+        return "m"
+
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline", slow_pipeline)
+    worker.run_once()
+    assert seen == {"job_advanced": True, "worker_advanced": True}
+    assert _fresh("long-1").status == "completed"
+
+
+def test_sigterm_requeues_job_that_cannot_finish_in_grace(client, monkeypatch):
+    import time as _time
+    _job("slow-1")
+    exited = []
+    real = worker.JobHeartbeat
+    monkeypatch.setattr(worker, "JOB_HEARTBEAT_INTERVAL", 0.1)
+    monkeypatch.setattr(worker, "JobHeartbeat",
+                        lambda job_id: real(job_id, grace=0.2, exit_fn=lambda: exited.append(1)))
+    monkeypatch.setattr(worker, "_shutdown_at", None)
+    worker._shutdown.clear()
+    seen = {}
+
+    def slow_pipeline(payload, progress_callback=None):
+        worker.request_shutdown()
+        deadline = _time.time() + 5
+        while not exited and _time.time() < deadline:
+            _time.sleep(0.05)
+        seen["status"] = _fresh("slow-1").status
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(upload_pipeline, "_run_upload_pipeline", slow_pipeline)
+    try:
+        worker.run_once()
+    finally:
+        worker._shutdown.clear()
+        monkeypatch.setattr(worker, "_shutdown_at", None)
+    assert exited == [1]
+    assert seen["status"] == "pending"
+
+
+def test_requeue_job_now_refunds_attempt(client):
+    _job("rq-1", status="processing", attempts=1)
+    assert worker.requeue_job_now("rq-1") is True
+    row = _fresh("rq-1")
+    assert row.status == "pending" and row.attempts == 0
+    assert worker.requeue_job_now("rq-1") is False  # no longer processing
+
+
+def test_run_once_idle_after_shutdown_requested(client):
+    _job("later-1")
+    worker._shutdown.set()
+    try:
+        assert worker.run_once() is None
+    finally:
+        worker._shutdown.clear()
+    assert _fresh("later-1").status == "pending"
+
+
+def test_orphan_requeue_only_touches_jobs_without_live_owner(client, monkeypatch):
+    old = datetime.utcnow() - timedelta(minutes=5)
+    _job("orphan", status="processing", started_at=old, last_heartbeat_at=old)
+    _job("owned", status="processing", started_at=old, last_heartbeat_at=old)
+    _job("fresh", status="processing", started_at=datetime.utcnow(),
+         last_heartbeat_at=datetime.utcnow())
+    db.session.add(WorkerHeartbeat(worker_id="other:1", current_job_id="owned",
+                                   started_at=old, last_seen_at=datetime.utcnow()))
+    db.session.commit()
+    monkeypatch.setattr(worker, "ORPHAN_SECONDS", 60)
+    worker.requeue_orphaned_jobs()
+    assert _fresh("orphan").status == "pending"
+    assert _fresh("owned").status == "processing"
+    assert _fresh("fresh").status == "processing"

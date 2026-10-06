@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e4e4e7;">
+<tr><td style="padding:20px 28px;border-bottom:1px solid #e4e4e7;font:600 16px/1 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif;letter-spacing:.02em;color:#18181b;">
+<a href="{{ site_url }}" style="color:#18181b;text-decoration:none;">arvision</a>
+</td></tr>
+<tr><td style="padding:28px;font:15px/1.6 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#27272a;">
+{% block body %}{% endblock %}
+</td></tr>
+<tr><td style="padding:16px 28px;border-top:1px solid #e4e4e7;font:12px/1.5 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#71717a;">
+{% block footer %}Sent by <a href="{{ site_url }}" style="color:#71717a;">ARVision</a>.{% endblock %}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

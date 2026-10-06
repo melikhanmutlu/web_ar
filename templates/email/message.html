@@ -1,0 +1,14 @@
+{% extends "email/base.html" %}
+{# Generic message: the plain-text body, rendered as paragraphs (services/email.py). #}
+{% block body %}
+{% for paragraph in paragraphs %}
+<p style="margin:0 0 16px;">{{ paragraph }}</p>
+{% endfor %}
+{% endblock %}
+{% block footer %}
+Sent by <a href="{{ site_url }}" style="color:#71717a;">ARVision</a>.
+{% if unsubscribe_url %}
+<br>You are receiving this optional email because of your account settings.
+<a href="{{ unsubscribe_url }}" style="color:#71717a;">Unsubscribe</a>
+{% endif %}
+{% endblock %}

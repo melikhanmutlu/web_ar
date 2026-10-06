@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>{{ title }} — arvision</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arvision.css') }}">
+</head>
+<body>
+    <main id="main" class="home-main" style="max-width:26rem;margin:4rem auto;padding:0 1rem">
+        <p style="margin-bottom:1rem"><a href="{{ url_for('main.index') }}" class="brand">arvision</a></p>
+        <div class="av-card av-stack">
+            <h1 class="home-title">{{ title }}</h1>
+            <p class="av-card-desc">{{ message }}</p>
+            {% if ok %}
+            <p class="av-card-desc">Receipts, password resets and other account emails are not affected. You can change this any time in your <a href="{{ url_for('auth.profile') }}">profile</a>.</p>
+            {% endif %}
+            <a class="btn-primary" href="{{ url_for('main.index') }}" style="text-align:center">Go to arvision</a>
+        </div>
+    </main>
+</body>
+</html>

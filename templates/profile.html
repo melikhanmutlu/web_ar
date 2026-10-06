@@ -124,6 +124,21 @@
         </section>
     </div>
 
+    <section class="profile-panel" id="emailPreferences">
+        <h2 class="av-card-title">Email preferences</h2>
+        <p class="av-card-desc">Choose which optional emails you get. Account emails (verification, password reset, payment receipts) are always sent.</p>
+        <form method="POST" action="{{ url_for('auth.update_email_preferences') }}" class="profile-form av-stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% for pref in email_prefs %}
+            <label class="av-card-desc" style="display:flex;gap:.6rem;align-items:center;margin:0;">
+                <input type="checkbox" name="email_{{ pref.category }}" {% if pref.enabled %}checked{% endif %}>
+                <span>{{ pref.label }}</span>
+            </label>
+            {% endfor %}
+            <button type="submit" class="btn-primary profile-submit">Save preferences</button>
+        </form>
+    </section>
+
     <section class="profile-panel">
         <h2 class="av-card-title">Refer a friend</h2>
         <p class="av-card-desc">Share your link. When someone signs up with it, they get {{ referral_invitee_credits }} AI credits and you get {{ referral_referrer_credits }}.</p>

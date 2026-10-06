@@ -12,6 +12,7 @@ from sqlalchemy import func
 
 from models import Organization, User, UserModel, db
 from services import send_email
+from services.email_preferences import unsubscribe_url, wants
 from services.growth_metrics import collect_growth_metrics, format_mrr
 from services.time_utils import datetime
 from site_settings import get_setting, set_setting
@@ -111,7 +112,9 @@ def send_weekly_report(now=None, force=False):
     already = set(filter(None, stored_emails.split(","))) if stored_week == week_key else set()
 
     admins = User.query.filter_by(is_admin=True).all()
-    recipients = [a.email for a in admins if a.email]
+    admins = [a for a in admins if wants(a, "weekly_report")]
+    unsub = {a.email: unsubscribe_url(a, "weekly_report") for a in admins if a.email}
+    recipients = list(unsub)
     pending = [e for e in recipients if e not in already]
     if not pending:
         return False
@@ -120,7 +123,8 @@ def send_weekly_report(now=None, force=False):
     delivered = set(already)
     sent_any = False
     for email in pending:
-        if send_email(email, "ARVision — your weekly growth report", body):
+        if send_email(email, "ARVision — your weekly growth report", body,
+                      unsubscribe_url=unsub[email]):
             delivered.add(email)
             sent_any = True
 

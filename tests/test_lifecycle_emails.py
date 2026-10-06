@@ -26,7 +26,7 @@ def _user(username, plan="pro", expires_in_days=None):
 
 def _capture_sends(monkeypatch, result=True):
     sent = []
-    def fake_send(to_email, subject, body):
+    def fake_send(to_email, subject, body, **kwargs):
         sent.append((to_email, subject, body))
         return result
     monkeypatch.setattr(lifecycle, "send_email", fake_send)

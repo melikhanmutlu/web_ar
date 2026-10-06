@@ -22,7 +22,7 @@ def _user(username, plan="pro", expires_in_days=None, active=True):
 
 def _capture(monkeypatch):
     sent = []
-    monkeypatch.setattr(lifecycle, "send_email", lambda to, subject, body: sent.append((to, subject, body)) or True)
+    monkeypatch.setattr(lifecycle, "send_email", lambda to, subject, body, **kw: sent.append((to, subject, body)) or True)
     return sent
 
 
@@ -57,7 +57,7 @@ def test_days_left_rounds_up(client, monkeypatch):
 def test_plan_expiry_email_uses_display_name(client, monkeypatch):
     import worker
     sent = []
-    monkeypatch.setattr(worker, "send_email", lambda to, subject, body: sent.append(body) or True)
+    monkeypatch.setattr(worker, "send_email", lambda to, subject, body, **kw: sent.append(body) or True)
     _user("lc4_exp", plan="business", expires_in_days=-1)
     worker.expire_stale_plans()
     assert sent and "Your ARVision Business plan has expired" in sent[0]

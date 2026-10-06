@@ -542,6 +542,7 @@ csrf.exempt(app.view_functions["upload.convert"])  # 410 stub
 csrf.exempt(app.view_functions["upload.retry_upload_job"])  # capability-token auth
 csrf.exempt(app.view_functions["engagement.track_download"])  # anonymous beacon
 csrf.exempt(app.view_functions["engagement.create_model_analytics_event"])  # embed beacon
+csrf.exempt(app.view_functions["auth.unsubscribe"])  # signed-token link / mail-client one-click POST
 
 # Programmatic write API (/api/v1): authenticated by Bearer API token, not a
 # session, so it can't carry a CSRF token. Rate-limit each endpoint per token

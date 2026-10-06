@@ -75,6 +75,12 @@ class User(UserMixin, db.Model):
     # address waits in pending_email and only replaces `email` once verified.
     email_verified_at = db.Column(db.DateTime, nullable=True)
     pending_email = db.Column(db.String(120), nullable=True)
+    # Email preferences: opt-outs for non-transactional mail only (verification,
+    # password reset and payment receipts are always sent). See
+    # services/email_preferences.py for the categories.
+    email_onboarding = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
+    email_renewal = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
+    email_weekly_report = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
     models = db.relationship('UserModel', backref='user', lazy=True, passive_deletes=True)
     folders = db.relationship('Folder', backref='user', lazy=True, passive_deletes=True)
     organization_memberships = db.relationship('OrganizationMember', backref='user', lazy=True, cascade='all, delete-orphan', passive_deletes=True)

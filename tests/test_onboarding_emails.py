@@ -29,7 +29,7 @@ def _model(user, share_count=0, visibility="unlisted"):
 def _capture(monkeypatch, result=True):
     sent = []
     monkeypatch.setattr(lifecycle, "send_email",
-                        lambda to, subj, body: (sent.append((to, subj)) or result))
+                        lambda to, subj, body, **kw: (sent.append((to, subj)) or result))
     return sent
 
 

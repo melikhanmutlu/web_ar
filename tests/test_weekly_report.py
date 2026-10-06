@@ -31,7 +31,7 @@ def _admin(username="wr_admin"):
 def _capture(monkeypatch, result=True):
     sent = []
     monkeypatch.setattr(weekly_report, "send_email",
-                        lambda to, subj, body: (sent.append((to, subj, body)) or result))
+                        lambda to, subj, body, **kw: (sent.append((to, subj, body)) or result))
     return sent
 
 
@@ -81,7 +81,7 @@ def test_partial_delivery_retries_only_the_failed_admin(client, monkeypatch):
     monday = _a_monday()
 
     attempts = []
-    def flaky_send(to, subj, body):
+    def flaky_send(to, subj, body, **kw):
         attempts.append(to)
         return to != "wr_broken@test.com"  # broken admin's SMTP fails
     monkeypatch.setattr(weekly_report, "send_email", flaky_send)
@@ -90,7 +90,7 @@ def test_partial_delivery_retries_only_the_failed_admin(client, monkeypatch):
     # Second run retries only the broken one (now succeeding).
     attempts.clear()
     monkeypatch.setattr(weekly_report, "send_email",
-                        lambda to, subj, body: attempts.append(to) or True)
+                        lambda to, subj, body, **kw: attempts.append(to) or True)
     weekly_report.send_weekly_report(now=monday)
     assert attempts == ["wr_broken@test.com"]  # ok admin not re-spammed
     # Now everyone delivered -> fully deduped.

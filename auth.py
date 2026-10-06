@@ -322,6 +322,39 @@ def sign_out_everywhere():
     flash('Signed out of all other devices.', 'success')
     return redirect(url_for('auth.profile'))
 
+@auth.route('/profile/email-preferences', methods=['POST'])
+@login_required
+def update_email_preferences():
+    """Toggle the optional (non-transactional) email categories. Unchecked
+    boxes are absent from the form, so every category is set explicitly."""
+    from services.email_preferences import CATEGORIES, set_pref
+    user = current_user._get_current_object()
+    for category in CATEGORIES:
+        if category == 'weekly_report' and not user.is_admin:
+            continue  # not offered to non-admins; keep their stored value
+        set_pref(user, category, request.form.get(f'email_{category}') == 'on')
+    db.session.commit()
+    flash('Email preferences saved.', 'success')
+    return redirect(url_for('auth.profile'))
+
+@auth.route('/unsubscribe/<token>', methods=['GET', 'POST'])
+def unsubscribe(token):
+    """One-click unsubscribe from the signed link in optional emails (GET from
+    the link, POST from RFC 8058 mail-client one-click). The token proves
+    which account and category; no login is needed."""
+    from services.email_preferences import CATEGORIES, read_unsubscribe_token, set_pref
+    parsed = read_unsubscribe_token(token)
+    user = db.session.get(User, parsed[0]) if parsed else None
+    if user is None:
+        return render_template('email_unsubscribed.html', ok=False,
+                               title='Link not valid',
+                               message='This unsubscribe link is invalid.'), 400
+    category = parsed[1]
+    set_pref(user, category, False)
+    db.session.commit()
+    return render_template('email_unsubscribed.html', ok=True, title='Unsubscribed',
+                           message=f'You will no longer receive: {CATEGORIES[category][1]}.')
+
 def _claims_admin_email(new_email):
     """True if the user is switching to an ADMIN_EMAILS address.
 
@@ -367,6 +400,12 @@ def _render_profile(profile_form, password_form):
         .all()
     )
     from services.referrals import referral_link, referred_count, INVITEE_CREDITS, REFERRER_CREDITS
+    from services.email_preferences import CATEGORIES, wants
+    email_prefs = [
+        {"category": c, "label": label, "enabled": wants(current_user, c)}
+        for c, (_, label) in CATEGORIES.items()
+        if c != "weekly_report" or current_user.is_admin
+    ]
     return render_template(
         'profile.html',
         user=current_user,
@@ -376,6 +415,7 @@ def _render_profile(profile_form, password_form):
         plan_info=plan_info,
         usage=usage,
         payments=payments,
+        email_prefs=email_prefs,
         profile_form=profile_form,
         password_form=password_form,
         referral_link=referral_link(current_user),

@@ -29,6 +29,7 @@ from sqlalchemy import func, or_
 from config import SITE_URL
 from models import LifecycleEmail, ModelShareLink, Payment, User, UserModel, db
 from services import send_email
+from services.email_preferences import unsubscribe_url, wants
 from services.plans import DEFAULT_PLAN, get_plan_config, plan_summary
 from services.time_utils import datetime
 
@@ -47,18 +48,28 @@ WINBACK_MAX_AGE_DAYS = 30
 _BILLING_URL = f"{SITE_URL}/billing"
 
 
+def _category_for(kind):
+    """Email-preference category (services/email_preferences) of a lifecycle kind."""
+    return "onboarding" if kind.startswith("onboard_") else "renewal"
+
+
 def _send_once(user, kind, dedupe_key, subject, body):
     """Send one lifecycle email unless the same (kind, dedupe_key) already
     went out to this user. Returns True when an email was actually sent."""
     # Never market to an account an admin deactivated (e.g. for abuse).
     if not user.is_active_flag:
         return False
+    # Honour the user's opt-out (profile toggle / one-click unsubscribe). No
+    # LifecycleEmail row is written, so nothing is marked as "sent".
+    category = _category_for(kind)
+    if not wants(user, category):
+        return False
     already = LifecycleEmail.query.filter_by(
         user_id=user.id, kind=kind, dedupe_key=dedupe_key
     ).first()
     if already is not None:
         return False
-    if not send_email(user.email, subject, body):
+    if not send_email(user.email, subject, body, unsubscribe_url=unsubscribe_url(user, category)):
         return False
     db.session.add(LifecycleEmail(user_id=user.id, kind=kind, dedupe_key=dedupe_key))
     try:

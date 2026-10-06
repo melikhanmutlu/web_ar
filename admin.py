@@ -666,13 +666,18 @@ def record_payment(user_id):
     amount_raw = (request.form.get("amount") or "").strip()
     try:
         amount = Decimal(amount_raw)
-        if amount <= 0:
+        if not amount.is_finite() or amount <= 0 or amount != amount.quantize(Decimal("0.01")):
+            raise InvalidOperation
+        if amount >= Decimal("100000000"):  # Numeric(10, 2) ceiling
             raise InvalidOperation
     except (InvalidOperation, ValueError):
-        flash("Payment amount must be a positive number.", "error")
+        flash("Payment amount must be a positive number with at most 2 decimals.", "error")
         return redirect(url_for("admin.user_detail", user_id=user.id))
 
-    currency = (request.form.get("currency") or "USD").strip().upper()[:3] or "USD"
+    currency = (request.form.get("currency") or "USD").strip().upper() or "USD"
+    if currency not in ("USD", "EUR", "TRY"):
+        flash("Currency must be USD, EUR or TRY.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user.id))
     method = (request.form.get("method") or "").strip()[:40] or None
     note = (request.form.get("note") or "").strip() or None
 
@@ -1770,6 +1775,14 @@ def set_payment_status(payment_id):
 
     if status == previous_status:
         pass
+    elif status == "paid" and previous_status in ("refunded", "void"):
+        # The grant (plan period / credits) already happened when this payment
+        # was first paid; applying it again would stack a second period.
+        return jsonify({
+            "success": False,
+            "error": f"A {previous_status} payment can't be re-marked paid (it would grant "
+                     "a second period/credits). Record a new payment instead.",
+        }), 409
     elif status == "paid" and previous_status != "paid":
         from blueprints.billing import _apply_successful_payment
         _apply_successful_payment(payment)

@@ -139,3 +139,40 @@ def test_billing_csv_export(client):
 def test_non_admin_cannot_view_billing(client, init_database):
     login(client, "testuser", "testpassword")
     assert client.get("/admin/billing").status_code == 404
+
+
+def test_refunded_or_void_payment_cannot_be_re_marked_paid(client):
+    from datetime import datetime, timedelta
+    admin = _make_user("bill_admin_idem", is_admin=True)
+    target = _make_user("bill_target_idem", plan="pro")
+    expires = datetime.utcnow() + timedelta(days=10)
+    target.plan_expires_at = expires
+    payment = Payment(user_id=target.id, plan="pro", amount=Decimal("19.00"), recorded_by_id=admin.id)
+    db.session.add(payment)
+    db.session.commit()
+    login(client, "bill_admin_idem", "testpassword123")
+
+    for first in ("void", "refunded"):
+        assert client.post(f"/admin/payments/{payment.id}/set-status",
+                           json={"status": first}).status_code == 200
+        resp = client.post(f"/admin/payments/{payment.id}/set-status", json={"status": "paid"})
+        assert resp.status_code == 409
+        assert resp.get_json()["success"] is False
+        assert db.session.get(Payment, payment.id).status == first
+    assert db.session.get(User, target.id).plan_expires_at == expires
+
+
+def test_record_payment_rejects_non_finite_fractional_and_bad_currency(client):
+    _make_user("bill_admin_val", is_admin=True)
+    target = _make_user("bill_target_val")
+    login(client, "bill_admin_val", "testpassword123")
+    bad = [("Infinity", "USD"), ("NaN", "USD"), ("-5", "USD"), ("0", "USD"),
+           ("1.234", "USD"), ("1e9", "USD"), ("10", "XQ$"), ("10", "USDX")]
+    for amount, currency in bad:
+        client.post(f"/admin/users/{target.id}/record-payment", data={
+            "plan": "pro", "amount": amount, "currency": currency})
+    assert Payment.query.filter_by(user_id=target.id).count() == 0
+    client.post(f"/admin/users/{target.id}/record-payment", data={
+        "plan": "pro", "amount": "19.50", "currency": "try"})
+    p = Payment.query.filter_by(user_id=target.id).one()
+    assert p.currency == "TRY" and p.amount == Decimal("19.50")

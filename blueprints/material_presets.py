@@ -113,6 +113,11 @@ def _resolve_material_preset(preset_id):
 @material_presets_bp.route("/api/models/<model_id>/material-preset", methods=["POST"])
 def apply_model_material_preset(model_id):
     import app as app_module
+    from blueprints.model_editing import (
+        _busy_response, _lock_model, _make_editable, _restore_compression,
+    )
+    from converters.glb_optimizer import glb_compression_mode
+    from services.model_lock import ModelBusyError
 
     guard = check_model_mutation_allowed(model_id)
     if guard:
@@ -131,18 +136,34 @@ def apply_model_material_preset(model_id):
         "roughness": preset["roughness"], "opacity": preset["opacity"],
         "tint_textures": bool(data.get("tint_textures", False)),
     }}
-    if not modify_glb(source, temp_output, modifications):
-        return jsonify({"success": False, "error": "Failed to apply material"}), 500
-    os.replace(temp_output, source)
-    create_version(
-        model_id=model_id, operation_type="material",
-        operation_details={"preset_id": preset["id"], **modifications},
-        comment=f"Applied material preset: {preset['name']}",
-    )
-    model.validation_report = app_module.asset_quality.inspect(source)
-    model.bump_asset_version()
-    invalidate_lods(model_id)
-    db.session.commit()
+    # Same read-modify-write as save/slice: serialize with other edits and
+    # round-trip meshopt/draco files through an editable copy.
+    edit_lock = None
+    try:
+        edit_lock = _lock_model(app_module, model_id)
+        compression_mode = glb_compression_mode(source)
+        refused = _make_editable(app_module, source, model_id, "material_preset")
+        if refused:
+            return refused
+        if not modify_glb(source, temp_output, modifications):
+            return jsonify({"success": False, "error": "Failed to apply material"}), 500
+        os.replace(temp_output, source)
+        _restore_compression(app_module, source, compression_mode, "material_preset")
+        model.file_size = os.path.getsize(source)
+        model.validation_report = app_module.asset_quality.inspect(source)
+        model.bump_asset_version()
+        invalidate_lods(model_id)
+        db.session.commit()
+        create_version(
+            model_id=model_id, operation_type="material",
+            operation_details={"preset_id": preset["id"], **modifications},
+            comment=f"Applied material preset: {preset['name']}",
+        )
+    except ModelBusyError:
+        return _busy_response()
+    finally:
+        if edit_lock:
+            edit_lock.release()
     return jsonify({"success": True, "preset": preset, "viewer_url": url_for("viewer.view_model", model_id=model_id)})
 
 

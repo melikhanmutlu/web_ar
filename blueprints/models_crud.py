@@ -195,8 +195,14 @@ def get_model_info_api(model_id):
 @login_required
 def update_model_color():
     import app as app_module
+    from blueprints.model_editing import (
+        _busy_response, _lock_model, _make_editable, _restore_compression,
+    )
+    from converters.glb_optimizer import glb_compression_mode
     from glb_modifier import modify_glb
+    from services.model_lock import ModelBusyError
 
+    edit_lock = None
     try:
         data = request.get_json()
         model_id = data.get("model_id")
@@ -219,6 +225,13 @@ def update_model_color():
             # glb_path resolves the live converted file; model.filename is a
             # stale absolute path once the storage root moves between deploys.
             output_path = model.glb_path
+            # Same read-modify-write as save/slice: serialize with other edits
+            # and round-trip meshopt/draco files through an editable copy.
+            edit_lock = _lock_model(app_module, model_id)
+            compression_mode = glb_compression_mode(output_path)
+            refused = _make_editable(app_module, output_path, model_id, "update_model_color")
+            if refused:
+                return refused
             temp_output = output_path + ".color.tmp.glb"
             if not modify_glb(
                 output_path,
@@ -227,7 +240,9 @@ def update_model_color():
             ):
                 return jsonify({"success": False, "error": "Failed to update model color"}), 500
             os.replace(temp_output, output_path)
+            _restore_compression(app_module, output_path, compression_mode, "update_model_color")
             model.color = color
+            model.file_size = os.path.getsize(output_path)
             model.bump_asset_version()
             invalidate_lods(model_id)
             model.validation_report = app_module.asset_quality.inspect(output_path)
@@ -242,6 +257,8 @@ def update_model_color():
                 comment="Updated model color",
             )
             return jsonify({"success": True}), 200
+        except ModelBusyError:
+            return _busy_response()
         except ValueError as e:
             return jsonify({"success": False, "error": str(e)}), 400
         except Exception as e:
@@ -254,6 +271,9 @@ def update_model_color():
     except Exception as e:
         logger.error(f"Error in update_model_color: {str(e)}")
         return jsonify({"success": False, "error": "Server error"}), 500
+    finally:
+        if edit_lock:
+            edit_lock.release()
 
 
 @models_crud_bp.route("/delete_model/<string:model_id>", methods=["POST"])

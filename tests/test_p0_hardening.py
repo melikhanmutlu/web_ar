@@ -182,9 +182,13 @@ def test_old_versions_are_pruned_automatically(client, model_on_disk):
         .all()
     )
     assert len(versions) == 10
-    assert [v.version_number for v in versions] == list(range(3, 13))
+    # the first (upload) version is never pruned; the newest ones fill the rest
+    assert [v.version_number for v in versions] == [1] + list(range(4, 13))
     # pruned versions' files are gone too, not just their DB rows
     assert not os.path.exists(
+        os.path.join(app.config["CONVERTED_FOLDER"], model_on_disk, "version_2.glb")
+    )
+    assert os.path.exists(
         os.path.join(app.config["CONVERTED_FOLDER"], model_on_disk, "version_1.glb")
     )
 
@@ -193,17 +197,18 @@ def test_restore_survives_pruning_of_the_source_version(client, model_on_disk):
     for i in range(12):
         create_version(model_on_disk, "transform", comment=f"edit {i}")
 
-    # version 3 is the oldest survivor after the loop above (1 and 2 pruned)
+    # version 4 is the oldest survivor after the loop above besides the
+    # never-pruned first version (2-3 pruned)
     surviving = ModelVersion.query.filter_by(
-        model_id=model_on_disk, version_number=3
+        model_id=model_on_disk, version_number=4
     ).first()
     assert surviving is not None and os.path.exists(surviving.filename)
 
-    # Restoring version 3 creates a new version 13 (pre-restore snapshot),
-    # pushing the total to 11 and triggering a prune back down to 10 — which
-    # would remove version 3 itself mid-restore without the temp-copy guard
-    # in restore_version().
-    assert restore_version(model_on_disk, 3) is True
+    # Restoring version 4 creates new versions (pre-restore backup + restored
+    # snapshot), triggering prunes back down to 10 — which would remove
+    # version 4 itself mid-restore without the temp-copy guard in
+    # restore_version().
+    assert restore_version(model_on_disk, 4) is True
 
     current_file = os.path.join(app.config["CONVERTED_FOLDER"], model_on_disk, "model.glb")
     assert os.path.exists(current_file)

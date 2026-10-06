@@ -127,6 +127,12 @@ def restore_model_version(model_id, version_number):
                 app_module.app.config["CONVERTED_FOLDER"], model_id, "model.glb"
             )
             app_module.refresh_usdz_after_edit(model_id, glb_path)
+            # The library card must not keep showing the pre-restore render.
+            from blueprints.model_editing import _invalidate_thumbnail
+
+            restored_model = get_live_model(model_id)
+            if restored_model:
+                _invalidate_thumbnail(app_module, restored_model)
             return jsonify(
                 {"success": True, "message": f"Restored to version {version_number}"}
             )

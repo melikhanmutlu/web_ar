@@ -41,8 +41,6 @@ def _active_worker_count():
 @health_bp.route("/healthz")
 def healthz():
     """Liveness/readiness probe including database connectivity."""
-    import app as app_module
-
     try:
         db.session.execute(db.text("SELECT 1"))
     except Exception:
@@ -53,7 +51,6 @@ def healthz():
     storage_ok = _storage_writable()
     result = {
         "status": "ok", "database": "up", "storage": "up" if storage_ok else "down",
-        "observability": app_module.OBSERVABILITY_STATUS,
     }
     if not storage_ok:
         result["status"] = "degraded"

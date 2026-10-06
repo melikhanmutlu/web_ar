@@ -1880,7 +1880,6 @@ def _system_status():
         "email_smtp": f"{_config.SMTP_HOST or 'not set'} ({'enabled' if _config.EMAIL_NOTIFICATIONS_ENABLED else 'disabled'})",
         "meshy_ai": "configured" if _ai.is_configured() else "not configured",
         "sentry": "on" if observability.get("sentry") else "off",
-        "opentelemetry": "on" if observability.get("opentelemetry") else "off",
         "job_queue": "worker process (JOB_QUEUE=true)" if os.environ.get("JOB_QUEUE", "false").lower() in ("true", "1", "yes") else "inline threads",
         "rate_limit_storage": os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
     }

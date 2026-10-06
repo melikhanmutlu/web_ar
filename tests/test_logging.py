@@ -20,10 +20,36 @@ def test_json_formatter_includes_correlation_context(client):
 
 def test_external_observability_is_safe_when_not_configured(client, monkeypatch):
     monkeypatch.delenv("SENTRY_DSN", raising=False)
-    monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
-    assert initialize_external_observability(client.application) == {
-        "sentry": False, "opentelemetry": False
-    }
+    assert initialize_external_observability(client.application) == {"sentry": False}
+
+
+def test_sentry_init_uses_release_and_environment(client, monkeypatch):
+    import sys
+    import types
+
+    calls = {}
+    fake = types.ModuleType("sentry_sdk")
+    fake.init = lambda **kw: calls.update(kw)
+    integrations = types.ModuleType("sentry_sdk.integrations")
+    flask_int = types.ModuleType("sentry_sdk.integrations.flask")
+    flask_int.FlaskIntegration = lambda: "flask-integration"
+    monkeypatch.setitem(sys.modules, "sentry_sdk", fake)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations", integrations)
+    monkeypatch.setitem(sys.modules, "sentry_sdk.integrations.flask", flask_int)
+    monkeypatch.setenv("SENTRY_DSN", "https://key@example.invalid/1")
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abc123")
+    monkeypatch.setenv("SENTRY_ENVIRONMENT", "staging")
+    monkeypatch.delenv("SENTRY_TRACES_SAMPLE_RATE", raising=False)
+
+    assert initialize_external_observability(client.application) == {"sentry": True}
+    assert calls["release"] == "abc123"
+    assert calls["environment"] == "staging"
+    assert calls["traces_sample_rate"] == 0.0
+
+
+def test_healthz_does_not_expose_observability(client):
+    resp = client.get("/healthz")
+    assert "observability" not in resp.get_json()
 
 
 def test_json_formatter_escapes_unicode_for_legacy_consoles():

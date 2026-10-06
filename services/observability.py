@@ -45,29 +45,29 @@ def configure_json_logging():
 
 
 def initialize_external_observability(app):
-    """Enable Sentry and OpenTelemetry when their env/config packages exist."""
-    status = {"sentry": False, "opentelemetry": False}
-    dsn = os.environ.get("SENTRY_DSN")
-    if dsn:
-        try:
-            import sentry_sdk
-            from sentry_sdk.integrations.flask import FlaskIntegration
-            sentry_sdk.init(
-                dsn=dsn,
-                integrations=[FlaskIntegration()],
-                environment=os.environ.get("SENTRY_ENVIRONMENT", os.environ.get("FLASK_ENV", "production")),
-                traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
-                send_default_pii=False,
-            )
-            status["sentry"] = True
-        except ImportError:
-            app.logger.warning("SENTRY_DSN is set but sentry-sdk is not installed")
+    """Enable Sentry when SENTRY_DSN is set; a no-op otherwise.
 
-    if os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"):
-        try:
-            from opentelemetry.instrumentation.flask import FlaskInstrumentor
-            FlaskInstrumentor().instrument_app(app)
-            status["opentelemetry"] = True
-        except ImportError:
-            app.logger.warning("OTEL exporter is configured but Flask instrumentation is not installed")
+    Runs when app.py is imported, so the web process and worker.py (which
+    imports app) both report errors. The release is the deployed commit SHA.
+    """
+    status = {"sentry": False}
+    dsn = os.environ.get("SENTRY_DSN")
+    if not dsn:
+        return status
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        sentry_sdk.init(
+            dsn=dsn,
+            integrations=[FlaskIntegration()],
+            release=os.environ.get("RAILWAY_GIT_COMMIT_SHA") or os.environ.get("SOURCE_COMMIT") or None,
+            environment=os.environ.get("SENTRY_ENVIRONMENT")
+            or os.environ.get("RAILWAY_ENVIRONMENT_NAME")
+            or os.environ.get("FLASK_ENV", "production"),
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
+            send_default_pii=False,
+        )
+        status["sentry"] = True
+    except ImportError:
+        app.logger.warning("SENTRY_DSN is set but sentry-sdk is not installed")
     return status

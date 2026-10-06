@@ -426,8 +426,25 @@
                 // 1 = fill cut surfaces: back faces seen through the cut are
                 // drawn flat in the part's own (darkened) colour, so a solid
                 // (e.g. a STEP part) reads as a filled section, not a hollow shell.
-                slicerCapEnabled: { value: 1 }
+                slicerCapEnabled: { value: 1 },
+                // World -> glTF-scene frame. model-viewer re-centres the model
+                // (its "Target" parent is shifted by -bbox centre, and the
+                // turntable rotates "Pivot"), but the slider values and the
+                // server cut are in the file's own frame (get_mesh_bounds).
+                // Identical only while the model is centred on the origin --
+                // i.e. until the first slice moves its centre.
+                slicerFrameInv: { value: new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]) }
             };
+
+            let _slicerFrameMatrix = null;
+            function updateSlicerFrame() {
+                const root = _mvScene && _mvScene._model;
+                if (!root || !root.matrixWorld) return;
+                root.updateMatrixWorld(true);
+                if (!_slicerFrameMatrix) _slicerFrameMatrix = root.matrixWorld.clone();
+                _slicerFrameMatrix.copy(root.matrixWorld).invert();
+                _clipUniforms.slicerFrameInv.value.set(_slicerFrameMatrix.elements);
+            }
 
             function patchMaterialForClipping(mat) {
                 // Always force DoubleSide so clipped back-faces are visible
@@ -451,28 +468,29 @@
                     shader.uniforms.slicerPlaneD = _clipUniforms.slicerPlaneD;
                     shader.uniforms.slicerNumPlanes = _clipUniforms.slicerNumPlanes;
                     shader.uniforms.slicerCapEnabled = _clipUniforms.slicerCapEnabled;
+                    shader.uniforms.slicerFrameInv = _clipUniforms.slicerFrameInv;
 
-                    // Vertex shader: pass world-space position to fragment
-                    // Uses modelMatrix to match the coordinate system of
+                    // Vertex shader: pass the position in the glTF scene's own
+                    // frame to the fragment shader -- the coordinate system of
                     // get_mesh_bounds (trimesh dump with concatenated transforms).
                     shader.vertexShader = shader.vertexShader.replace(
                         'void main() {',
-                        'varying vec3 vSlicerWorldPos;\nvoid main() {'
+                        'varying vec3 vSlicerWorldPos;\nuniform mat4 slicerFrameInv;\nvoid main() {'
                     );
                     if (shader.vertexShader.includes('#include <worldpos_vertex>')) {
                         shader.vertexShader = shader.vertexShader.replace(
                             '#include <worldpos_vertex>',
-                            '#include <worldpos_vertex>\nvSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+                            '#include <worldpos_vertex>\nvSlicerWorldPos = (slicerFrameInv * modelMatrix * vec4(transformed, 1.0)).xyz;'
                         );
                     } else if (shader.vertexShader.includes('#include <fog_vertex>')) {
                         shader.vertexShader = shader.vertexShader.replace(
                             '#include <fog_vertex>',
-                            'vSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n#include <fog_vertex>'
+                            'vSlicerWorldPos = (slicerFrameInv * modelMatrix * vec4(transformed, 1.0)).xyz;\n#include <fog_vertex>'
                         );
                     } else {
                         shader.vertexShader = shader.vertexShader.replace(
                             /}\s*$/,
-                            'vSlicerWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\n}'
+                            'vSlicerWorldPos = (slicerFrameInv * modelMatrix * vec4(transformed, 1.0)).xyz;\n}'
                         );
                     }
 
@@ -561,6 +579,7 @@ void main() {
                 });
 
                 // Update uniform values
+                updateSlicerFrame();
                 const clip = buildClipPlaneData();
                 _clipUniforms.slicerPlaneNX.value = clip.nx;
                 _clipUniforms.slicerPlaneNY.value = clip.ny;
@@ -662,6 +681,7 @@ void main() {
                         discoverInternals();
                     }
 
+                    updateSlicerFrame();
                     forceModelViewerRender();
                     frameCount++;
                     _renderPumpId = requestAnimationFrame(pump);

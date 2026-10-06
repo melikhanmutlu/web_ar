@@ -30,3 +30,17 @@ def test_validation_api_returns_persisted_report(client):
     response = client.get(f"/api/models/{model.id}/validation")
     assert response.status_code == 200
     assert response.get_json()["report"]["triangles"] == 42
+
+
+def test_asset_quality_reads_meshopt_compressed_glb(tmp_path):
+    import pytest
+    from converters.glb_optimizer import glb_needs_decompression, optimize_glb
+
+    path = tmp_path / "sphere.glb"
+    trimesh.creation.icosphere(subdivisions=4).export(path)
+    if not optimize_glb(str(path), enabled=True, mode="meshopt"):
+        pytest.skip("gltfpack unavailable")
+    assert glb_needs_decompression(str(path))
+    report = AssetQualityService().inspect(path)
+    assert report["triangles"] == 5120
+    assert report["vertices"] > 0

@@ -743,7 +743,14 @@ def get_file_info(file_path):
                     )
                     return info
 
-                mesh = trimesh.load(file_path)
+                if file_ext == ".glb":
+                    # meshopt/draco GLBs read as empty geometry in trimesh
+                    from converters.glb_optimizer import readable_glb
+
+                    with readable_glb(file_path) as readable_path:
+                        mesh = trimesh.load(readable_path)
+                else:
+                    mesh = trimesh.load(file_path)
                 if isinstance(mesh, trimesh.Scene):
                     # For scenes (like OBJ with multiple meshes), combine the statistics
                     total_vertices = 0
@@ -2419,7 +2426,10 @@ def register_glb_as_model(glb_path, *, user_id=None, source="ai", prompt=None,
         import trimesh
         import numpy as np
 
-        mesh = trimesh.load(output_path)
+        from converters.glb_optimizer import readable_glb
+
+        with readable_glb(output_path) as readable_path:
+            mesh = trimesh.load(readable_path)
         if isinstance(mesh, trimesh.Scene):
             verts = [gm.vertices for gm in mesh.geometry.values()
                      if isinstance(gm, trimesh.Trimesh)]

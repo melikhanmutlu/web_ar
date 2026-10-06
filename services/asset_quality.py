@@ -3,6 +3,8 @@ import os
 import trimesh
 from pygltflib import GLTF2
 
+from converters.glb_optimizer import readable_glb
+
 
 class AssetQualityService:
     """Generate a stable, API-friendly quality report for a published GLB."""
@@ -14,7 +16,9 @@ class AssetQualityService:
     def inspect(self, path, quality_warnings=()):
         size = os.path.getsize(path)
         gltf = GLTF2().load(path)
-        scene = trimesh.load(path, force="scene")
+        # trimesh can't decode meshopt/draco; read a decompressed temp copy.
+        with readable_glb(path) as readable_path:
+            scene = trimesh.load(readable_path, force="scene")
         geometries = list(scene.geometry.values()) if isinstance(scene, trimesh.Scene) else [scene]
         vertices = sum(len(mesh.vertices) for mesh in geometries)
         triangles = sum(len(mesh.faces) for mesh in geometries)

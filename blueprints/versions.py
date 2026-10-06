@@ -122,14 +122,14 @@ def restore_model_version(model_id, version_number):
         if guard:
             return guard
 
+        edit_lock = ModelEditLock(
+            os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
+        ).acquire()
         if not ModelVersion.query.filter_by(
             model_id=model_id, version_number=version_number
         ).first():
             return jsonify({"success": False, "error": "Version not found"}), 404
 
-        edit_lock = ModelEditLock(
-            os.path.join(app_module.app.config["CONVERTED_FOLDER"], model_id)
-        ).acquire()
         success = restore_version(model_id, version_number)
         if success:
             # The restored GLB replaced model.glb — rebuild the iOS USDZ too.

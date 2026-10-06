@@ -26,6 +26,37 @@ logger = logging.getLogger(__name__)
 _pin_lock = threading.Lock()
 
 
+_CGNAT_NET = ipaddress.ip_network("100.64.0.0/10")
+_NAT64_NET = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _ip_is_unsafe(ip):
+    """True if `ip` must never be a webhook target (non-public address).
+
+    Python's `is_private` misses e.g. 100.64.0.0/10 (carrier-grade NAT), so
+    this combines every individual property with an `is_global` allowlist and
+    unwraps IPv6 forms that embed an IPv4 address (IPv4-mapped ::ffff:a.b.c.d,
+    6to4, Teredo, NAT64) so they're judged by the address they really reach.
+    """
+    if isinstance(ip, ipaddress.IPv6Address):
+        embedded = ip.ipv4_mapped
+        if embedded is None and ip.sixtofour is not None:
+            embedded = ip.sixtofour
+        if embedded is None and ip.teredo is not None:
+            embedded = ip.teredo[1]
+        if embedded is None and ip in _NAT64_NET:
+            embedded = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if embedded is not None:
+            return _ip_is_unsafe(embedded)
+    elif ip in _CGNAT_NET:
+        return True
+    return (
+        ip.is_private or ip.is_loopback or ip.is_link_local
+        or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+        or not ip.is_global
+    )
+
+
 def _resolve_safe_ips(url):
     """Return the resolved IP list if `url` is https and every address is
     public, else None.
@@ -53,10 +84,7 @@ def _resolve_safe_ips(url):
             ip = ipaddress.ip_address(addr)
         except ValueError:
             return None
-        if (
-            ip.is_private or ip.is_loopback or ip.is_link_local
-            or ip.is_multicast or ip.is_reserved or ip.is_unspecified
-        ):
+        if _ip_is_unsafe(ip):
             return None
         addrs.append(addr)
     return addrs

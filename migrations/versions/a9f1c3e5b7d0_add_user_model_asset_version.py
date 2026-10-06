@@ -1,13 +1,13 @@
 """add user_model.asset_version (cache-busting counter for GLB/USDZ/thumbnail)
 
 Revision ID: a9f1c3e5b7d0
-Revises: e3f5a7b9c1d2
+Revises: f2b3c4d5e6f7
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "a9f1c3e5b7d0"
-down_revision = "e3f5a7b9c1d2"
+down_revision = "f2b3c4d5e6f7"
 branch_labels = None
 depends_on = None
 

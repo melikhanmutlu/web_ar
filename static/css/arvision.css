@@ -3666,7 +3666,7 @@ html :focus-visible {
 @media (max-width: 640px) {
     /* Compact header actions: Upload on its own full-width row, the three
        secondary actions share one row beneath it. */
-    .library-actions .library-actions-primary { gap: 0.5rem; flex-wrap: wrap; }
+    .library-actions .library-actions-primary { gap: 0.5rem; flex-wrap: wrap; width: 100%; flex: 1 1 100%; }
     .library-actions .library-actions-primary > * { flex: 1 1 0; min-width: 0; white-space: nowrap; }
     .library-actions .library-actions-primary > .btn-primary { order: -1; flex-basis: 100%; }
     .library-actions .library-btn,

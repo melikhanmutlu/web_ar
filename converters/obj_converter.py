@@ -66,13 +66,15 @@ def assert_safe_obj_references(obj_path: str) -> None:
                         continue
                     key, val = parts[0].lower(), parts[1]
                     if key in line_keys or key.startswith("map_"):
-                        # texture directives can carry options before the path;
-                        # the filename is the last whitespace-separated token.
-                        candidate = val.split()[-1] if val.split() else val
-                        if _reference_is_unsafe(candidate):
-                            raise ValueError(
-                                f"Unsafe file reference in {os.path.basename(path)}: {candidate}"
-                            )
+                        # texture directives can carry options before the path,
+                        # and a path may itself contain spaces; check every
+                        # token so an absolute/'..' path can't hide behind a
+                        # harmless-looking last token ("/srv/my dir/a.png").
+                        for candidate in (val.split() or [val]):
+                            if _reference_is_unsafe(candidate):
+                                raise ValueError(
+                                    f"Unsafe file reference in {os.path.basename(path)}: {candidate}"
+                                )
         except (OSError, UnicodeDecodeError):
             pass
 

@@ -266,6 +266,10 @@ def _localdt(value, fmt="%Y-%m-%d %H:%M"):
     local = to_display_tz(value)
     return local.strftime(fmt) if local else ""
 
+from services.plans import format_mb as _format_mb, format_money as _format_money
+app.add_template_filter(_format_mb, "format_mb")
+app.add_template_filter(_format_money, "money")
+
 # Initialize extensions
 db.init_app(app)
 # CSRF protection for all state-changing requests. Token is bound to the session

@@ -261,6 +261,40 @@ def effective_ai_monthly_limit(user, global_default_limit):
     return plan_limit(user, "ai_monthly", global_default_limit)
 
 
+def resolved_plan_limits(plan_cfg, global_storage_mb, global_ai_monthly):
+    """A plan's limits with the None "no plan-imposed limit" entries for
+    storage/AI replaced by the global defaults enforcement falls back to
+    (same rule as plan_limit), for display on pricing pages."""
+    limits = dict(plan_cfg.get("limits", {}))
+    if limits.get("storage_mb") is None:
+        limits["storage_mb"] = global_storage_mb
+    if limits.get("ai_monthly") is None:
+        limits["ai_monthly"] = global_ai_monthly
+    return limits
+
+
+def format_mb(value):
+    """Human storage size: MB below 1 GB, GB (1 decimal if needed) above;
+    an em dash for 0/absent."""
+    if not value:
+        return "\u2014"
+    if value < 1024:
+        return f"{value:g} MB"
+    gb = value / 1024
+    return f"{gb:.0f} GB" if gb == int(gb) else f"{gb:.1f} GB"
+
+
+def format_money(amount, currency=DEFAULT_CURRENCY):
+    """List-price display: "$19" for USD, "19 EUR" etc. otherwise."""
+    if amount is None:
+        return "\u2014"
+    amount = float(amount)
+    text = f"{amount:.0f}" if amount == int(amount) else f"{amount:.2f}"
+    if (currency or DEFAULT_CURRENCY) == "USD":
+        return f"${text}"
+    return f"{text} {currency}"
+
+
 # ---------------------------------------------------------------------------
 # Admin CRUD + seeding
 # ---------------------------------------------------------------------------

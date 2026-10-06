@@ -49,7 +49,7 @@
             <article {% if slug == plan %}class="is-current"{% endif %}>
                 <div class="billing-plan-head"><span>0{{ loop.index }}</span>{% if slug == plan %}<em>YOUR PLAN</em>{% endif %}</div>
                 <h3>{{ cfg.display_name }}</h3>
-                <strong>{{ cfg.price }} {{ cfg.currency }}<small>/{{ 'mo' if cfg.billing_period == 'monthly' else 'yr' }}</small></strong>
+                <strong>{{ cfg.price|money(cfg.currency) }}<small>/{{ 'mo' if cfg.billing_period == 'monthly' else 'yr' }}</small></strong>
                 <p>{{ 'For teams scaling immersive commerce and delivery.' if slug == 'business' else ('For professional 3D workflows and API access.' if slug == 'pro' else 'The essentials for publishing your first experiences.') }}</p>
                 {% if slug == plan %}
                     <button type="button" class="secondary-btn wide" disabled>Current plan</button>
@@ -75,7 +75,7 @@
         <div class="credit-pack-grid">
         {% for pack_id, pack in credit_packs.items() %}
             <article>
-                <span>PACK 0{{ loop.index }}</span><div><strong>{{ pack.credits }} credits</strong><small>AI generation capacity</small></div><b>{{ pack.price }} {{ (public_plans.values() | first).currency if public_plans else '' }}</b>
+                <span>PACK 0{{ loop.index }}</span><div><strong>{{ pack.credits }} credits</strong><small>AI generation capacity</small></div><b>{{ pack.price|money }}</b>
                 {% if checkout_enabled %}
                     <form method="POST" action="{{ url_for('billing.topup', pack=pack_id) }}">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -101,7 +101,7 @@
                 <tr>
                     <td>{{ p.created_at.strftime('%Y-%m-%d') }}</td>
                     <td>{% if p.kind == 'topup' %}{{ p.credits }} AI credits{% else %}{{ p.plan }}{% endif %}</td>
-                    <td>{{ p.amount }} {{ p.currency }}</td>
+                    <td>{{ p.amount|money(p.currency) }}</td>
                     <td>{{ p.status }}</td>
                 </tr>
             {% endfor %}

@@ -9,7 +9,7 @@ seo_bp = Blueprint("seo", __name__)
 # Endpoints listed in the sitemap. Segment landing pages are added below.
 SITEMAP_STATIC_ENDPOINTS = [
     "main.index", "main.features", "main.pricing", "main.developers",
-    "main.security", "main.contact_sales",
+    "main.security", "main.contact_sales", "main.workflow",
 ]
 
 

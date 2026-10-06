@@ -41,8 +41,13 @@ def _storage_usage_for(user_id):
     )
 
 
+def global_storage_quota_mb():
+    """Site-wide storage quota (admin setting, else env default)."""
+    return setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
+
+
 def _storage_quota_bytes(user=None):
     """user's plan (services/plans.py) can override the global site-wide
     default; pass None (or omit) to get the plain global quota."""
-    global_default = setting_int("storage_quota_mb", int(os.getenv("STORAGE_QUOTA_MB", 1024)))
+    global_default = global_storage_quota_mb()
     return effective_storage_quota_mb(user, global_default) * 1024 * 1024

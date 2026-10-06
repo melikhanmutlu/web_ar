@@ -349,20 +349,50 @@ def developer_settings():
 
 @main_bp.route("/pricing", methods=["GET"])
 def pricing():
-    from services.plans import public_plan_slugs, plan_name, all_plan_configs
-
+    from flask import current_app
+    from services.plans import (
+        public_plan_slugs, plan_name, all_plan_configs, resolved_plan_limits,
+    )
     from services.credits import CREDIT_PACKS
+    from services.payments import get_active_provider
+    from services.storage_quota import global_storage_quota_mb
+    from blueprints.billing import TRIAL_DAYS
     from site_settings import setting_int
 
     # Admins resolve to the internal "unlimited" plan (not public), so it
     # highlights nothing on the tier grid -- the template shows a note instead.
     current_plan = plan_name(current_user) if current_user.is_authenticated else None
 
+    # Same global fallbacks enforcement uses (storage_quota / _ai_quota_state).
+    storage_default = global_storage_quota_mb()
+    ai_default = setting_int("ai_monthly_limit", current_app.config.get("AI_GEN_MONTHLY_LIMIT", 0))
+    plan_config = all_plan_configs()
+    plan_limits = {
+        slug: resolved_plan_limits(cfg, storage_default, ai_default)
+        for slug, cfg in plan_config.items()
+    }
+
+    # Mirrors billing_home's trial_available (anonymous visitors can start one
+    # after signing up).
+    if current_user.is_authenticated:
+        trial_available = (
+            not getattr(current_user, "is_admin", False)
+            and current_user.business_trial_used_at is None
+            and current_plan == "free"
+        )
+    else:
+        trial_available = True
+    provider = get_active_provider()
+
     return render_template(
         "pricing.html",
         plans=public_plan_slugs(),
-        plan_config=all_plan_configs(),
+        plan_config=plan_config,
+        plan_limits=plan_limits,
         credit_packs=CREDIT_PACKS,
         current_plan=current_plan,
         free_ai_trial_count=max(0, setting_int("free_ai_trial_count", 3)),
+        trial_days=TRIAL_DAYS,
+        trial_available=trial_available,
+        checkout_enabled=bool(provider and provider.is_configured()),
     )

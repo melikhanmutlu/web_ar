@@ -103,3 +103,20 @@ def test_login_page_inherits_noindex_from_base_html(client):
     resp = client.get("/login")
     body = resp.get_data(as_text=True)
     assert 'name="robots" content="noindex, nofollow"' in body
+
+
+def test_every_sitemap_url_renders_with_indexable_robots(client):
+    """The sitemap must not list pages that tell crawlers noindex."""
+    import re
+    from urllib.parse import urlparse
+
+    body = client.get("/sitemap.xml").get_data(as_text=True)
+    paths = [urlparse(u).path for u in re.findall(r"<loc>([^<]+)</loc>", body)]
+    assert "/pricing" in paths and "/workflow" in paths
+    for path in paths:
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        html = resp.get_data(as_text=True)
+        m = re.search(r'<meta name="robots" content="([^"]*)"', html)
+        assert m, f"{path} has no robots meta"
+        assert "noindex" not in m.group(1) and "nofollow" not in m.group(1), (path, m.group(1))

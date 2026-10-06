@@ -26,7 +26,9 @@ _DOCUMENTED = re.compile(r"^#?\s*([A-Z][A-Z0-9_]*)=", re.MULTILINE)
 def _code_env_vars():
     found = {}
     for path in ROOT.rglob("*.py"):
-        if SKIP_DIRS & set(path.relative_to(ROOT).parts):
+        parts = path.relative_to(ROOT).parts
+        # Hidden dirs (.git, .claude worktrees, caches) hold copies, not this checkout's code.
+        if SKIP_DIRS & set(parts) or any(p.startswith(".") for p in parts):
             continue
         for m in _READ.finditer(path.read_text(encoding="utf-8", errors="ignore")):
             found.setdefault(m.group(1) or m.group(2), path.relative_to(ROOT).as_posix())

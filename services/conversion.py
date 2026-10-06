@@ -3,8 +3,9 @@ import os
 import shutil
 
 import trimesh
-from pygltflib import GLTF2, Node
+from pygltflib import GLTF2
 
+from converters.base_converter import scale_glb_in_place
 from converters import FBXConverter, OBJConverter, STLConverter, STEPConverter
 from converters.glb_optimizer import glb_needs_decompression, optimize_glb, readable_glb
 from converters.glb_quality import finalize_glb
@@ -164,24 +165,7 @@ class ConversionService:
         current = float(max(bounds[1] - bounds[0]))
         if not current > maximum or current <= 0:
             return
-        scale = maximum / current
-        gltf = GLTF2().load(path)
-        if not gltf.scenes:
-            return
-        scene_def = gltf.scenes[gltf.scene or 0]
-        roots = list(scene_def.nodes or [])
-        if not roots:
-            return
-        # trimesh reserves the node name "world" for its own base frame; a
-        # node of that name (trimesh's own GLB export uses it) under a scaled
-        # parent would make trimesh mis-resolve the graph when measuring.
-        for node in gltf.nodes:
-            if node.name == "world":
-                node.name = "world_root"
-        wrapper = Node(name="Size limit", scale=[scale, scale, scale], children=roots)
-        gltf.nodes.append(wrapper)
-        scene_def.nodes = [len(gltf.nodes) - 1]
-        gltf.save(path)
+        scale_glb_in_place(path, maximum / current)
 
     def convert(self, payload, output_path, *, progress=None):
         """Convert an uploaded model to GLB. Failures surface as RuntimeError

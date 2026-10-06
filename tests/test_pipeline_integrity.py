@@ -5,6 +5,7 @@ import json
 import os
 import struct
 import uuid
+import zipfile
 
 import pytest
 import trimesh
@@ -264,3 +265,180 @@ def test_job_error_is_sanitized(client):
     ConversionJobService(db).fail(job, RuntimeError("boom at /storage/temp/abc/model.bin"),
                                   allow_retry=False)
     assert "/storage" not in job.error and "model.bin" in job.error
+
+
+# --- glTF buffers and OBJ textures are staged safely ------------------------
+
+def _png_bytes(color=(200, 30, 30)):
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _zip_upload(name, entries):
+    from werkzeug.datastructures import FileStorage
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        for path, content in entries.items():
+            archive.writestr(path, content)
+    buf.seek(0)
+    return FileStorage(stream=buf, filename=name)
+
+
+def _file_upload(name, data):
+    from werkzeug.datastructures import FileStorage
+    return FileStorage(stream=io.BytesIO(data), filename=name)
+
+
+def stage_and_convert(tmp_path, upload, **kwargs):
+    from services import UploadStagingService
+    service = UploadStagingService(tmp_path / "staging", max_uncompressed_bytes=50 * 1024 * 1024)
+    (tmp_path / "staging").mkdir(exist_ok=True)
+    job_id = "j-" + uuid.uuid4().hex[:8]
+    staged = service.stage(job_id, upload, **kwargs)
+    payload = {"unique_id": job_id, "compression": "none", **staged}
+    mid = app_module._run_upload_pipeline(payload)
+    model = app_module.db.session.get(UserModel, mid)
+    return staged, model
+
+
+def _gltf_files():
+    """trimesh's own .gltf + .bin export (name -> bytes)."""
+    scene = trimesh.Scene(trimesh.creation.box(extents=[0.2, 0.2, 0.2]))
+    return dict(scene.export(file_type="gltf"))
+
+
+def test_gltf_with_bin_in_zip_converts(client, tmp_path):
+    files = _gltf_files()
+    assert any(name.endswith(".bin") for name in files)
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    staged, model = stage_and_convert(tmp_path, _zip_upload("m.zip", files))
+    assert staged["file_extension"] == ".gltf"
+    assert glb_extents_m(model.filename).max() == pytest.approx(0.2, abs=1e-3)
+    assert gltf_name
+
+
+def test_gltf_buffers_in_subfolder_are_flattened(client, tmp_path):
+    files = _gltf_files()
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    doc = json.loads(files[gltf_name])
+    entries = {gltf_name: None}
+    for buffer in doc["buffers"]:
+        bin_name = buffer["uri"]
+        buffer["uri"] = "My%20Buffers/" + bin_name
+        entries["My Buffers/" + bin_name] = files[bin_name]
+    entries[gltf_name] = json.dumps(doc)
+    staged, model = stage_and_convert(tmp_path, _zip_upload("m.zip", entries))
+    assert glb_extents_m(model.filename).max() == pytest.approx(0.2, abs=1e-3)
+
+
+def test_single_gltf_with_external_bin_gives_clear_error(client, tmp_path):
+    from services import UploadStagingError
+    files = _gltf_files()
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    with pytest.raises(UploadStagingError) as exc:
+        stage_and_convert(tmp_path, _file_upload("m.gltf", files[gltf_name]))
+    message = str(exc.value)
+    assert "ZIP" in message and "/" not in message.replace("(or", "")
+    assert "storage" not in message
+
+
+def test_loose_gltf_and_bin_companions_convert(client, tmp_path):
+    files = _gltf_files()
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    bins = [_file_upload(n, files[n]) for n in files if n.endswith(".bin")]
+    staged, model = stage_and_convert(
+        tmp_path, _file_upload("m.gltf", files[gltf_name]), textures=bins,
+    )
+    assert glb_extents_m(model.filename).max() == pytest.approx(0.2, abs=1e-3)
+
+
+@pytest.mark.parametrize("uri", ["/etc/passwd", "../../outside.bin", "file:///etc/passwd", "http://x/y.bin"])
+def test_gltf_unsafe_uris_are_rejected(client, tmp_path, uri):
+    from services import UploadStagingError
+    files = _gltf_files()
+    gltf_name = next(n for n in files if n.endswith(".gltf"))
+    doc = json.loads(files[gltf_name])
+    doc["buffers"][0]["uri"] = uri
+    entries = {gltf_name: json.dumps(doc)}
+    with pytest.raises(UploadStagingError) as exc:
+        stage_and_convert(tmp_path, _zip_upload("m.zip", entries))
+    assert "not allowed" in str(exc.value)
+
+
+OBJ_QUAD = "v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n" \
+           "f 1/1 2/2 3/3\nf 1/1 3/3 4/4\n"
+
+
+def _glb_images(path):
+    return len(GLTF2().load(path).images or [])
+
+
+def test_obj_zip_texture_in_subfolder_is_kept(client, tmp_path):
+    entries = {
+        "model/chair.obj": "mtllib chair.mtl\nusemtl wood\n" + OBJ_QUAD,
+        "model/chair.mtl": "newmtl wood\nKd 1 1 1\nmap_Kd textures/wood.png\n",
+        "model/textures/wood.png": _png_bytes(),
+    }
+    staged, model = stage_and_convert(tmp_path, _zip_upload("c.zip", entries))
+    assert _glb_images(model.filename) == 1
+    assert staged["staging_warnings"] == []
+
+
+def test_obj_zip_texture_with_spaces_is_kept(client, tmp_path):
+    entries = {
+        "my chair.obj": "mtllib my chair.mtl\nusemtl wood\n" + OBJ_QUAD,
+        "my chair.mtl": "newmtl wood\nKd 1 1 1\nmap_Kd -s 1 1 1 my wood texture.png\n",
+        "my wood texture.png": _png_bytes(),
+    }
+    from services import UploadStagingService
+    service = UploadStagingService(tmp_path / "st", max_uncompressed_bytes=10_000_000)
+    (tmp_path / "st").mkdir()
+    staged = service.stage("j-" + uuid.uuid4().hex[:8], _zip_upload("c.zip", entries))
+    mtl = open(staged["mtl_path"]).read()
+    assert "my wood texture" not in mtl and "my_wood_texture.png" in mtl
+    assert "-s 1 1 1" in mtl
+    assert "mtllib my_chair.mtl" in open(staged["temp_file_path"]).read()
+    payload = {"unique_id": "t-" + uuid.uuid4().hex[:8], "compression": "none", **staged}
+    model = app_module.db.session.get(UserModel, app_module._run_upload_pipeline(payload))
+    assert _glb_images(model.filename) == 1
+
+
+def test_obj_missing_texture_adds_warning(client, tmp_path):
+    entries = {
+        "c.obj": "mtllib c.mtl\nusemtl wood\n" + OBJ_QUAD,
+        "c.mtl": "newmtl wood\nKd 0.5 0.5 0.5\nmap_Kd gone.png\n",
+    }
+    staged, model = stage_and_convert(tmp_path, _zip_upload("c.zip", entries))
+    assert any("gone.png" in w for w in staged["staging_warnings"])
+    assert any("gone.png" in w for w in model.validation_report["warnings"])
+
+
+def test_obj_unsafe_texture_reference_is_rejected(client, tmp_path):
+    entries = {
+        "c.obj": "mtllib c.mtl\nusemtl wood\n" + OBJ_QUAD,
+        "c.mtl": "newmtl wood\nKd 0.5 0.5 0.5\nmap_Kd ../../etc/passwd\n",
+    }
+    with pytest.raises(RuntimeError) as exc:
+        stage_and_convert(tmp_path, _zip_upload("c.zip", entries))
+    assert "not allowed" in str(exc.value) and "passwd" not in str(exc.value)
+
+
+@pytest.mark.parametrize("unit", [None, "mm", "m", "auto"])
+def test_obj_usemtl_before_vertices_keeps_mtl_colour(client, tmp_path, unit):
+    obj = "mtllib c.mtl\nusemtl red\n" + OBJ_QUAD.replace("vt", "#vt")
+    obj = obj.replace("f 1/1 2/2 3/3\nf 1/1 3/3 4/4", "f 1 2 3\nf 1 3 4")
+    entries = {"c.obj": obj, "c.mtl": "newmtl red\nKd 1 0 0\n"}
+    extra = {"source_unit": unit} if unit else {}
+    from services import UploadStagingService
+    service = UploadStagingService(tmp_path / "st", max_uncompressed_bytes=10_000_000)
+    (tmp_path / "st").mkdir()
+    staged = service.stage("j-" + uuid.uuid4().hex[:8], _zip_upload("c.zip", entries))
+    payload = {"unique_id": "t-" + uuid.uuid4().hex[:8], "compression": "none", **staged, **extra}
+    model = app_module.db.session.get(UserModel, app_module._run_upload_pipeline(payload))
+    gltf = GLTF2().load(model.filename)
+    primitive = gltf.meshes[0].primitives[0]
+    material = gltf.materials[primitive.material]
+    assert material.name == "red"
+    assert material.pbrMetallicRoughness.baseColorFactor[:3] == [1.0, 0.0, 0.0]

@@ -65,6 +65,32 @@ def safe_join_within(base_dir: str, untrusted_name: str) -> Optional[str]:
     return candidate
 
 
+def scale_glb_in_place(glb_path: str, factor: float) -> None:
+    """Uniformly scale a GLB by wrapping its scene roots in a new scaled node.
+
+    Works at glTF level (pygltflib) instead of re-exporting through trimesh, so
+    materials, textures, animations, skins and extensions are untouched and the
+    scale is applied exactly once.
+    """
+    from pygltflib import GLTF2, Node
+
+    gltf = GLTF2().load(glb_path)
+    if not gltf.scenes:
+        return
+    scene_def = gltf.scenes[gltf.scene or 0]
+    roots = list(scene_def.nodes or [])
+    if not roots:
+        return
+    # trimesh reserves the node name "world" for its own base frame; a node of
+    # that name under a scaled parent makes trimesh mis-resolve the graph.
+    for node in gltf.nodes:
+        if node.name == "world":
+            node.name = "world_root"
+    gltf.nodes.append(Node(name="Scale", scale=[factor, factor, factor], children=roots))
+    scene_def.nodes = [len(gltf.nodes) - 1]
+    gltf.save(glb_path)
+
+
 class BaseConverter:
     def __init__(self):
         self.model_id: str = None

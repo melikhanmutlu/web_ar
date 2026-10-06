@@ -1928,6 +1928,16 @@ def _run_upload_pipeline(payload, progress_callback=None):
         # last, so nothing may re-save the GLB here).
         quality_warnings = conversion_result.get("quality_warnings") or []
         asset_report = conversion_result.get("asset_report")
+        # Companion files (e.g. an OBJ texture) missing from the upload.
+        staging_warnings = payload.get("staging_warnings") or []
+        if staging_warnings:
+            quality_warnings = [*quality_warnings, *staging_warnings]
+            if isinstance(asset_report, dict):
+                asset_report = {
+                    **asset_report,
+                    "valid": False,
+                    "warnings": [*(asset_report.get("warnings") or []), *staging_warnings],
+                }
 
         # Clean up temporary file and directory
         try:

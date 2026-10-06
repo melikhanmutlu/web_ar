@@ -10,7 +10,7 @@ import numpy as np
 import platform
 import shutil
 from typing import Optional, List
-from .base_converter import BaseConverter, hex_to_linear_rgb
+from .base_converter import BaseConverter, hex_to_linear_rgb, scale_glb_in_place
 
 # Complexity guard shared with the STL/STEP converters — reject meshes large
 # enough to exhaust memory before the (double) trimesh reload does.
@@ -359,8 +359,32 @@ class OBJConverter(BaseConverter):
                     f"Warning: Could not check dimensions: {str(e)}", "WARNING"
                 )
 
+            # Unit/limit scaling without a colour override is done on the GLB
+            # itself (root-node scale): a trimesh load/export round trip drops
+            # the MTL material assignment of untextured materials, leaving the
+            # primitive on the grey WebAR_Default.
+            scaled_in_place = False
+            if not needs_color and (needs_scaling or needs_unit_scale):
+                try:
+                    total_scale = unit_scale if needs_unit_scale else 1.0
+                    if needs_scaling:
+                        scaled_dims = {
+                            "x": float(extents[0]) * total_scale,
+                            "y": float(extents[1]) * total_scale,
+                            "z": float(extents[2]) * total_scale,
+                        }
+                        total_scale *= self.calculate_scale_factor(scaled_dims)
+                    if total_scale != 1.0:
+                        self.log_operation(f"Applying scale {total_scale} on the GLB root node")
+                        scale_glb_in_place(output_path, total_scale)
+                    scaled_in_place = True
+                except Exception as e:
+                    self.log_operation(
+                        f"Root-node scaling failed, falling back to mesh export: {e}", "WARNING"
+                    )
+
             # Only reload and process if needed
-            if needs_color or needs_scaling or needs_unit_scale:
+            if not scaled_in_place and (needs_color or needs_scaling or needs_unit_scale):
                 try:
                     self.log_operation(
                         f"Post-processing GLB - color: {needs_color}, scaling: {needs_scaling}, unit: {self.source_unit}"
@@ -504,5 +528,6 @@ class OBJConverter(BaseConverter):
         self.mtl_file = None
 
     def handle_error(self, error_message):
+        self.errors.append(error_message)
         self.update_status("ERROR")
         self.log_operation(f"Error during conversion: {error_message}")

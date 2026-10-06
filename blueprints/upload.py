@@ -27,7 +27,7 @@ from config import (
 )
 from models import ConversionJob, UserModel, db
 from services import UploadStagingError
-from services.model_permissions import get_live_model
+from services.model_permissions import check_model_view_allowed, get_live_model
 from services.plans import effective_storage_quota_mb, plan_limit
 from services.upgrade import upgrade_hint
 from services.time_utils import datetime
@@ -132,6 +132,9 @@ def get_usdz_status(model_id):
         model = get_live_model(model_id)
         if not model:
             return jsonify({"success": False, "error": "Model not found"}), 404
+        denied = check_model_view_allowed(model_id)
+        if denied:
+            return jsonify({"success": False, "error": denied.error}), denied.status
 
         usdz_ready = False
         usdz_filename = None

@@ -84,6 +84,13 @@ def generate_3d():
     credit_spent = (user.ai_credit_balance or 0) < balance_before
     db.session.commit()
 
+    def reject(error, status):
+        # Every non-starting exit must hand the early-committed credit back.
+        db.session.rollback()
+        if credit_spent:
+            app_module._refund_ai_credit(current_user.id)
+        return jsonify({"success": False, "error": error}), status
+
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()
     options = _parse_ai_options(data.get("options"))
@@ -95,7 +102,7 @@ def generate_3d():
                 id=parent_job_id, user_id=current_user.id
             ).first()
             if not parent:
-                return jsonify({"success": False, "error": "Parent generation not found"}), 404
+                return reject("Parent generation not found", 404)
         if mode == "image":
             image_task = data.get("image_task")
             if isinstance(image_task, dict):
@@ -105,8 +112,7 @@ def generate_3d():
             else:
                 image = (data.get("image") or "").strip()
             if not image.startswith("data:image/"):
-                return jsonify({"success": False,
-                                "error": "A valid image (jpg/png) is required."}), 400
+                return reject("A valid image (jpg/png) is required.", 400)
             task_id = ai_generator.start_image_to_3d(
                 image, topology=options.get("topology"),
                 target_polycount=options.get("target_polycount"),
@@ -128,8 +134,7 @@ def generate_3d():
             if not prompt and parent_job_id:
                 prompt = parent.prompt or ""
             if not prompt:
-                return jsonify({"success": False,
-                                "error": "A text prompt is required."}), 400
+                return reject("A text prompt is required.", 400)
             prompt, custom_preset_id = _resolve_prompt_preset(data.get("preset_id"), prompt)
             prompt = prompt[:600]
             task_id = ai_generator.start_text_to_3d(
@@ -151,21 +156,12 @@ def generate_3d():
         db.session.commit()
         return jsonify({"success": True, "job_id": job_id})
     except ValueError as e:
-        db.session.rollback()
-        if credit_spent:
-            app_module._refund_ai_credit(current_user.id)
-        return jsonify({"success": False, "error": str(e)}), 400
+        return reject(str(e), 400)
     except ai_generator.MeshyError as e:
-        db.session.rollback()
-        if credit_spent:
-            app_module._refund_ai_credit(current_user.id)
-        return jsonify({"success": False, "error": str(e)}), 502
+        return reject(str(e), 502)
     except Exception as e:
-        db.session.rollback()
-        if credit_spent:
-            app_module._refund_ai_credit(current_user.id)
         app_module.logger.error(f"[generate-3d] start error: {e}", exc_info=True)
-        return jsonify({"success": False, "error": "Failed to start generation."}), 500
+        return reject("Failed to start generation.", 500)
 
 
 @ai_generation_bp.route("/api/generate-3d/<job_id>/status", methods=["GET"])

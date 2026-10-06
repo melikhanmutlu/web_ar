@@ -467,7 +467,7 @@ app.view_functions["ai_generation.meshy_webhook"] = limiter.limit(
 )(app.view_functions["ai_generation.meshy_webhook"])
 csrf.exempt(app.view_functions["ai_generation.meshy_webhook"])
 app.view_functions["ai_image.generate_image"] = limiter.limit(
-    "10 per minute", exempt_when=_ai_rate_exempt
+    "10 per minute;60 per day", exempt_when=_ai_rate_exempt
 )(app.view_functions["ai_image.generate_image"])
 
 # Endpoints that cannot carry a session-bound CSRF token: 410 stubs that must

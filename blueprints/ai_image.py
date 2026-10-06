@@ -1,15 +1,16 @@
 """AI image pre-processing (text-to-image / image-to-image before 3D)."""
 
 from flask import Blueprint, jsonify, request
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 ai_image_bp = Blueprint("ai_image", __name__)
 
 # Stateless by design: image generation finishes in seconds, produces only
 # an image, and Meshy task ids are unguessable — so the task id is handed
 # straight to the client which polls the status proxy below. No DB rows,
-# gunicorn multi-worker safe, and it does NOT count against the 3D daily
-# quota (only HTTP rate limiting applies).
+# gunicorn multi-worker safe. It does not consume the monthly 3D quota, but it
+# spends real Meshy credits, so it requires an allowance to be left (quota or
+# prepaid credit) -- a user who can't generate 3D can't feed this either.
 _IMAGE_GEN_KINDS = ("t2i", "i2i")
 
 
@@ -23,6 +24,14 @@ def generate_image():
     if not ai_generator.is_configured():
         return jsonify({"success": False,
                         "error": "AI generation is not configured on this server."}), 503
+
+    exceeded, _count, limit = app_module._ai_quota_state(current_user.id)
+    if exceeded and (current_user.ai_credit_balance or 0) <= 0:
+        from services.upgrade import upgrade_hint
+        return jsonify({"success": False,
+                        "error": f"Monthly generation limit reached ({limit}) and no AI credits left. "
+                                 "Buy a credit pack or upgrade your plan.",
+                        "upgrade": upgrade_hint("ai_credits")}), 429
 
     data = request.get_json(silent=True) or {}
     mode = (data.get("mode") or "text").strip()

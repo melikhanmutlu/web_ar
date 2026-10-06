@@ -117,13 +117,15 @@ def _check_multi_model_limits(count):
     return _check_model_count_limit(count)
 
 
-def _check_storage_quota():
+def _check_storage_quota(incoming_bytes=None):
     """Admin-configurable per-user storage cap (storage_quota_mb setting).
 
     Anonymous uploads (user_id is None) aren't tracked to anyone's quota —
     consistent with my_models.html's storage view, which is per-account.
     request.content_length is an approximation of the incoming file size
-    (matches the same approximation _check_upload_size_limit already makes).
+    (matches the same approximation _check_upload_size_limit already makes);
+    callers that know the real size (server-side generated files) pass
+    `incoming_bytes` instead.
     Returns a response tuple or None.
     """
     if not current_user.is_authenticated:
@@ -137,7 +139,7 @@ def _check_storage_quota():
         .filter(UserModel.user_id == current_user.id)
         .scalar()
     )
-    incoming = request.content_length or 0
+    incoming = (request.content_length or 0) if incoming_bytes is None else incoming_bytes
     if used + incoming > quota_mb * 1024 * 1024:
         return jsonify(
             {"error": f"Storage quota exceeded ({quota_mb} MB limit). Delete some models or contact an admin.",

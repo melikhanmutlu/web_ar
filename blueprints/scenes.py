@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, render_template, request
 from flask_login import current_user, login_required
 
 from converters.glb_optimizer import readable_glb
+from blueprints.upload import _check_model_count_limit, _check_storage_quota
 from models import UserModel
 
 scenes_bp = Blueprint("scenes", __name__)
@@ -50,6 +51,11 @@ def build_scene():
             "success": False,
             "error": f"Provide between {MIN_SCENE_ITEMS} and {MAX_SCENE_ITEMS} models",
         }), 400
+
+    # Same plan guards as /upload_model: a scene is a brand-new model.
+    count_guard = _check_model_count_limit()
+    if count_guard:
+        return count_guard
 
     combined = trimesh.Scene()
     for i, item in enumerate(items):
@@ -99,6 +105,9 @@ def build_scene():
     os.close(tmp_fd)
     try:
         combined.export(tmp_path, file_type="glb")
+        quota_guard = _check_storage_quota(incoming_bytes=os.path.getsize(tmp_path))
+        if quota_guard:
+            return quota_guard
         new_model = app_module.register_glb_as_model(
             tmp_path, user_id=current_user.id, source="scene", prompt=name,
         )

@@ -45,6 +45,14 @@
     --error:      #dc2626;
     --error-dark: #ef4444;
 
+    /* Faz 4 accessibility tokens. --text-subtle is the lightest text grey
+       that still reaches >= 4.5:1 on white and on every light surface in
+       use (#f6f7f9 / #eceef3 / #f1f2f5 / #f0f1f4). --fs-micro is the
+       floor for UI microcopy. --focus-ring is the keyboard focus colour. */
+    --text-subtle: #5b6370;
+    --fs-micro:    12px;
+    --focus-ring:  var(--accent);
+
     --spacing-xs:  0.25rem;
     --spacing-sm:  0.5rem;
     --spacing-md:  0.75rem;
@@ -3649,3 +3657,31 @@ footer { border-top: 1px solid #e2e5ea; background: #fff; }
 .integration-strip .reveal>div { flex-wrap: wrap; }
 .integration-strip a { color: inherit; text-decoration: none; }
 .integration-strip a:hover { text-decoration: underline; }
+
+
+/* ===================================================================
+   Faz 4 — keyboard focus + skip link
+   =================================================================== */
+/* One visible keyboard ring for everything focusable. `html` raises the
+   specificity just enough to beat component rules that set outline:0/none
+   (.primary-btn, .av-input, .library-search input ...). */
+html :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+/* Text fields: ring + soft halo, also for mouse focus (the old rule only
+   changed the border colour, which is easy to miss). */
+.av-input:focus, .av-select:focus, .av-number:focus, .av-textarea:focus,
+.auth-input:focus, .sales-form input:focus, .sales-form textarea:focus,
+.credential-form .av-input:focus, .prompt-box:focus {
+    border-color: var(--focus-ring);
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 0;
+    box-shadow: 0 0 0 4px rgba(98, 93, 245, 0.18);
+}
+/* The search pill wraps a borderless input; ring the wrapper instead. */
+.library-search:focus-within {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+.library-search input:focus-visible { outline: 0; }

@@ -1,4 +1,11 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+    /* Skip link (self-contained: view.html/studio don't all load arvision.css). */
+    .skip-link { position: fixed; left: 12px; top: 8px; z-index: 100000; padding: 10px 16px;
+        background: #111318; color: #fff; border-radius: 8px; font: 600 14px/1.2 Arial, Helvetica, sans-serif;
+        text-decoration: none; transform: translateY(-200%); }
+    .skip-link:focus { transform: none; outline: 2px solid #8d8aff; outline-offset: 2px; }
+</style>
 <script>
     // Escape untrusted strings before they go into innerHTML. Available
     // app-wide so server-authored values (hotspot labels, view names, version

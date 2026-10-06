@@ -1,5 +1,6 @@
 {# viewer_chrome (set by the viewer page before including) trims the nav and
    hides the "Open Studio" CTA -- you're already inside a Studio workspace. #}
+<a class="skip-link" href="#main">Skip to content</a>
 <header class="nav {% if viewer_chrome %}nav-viewer{% endif %}" id="siteNav">
     <div class="nav-inner">
         <a href="{{ url_for('main.index') }}" class="brand">arvision</a>

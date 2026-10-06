@@ -305,6 +305,19 @@ def change_password():
     profile_form = ProfileForm(current_user.id, username=current_user.username, email=current_user.email)
     return _render_profile(profile_form, password_form)
 
+@auth.route('/profile/sign-out-everywhere', methods=['POST'])
+@login_required
+def sign_out_everywhere():
+    """Invalidate every session/remember-me cookie of this account (bumps
+    session_version, same mechanism as a password change) and keep this browser
+    signed in by re-issuing its login."""
+    user = current_user._get_current_object()
+    user.session_version = (user.session_version or 0) + 1
+    db.session.commit()
+    login_user(user, remember=bool(request.cookies.get(current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'))))
+    flash('Signed out of all other devices.', 'success')
+    return redirect(url_for('auth.profile'))
+
 def _claims_admin_email(new_email):
     """True if the user is switching to an ADMIN_EMAILS address.
 

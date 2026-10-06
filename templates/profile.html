@@ -114,6 +114,13 @@
                 </div>
                 <button type="submit" class="btn-primary profile-submit">Change password</button>
             </form>
+            <hr style="border:0;border-top:1px solid currentColor;opacity:.15;margin:1.25rem 0;">
+            <h3 class="av-card-title">Sign out of all devices</h3>
+            <p class="av-card-desc">Ends every other session and remember-me login for this account. This browser stays signed in.</p>
+            <form method="POST" action="{{ url_for('auth.sign_out_everywhere') }}" class="profile-form av-stack">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-primary profile-submit" id="signOutEverywhere">Sign out of all devices</button>
+            </form>
         </section>
     </div>
 

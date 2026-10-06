@@ -60,8 +60,8 @@ def test_successful_login_resets_lockout_counter(client, init_database):
 def test_nonexistent_username_does_not_error(client):
     # Same generic message/path as a wrong password — no user enumeration.
     response = login(client, "nobody-here", "whatever")
-    assert response.status_code == 302
-    assert response.request.path == "/login" or response.headers.get("Location", "").endswith("/login")
+    assert response.status_code == 200  # form re-rendered with the generic inline error
+    assert b"Invalid username/email or password" in response.data
 
 
 def test_login_rate_limit_enforced(client, init_database):

@@ -2213,9 +2213,68 @@ def too_large(e):
     ), 413
 
 
+def _error_wants_json(non_browser_is_json=False):
+    """JSON for API/XHR callers, HTML pages for browser navigation (same idea
+    as the CSRF handler). With non_browser_is_json, anything that doesn't ask
+    for text/html (curl, bare fetch) also gets JSON."""
+    if request.path.startswith("/api/") or request.is_json:
+        return True
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return True
+    if request.accept_mimetypes.best_match(["text/html", "application/json"]) == "application/json":
+        return True
+    return non_browser_is_json and "text/html" not in request.headers.get("Accept", "")
+
+
+_ERROR_PAGES = {
+    403: ("Access denied",
+          "You don't have access to this page. If it is a private model, sign in "
+          "or ask the owner for a share link."),
+    404: ("Page not found",
+          "We couldn't find what you were looking for. The link may be broken, "
+          "or the page or model may have been removed."),
+    500: ("Something went wrong",
+          "We hit an unexpected error. Please try again in a moment."),
+}
+
+
+def _render_error(code, json_message, non_browser_is_json=False):
+    if _error_wants_json(non_browser_is_json):
+        return jsonify({"success": False, "error": json_message}), code
+    title, message = _ERROR_PAGES[code]
+    try:
+        return render_template(
+            "error.html", error_code=code, error_title=title, error_message=message
+        ), code
+    except Exception:
+        # Never let the error page itself fail (e.g. DB down while the base
+        # template's context processors run); fall back to static markup.
+        logger.exception("Error page render failed")
+        return (
+            f"<!doctype html><title>{title}</title><h1>{title}</h1><p>{message}</p>"
+            '<p><a href="/">Home</a></p>',
+            code,
+        )
+
+
+@app.errorhandler(404)
+def not_found_error(e):
+    return _render_error(404, "Not found")
+
+
+@app.errorhandler(403)
+def forbidden_error(e):
+    return _render_error(403, "Forbidden")
+
+
 @app.errorhandler(500)
 def server_error(e):
-    return jsonify({"error": "Server error. Please try again later."}), 500
+    # Generic body only: never echo exception details to the client.
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    return _render_error(500, "Server error. Please try again later.", non_browser_is_json=True)
 
 
 def check_model_files():
@@ -2268,7 +2327,9 @@ def before_request():
             current_user, "is_admin", False
         )
         if not exempt and not is_admin:
-            return render_template("maintenance.html"), 503
+            response = make_response(render_template("maintenance.html"), 503)
+            response.headers["Retry-After"] = "600"
+            return response
     return None
 
 

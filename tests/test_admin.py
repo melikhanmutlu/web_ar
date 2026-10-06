@@ -120,8 +120,9 @@ def test_deactivated_user_cannot_log_in(client, init_database, admin_user):
     client.post("/logout")
 
     response = login(client, "testuser", "testpassword")
-    assert response.status_code == 302
-    assert "/login" in response.headers["Location"]
+    # Failed logins re-render the form (200) with an inline error
+    assert response.status_code == 200
+    assert b"This account has been deactivated." in response.data
     # A deactivated session gets no access to authed pages either
     assert client.get("/my_models").status_code == 302
 

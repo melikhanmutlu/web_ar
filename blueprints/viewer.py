@@ -43,8 +43,7 @@ def view_model(model_id):
     # Check if model exists in database
     model = UserModel.query.get(model_id)
     if not model:
-        flash("Model not found", "error")
-        return redirect(url_for("main.index"))
+        abort(404)
 
     # Trashed models are not viewable until restored
     if model.deleted_at is not None:

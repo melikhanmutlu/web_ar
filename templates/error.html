@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_title }} - arvision{% endblock %}
+
+{% block content %}
+<div class="aurora-bg aurora-bg--static" aria-hidden="true"></div>
+<main class="auth-main">
+    <section class="auth-shell">
+        <div class="auth-copy">
+            <p class="home-kicker">Error {{ error_code }}</p>
+            <h1 class="home-title">{{ error_title }}</h1>
+            <p class="auth-lede">{{ error_message }}</p>
+        </div>
+
+        <div class="auth-form av-stack" id="error-actions">
+            {% if error_code == 403 and not current_user.is_authenticated %}
+                <a href="{{ url_for('auth.login', next=request.full_path.rstrip('?')) }}" class="btn-primary">Sign in</a>
+            {% endif %}
+            <a href="{{ url_for('main.index') }}" class="btn-primary">Home</a>
+            <p class="auth-alt">
+                <a href="{{ url_for('main.studio') }}">Studio</a>
+                &middot;
+                <a href="{{ url_for('main.pricing') }}">Pricing</a>
+            </p>
+        </div>
+    </section>
+</main>
+{% endblock %}

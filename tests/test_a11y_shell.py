@@ -47,3 +47,13 @@ def test_pricing_not_included_mark_is_a_labelled_dash(client):
     html = client.get("/pricing").get_data(as_text=True)
     assert "&times;" not in html
     assert 'aria-label="Not included">&mdash;</span>' in html
+
+
+@pytest.mark.parametrize("path", ["/login", "/register", "/discover", "/studio"])
+def test_auth_discover_studio_render_the_shared_footer(client, path):
+    html = client.get(path).get_data(as_text=True)
+    assert '<footer>' in html and 'footer-inner' in html
+
+
+def test_dead_dark_theme_rules_are_gone():
+    assert ".dark " not in open(CSS).read()

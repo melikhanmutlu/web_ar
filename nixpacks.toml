@@ -6,7 +6,7 @@ cmds = [
     "python -m venv /opt/venv",
     "/opt/venv/bin/pip install pip==26.2.1",
     "/opt/venv/bin/pip install -r requirements.txt",
-    "npm ci",
+    "npm ci --omit=dev",
     "chmod +x tools/FBX2glTF"
 ]
 

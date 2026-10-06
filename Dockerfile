@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir pip==26.2.1 \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
 COPY . .
 

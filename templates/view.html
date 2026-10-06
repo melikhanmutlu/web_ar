@@ -941,7 +941,8 @@
                 {% if marketing_demo|default(false) %}
                 src="{{ viewer_model_src }}"
                 {% else %}
-                src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.asset_version or 0)) }}"
+                src="{{ light_model_url or url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.asset_version or 0)) }}"
+                {% if light_model_url %}data-full-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=actual_filename, v=(model.asset_version or 0)) }}"{% endif %}
                 {% endif %}
                 {% if usdz_filename %}ios-src="{{ url_for('model_files.serve_converted_file', unique_id=model_unique_id, filename=usdz_filename, v=(model.asset_version or 0)) }}"{% endif %}
                 shadow-intensity="{{ viewer_settings.shadow_intensity }}"
@@ -1889,6 +1890,9 @@
     <script defer src="{{ url_for('static', filename='js/viewer/save-flow.js') }}"></script>
     {% endif %}
     <script defer src="{{ url_for('static', filename='js/viewer/panel-ui.js') }}"></script>
+    {% if light_model_url %}
+    <script defer src="{{ url_for('static', filename='js/viewer/lod-swap.js') }}"></script>
+    {% endif %}
     <script src="{{ url_for('static', filename='js/viewer/chrome.js') }}"></script>
 </body>
 </html>

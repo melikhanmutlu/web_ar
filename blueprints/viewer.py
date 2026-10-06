@@ -8,7 +8,7 @@ from flask_login import current_user
 
 from config import SEO_INDEX_MODEL_PAGES
 from models import ModelLike, ModelSave, UserModel, db
-from services import abuse_guard
+from services import abuse_guard, lod_delivery
 from services.model_analytics import record_model_event
 from services.model_permissions import check_model_mutation_allowed, check_model_view_allowed, get_live_model
 from services.viewer_settings import resolved_viewer_settings
@@ -35,6 +35,20 @@ def _seo_robots_for_model_page(is_canonical=False):
     if is_canonical and setting_bool("seo_index_model_pages", SEO_INDEX_MODEL_PAGES):
         return "index, follow"
     return "noindex, follow"
+
+
+def _light_model_url(model, model_unique_id):
+    """URL of the LOD a phone should start with, or None for the full model.
+    ?lod=full forces the full model."""
+    lod = lod_delivery.pick_lod(
+        model, request.headers.get("User-Agent"), request.args.get("lod")
+    )
+    if lod is None:
+        return None
+    return url_for(
+        "model_files.serve_converted_file", unique_id=model_unique_id,
+        filename=os.path.basename(lod.filename), v=(model.asset_version or 0),
+    )
 
 
 @viewer_bp.route("/view/<model_id>")
@@ -337,6 +351,9 @@ def view_model(model_id):
         anon_edit_token=anon_edit_token,
 
         delivery_budget=delivery_budget,
+        # Read-only visitors on phones start with a lighter LOD; anyone who can
+        # edit always gets model.glb (editing tools operate on the full model).
+        light_model_url=None if can_edit else _light_model_url(model, model_unique_id),
         hidden_layer_count=hidden_layer_count,
         seo_robots=_seo_robots_for_model_page(is_canonical=True),
     ))
@@ -402,18 +419,22 @@ def embed_view(model_id):
         except Exception:
             pass
 
-    return render_template(
+    response = make_response(render_template(
         "embed.html",
         model=model,
         model_unique_id=model_unique_id,
         actual_filename=actual_filename,
+        light_model_url=_light_model_url(model, model_unique_id),
         usdz_filename=usdz_actual_filename,
         model_dimensions=model_dimensions,
         autoplay=request.args.get("autoplay", "0") == "1",
         ar=request.args.get("ar", "1") != "0",
         viewer_settings=resolved_viewer_settings(model),
         seo_robots=_seo_robots_for_model_page(),
-    )
+    ))
+    # The model URL depends on the device class.
+    response.headers.add("Vary", "User-Agent")
+    return response
 
 
 @viewer_bp.route("/vr/<model_id>")

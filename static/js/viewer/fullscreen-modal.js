@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function downloadFormat(format) {
         try {
             const modelUrl = format === 'glb'
-                ? modelViewer.src
+                ? (modelViewer.dataset.fullSrc || modelViewer.src)
                 : '/api/models/' + window.VIEWER_CONFIG.modelId + '/export/' + format;
             if (!modelUrl) {
                 throw new Error('Model URL not found');

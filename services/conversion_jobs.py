@@ -3,6 +3,8 @@ from services.time_utils import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
 
+from services.conversion_errors import sanitize_error_message
+
 
 class ConversionJobService:
     """Durable state machine for conversion jobs and retry scheduling."""
@@ -61,7 +63,8 @@ class ConversionJobService:
     def fail(self, job, error, *, allow_retry=True):
         self.db.session.rollback()
         retry = allow_retry and job.attempts < (job.max_attempts or 1)
-        job.error = str(error)[:2000]
+        error = sanitize_error_message(str(error))
+        job.error = error[:2000]
         if retry:
             delay = min(
                 self.retry_max_seconds,

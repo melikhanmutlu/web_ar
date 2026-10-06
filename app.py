@@ -2055,12 +2055,11 @@ def _run_upload_pipeline(payload, progress_callback=None):
                         f"[upload_model - {unique_id}] Extents from mesh: {extents}"
                     )
 
-                # Convert to cm and store
-                if max(extents) > 0.001:
-                    x_cm = round(float(extents[0]) * 100, 2)
-                    y_cm = round(float(extents[1]) * 100, 2)
-                    z_cm = round(float(extents[2]) * 100, 2)
-                    max_cm = round(float(max(extents)) * 100, 2)
+                # Convert to cm and store (4 decimals below 1 cm so sub-mm parts
+                # are not dropped or rounded to zero)
+                dims = ConversionService.dimensions_cm_from_extents(extents)
+                if dims:
+                    x_cm, y_cm, z_cm, max_cm = dims["x"], dims["y"], dims["z"], dims["max"]
 
                     model_bounds = json.dumps(
                         {"extents": [x_cm, y_cm, z_cm], "max": max_cm}
@@ -2070,7 +2069,7 @@ def _run_upload_pipeline(payload, progress_callback=None):
                     )
                 else:
                     logger.warning(
-                        f"[upload_model - {unique_id}] Extents too small or zero: {extents}"
+                        f"[upload_model - {unique_id}] Extents zero: {extents}"
                     )
             except Exception as e:
                 logger.warning(

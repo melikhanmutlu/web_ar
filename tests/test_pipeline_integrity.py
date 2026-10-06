@@ -10,7 +10,7 @@ import pytest
 import trimesh
 from pygltflib import (
     GLTF2, Accessor, Animation, AnimationChannel, AnimationChannelTarget,
-    AnimationSampler, BufferView,
+    AnimationSampler, BufferView, Scene,
 )
 
 import app as app_module
@@ -187,3 +187,80 @@ def test_resolved_unit_reported_in_job_status(client, tmp_path):
     body = r.get_json()
     assert body["status"] == "completed", body
     assert body["source_unit"] == "mm" and body["detected_unit"] == "mm"
+
+
+# --- corrupt / degenerate input fails clearly -------------------------------
+
+def _pipeline_error(tmp_path, filename, data, **opts):
+    with pytest.raises(RuntimeError) as exc:
+        run_pipeline(tmp_path, filename, data, **opts)
+    return str(exc.value)
+
+
+def test_corrupt_glb_is_rejected(client, tmp_path):
+    hdr = struct.pack("<4sII", b"glTF", 2, 12 + 8 + 20)
+    garbage = hdr + struct.pack("<II", 20, 0x4E4F534A) + b"not json at all!!!!!!"
+    msg = _pipeline_error(tmp_path, "bad.glb", garbage)
+    assert "corrupt" in msg.lower()
+    assert UserModel.query.count() == 0
+
+
+def test_truncated_glb_is_rejected(client, tmp_path):
+    good = box_glb([1, 1, 1])
+    msg = _pipeline_error(tmp_path, "cut.glb", good[: len(good) // 2])
+    assert "corrupt" in msg.lower()
+
+
+def test_glb_without_geometry_is_rejected(client, tmp_path):
+    empty = tmp_path / "empty.glb"
+    gltf = GLTF2()
+    gltf.scenes = [Scene(nodes=[])]
+    gltf.scene = 0
+    gltf.save(str(empty))
+    msg = _pipeline_error(tmp_path, "empty.glb", empty.read_bytes())
+    assert "no 3d geometry" in msg.lower()
+
+
+def test_degenerate_stl_is_a_failed_conversion(client, tmp_path):
+    # One zero-area triangle with all vertices at the same point.
+    tri = struct.pack("<12fH", *([0.0] * 12), 0)
+    data = b"\0" * 80 + struct.pack("<I", 1) + tri
+    msg = _pipeline_error(tmp_path, "degenerate.stl", data)
+    assert "no usable geometry" in msg.lower() or "failed" in msg.lower()
+    assert UserModel.query.count() == 0
+
+
+def test_garbage_stl_error_is_friendly(client, tmp_path):
+    msg = _pipeline_error(tmp_path, "garbage.stl", bytes(range(256)) * 8)
+    assert "chardet" not in msg and "module" not in msg.lower()
+    assert "/" not in msg
+
+
+def test_sub_millimetre_model_keeps_dimensions(client, tmp_path):
+    model, glb = run_pipeline(tmp_path, "tiny.stl", box_stl([0.5, 0.5, 0.5]), source_unit="mm")
+    dims = json.loads(model.bounds)
+    assert dims["max"] == pytest.approx(0.05, abs=1e-3)  # cm
+    assert dims["extents"][0] > 0
+
+
+def test_error_messages_never_leak_paths_or_modules():
+    from services.conversion_errors import friendly_conversion_error, sanitize_error_message
+    leaked = "[Errno 2] No such file or directory: '/srv/app/storage/temp/abc/gltf_buffer_0.bin'"
+    msg = friendly_conversion_error(FileNotFoundError(leaked), ".gltf")
+    assert "/srv" not in msg and "storage" not in msg
+    assert "chardet" not in friendly_conversion_error(
+        ModuleNotFoundError("No module named 'chardet'"), ".stl")
+    assert "/srv/app" not in sanitize_error_message("failed reading /srv/app/storage/x.bin now")
+    assert sanitize_error_message("see https://example.com/a/b ok") == "see https://example.com/a/b ok"
+
+
+def test_job_error_is_sanitized(client):
+    from models import ConversionJob, db
+    from services import ConversionJobService
+    job = ConversionJob(id=uuid.uuid4().hex[:8], job_type="upload", status="processing",
+                        payload={}, attempts=1, max_attempts=1)
+    db.session.add(job)
+    db.session.commit()
+    ConversionJobService(db).fail(job, RuntimeError("boom at /storage/temp/abc/model.bin"),
+                                  allow_retry=False)
+    assert "/storage" not in job.error and "model.bin" in job.error

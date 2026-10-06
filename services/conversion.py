@@ -6,9 +6,10 @@ import trimesh
 from pygltflib import GLTF2, Node
 
 from converters import FBXConverter, OBJConverter, STLConverter, STEPConverter
-from converters.glb_optimizer import optimize_glb, readable_glb
+from converters.glb_optimizer import glb_needs_decompression, optimize_glb, readable_glb
 from converters.glb_quality import finalize_glb
 from glb_modifier import normalize_model_to_center
+from services.conversion_errors import UserFacingConversionError, friendly_conversion_error
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,102 @@ class ConversionService:
         if extension in {".glb", ".gltf"}:
             return None
         raise RuntimeError(f"Unsupported file format: {extension}")
+
+    @staticmethod
+    def _assert_valid_gltf(path, extension):
+        """Fail clearly when a GLB/glTF upload is corrupt or has no geometry.
+
+        A GLB with a valid header and garbage after it used to "convert"
+        successfully and open an empty viewer.
+        """
+        label = "GLB" if extension == ".glb" else "glTF"
+        corrupt = UserFacingConversionError(
+            f"This {label} file is corrupt or incomplete and could not be read. "
+            "Please re-export it and try again."
+        )
+        if extension == ".glb":
+            with open(path, "rb") as fh:
+                if fh.read(4) != b"glTF":
+                    raise corrupt
+        try:
+            gltf = GLTF2().load(path)
+        except Exception as exc:
+            raise corrupt from exc
+        if gltf is None:
+            raise corrupt
+        has_geometry = False
+        for mesh in gltf.meshes or []:
+            for primitive in mesh.primitives or []:
+                position = getattr(primitive.attributes, "POSITION", None)
+                if position is None or position >= len(gltf.accessors or []):
+                    continue
+                if (gltf.accessors[position].count or 0) > 0:
+                    has_geometry = True
+        if not has_geometry:
+            raise UserFacingConversionError(
+                f"This {label} file contains no 3D geometry (no meshes with vertices)."
+            )
+        if extension == ".glb":
+            # Embedded buffer must actually be present in full.
+            for buffer in gltf.buffers or []:
+                if buffer.uri is None:
+                    blob = gltf.binary_blob() or b""
+                    if len(blob) < (buffer.byteLength or 0):
+                        raise corrupt
+
+    @staticmethod
+    def _geometry_extents_m(path):
+        """(vertex_count, extents) of the node-baked scene, or None if the
+        file cannot be inspected (do not judge it then)."""
+        try:
+            with readable_glb(path) as readable:
+                scene = trimesh.load(readable, force="scene")
+                geometry = list(getattr(scene, "geometry", {}).values())
+                vertices = sum(len(getattr(g, "vertices", [])) for g in geometry)
+                if not vertices:
+                    return 0, None
+                bounds = scene.bounds
+                if bounds is None:
+                    return vertices, None
+                return vertices, bounds[1] - bounds[0]
+        except Exception as exc:
+            logger.warning("Extent check skipped for %s: %s", path, exc)
+            return None
+
+    @classmethod
+    def _assert_not_empty_output(cls, path):
+        """Zero-extent (or empty) output is a failed conversion, not a model."""
+        measured = cls._geometry_extents_m(path)
+        if measured is None:
+            return
+        vertices, extents = measured
+        if vertices and extents is not None and float(max(extents)) > 1e-9:
+            return
+        # A meshopt/draco file we could not decompress reads as empty: unknown.
+        if glb_needs_decompression(path):
+            return
+        raise UserFacingConversionError(
+            "The converted model has no usable geometry (zero size). The file may "
+            "be empty or contain only degenerate triangles."
+        )
+
+    @staticmethod
+    def dimensions_cm_from_extents(extents_m):
+        """Dimension dict in cm from metre extents; None when there is no size.
+
+        Sub-centimetre models keep 4 decimals (a 0.5 mm part is 0.05 cm) so
+        they are not stored as 0 / missing.
+        """
+        largest = float(max(extents_m))
+        if not largest > 1e-9:
+            return None
+        digits = 2 if largest * 100 >= 1 else 4
+        return {
+            "x": round(float(extents_m[0]) * 100, digits),
+            "y": round(float(extents_m[1]) * 100, digits),
+            "z": round(float(extents_m[2]) * 100, digits),
+            "max": round(largest * 100, digits),
+        }
 
     @staticmethod
     def _copy_or_pack_gltf(source_path, output_path, extension):
@@ -87,6 +184,18 @@ class ConversionService:
         gltf.save(path)
 
     def convert(self, payload, output_path, *, progress=None):
+        """Convert an uploaded model to GLB. Failures surface as RuntimeError
+        with a user-safe message (no module names or server paths)."""
+        try:
+            return self._convert(payload, output_path, progress=progress)
+        except UserFacingConversionError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                friendly_conversion_error(exc, payload.get("file_extension"))
+            ) from exc
+
+    def _convert(self, payload, output_path, *, progress=None):
         report = progress or (lambda *_: None)
         extension = payload["file_extension"]
         source_path = payload["temp_file_path"]
@@ -95,6 +204,7 @@ class ConversionService:
 
         if extension in {".glb", ".gltf"}:
             report(56, "Preparing GLB", "Copying or repacking the uploaded glTF asset.")
+            self._assert_valid_gltf(source_path, extension)
             self._copy_or_pack_gltf(source_path, output_path, extension)
             success = os.path.isfile(output_path)
         else:
@@ -110,6 +220,7 @@ class ConversionService:
         if not success or not os.path.isfile(output_path):
             errors = getattr(converter, "errors", None) if converter else None
             raise RuntimeError("Conversion failed" + (f": {errors[-1]}" if errors else ""))
+        self._assert_not_empty_output(output_path)
 
         if extension in {".glb", ".gltf"} and payload.get("max_dimension") is not None:
             report(68, "Scaling model", "Applying the requested maximum dimension limit.")
@@ -194,15 +305,7 @@ class ConversionService:
             bounds = combined.bounds
             if bounds is None:
                 return None
-            ext = bounds[1] - bounds[0]
-            if float(max(ext)) <= 0.001:
-                return None
-            return {
-                "x": round(float(ext[0]) * 100, 2),
-                "y": round(float(ext[1]) * 100, 2),
-                "z": round(float(ext[2]) * 100, 2),
-                "max": round(float(max(ext)) * 100, 2),
-            }
+            return ConversionService.dimensions_cm_from_extents(bounds[1] - bounds[0])
         except Exception as exc:
             logger.warning("Dimension measurement failed for %s: %s", glb_path, exc)
             return None

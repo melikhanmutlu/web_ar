@@ -6,8 +6,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Directories that are not application code.
 SKIP_DIRS = {
-    "tests", "node_modules", "skills", "skills-extra", "agents", "rules",
-    "workflows", "migrations", "static", "venv", ".venv", "docs",
+    "tests", "node_modules", "migrations", "static", "venv", ".venv", "docs",
 }
 
 # Read by the code but intentionally not documented as settings.

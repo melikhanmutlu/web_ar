@@ -22,7 +22,7 @@ jobs:
       SKIP_DB_BOOTSTRAP: "1"
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -78,7 +78,7 @@ jobs:
       TEST_DATABASE_URL: postgresql+psycopg2://arvision:arvision@localhost:5432/arvision_test
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -105,7 +105,7 @@ jobs:
       DEBUG: "False"
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -159,7 +159,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg2://arvision:arvision@localhost:5432/arvision_migrate
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip

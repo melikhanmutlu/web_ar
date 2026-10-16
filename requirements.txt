@@ -452,9 +452,9 @@ flask-compress==1.25 \
     --hash=sha256:6ca78e29728525e575a9e76e0e8e7acc6e0bf1421e0cbfd452bca0a68626166f \
     --hash=sha256:802954fb3af048cf4ca2a3b414393bf2b98466ae8067e6654ea0aa34ba34aff5
     # via -r requirements.in
-flask-limiter==3.8.0 \
-    --hash=sha256:0ab44f586d8cc349412791711b6cbafe8f86e7b60ad9e8f24f2686009f00900e \
-    --hash=sha256:686f8b4a75404e47b91565a795c70d29f69c145f6907f1f32522e962b134dada
+flask-limiter==4.1.1 \
+    --hash=sha256:ca11608fc7eec43dcea606964ca07c3bd4ec1ae89043a0f67f717899a4f48106 \
+    --hash=sha256:e1ae13e06e6b3e39a4902e7d240b901586b25932c2add7bd5f5eeb4bdc11111b
     # via -r requirements.in
 flask-login==0.6.3 \
     --hash=sha256:5e23d14a607ef12806c699590b89d0f0e0d67baeec599d75947bf9c147330333 \
@@ -662,10 +662,6 @@ mapbox-earcut==2.1.0 \
     --hash=sha256:fe652ace9a050b9f6447e9d7a9f2465fab951547e295ba1de7f2404f8bdf326f \
     --hash=sha256:fed97aaa1cd846c1a24867a43fe0a6603e84b25543cec9f58aced65a8c5c723f
     # via -r requirements.in
-markdown-it-py==4.2.0 \
-    --hash=sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49 \
-    --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
-    # via rich
 markupsafe==3.0.4 \
     --hash=sha256:007e1ffd9bf65bb6ee96df7b258fc632a4868dd5566037986c64781f35a36e98 \
     --hash=sha256:02fa4acbc6a3fc5c693c34d4dd8c1130b7fe99cc915181b0ddd6f72aeb296002 \
@@ -829,10 +825,6 @@ marshmallow==3.26.2 \
     --hash=sha256:013fa8a3c4c276c24d26d84ce934dc964e2aa794345a0f8c7e5a7191482c8a73 \
     --hash=sha256:bbe2adb5a03e6e3571b573f42527c6fe926e17467833660bebd11593ab8dfd57
     # via dataclasses-json
-mdurl==0.1.2 \
-    --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
-    --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
-    # via markdown-it-py
 mypy-extensions==1.1.0 \
     --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505 \
     --hash=sha256:52e68efc3284861e772bbcd66823fde5ae21fd2fdb51c62a211403730b916558
@@ -1061,10 +1053,6 @@ psycopg2-binary==2.9.9 \
 pygltflib==1.16.1 \
     --hash=sha256:ccea04343382bacaa8f00f4cf0bfdaada468ba0e4f174f88d701af0695761bf3
     # via -r requirements.in
-pygments==2.21.0 \
-    --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9 \
-    --hash=sha256:610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c
-    # via rich
 python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
@@ -1077,10 +1065,6 @@ requests==2.33.0 \
     --hash=sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b \
     --hash=sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652
     # via -r requirements.in
-rich==13.9.4 \
-    --hash=sha256:439594978a49a09530cff7ebc4b5c7103ef57baf48d5ea3184f21d9a2befa098 \
-    --hash=sha256:6049d5e6ec054bf2779ab3358186963bac2ea89175919d699e378b99738c2a90
-    # via flask-limiter
 scipy==1.11.4 \
     --hash=sha256:00150c5eae7b610c32589dda259eacc7c4f1665aedf25d921907f4d08a951b1c \
     --hash=sha256:028eccd22e654b3ea01ee63705681ee79933652b2d8f873e7949898dda6d11b6 \
@@ -1108,7 +1092,7 @@ scipy==1.11.4 \
     --hash=sha256:f313b39a7e94f296025e3cffc2c567618174c0b1dde173960cf23808f9fae4be \
     --hash=sha256:f3cd9e7b3c2c1ec26364856f9fbe78695fe631150f94cd1c22228456404cf1ec
     # via -r requirements.in
-sentry-sdk==2.71.0 \
+sentry-sdk[flask]==2.71.0 \
     --hash=sha256:7beb27a22f06396f3a05510c3da6ea10e1c79e02e859993c27ce4ff074e296d6 \
     --hash=sha256:9ed36b4c206048aa67b5ddba0a6e28d59fc55cf10d60f5f7aea2c3917184bf4a
     # via -r requirements.in

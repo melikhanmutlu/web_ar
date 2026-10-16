@@ -27,6 +27,6 @@ Flask-WTF==1.2.1
 email-validator==2.1.0.post1
 requests==2.33.0
 python-dotenv==1.2.2
-Flask-Limiter==3.8.0
+Flask-Limiter==4.1.1
 Flask-Compress==1.25
 sentry-sdk[flask]==2.71.0

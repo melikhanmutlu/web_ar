@@ -115,7 +115,9 @@ Neither the database nor the volume is backed up by this repository; configure b
 
 - Railway Postgres: enable the platform backups (service Backups tab, daily/weekly
   schedules) and test a restore into a scratch service.
-- Independent logical backup (run from any machine with `pg_dump` 15+ and the
+- Independent logical backup (run from any machine with `pg_dump` 18+ -- it must be
+  the same major version as the server or newer, or it aborts with "server version
+  mismatch" -- and the
   public `DATABASE_URL` of the database):
 
   ```bash
@@ -124,7 +126,9 @@ Neither the database nor the volume is backed up by this repository; configure b
   pg_restore --no-owner --dbname "$TARGET_DATABASE_URL" "arvision-YYYY-MM-DD.dump"
   ```
 
-  Run it on a schedule (cron / GitHub Actions) and store the dumps off Railway.
+  Run it on a schedule and store the dumps off Railway:
+  `.github/workflows/db-backup.yml` does this daily to Cloudflare R2 (secrets
+  `BACKUP_DATABASE_URL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`).
 
 **Volume (uploaded and converted models)**
 

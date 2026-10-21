@@ -1,0 +1,39 @@
+name: DB backup
+
+# Daily logical backup of the Railway Postgres (server major 18) to
+# Cloudflare R2. pg_dump must be the same major as the server or newer,
+# so it runs from the postgres:18 image, not the runner's client.
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          FILE="arvision-$(date -u +%F).dump"
+          docker run --rm -e DATABASE_URL -v "$PWD:/out" postgres:18 \
+            sh -c 'pg_dump --version && pg_dump --format=custom --no-owner --file "/out/'"$FILE"'" "$DATABASE_URL"'
+          # A dump that pg_restore cannot list is not a backup.
+          docker run --rm -v "$PWD:/out" postgres:18 pg_restore --list "/out/$FILE" > /dev/null
+          ls -l "$FILE"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          aws s3 cp "$FILE" "s3://${{ secrets.R2_BUCKET }}/postgres/$FILE" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"

@@ -57,6 +57,8 @@ else:
 # Setting DATABASE_URL trips config.py's production detection, which then
 # requires a SECRET_KEY — provide a fixed test one so import succeeds.
 os.environ.setdefault("SECRET_KEY", "test-only-secret-key")
+# Convert in-process so tests can monkeypatch the converters.
+os.environ.setdefault("CONVERSION_SUBPROCESS", "false")
 
 import threading
 import time

@@ -399,7 +399,10 @@ asset_quality = AssetQualityService(
     warning_triangles=int(os.environ.get("GLB_WARNING_TRIANGLES", "250000")),
     warning_bytes=int(os.environ.get("GLB_WARNING_BYTES", str(25 * 1024 * 1024))),
 )
-conversion_service = ConversionService(asset_quality)
+conversion_service = ConversionService(
+    asset_quality,
+    isolate=os.environ.get("CONVERSION_SUBPROCESS", "true").lower() in ("true", "1", "yes"),
+)
 upload_pipeline.configure(
     conversion_jobs=conversion_jobs,
     conversion_service=conversion_service,

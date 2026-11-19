@@ -26,7 +26,9 @@ def main(argv=None) -> int:
             tol_linear=args.tol_linear,
             tol_angular=args.tol_angular,
             merge_primitives=True,
-            use_parallel=True,
+            # Serial meshing: ~3.2 GB peak instead of ~4.8 GB on a 72 MB
+            # assembly, for ~10% more time.
+            use_parallel=False,
         )
     except Exception as exc:  # cascadio raises a plain RuntimeError on bad input
         print(f"cascadio failed: {exc}", file=sys.stderr)

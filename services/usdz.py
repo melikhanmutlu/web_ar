@@ -15,6 +15,7 @@ import time
 from flask import current_app
 
 from models import UserModel, db
+from services.page_cache import drop_page_cache
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ def convert_to_usdz(input_glb_path, output_usdz_path):
             and os.path.getsize(temp_usdz_path) > 0
         ):
             os.replace(temp_usdz_path, output_usdz_path)
+            drop_page_cache(output_usdz_path, flush=True)
             logger.info(f"USDZ conversion successful: {output_usdz_path}")
             return True
         else:

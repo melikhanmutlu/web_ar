@@ -1,7 +1,10 @@
+import json
 import logging
 import os
 import shutil
 import subprocess
+import sys
+from types import SimpleNamespace
 
 import trimesh
 from pygltflib import GLTF2
@@ -14,15 +17,21 @@ from converters.glb_optimizer import (
 from converters.glb_quality import finalize_glb
 from glb_modifier import normalize_model_to_center
 from services.conversion_errors import UserFacingConversionError, friendly_conversion_error
+from services.page_cache import drop_page_cache
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class ConversionService:
     """Format dispatch and deterministic GLB post-processing."""
 
-    def __init__(self, asset_quality_service):
+    def __init__(self, asset_quality_service, *, isolate=False):
         self.asset_quality = asset_quality_service
+        # Run each conversion in a short-lived child process (see
+        # services/conversion_child.py) so its memory goes back to the OS.
+        self.isolate = isolate
 
     @staticmethod
     def _converter(payload):
@@ -187,14 +196,58 @@ class ConversionService:
     def convert(self, payload, output_path, *, progress=None):
         """Convert an uploaded model to GLB. Failures surface as RuntimeError
         with a user-safe message (no module names or server paths)."""
-        try:
-            return self._convert(payload, output_path, progress=progress)
-        except UserFacingConversionError:
-            raise
-        except Exception as exc:
-            raise RuntimeError(
-                friendly_conversion_error(exc, payload.get("file_extension"))
-            ) from exc
+        if self.isolate:
+            result = self._convert_in_child(payload, output_path, progress=progress)
+        else:
+            try:
+                result = self._convert(payload, output_path, progress=progress)
+            except UserFacingConversionError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(
+                    friendly_conversion_error(exc, payload.get("file_extension"))
+                ) from exc
+        # The finished GLB is served from disk on demand; don't keep its pages
+        # cached (Railway bills page cache as service memory).
+        drop_page_cache(output_path, flush=True)
+        return result
+
+    def _convert_in_child(self, payload, output_path, *, progress=None):
+        report = progress or (lambda *_, **__: None)
+        request = {
+            "payload": payload,
+            "output_path": output_path,
+            "asset_quality": {
+                "warning_triangles": self.asset_quality.warning_triangles,
+                "warning_bytes": self.asset_quality.warning_bytes,
+            },
+        }
+        process = subprocess.Popen(
+            [sys.executable, "-m", "services.conversion_child"],
+            cwd=_REPO_ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+        )
+        process.stdin.write(json.dumps(request))
+        process.stdin.close()
+        outcome = None
+        for line in process.stdout:
+            message = json.loads(line)
+            if "progress" in message:
+                report(*message["progress"], **message.get("extra", {}))
+            else:
+                outcome = message
+        process.wait()
+        if outcome is None:
+            logger.error("Conversion child exited with %s and no result", process.returncode)
+            raise UserFacingConversionError(
+                "The conversion stopped unexpectedly, possibly because the model "
+                "needs too much memory. Try a smaller or simpler file."
+            )
+        if "error" in outcome:
+            error_class = UserFacingConversionError if outcome["user_facing"] else RuntimeError
+            raise error_class(outcome["error"])
+        result = outcome["result"]
+        result["converter"] = SimpleNamespace(**result["converter"])
+        return result
 
     def _convert(self, payload, output_path, *, progress=None):
         report = progress or (lambda *_: None)

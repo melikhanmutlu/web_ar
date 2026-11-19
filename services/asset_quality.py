@@ -21,7 +21,8 @@ class AssetQualityService:
             scene = trimesh.load(readable_path, force="scene")
         geometries = list(scene.geometry.values()) if isinstance(scene, trimesh.Scene) else [scene]
         vertices = sum(len(mesh.vertices) for mesh in geometries)
-        triangles = sum(len(mesh.faces) for mesh in geometries)
+        # LINES primitives (e.g. STEP wire curves) load as Path3D, which has no faces.
+        triangles = sum(len(getattr(mesh, "faces", ())) for mesh in geometries)
         external_images = [
             image.uri for image in (gltf.images or [])
             if image.uri and not image.uri.startswith("data:")
